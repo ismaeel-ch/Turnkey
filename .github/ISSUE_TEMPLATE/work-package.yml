@@ -1,0 +1,49 @@
+name: Work package
+description: A work package from docs/PLAN.md, with its acceptance list
+title: "WP-nn: "
+labels: ["wp"]
+body:
+  - type: input
+    id: package
+    attributes:
+      label: Work package number
+      description: The two-digit number from docs/PLAN.md section 4 (WP-01 to WP-16)
+      placeholder: "12"
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent
+      description: The role that owns the package, for example devops-ci
+    validations:
+      required: true
+  - type: textarea
+    id: owns
+    attributes:
+      label: Owns
+      description: The paths this package may change. Nothing else changes without an issue comment first.
+      placeholder: ".github/**, scripts/ci/**, docs/process/**, vercel.json"
+    validations:
+      required: true
+  - type: textarea
+    id: delivers
+    attributes:
+      label: What it delivers
+      description: The outcome, in plain English
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: One checkbox per item. Each is verified in the pull request that closes this issue.
+      value: |
+        - [ ] 
+    validations:
+      required: true
+  - type: textarea
+    id: needs
+    attributes:
+      label: Depends on
+      description: Other work packages or issues that must land first, if any
