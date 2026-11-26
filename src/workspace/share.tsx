@@ -1,4 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
+import type { AppRecord } from '@/shared/types/workspace';
 import { useEffect } from 'react';
 import {
   S,
@@ -165,7 +166,7 @@ export const shareLink = (code) => {
   } catch (e) {}
   return (base || 'https://formwork.example/') + '#app=' + code;
 };
-export function packOf(app, o) {
+export function packOf(app, o): Record<string, unknown> {
   // everything a browser needs to rebuild the app: what each station wrote, and the rows to start with
   const def = app.def,
     live = o.data === 'live',
@@ -268,7 +269,7 @@ export function readPack(json) {
     throw new Error('That link does not hold a Turnkey app.');
   return p;
 }
-export function appFromPack(pack, key, preview) {
+export function appFromPack(pack, key, preview?): AppRecord {
   // rebuild the app station by station. Each part must pass the same checks an agent's output must pass.
   const id = uid('app'),
     app = {
@@ -374,7 +375,7 @@ export function appFromPack(pack, key, preview) {
   dbSave(id);
   return app;
 }
-export async function openShared(input, o) {
+export async function openShared(input, o?) {
   // from a link, a pasted code, or the owner's preview
   o = o || {};
   const code = shareCode(input);

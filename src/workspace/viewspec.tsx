@@ -3,6 +3,7 @@ import type {
   AppDef,
   AppTable,
   BackedDef,
+  Board,
   BriefedDef,
   Check,
   ColumnDef,
@@ -431,7 +432,7 @@ export function migrateApp(app: AppRecord) {
     if (!app.line[s.id]) app.line[s.id] = blankLine();
   });
   if (def.team === undefined) def.team = null;
-  if (def.team && !def.board && def.tables.length && def.process) def.board = suggestBoard(def);
+  if (def.team && !def.board && def.tables.length && def.process) def.board = suggestBoard(def) as Board;
   if (!def.team) def.board = null;
   if (!def.theme.density) def.theme.density = 'comfortable';
   if (!def.views) def.views = {};
