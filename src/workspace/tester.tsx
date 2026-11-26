@@ -397,109 +397,116 @@ export function keepFix(app, text, ctx) {
     station: STATIONS[res.first].id,
   };
 }
-export async function runTester(app, run) {
+/**
+ * The Tester's part of a build, as the four steps the workflow graph calls: write the cases, run every test, send the
+ * failures back for repair, and record the result. The graph decides how often `run` and `repair` happen (at most
+ * QA_ROUNDS runs) and emits the `tests` step events itself.
+ */
+export function testerSteps(app, run) {
   const live = app.mode === 'live' && liveModelOn(),
     ctx = ctxOf(app, run, 'tester'),
-    rec = REC[app.tpl],
-    Q = (app.qa = {
+    rec = REC[app.tpl];
+  let Q = null,
+    fails = [];
+  async function write() {
+    Q = app.qa = {
       status: 'working',
       by: '',
       rounds: [],
       t0: Date.now(),
       t1: null,
       dropped: [],
-    });
-  if (U.follow[app.id] !== false) U.sel[app.id] = 'qa';
-  emit('STEP_STARTED', {
-    stepName: 'tests',
-    runId: run.id,
-    app: app.id,
-  });
-  commit();
-  const s1 = stepStart(run, 'tests', 'tester', 'Write test cases', live ? 'model' : 'tool');
-  let raw = null;
-  say(
-    app,
-    'tester',
-    live
-      ? 'Reading the brief and writing test cases for its rules and user stories.'
-      : rec && rec.tester
-        ? 'Writing test cases from the brief: one for every rule, and one refusal for every role that has limits.'
-        : 'Writing test cases from the rules of the brief and the access rules.',
-  );
-  if (live) {
-    try {
-      raw = await callModel(app, run, 'tester', testerPrompt(app), 1);
-      Q.by = 'model';
-    } catch (e) {
-      if (e instanceof Stopped || e.fatal) throw e;
-      raw = null;
-    }
-  } else {
-    await pace(app, 900);
-    if (rec && rec.tester) {
-      raw = rec.tester();
-      Q.by = 'saved';
-      run.replayed++;
-    }
-  }
-  let cases = normCases(raw, app.def);
-  if (cases.length < 2) {
-    cases = normCases(
-      {
-        cases: suggestCases(app),
-      },
-      app.def,
+    };
+    if (U.follow[app.id] !== false) U.sel[app.id] = 'qa';
+    commit();
+    const s1 = stepStart(run, 'tests', 'tester', 'Write test cases', live ? 'model' : 'tool');
+    let raw = null;
+    say(
+      app,
+      'tester',
+      live
+        ? 'Reading the brief and writing test cases for its rules and user stories.'
+        : rec && rec.tester
+          ? 'Writing test cases from the brief: one for every rule, and one refusal for every role that has limits.'
+          : 'Writing test cases from the rules of the brief and the access rules.',
     );
-    Q.by = Q.by === 'model' ? "rules, because the model's cases could not be used" : 'rules';
-  }
-  app.def.cases = cases;
-  app.rev++;
-  stepEnd(s1, true);
-  toolCall(
-    ctx,
-    'write_test_cases',
-    {
-      cases: cases.length,
-    },
-    () => ({
-      written: cases.map((c) => c.name),
-    }),
-    'backend',
-  );
-  emit('STATE_DELTA', {
-    app: app.id,
-    delta: [
+    if (live) {
+      try {
+        raw = await callModel(app, run, 'tester', testerPrompt(app), 1);
+        Q.by = 'model';
+      } catch (e) {
+        if (e instanceof Stopped || e.fatal) throw e;
+        raw = null;
+      }
+    } else {
+      await pace(app, 900);
+      if (rec && rec.tester) {
+        raw = rec.tester();
+        Q.by = 'saved';
+        run.replayed++;
+      }
+    }
+    let cases = normCases(raw, app.def);
+    if (cases.length < 2) {
+      cases = normCases(
+        {
+          cases: suggestCases(app),
+        },
+        app.def,
+      );
+      Q.by = Q.by === 'model' ? "rules, because the model's cases could not be used" : 'rules';
+    }
+    app.def.cases = cases;
+    app.rev++;
+    stepEnd(s1, true);
+    toolCall(
+      ctx,
+      'write_test_cases',
       {
-        op: 'add',
-        path: '/cases',
-        value: cases.length + ' test cases',
+        cases: cases.length,
       },
-    ],
-  });
-  commit();
-  for (let n = 1; n <= QA_ROUNDS; n++) {
+      () => ({
+        written: cases.map((c) => c.name),
+      }),
+      'backend',
+    );
+    emit('STATE_DELTA', {
+      app: app.id,
+      delta: [
+        {
+          op: 'add',
+          path: '/cases',
+          value: cases.length + ' test cases',
+        },
+      ],
+    });
+    commit();
+  }
+  async function runRound({ round: n }) {
     Q.status = 'checking';
     commit();
     const s2 = stepStart(run, 'tests', 'orchestrator', n === 1 ? 'Run every test' : 'Run every test again', 'check');
     await pace(app, 800);
-    const ts = runTestsSync(app),
-      fails = failingTests(app),
-      R = {
-        n,
-        total: ts ? ts.total : 0,
-        failed: ts ? ts.failed : 0,
-        fails: fails.slice(0, 8).map((f) => ({
-          name: f.name,
-          suite: f.suiteName,
-          actual: f.actual,
-        })),
-        fixes: [],
-      };
+    const ts = runTestsSync(app);
+    fails = failingTests(app);
+    const R = {
+      n,
+      total: ts ? ts.total : 0,
+      failed: ts ? ts.failed : 0,
+      fails: fails.slice(0, 8).map((f) => ({
+        name: f.name,
+        suite: f.suiteName,
+        actual: f.actual,
+      })),
+      fixes: [],
+    };
     Q.rounds.push(R);
     stepEnd(s2, !R.failed);
     commit();
-    if (!R.failed || n === QA_ROUNDS) break;
+    return { total: R.total, failed: R.failed };
+  }
+  async function repair({ round: n }) {
+    const R = Q.rounds[Q.rounds.length - 1];
     Q.status = 'sentback';
     run.retries++;
     say(
@@ -569,35 +576,7 @@ export async function runTester(app, run) {
     });
     stepEnd(s3, R.fixes.some((f) => f.ok) || wrong.length > 0);
     const okN = R.fixes.filter((f) => f.ok).length;
-    if (okN || wrong.length)
-      say(
-        app,
-        'backend',
-        (okN
-          ? 'Repaired: ' +
-            R.fixes
-              .filter((f) => f.ok)
-              .map((f) => f.why)
-              .join('; ') +
-            '. '
-          : '') +
-          (wrong.length
-            ? wrong.length +
-              ' test case' +
-              (wrong.length === 1 ? ' was' : 's were') +
-              ' withdrawn because ' +
-              (wrong.length === 1 ? 'it' : 'they') +
-              ' did not match the brief. '
-            : '') +
-          'Each repair went through the same checks as a change you ask for.',
-        {
-          type: 'changed',
-          items: R.fixes.filter((f) => f.ok).map((f) => f.why),
-          reran: ['Tests'],
-          skipped: [],
-        },
-      );
-    else {
+    if (!okN && !wrong.length) {
       say(
         app,
         'backend',
@@ -605,50 +584,75 @@ export async function runTester(app, run) {
           (R.failed === 1 ? 'test stays' : 'tests stay') +
           ' for you to decide.',
       );
-      break;
+      return { progress: false };
     }
+    say(
+      app,
+      'backend',
+      (okN
+        ? 'Repaired: ' +
+          R.fixes
+            .filter((f) => f.ok)
+            .map((f) => f.why)
+            .join('; ') +
+          '. '
+        : '') +
+        (wrong.length
+          ? wrong.length +
+            ' test case' +
+            (wrong.length === 1 ? ' was' : 's were') +
+            ' withdrawn because ' +
+            (wrong.length === 1 ? 'it' : 'they') +
+            ' did not match the brief. '
+          : '') +
+        'Each repair went through the same checks as a change you ask for.',
+      {
+        type: 'changed',
+        items: R.fixes.filter((f) => f.ok).map((f) => f.why),
+        reran: ['Tests'],
+        skipped: [],
+      },
+    );
     commit();
     await pace(app, 500);
+    return { progress: true };
   }
-  const last = Q.rounds[Q.rounds.length - 1];
-  Q.status = last.failed ? 'failed' : 'ok';
-  Q.t1 = Date.now();
-  const repaired = Q.rounds.reduce((k, r) => k + r.fixes.filter((f) => f.ok).length, 0);
-  say(
-    app,
-    'tester',
-    last.failed
-      ? last.failed +
-          ' of ' +
-          last.total +
-          ' tests still fail. The app works, but a version can only be released when every test passes. Ask for a change in chat, or open the tests.'
-      : 'All ' +
-          last.total +
-          ' tests pass' +
-          (repaired ? ' after ' + repaired + (repaired === 1 ? ' repair' : ' repairs') : '') +
-          ': ' +
-          app.def.cases.length +
-          ' cases I wrote and ' +
-          (last.total - app.def.cases.length) +
-          ' generated from the definitions.',
-    {
-      type: 'tests',
-      total: last.total,
-      passed: last.total - last.failed,
-      failed: last.failed,
-      suites: suiteOf(app).map((s) => ({
-        name: s.name,
-        n: s.tests.length,
-      })),
-    },
-  );
-  emit('STEP_FINISHED', {
-    stepName: 'tests',
-    runId: run.id,
-    app: app.id,
-  });
-  commit();
-  return Q;
+  async function done() {
+    const last = Q.rounds[Q.rounds.length - 1];
+    Q.status = last.failed ? 'failed' : 'ok';
+    Q.t1 = Date.now();
+    const repaired = Q.rounds.reduce((k, r) => k + r.fixes.filter((f) => f.ok).length, 0);
+    say(
+      app,
+      'tester',
+      last.failed
+        ? last.failed +
+            ' of ' +
+            last.total +
+            ' tests still fail. The app works, but a version can only be released when every test passes. Ask for a change in chat, or open the tests.'
+        : 'All ' +
+            last.total +
+            ' tests pass' +
+            (repaired ? ' after ' + repaired + (repaired === 1 ? ' repair' : ' repairs') : '') +
+            ': ' +
+            app.def.cases.length +
+            ' cases I wrote and ' +
+            (last.total - app.def.cases.length) +
+            ' generated from the definitions.',
+      {
+        type: 'tests',
+        total: last.total,
+        passed: last.total - last.failed,
+        failed: last.failed,
+        suites: suiteOf(app).map((s) => ({
+          name: s.name,
+          n: s.tests.length,
+        })),
+      },
+    );
+    commit();
+  }
+  return { write, run: runRound, repair, done };
 }
 
 /* ---------- the Tester in the inspector ---------- */
