@@ -1,6 +1,13 @@
-/** Anthropic's Messages API with streaming, over plain fetch. Native tool calling. */
+/**
+ * Anthropic's Messages API with streaming, over plain fetch. Native tool calling.
+ *
+ * Claude features used: `output_config.effort` from the tier (see features.ts), a `cache_control` mark on the system
+ * prompt (tools and system prompt are the stable prefix; the conversation after it is not cached), cache reads and
+ * writes in usage, tool choice always `auto`, and no sampling settings.
+ */
+import { effortFor, withRequiredNote } from '../features';
 import { createPacer, errorFromResponse, scrub, sseData, withRetries, type RetryOptions } from '../http';
-import { LlmError, type ChatChunk, type ChatMessage, type ChatRequest, type Provider, type Tier } from '../types';
+import { LlmError, type ChatChunk, type ChatMessage, type ChatRequest, type Provider, type Tier, type Usage } from '../types';
 
 export type AnthropicConfig = {
   apiKey: string;
@@ -10,6 +17,13 @@ export type AnthropicConfig = {
   perMinute?: number;
   retry?: RetryOptions;
   fetchImpl?: typeof fetch;
+};
+
+type AnthropicUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
 };
 
 type Block = { type: string; [key: string]: unknown };
@@ -51,18 +65,21 @@ export function anthropic(config: AnthropicConfig): Provider {
     nativeTools: true,
     model,
     async *stream(request: ChatRequest): AsyncGenerator<ChatChunk> {
-      const { system, messages } = toAnthropicMessages(request.messages);
       const tools = request.tools?.length && request.toolChoice !== 'none' ? request.tools : undefined;
+      const { system, messages } = toAnthropicMessages(tools ? withRequiredNote(request.messages, request.toolChoice) : request.messages);
       const body = JSON.stringify({
         model: model(request.tier),
         max_tokens: request.maxTokens ?? 4096,
-        system: system || undefined,
+        system: system
+          ? [{ type: 'text', text: system, ...(request.cache !== false ? { cache_control: { type: 'ephemeral' } } : {}) }]
+          : undefined,
         messages,
         stream: true,
+        output_config: { effort: effortFor(request) },
         ...(tools
           ? {
               tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })),
-              tool_choice: { type: request.toolChoice === 'required' ? 'any' : 'auto' },
+              tool_choice: { type: 'auto' },
             }
           : {}),
       });
@@ -87,17 +104,23 @@ export function anthropic(config: AnthropicConfig): Provider {
       if (!res.ok || !res.body) throw await errorFromResponse(res);
 
       let truncated = false;
-      let input: number | undefined;
-      let output: number | undefined;
+      const usage: Usage = {};
+      const take = (u?: AnthropicUsage) => {
+        if (!u) return;
+        if (u.input_tokens !== undefined) usage.input = u.input_tokens;
+        if (u.output_tokens !== undefined) usage.output = u.output_tokens;
+        if (u.cache_read_input_tokens) usage.cacheRead = u.cache_read_input_tokens;
+        if (u.cache_creation_input_tokens) usage.cacheWrite = u.cache_creation_input_tokens;
+      };
       const blocks = new Map<number, { id: string; name: string; json: string }>();
       for await (const { data } of sseData(res.body)) {
         const ev = data as {
           type?: string;
           index?: number;
-          message?: { usage?: { input_tokens?: number; output_tokens?: number } };
+          message?: { usage?: AnthropicUsage };
           content_block?: { type?: string; id?: string; name?: string };
           delta?: { type?: string; text?: string; partial_json?: string; stop_reason?: string };
-          usage?: { output_tokens?: number; input_tokens?: number };
+          usage?: AnthropicUsage;
           error?: { message?: string; type?: string };
         };
         if (ev.type === 'error') {
@@ -108,10 +131,8 @@ export function anthropic(config: AnthropicConfig): Provider {
             overloaded ? 429 : 502,
           );
         }
-        if (ev.type === 'message_start') {
-          input = ev.message?.usage?.input_tokens ?? input;
-          output = ev.message?.usage?.output_tokens ?? output;
-        } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
+        if (ev.type === 'message_start') take(ev.message?.usage);
+        else if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
           blocks.set(ev.index ?? 0, { id: ev.content_block.id || '', name: ev.content_block.name || '', json: '' });
         } else if (ev.type === 'content_block_delta') {
           if (ev.delta?.type === 'text_delta' && ev.delta.text) yield { type: 'delta', text: ev.delta.text };
@@ -135,11 +156,10 @@ export function anthropic(config: AnthropicConfig): Provider {
           }
         } else if (ev.type === 'message_delta') {
           if (ev.delta?.stop_reason === 'max_tokens') truncated = true;
-          output = ev.usage?.output_tokens ?? output;
-          input = ev.usage?.input_tokens ?? input;
+          take(ev.usage);
         }
       }
-      yield { type: 'done', truncated, usage: input !== undefined || output !== undefined ? { input, output } : undefined };
+      yield { type: 'done', truncated, usage: Object.keys(usage).length ? usage : undefined };
     },
   };
 }
