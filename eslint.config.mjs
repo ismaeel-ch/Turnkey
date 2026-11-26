@@ -17,6 +17,7 @@ const eslintConfig = defineConfig([
       'src/workspace/builds.ts',
       'src/workspace/core.ts',
       'src/workspace/db.ts',
+      'src/workspace/icons.ts',
       'src/workspace/quests.ts',
       'src/workspace/registry.ts',
     ],
