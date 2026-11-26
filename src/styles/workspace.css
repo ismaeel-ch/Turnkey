@@ -43,7 +43,7 @@ ul.dots{list-style:disc;padding-left:18px}
 .btn{gap:6px;min-width:0;flex:none;white-space:nowrap;text-decoration:none}.btn.sm{font-weight:400}
 .btn.danger{background:var(--colorStatusDangerBackground3);color:#fff;border-color:transparent}.btn.danger:hover{background:var(--colorStatusDangerBackground3);filter:brightness(.92)}
 .btn.subtle{font-weight:400}
-.btn.on{background:var(--colorNeutralBackground1Selected);color:var(--colorBrandForeground1);border-color:var(--colorBrandStroke1)}.btn.subtle.on{border-color:transparent;background:var(--colorSubtleBackgroundSelected)}
+.btn.on{background:var(--colorNeutralBackground1Selected);color:var(--colorBrandForeground1);border-color:var(--colorBrandStroke1)}.btn.subtle.on{border-color:transparent;background:var(--colorSubtleBackgroundSelected);color:var(--colorBrandForeground2)}
 .btn.icon.sm{width:24px}
 .input,.select,.textarea{width:100%;min-height:32px;padding:5px 10px;border:1px solid var(--colorNeutralStroke1);border-bottom-color:var(--colorNeutralStrokeAccessible);border-radius:4px;background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground1)}
 :not(.tk-field)>.input:focus,:not(.tk-field)>.select:focus,:not(.tk-field)>.textarea:focus{outline:none;border-bottom-color:var(--colorCompoundBrandStroke);box-shadow:inset 0 -1px 0 var(--colorCompoundBrandStroke)}
@@ -99,14 +99,16 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .titlebar{display:flex;align-items:flex-end;gap:6px;height:44px;padding:0 8px 0 4px;background:var(--colorNeutralBackground4);flex:none}
 .brand{display:flex;align-items:center;gap:8px;height:44px;padding:0 8px;border:0;background:none;font-weight:600;font-size:15px;flex:none;border-radius:4px}
 .tabstrip{display:flex;align-items:flex-end;gap:2px;flex:1;min-width:0;height:44px;overflow-x:auto;scrollbar-width:none;padding-top:8px}
-.wtab{display:flex;align-items:center;gap:6px;height:36px;padding:0 6px 0 10px;flex:0 1 200px;min-width:96px;border-radius:8px 8px 0 0;color:var(--colorNeutralForeground2);cursor:pointer;position:relative;font-size:13px}
+.wtab{display:flex;align-items:center;gap:6px;height:36px;padding:0 6px 0 0;flex:0 1 200px;min-width:96px;border-radius:8px 8px 0 0;color:var(--colorNeutralForeground2);cursor:pointer;position:relative;font-size:13px}
 .wtab:hover{background:var(--colorNeutralBackground5)}.wtab.on{background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground1);box-shadow:var(--shadow2)}.wtab-t{flex:1;min-width:0}
+.wtab-b{flex:1;min-width:0;align-self:stretch;display:flex;align-items:center;gap:6px;padding:0 0 0 10px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:8px 8px 0 0}.wtab-b:focus-visible{outline-offset:-2px}
 .wtab-ic{width:18px;height:18px;border-radius:5px;background:var(--acc);color:var(--acc-on);display:grid;place-items:center;flex:none}
 .wtab-x,.newtab{width:24px;height:24px;border:0;background:none;border-radius:4px;display:grid;place-items:center;color:var(--colorNeutralForeground3);flex:none}.wtab-x:hover,.newtab:hover{background:var(--colorNeutralBackground1Pressed);color:var(--colorNeutralForeground1)}
 .newtab{width:28px;height:28px;margin:0 2px 4px}
 .tb-right{display:flex;align-items:center;gap:4px;height:44px;flex:none}.tb-mode{padding:0 6px;font-size:13px}.net.is-offline{color:var(--colorStatusWarningForeground1);background:var(--colorStatusWarningBackground1)}
 .acct{border:0;background:none;padding:2px;border-radius:50%;display:inline-grid}
-.shell-body{flex:1;min-height:0;display:flex;background:var(--colorNeutralBackground2)}
+.shell-body{flex:1;min-height:0;display:flex;background:var(--colorNeutralBackground2)}.shell-body:focus{outline:none}
+.skip-link{position:absolute;left:8px;top:-48px;z-index:1000;padding:8px 12px;border-radius:4px;background:var(--colorNeutralBackground1);color:var(--colorBrandForeground1);box-shadow:var(--shadow8);font-weight:600}.skip-link:focus{top:8px}
 .splash{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center}.splash p{max-width:52ch}
 
 /* home */
@@ -606,7 +608,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 @media (max-width:720px){.how{grid-template-columns:repeat(2,minmax(0,1fr))}.journey{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:4px}.jstep:nth-child(3)::before{display:none}.rel-share-grid{grid-template-columns:minmax(0,1fr)}.rel-icon{max-width:none}.rel-now,.fui-Card.rel-now{flex-direction:column}.release-in{padding:12px 12px 32px}.details-bar{padding:0 4px}}
 
 /* ---------- the workflow as a flow you extend: a plus on every gate, steps and approvals as nodes, the Tester ---------- */
-.fl-gate{padding-bottom:10px}.fl-add{position:absolute;right:10px;bottom:-14px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);color:var(--colorBrandForeground1);box-shadow:var(--shadow4);cursor:pointer;z-index:2;padding:0}
+.fl-gate{padding-bottom:10px}.fl-gate-h .btn.icon{min-width:32px;min-height:32px}.fl-add{position:absolute;right:10px;bottom:-18px;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);color:var(--colorBrandForeground1);box-shadow:var(--shadow4);cursor:pointer;z-index:2;padding:0}
 .fl-add:hover{background:var(--colorBrandBackground);border-color:var(--colorBrandBackground);color:#fff}.fl-add:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:2px}
 .fl-review{border-style:solid}.fl-review .fl-sub{display:flex;align-items:center;gap:4px}
 .fl-approval{gap:4px;padding:8px 8px 8px 10px;border-left:3px solid var(--colorBrandStroke1);border-radius:8px}.fl-approval.on{border-color:var(--colorStatusWarningBorder2);background:var(--colorStatusWarningBackground1);box-shadow:0 0 0 1px var(--colorStatusWarningBorder2),var(--shadow4)}
