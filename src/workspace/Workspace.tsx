@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ErrorScreen } from '@/platform/error-screen';
 import { flushOnHide, openWorkspaceStorage } from '@/platform/storage';
 import { U, attachStorage, notify } from './core';
+import { listenForStorageProblems, noteStorageProblem } from './errors';
 import { setFlowAvailable } from './flow';
 import { boot, Root } from './shell-c';
 
@@ -17,7 +18,11 @@ let started = false;
 function start() {
   if (started) return;
   started = true;
-  void openWorkspaceStorage((p) => console.warn('[storage]', p.message))
+  listenForStorageProblems();
+  void openWorkspaceStorage((p) => {
+    console.warn('[storage]', p.message);
+    noteStorageProblem(p.kind, p.message);
+  })
     .catch(() => null) // never expected: the adapter falls back to memory instead of failing
     .then((storage) => {
       if (storage) attachStorage(storage.lsCompat());

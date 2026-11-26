@@ -1,3 +1,5 @@
+import { AreaBoundary } from '@/platform/area-boundary';
+import { engineProblem, storageProblem } from './errors';
 import { modelHost } from '@/platform/model-client';
 import { type ReactNode, useState, useLayoutEffect } from 'react';
 import type { BackedDef } from '@/shared/types/app';
@@ -1582,11 +1584,18 @@ export function Shell() {
       <a className="skip-link" href="#main">
         Skip to main content
       </a>
-      <Titlebar tabs={tabs} tab={tab} />
+      <AreaBoundary name="The title bar">
+        <Titlebar tabs={tabs} tab={tab} />
+      </AreaBoundary>
       {!LS.ok && (
         <MBar tone="warning" cls="bar">
           Browser storage is not available in this view, so nothing will be kept after you close it. Open the page in its own tab to keep
           your work.
+        </MBar>
+      )}
+      {LS.ok && storageProblem() && (
+        <MBar tone={storageProblem()!.kind === 'write' ? 'warning' : 'danger'} cls="bar storage-problem">
+          {storageProblem()!.text}
         </MBar>
       )}
       {!online() && (
@@ -1606,11 +1615,23 @@ export function Shell() {
         </MBar>
       )}
       <main className="shell-body" id="main" tabIndex={-1}>
-        {app ? <Workspace key={app.id} app={app} /> : <Home />}
+        <AreaBoundary name={app ? 'This app' : 'The home page'} resetKey={app ? app.id : 'home'}>
+          {app ? <Workspace key={app.id} app={app} /> : <Home />}
+        </AreaBoundary>
       </main>
-      {S.settings.debug && <DebugDrawer app={app} />}
-      {PHONE() && <PhoneSheets app={app} />}
-      <AgentActivity app={app} />
+      {S.settings.debug && (
+        <AreaBoundary name="The debug drawer">
+          <DebugDrawer app={app} />
+        </AreaBoundary>
+      )}
+      {PHONE() && (
+        <AreaBoundary name="The phone menu">
+          <PhoneSheets app={app} />
+        </AreaBoundary>
+      )}
+      <AreaBoundary name="The agent panel" resetKey={app ? app.id : 'home'}>
+        <AgentActivity app={app} />
+      </AreaBoundary>
     </div>
   );
 }
@@ -1629,23 +1650,27 @@ function RootInner() {
     );
   if (U.boot === 'error')
     return (
-      <div className="splash">
+      <div className="splash" role="alert">
         <Logo size={44} />
         <strong className="t-sub1">
           {BRAND.name}
           {' could not start'}
         </strong>
-        <p className="muted">
-          {U.bootErr}
-          {' Reload the page. If it keeps happening, the SQLite engine could not be loaded in this view.'}
-        </p>
+        <p className="muted">{engineProblem(U.bootErr)}</p>
+        <Btn className="btn primary" onClick={() => window.location.reload()}>
+          Reload the page
+        </Btn>
       </div>
     );
   if (U.solo && S.apps[U.solo.app]) return [<SoloShell key="solo" />, <DialogHost key="dlg" />, <Toasts key="toasts" />];
   return [
     !S.onboarded ? <Onboarding key="ob" /> : !S.session || !me() ? <SignIn key="si" /> : <Shell key="shell" />,
-    <DialogHost key="dlg" />,
-    <TourLayer key="tour" />,
+    <AreaBoundary key="dlg" name="This dialog">
+      <DialogHost />
+    </AreaBoundary>,
+    <AreaBoundary key="tour" name="The guided tour">
+      <TourLayer />
+    </AreaBoundary>,
     <Toasts key="toasts" />,
   ];
 }
