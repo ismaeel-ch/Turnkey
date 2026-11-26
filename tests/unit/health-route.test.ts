@@ -21,6 +21,8 @@ beforeEach(() => {
       OPENAI_MODEL: undefined,
       LLM_PROVIDER: undefined,
       LIVE_MODE: undefined,
+      NODE_ENV: 'production', // outside production an unset provider becomes a stand-in
+      VERCEL: undefined,
       LLM_DAILY_CALL_CAP: '1000',
       LLM_GLOBAL_PER_MINUTE: '1000',
       LLM_RATE_PER_MINUTE: '100',
@@ -61,16 +63,14 @@ describe('GET /api/health with no model configured', () => {
     await expect((await GET(get())).json()).resolves.toMatchObject({ commit: null });
   });
 
-  it('does not make a model call for probe=1, and says nothing about a probe', async () => {
+  it('says plainly that there is no model when asked for a probe, and calls nothing', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
     const { GET } = await freshRoute();
     const body = await (await GET(get('?probe=1'))).json();
-    expect(body).not.toHaveProperty('probe');
-  });
-
-  it('reports the tool probe as not ready, naming what is missing, without calling a gateway', async () => {
-    const { GET } = await freshRoute();
-    const body = await (await GET(get('?probe=tools'))).json();
-    expect(body.tools).toEqual({ ok: false, missing: ['LITELLM_BASE_URL', 'LITELLM_API_KEY', 'LITELLM_MODEL'] });
+    expect(body.probe).toEqual({ ok: false, error: 'No model is configured on this deployment.' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });
 
@@ -90,13 +90,24 @@ describe('GET /api/health with the mock provider', () => {
     });
   });
 
-  it('answers a probe with the reply of a quick call', async () => {
+  it('answers a probe with a tool call made on the quick model', async () => {
     const { GET } = await freshRoute();
     const body = await (await GET(get('?probe=1'))).json();
-    expect(body.probe).toMatchObject({ ok: true, model: 'mock-quick' });
-    expect(body.probe.reply.length).toBeGreaterThan(0);
-    expect(body.probe.reply.length).toBeLessThanOrEqual(40);
+    expect(body.probe).toMatchObject({
+      ok: true,
+      provider: 'mock',
+      model: 'mock-quick',
+      mode: 'native',
+      toolCalling: 'works',
+      toolCall: { name: 'add_canvas_node', args: { kind: 'note', title: 'sample' } },
+    });
     expect(typeof body.probe.ms).toBe('number');
+  });
+
+  it('treats probe=tools as the same probe', async () => {
+    const { GET } = await freshRoute();
+    const body = await (await GET(get('?probe=tools'))).json();
+    expect(body.probe).toMatchObject({ ok: true, toolCalling: 'works' });
   });
 
   it('refuses a probe once the daily allowance is used up', async () => {
@@ -109,80 +120,52 @@ describe('GET /api/health with the mock provider', () => {
   });
 });
 
-describe('GET /api/health?probe=tools', () => {
-  // The gateway is stood in for by a fake fetch: nothing leaves the test.
-  const gateway = (answer: (url: string) => Response) =>
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => answer(String(input instanceof Request ? input.url : input))),
-    );
-  const litellm = () =>
-    restore.push(setEnv({ LITELLM_BASE_URL: 'gateway.example/v1', LITELLM_API_KEY: 'kx-made-up', LITELLM_MODEL: 'model-a' }));
-
+describe('GET /api/health?probe with a provider that does not behave', () => {
+  const withProvider = async (stream: () => AsyncIterable<unknown>) => {
+    vi.resetModules();
+    const real = await vi.importActual<typeof import('@/server/llm')>('@/server/llm');
+    vi.doMock('@/server/llm', () => ({
+      ...real,
+      resolveProvider: () => ({ id: 'fake', model: (t: string) => 'fake-' + t, stream }),
+    }));
+    return { ...(await import('@/app/api/health/route')), LlmError: real.LlmError };
+  };
   afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('reports that tool calls work when the model makes one', async () => {
-    litellm();
-    gateway((url) => {
-      if (url.endsWith('/models')) return Response.json({ object: 'list', data: [{ id: 'model-a', object: 'model' }] });
-      return Response.json({
-        id: 'x',
-        object: 'chat.completion',
-        created: 0,
-        model: 'model-a',
-        choices: [
-          {
-            index: 0,
-            finish_reason: 'tool_calls',
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                { id: 'c1', type: 'function', function: { name: 'add_canvas_node', arguments: '{"kind":"note","title":"Hello"}' } },
-              ],
-            },
-          },
-        ],
-      });
-    });
-    const { GET } = await freshRoute();
-    const body = await (await GET(get('?probe=tools'))).json();
-    expect(body.tools).toMatchObject({
-      ok: true,
-      model: 'model-a',
-      toolCalling: 'works',
-      toolCall: { name: 'add_canvas_node', arguments: '{"kind":"note","title":"Hello"}' },
-      availableModels: ['model-a'],
-    });
+    vi.doUnmock('@/server/llm');
   });
 
   it('reports a plain answer with no tool call as not ready', async () => {
-    litellm();
-    gateway((url) =>
-      url.endsWith('/models')
-        ? new Response('no', { status: 403 })
-        : Response.json({
-            id: 'x',
-            object: 'chat.completion',
-            created: 0,
-            model: 'model-a',
-            choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'Hello' } }],
-          }),
-    );
-    const { GET } = await freshRoute();
-    const body = await (await GET(get('?probe=tools'))).json();
-    expect(body.tools).toMatchObject({ ok: false, toolCalling: 'model answered without a tool call', availableModels: [] });
+    const { GET } = await withProvider(async function* () {
+      yield { type: 'delta', text: 'Hello' };
+      yield { type: 'done', truncated: false };
+    });
+    const body = await (await GET(get('?probe=1'))).json();
+    expect(body.probe).toMatchObject({ ok: false, provider: 'fake', model: 'fake-quick', mode: 'native', toolCall: null });
+    expect(body.probe.toolCalling).toBe('model answered without a tool call');
   });
 
-  it('hides the gateway error text, which can carry the address', async () => {
-    litellm();
-    gateway(() => new Response('upstream at gateway.example said no', { status: 500 }));
-    const { GET } = await freshRoute();
-    const text = await (await GET(get('?probe=tools'))).text();
-    const body = JSON.parse(text);
-    expect(body.tools).toMatchObject({ ok: false, model: 'model-a', error: 'the tool-call probe failed; see the server log' });
+  it('passes on the code and message of a gateway error, never the raw error', async () => {
+    let fail: () => never = () => {
+      throw new Error('not set');
+    };
+    const { GET, LlmError } = await withProvider(async function* () {
+      yield* [];
+      fail();
+    });
+    fail = () => {
+      throw new LlmError('rate_limited', 'The model is busy.', 429);
+    };
+    const body = await (await GET(get('?probe=1'))).json();
+    expect(body.probe).toMatchObject({ ok: false, model: 'fake-quick', code: 'rate_limited', error: 'The model is busy.' });
+  });
+
+  it('hides the text of any other failure, which can carry the gateway address', async () => {
+    const { GET } = await withProvider(async function* () {
+      yield* [];
+      throw new Error('upstream at gateway.example said no');
+    });
+    const text = await (await GET(get('?probe=1'))).text();
+    expect(JSON.parse(text).probe).toMatchObject({ ok: false, code: 'upstream', error: 'the tool-call probe failed' });
     expect(text).not.toContain('gateway.example');
   });
 });

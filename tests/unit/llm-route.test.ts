@@ -125,7 +125,7 @@ describe('POST /api/llm with the mock provider', () => {
 
 describe('POST /api/llm with no model configured', () => {
   it('answers 503 not_configured and says so in plain words', async () => {
-    env({ LLM_PROVIDER: undefined });
+    env({ LLM_PROVIDER: undefined, NODE_ENV: 'production' }); // outside production the route would fall back to a stand-in
     const { POST } = await freshRoute();
     const res = await POST(json({ prompt: 'x' }));
     expect(res.status).toBe(503);
@@ -134,7 +134,7 @@ describe('POST /api/llm with no model configured', () => {
   });
 
   it('answers 503 even for a body that is not JSON, because the provider is checked first', async () => {
-    env({ LLM_PROVIDER: undefined });
+    env({ LLM_PROVIDER: undefined, NODE_ENV: 'production' }); // outside production the route would fall back to a stand-in
     const { POST } = await freshRoute();
     const res = await POST(postRequest('{'));
     expect(res.status).toBe(503);

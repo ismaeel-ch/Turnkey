@@ -101,7 +101,7 @@ describe('guard-files', () => {
   });
 
   it('blocks edits to generated code, vendored files, the lockfile and git internals', () => {
-    expect(edit(path.join(ROOT, 'src/platform/generated/legacy.js')).status).toBe(2);
+    expect(edit(path.join(ROOT, 'src/styles/theme.generated.ts')).status).toBe(2);
     expect(edit(path.join(ROOT, 'public/vendor/htm.js')).status).toBe(2);
     expect(edit(path.join(ROOT, 'package-lock.json')).status).toBe(2);
     expect(edit(path.join(ROOT, '.git/config')).status).toBe(2);

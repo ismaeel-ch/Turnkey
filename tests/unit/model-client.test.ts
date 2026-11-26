@@ -187,3 +187,66 @@ describe('createHost', () => {
     await expect(host.use('something-else')).resolves.toBeNull();
   });
 });
+
+describe('saveFile', () => {
+  it('saves through a hidden link with the file name and a type from its ending, then lets go of the address', async () => {
+    const { saveFile } = await import('@/platform/model-client');
+    const created: Blob[] = [];
+    const revoked: string[] = [];
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, {
+        createObjectURL: (b: Blob) => (created.push(b), 'blob:made-up'),
+        revokeObjectURL: (u: string) => revoked.push(u),
+      }),
+    );
+    const clicks: Array<{ href: string; download: string }> = [];
+    const link = {
+      href: '',
+      download: '',
+      style: {},
+      click() {
+        clicks.push({ href: link.href, download: link.download });
+      },
+      remove() {},
+    };
+    vi.stubGlobal('document', { createElement: () => link, body: { appendChild() {} } });
+    vi.useFakeTimers();
+    await saveFile({ filename: 'Notes.CSV', data: 'a,b' });
+    await saveFile({ filename: 'plain', data: new Uint8Array([1]) });
+    await saveFile({ filename: 'x.json', data: new Blob(['{}']) });
+    expect(clicks).toEqual([
+      { href: 'blob:made-up', download: 'Notes.CSV' },
+      { href: 'blob:made-up', download: 'plain' },
+      { href: 'blob:made-up', download: 'x.json' },
+    ]);
+    expect(created[0].type).toBe('text/csv');
+    expect(created[1].type).toBe('application/octet-stream');
+    vi.advanceTimersByTime(15000);
+    expect(revoked).toHaveLength(3);
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('createHost and modelHost', () => {
+  it('offers downloads, and nothing for a capability it does not know', async () => {
+    const { createHost } = await import('@/platform/model-client');
+    const host = createHost();
+    expect(await host.use('downloads')).toHaveProperty('save');
+    expect(await host.use('camera')).toBeNull();
+  });
+
+  it('uses a host that the page already has, and otherwise makes one and keeps it', async () => {
+    vi.resetModules();
+    const { modelHost } = await import('@/platform/model-client');
+    const fake = { use: async () => 'x' };
+    vi.stubGlobal('window', { claude: fake });
+    expect(modelHost()).toBe(fake);
+    vi.stubGlobal('window', {});
+    const mine = modelHost();
+    expect(mine).not.toBe(fake);
+    expect(modelHost()).toBe(mine);
+    vi.unstubAllGlobals();
+  });
+});
