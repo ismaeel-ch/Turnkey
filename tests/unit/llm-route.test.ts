@@ -143,7 +143,7 @@ describe('POST /api/llm with no model configured', () => {
 
 describe('POST /api/llm when the provider fails midway', () => {
   /** Loads the route with a provider whose stream yields `text` (if any) and then fails with what `fail` makes. */
-  async function routeWithFailure(text: string, fail: (E: typeof LlmError) => unknown) {
+  async function routeWithFailure(text: string, fail: (E: typeof import('@/server/llm/types').LlmError) => unknown) {
     vi.resetModules();
     // The error class must come from the same module graph as the route, or the route will not recognise it.
     const { LlmError: E } = await import('@/server/llm/types');

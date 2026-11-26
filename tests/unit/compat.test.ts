@@ -67,7 +67,7 @@ describe('h and html: children', () => {
     expect(renderToStaticMarkup(h('ul', null, [h('li', null, 'one'), [h('li', null, 'two')]]))).toBe('<ul><li>one</li><li>two</li></ul>');
   });
   it('draws a bigint as text', () => {
-    expect(renderToStaticMarkup(h('span', null, 12345678901234567890n))).toBe('<span>12345678901234567890</span>');
+    expect(renderToStaticMarkup(h('span', null, BigInt('12345678901234567890')))).toBe('<span>12345678901234567890</span>');
   });
   it('draws numbers, booleans and null as React does, with html tagged templates too', () => {
     expect(renderToStaticMarkup(html`<b class="total">${3} items${null}${false}</b>`)).toBe('<b class="total">3 items</b>');

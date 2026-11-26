@@ -9,7 +9,10 @@ async function collect(stream: AsyncIterable<ChatChunk>) {
 }
 const textOf = (chunks: ChatChunk[]) => chunks.map((c) => (c.type === 'delta' ? c.text : '')).join('');
 const request = (content: string, tier: ChatRequest['tier'] = 'default'): ChatRequest => ({
-  messages: [{ role: 'system', content: 'be brief' }, { role: 'user', content }],
+  messages: [
+    { role: 'system', content: 'be brief' },
+    { role: 'user', content },
+  ],
   tier,
 });
 

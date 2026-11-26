@@ -7,7 +7,7 @@ async function freshRoute() {
   return import('@/app/api/health/route');
 }
 
-let restore: Array<() => void> = [];
+const restore: Array<() => void> = [];
 const get = (query = '') => new Request(`http://localhost/api/health${query}`);
 
 beforeEach(() => {
@@ -48,11 +48,11 @@ describe('GET /api/health with no model configured', () => {
   });
 
   it('never includes a key or a gateway address', async () => {
-    restore.push(setEnv({ LITELLM_BASE_URL: 'gateway.example/v1', LITELLM_API_KEY: 'test-key-value', LITELLM_MODEL: 'model-a' }));
+    restore.push(setEnv({ LITELLM_BASE_URL: 'gateway.example/v1', LITELLM_API_KEY: 'kx-made-up', LITELLM_MODEL: 'model-a' }));
     const { GET } = await freshRoute();
     const text = await (await GET(get())).text();
     expect(text).not.toContain('gateway.example');
-    expect(text).not.toContain('test-key-value');
+    expect(text).not.toContain('kx-made-up');
   });
 
   it('reports no commit when Vercel has not set one', async () => {
@@ -117,7 +117,7 @@ describe('GET /api/health?probe=tools', () => {
       vi.fn(async (input: string | URL | Request) => answer(String(input instanceof Request ? input.url : input))),
     );
   const litellm = () =>
-    restore.push(setEnv({ LITELLM_BASE_URL: 'gateway.example/v1', LITELLM_API_KEY: 'test-key-value', LITELLM_MODEL: 'model-a' }));
+    restore.push(setEnv({ LITELLM_BASE_URL: 'gateway.example/v1', LITELLM_API_KEY: 'kx-made-up', LITELLM_MODEL: 'model-a' }));
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -139,7 +139,9 @@ describe('GET /api/health?probe=tools', () => {
             message: {
               role: 'assistant',
               content: null,
-              tool_calls: [{ id: 'c1', type: 'function', function: { name: 'add_canvas_node', arguments: '{"kind":"note","title":"Hello"}' } }],
+              tool_calls: [
+                { id: 'c1', type: 'function', function: { name: 'add_canvas_node', arguments: '{"kind":"note","title":"Hello"}' } },
+              ],
             },
           },
         ],

@@ -76,7 +76,13 @@ describe('guard-bash: git', () => {
 
 describe('guard-bash: environment files', () => {
   it('blocks reading or copying the local environment file', () => {
-    for (const command of ['cat .env.local', 'cp .env.local /tmp/x', 'grep KEY .env', 'head -n 3 .env.production.local', 'base64 .env.local']) {
+    for (const command of [
+      'cat .env.local',
+      'cp .env.local /tmp/x',
+      'grep KEY .env',
+      'head -n 3 .env.production.local',
+      'base64 .env.local',
+    ]) {
       expect(bash(command, ROOT).status, command).toBe(2);
     }
   });

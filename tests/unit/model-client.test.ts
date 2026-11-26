@@ -22,11 +22,7 @@ afterEach(() => {
 describe('sample: reading the stream', () => {
   it('joins deltas that arrive split across chunk boundaries, including a split line', async () => {
     fakeFetch(() =>
-      streamResponse([
-        '{"type":"del',
-        'ta","text":"Hel"}\n{"type":"delta","te',
-        'xt":"lo"}\n{"type":"done","truncated":false}\n',
-      ]),
+      streamResponse(['{"type":"del', 'ta","text":"Hel"}\n{"type":"delta","te', 'xt":"lo"}\n{"type":"done","truncated":false}\n']),
     );
     await expect(sample('say hello')).resolves.toEqual({ text: 'Hello', truncated: false });
   });
@@ -50,7 +46,9 @@ describe('sample: reading the stream', () => {
 
   it('calls onText with the growing text after each delta, and ignores empty deltas', async () => {
     fakeFetch(() =>
-      streamResponse(['{"type":"delta","text":"H"}\n{"type":"delta","text":""}\n{"type":"delta","text":"i"}\n{"type":"done","truncated":false}\n']),
+      streamResponse([
+        '{"type":"delta","text":"H"}\n{"type":"delta","text":""}\n{"type":"delta","text":"i"}\n{"type":"done","truncated":false}\n',
+      ]),
     );
     const seen: string[] = [];
     await sample('x', { onText: ({ text }) => seen.push(text) });
@@ -116,7 +114,10 @@ describe('sample: refusals before the stream', () => {
   });
 
   it('reports a network failure as network, not as the browser error', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))),
+    );
     await expect(sample('x')).rejects.toMatchObject({ code: 'network' });
   });
 
@@ -144,7 +145,10 @@ describe('health', () => {
   it('returns null when the answer is not ok or cannot be reached', async () => {
     fakeFetch(() => new Response('down', { status: 500 }));
     await expect(health()).resolves.toBeNull();
-    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new TypeError('offline'))),
+    );
     await expect(health()).resolves.toBeNull();
   });
 });
@@ -162,7 +166,10 @@ describe('createHost', () => {
   });
 
   it('offers sample anyway when health cannot be reached, so the calls say what is wrong', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new TypeError('offline'))),
+    );
     await expect(createHost().use('sample')).resolves.toBe(sample);
   });
 

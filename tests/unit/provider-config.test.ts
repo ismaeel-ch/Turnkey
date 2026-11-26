@@ -35,9 +35,9 @@ describe('resolveProvider: LiteLLM defaults', () => {
 
   it('treats a blank value as not set', () => {
     expect(resolveProvider({ LITELLM_BASE_URL: '   ', LITELLM_API_KEY: 'test-key' })).toBeNull();
-    expect(resolveProvider({ LITELLM_BASE_URL: 'gateway.example/v1', LITELLM_API_KEY: 'test-key', LITELLM_MODEL: ' ' })?.model('default')).toBe(
-      'claude-sonnet-5-5',
-    );
+    expect(
+      resolveProvider({ LITELLM_BASE_URL: 'gateway.example/v1', LITELLM_API_KEY: 'test-key', LITELLM_MODEL: ' ' })?.model('default'),
+    ).toBe('claude-sonnet-5-5');
   });
 });
 
