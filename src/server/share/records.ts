@@ -44,6 +44,12 @@ export const RESERVED = new Set([
   'manifest',
   'sw',
   'favicon',
+  // metadata routes Next.js serves at the top level
+  'opengraph-image',
+  'twitter-image',
+  'apple-icon',
+  'robots',
+  'sitemap',
   'new',
   'home',
   'index',
