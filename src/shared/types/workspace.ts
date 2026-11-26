@@ -81,7 +81,37 @@ export interface AppRecord {
   runs: Run[];
   /** the conversation with the agents, newest last */
   chat: ChatMessage[];
+  /** the Tester's last pass over the finished app */
+  qa?: QaState | null;
   [field: string]: Loose;
+}
+
+/** A repair one agent tried after a test failed. */
+export interface QaFix {
+  by: string;
+  text: string;
+  for: string;
+  ok: boolean;
+  why: string;
+  station: string;
+}
+/** One run of every test, and the repairs that followed it. */
+export interface QaRound {
+  n: number;
+  total: number;
+  failed: number;
+  fails: { name: string; suite: string; actual: string }[];
+  fixes: QaFix[];
+}
+export interface QaState {
+  status: string;
+  /** who wrote the cases: model, saved or rules */
+  by: string;
+  rounds: QaRound[];
+  t0: number;
+  t1: number | null;
+  /** cases withdrawn because they did not match the brief */
+  dropped: { id: string; why: string }[];
 }
 
 /** One step of a run, as the timeline shows it. */
@@ -317,6 +347,10 @@ export interface SavedBuild {
   sampleNote?: string;
   /** saved test cases (quests: sample inputs with the team's recorded run) */
   cases?: SavedCase[];
+  /** the Tester's saved answer: its test cases, before they are checked */
+  tester?: () => Loose;
+  /** a note on a test the saved build fails on purpose */
+  slip?: string;
   [field: string]: Loose;
 }
 
