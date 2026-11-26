@@ -4,7 +4,7 @@
  * Safe for the browser: it imports nothing from src/server.
  */
 import { HttpAgent, type AgentSubscriber } from '@ag-ui/client';
-import type { BaseEvent, Message, RunAgentInput, State } from '@ag-ui/core';
+import type { BaseEvent, Message, State } from '@ag-ui/core';
 import { publishAgentEvent, type AgentEventContext } from './activity';
 
 export const AGENT_BASE_URL = '/api/copilotkit';
@@ -134,5 +134,3 @@ export async function runAgent(agentId: string, options: RunAgentOptions = {}): 
     options.signal?.removeEventListener('abort', onAbort);
   }
 }
-
-export type { RunAgentInput };

@@ -11,7 +11,7 @@
  *     per attempt:  STEP_STARTED/STEP_FINISHED with stepName in STEP_NAMES, in graph order
  *                   TEXT_MESSAGE_START/CONTENT/END for the draft step, messageId `draft-<attempt>`
  *                   CUSTOM name `issues` with value { attempt, issues } when validation fails
- *     RUN_FINISHED with result = StepResult      or      RUN_ERROR with code in STEP_ERROR_CODES
+ *     RUN_FINISHED with result = StepResult      or      RUN_ERROR with code a StepErrorCode
  * The graph itself emits the neutral `StepEvent` below to an `EventSink`; the bridge maps each one to the AG-UI
  * event named in its comment.
  */
@@ -71,17 +71,6 @@ export type StepErrorCode =
   | 'aborted' // the caller cancelled
   | 'truncated' // the last answer was cut off before its JSON ended
   | 'invalid_output'; // no valid answer within the attempt cap
-export const STEP_ERROR_CODES: readonly StepErrorCode[] = [
-  'bad_request',
-  'not_configured',
-  'rate_limited',
-  'budget',
-  'unauthorized',
-  'upstream',
-  'aborted',
-  'truncated',
-  'invalid_output',
-];
 
 /** The final result, carried by RUN_FINISHED. `text` is exactly one JSON object, with no fences and no prose. */
 export type StepResult = {

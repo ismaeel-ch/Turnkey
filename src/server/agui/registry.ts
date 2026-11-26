@@ -108,8 +108,3 @@ export function unregisterAgent(id: string): void {
   loaders.delete(id);
   loaded.delete(id);
 }
-
-/** Forget loaded agents (tests). */
-export function resetRegistry(): void {
-  loaded.clear();
-}
