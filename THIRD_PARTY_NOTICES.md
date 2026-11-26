@@ -15,10 +15,8 @@ Checked on Thu 26 Nov 2026, 16:19 UTC, against `main` at `353ab5d`. Versions com
 | sql.js | 1.12.0 | MIT (Copyright (c) 2017 sql.js authors) | SQLite in the browser | `public/vendor/sql-wasm.js`, `public/vendor/sql-wasm.wasm` |
 | zod | 4.6.7 | MIT (Copyright (c) 2025 Colin McDonnell) | validation of inputs and model output | `src/shared`, `src/server` |
 | openai | 7.65.0 | Apache-2.0 | OpenAI-compatible client, used for the gateway probe | `src/app/api/health/route.ts` |
-| @ai-sdk/openai | 3.0.147 | Apache-2.0 (Copyright 2023 Vercel, Inc.) | AI SDK model for the spike | `src/lib/model.ts` |
 | @copilotkit/runtime | 1.90.2 | MIT (Copyright (c) Atai Barkai) | agent runtime in the route handler | `src/app/api/copilotkit` |
 | @copilotkit/react-core | 1.90.2 | MIT | spike page | `src/app/(spike)/spike/page.tsx` |
-| @copilotkit/react-ui | 1.90.2 | MIT | declared in `package.json`; not imported in `src` on `main` | none yet |
 | @ag-ui/client | 1.0.5 | MIT | AG-UI client | declared; not imported in `src` on `main`; planned `src/platform/agui` (WP-08) |
 | @ag-ui/core | 1.0.5 | MIT | AG-UI types | declared; not imported in `src` on `main`; planned `src/server/agui` (WP-08) |
 | @ag-ui/encoder | 1.0.5 | MIT | AG-UI event encoding | declared; not imported in `src` on `main`; planned `src/server/agui` (WP-08) |
