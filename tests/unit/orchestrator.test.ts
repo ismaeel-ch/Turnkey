@@ -372,3 +372,33 @@ describe('mermaid diagram', () => {
     expect(text).toContain('st_backend_approve');
   });
 });
+
+describe('workflowFromFlow', () => {
+  it('maps the owner workflow onto a definition', async () => {
+    const { workflowFromFlow } = await import('@/platform/orchestrator');
+    const info = (id: string) =>
+      ({ security: { name: 'Security', after: 'backend' }, mine: { name: 'Mine', after: 'views', custom: true, auto: true } })[
+        id as 'mine'
+      ];
+    const def = workflowFromFlow(
+      {
+        attempts: 2,
+        approve: { backend: true },
+        by: { views: 'rules' },
+        reviewers: ['security', 'mine', 'gone'],
+        at: { security: 'views' },
+        auto: { security: true },
+      },
+      info,
+      'views',
+    );
+    expect(def.attempts).toBe(2);
+    expect(def.approvals).toEqual(['backend']);
+    expect(def.from).toBe('views');
+    expect(def.stations.find((s) => s.id === 'views')?.byRules).toBe(true);
+    expect(def.steps).toEqual([
+      { id: 'security', name: 'Security', after: 'views', mode: 'apply' },
+      { id: 'mine', name: 'Mine', after: 'views', mode: 'apply', custom: true },
+    ]);
+  });
+});

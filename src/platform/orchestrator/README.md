@@ -1,16 +1,16 @@
 # Workflow graph (WP-09)
 
 The build workflow the owner sees and edits on the canvas, as a LangGraph graph compiled from the workflow
-definition. A library: nothing here touches `src/legacy` or the workspace. The classic loop (`runBuild` in
-`src/legacy/line.js`) stays the default. Integration wires this in later behind a switch.
+definition. A library: nothing here touches the workspace. The classic loop (`runBuild` in
+`src/workspace/line.ts`) stays the default. Integration wires this in later behind a switch.
 
 This file has two parts: first the **specification**, the exact order of events in a build as the classic loop does it
 today; then how the graph reproduces it.
 
 ## 1. Specification: the order of events in a build
 
-Sources: `src/legacy/line.js` (`runBuild`, `runStation`, `askQuestion`), `src/legacy/custom.js` (`flowOf`, `stepsAt`,
-`stepAfter`, `stepAuto`, `askGate`, `runReview`, `applyAuto`), `src/legacy/tester.js` (`runTester`, `QA_ROUNDS`).
+Sources: `src/workspace/line.ts` (`runBuild`, `runStation`, `askQuestion`), `src/workspace/custom.tsx` (`flowOf`, `stepsAt`,
+`stepAfter`, `stepAuto`, `askGate`, `runReview`, `applyAuto`), `src/workspace/tester.tsx` (`runTester`, `QA_ROUNDS`).
 
 ### 1.1 The workflow as data
 
@@ -171,3 +171,34 @@ flowchart TD
   run -- failures, rounds left --> repair[Repair] --> run
   run -- last round --> wrap
 ```
+
+## 3. Wiring it in (for integration)
+
+Server-free, browser-safe. Everything below uses names that exist in `src/workspace` after the move out of `src/legacy`.
+
+```ts
+import { createRun, workflowFromFlow } from '@/platform/orchestrator';
+import { flowOf, REVIEWERS } from '@/workspace/custom';
+
+const def = workflowFromFlow(flowOf(app), (id) => REVIEWERS[id], from); // `from` only for a partial run
+const run = createRun(def, ports, { app: app.id, runId: run.id });
+let r = await run.start(); // r.status: ok | failed | stopped | waiting
+while (r.status === 'waiting') r = await run.resume(answerFromOwner(r.ask)); // question: {index}, approval: {approved}
+```
+
+| Port                      | Map it to                                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------- |
+| `runStation`              | the attempt body of `runStation` in `line.ts` (`produce`, then `APPLY`), `feedback` as `fbText` |
+| `runGate`                 | the checks `runStation` runs after `APPLY`, including the repair pass on the last attempt       |
+| `fallback`                | `FALLBACK[station.id]` followed by the same checks                                              |
+| `sentBack`                | the "sentback" card, `run.retries++`, the 1100 ms pause (`pace`)                                |
+| `stationDone`             | the `ok` bookkeeping, `DONE_SAY` and `CARD` for the station                                     |
+| `owner.question/answered` | `askQuestion` and `answerQuestion` (the graph does the waiting; ports must not block)           |
+| `owner.decided`           | the effect of `answerGate(app, ok)`                                                             |
+| `runStep`                 | `runReview` in `custom.tsx`                                                                     |
+| `ready`, `tester.*`       | the ready block of `runBuild`, then `runTester` split into write, run, repair and done          |
+| `stopped`                 | `() => run.stopped` (set by `stopRun`)                                                          |
+| `emit`                    | `log(app, type, payload)`, the same events the timeline already shows                           |
+
+An approval does not need `askGate`'s promise: the graph stops with `status: 'waiting'` and `ask`, and the Approve and
+Stop buttons call `run.resume({ approved })`. The same holds for the Researcher's question (`resume({ index })`).

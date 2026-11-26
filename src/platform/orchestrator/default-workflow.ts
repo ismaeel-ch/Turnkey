@@ -1,6 +1,6 @@
 import type { StationDef, WorkflowDefinition } from './types';
 
-/** The six stations of the standard workflow, as in `STATIONS` in `src/legacy/line.js`. */
+/** The six stations of the standard workflow, as in `STATIONS` in `src/workspace/line.ts`. */
 export const STATIONS: StationDef[] = [
   { id: 'research', name: 'Research', agent: 'researcher', asks: true },
   { id: 'database', name: 'Database', agent: 'database' },

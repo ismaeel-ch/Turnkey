@@ -11,11 +11,24 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../../..');
 const arg = (k) => (process.argv.find((a) => a.startsWith('--' + k + '=')) || '').split('=')[1];
 
-const server = await createServer({ root, logLevel: 'error', server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom', resolve: { alias: { '@': path.join(root, 'src') } }, optimizeDeps: { noDiscovery: true } });
+const server = await createServer({
+  root,
+  logLevel: 'error',
+  server: { middlewareMode: true, hmr: false, ws: false },
+  appType: 'custom',
+  resolve: { alias: { '@': path.join(root, 'src') } },
+  optimizeDeps: { noDiscovery: true },
+});
 try {
   const { diagram } = await server.ssrLoadModule(path.join(here, '../diagram.ts'));
   const approvals = (arg('approve') || '').split(',').filter(Boolean);
-  const steps = (arg('steps') || '').split(',').filter(Boolean).map((x) => { const [id, after] = x.split(':'); return { id, name: id, after, mode: 'advise' }; });
+  const steps = (arg('steps') || '')
+    .split(',')
+    .filter(Boolean)
+    .map((x) => {
+      const [id, after] = x.split(':');
+      return { id, name: id, after, mode: 'advise' };
+    });
   const text = diagram({ approvals, steps });
   if (process.argv.includes('--write')) writeFileSync(path.join(here, '../default-workflow.mmd'), text);
   else process.stdout.write(text);
