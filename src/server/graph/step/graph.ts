@@ -115,7 +115,6 @@ export function createStepGraph(options: StepGraphOptions = {}) {
         messages: state.messages,
         tier: state.tier,
         maxTokens: options.maxTokens,
-        temperature: 0.2,
         signal: config.signal,
       })) {
         if (config.signal?.aborted) throw new LlmError('aborted', 'The request was cancelled.', 499);
