@@ -21,7 +21,6 @@ export function createArchitect(): AbstractAgent {
     name: "Architect",
     model: litellmModel(),
     maxSteps: 3,
-    temperature: 0.2,
     prompt: [
       "You are the Architect agent in Turnkey, an app builder.",
       "The user describes an app. Put its building blocks on the shared canvas.",
