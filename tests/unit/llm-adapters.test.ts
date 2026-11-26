@@ -185,7 +185,7 @@ describe('routes follow LLM_PROVIDER', () => {
   });
   it('/api/llm streams a role-aware answer from the mock', async () => {
     const prompt =
-      'You are the Researcher agent on Turnkey, a line of agents that builds small apps.\n\nREQUEST: "Track tickets"\n\nWrite the brief.';
+      'You are the Researcher agent on Turnkey, a line of agents that builds small record-keeping web apps (tables, roles, one status workflow, screens) from one sentence. Code checks your answer and sends it back if it fails, so follow the format exactly. Reply with ONE JSON object and nothing else: no prose, no code fences.\n\nREQUEST: "Track tickets"\n\nWrite the brief.';
     const res = await llm(
       new Request('http://localhost/api/llm', {
         method: 'POST',

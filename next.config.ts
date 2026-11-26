@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { securityHeaders } from './src/server/guard/headers';
 
 // CopilotKit's runtime reports anonymous usage unless told not to. Set here for the build, and in
 // src/instrumentation.ts for the running server. This project sends nothing to third parties.
@@ -10,6 +11,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     return [
+      // Security headers on every response (src/server/guard/headers.ts).
+      { source: '/:path*', headers: securityHeaders() },
       // The SQLite engine copied by scripts/copy-sqlite.mjs; its URL carries the sql.js version.
       { source: '/vendor/:path*', headers: [{ key: 'cache-control', value: 'public, max-age=31536000, immutable' }] },
     ];

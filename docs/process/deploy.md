@@ -2,24 +2,28 @@
 
 ## How deploys happen
 
-- Production deploys only when a GitHub release is published. `.github/workflows/release.yml` checks that the
-  release tag points at a commit on `main`, runs `npm run check` on it, builds it with the Vercel CLI and deploys
-  that exact build to production. Then it calls `/api/health` on the production address.
+- Production deploys only through `.github/workflows/release.yml`, which runs when a release is made. It checks that
+  the commit is on `main`, runs `npm run check` on it, builds it with the Vercel CLI and deploys that exact build to
+  production. Then it calls `/api/health` on the production address.
 - Nothing else deploys. `vercel.json` sets `git.deploymentEnabled` to `false`, so Vercel's Git integration does not
   deploy merges, pushes or pull requests. The repository can stay connected to Vercel; it just never starts a build.
-- Pre-releases and drafts do not deploy. Publishing a release marked as a pre-release is a safe way to tag a commit
-  without shipping it.
 
 ## Cutting a release
 
-1. Merge everything the release needs into `main` through pull requests (CI runs on them, see workflow.md).
-2. Publish the release, either on the website (**Releases**, **Draft a new release**, create the tag such as
-   `v0.2.0` on `main`, **Generate release notes**, **Publish release**) or from a checkout:
-   `gh release create v0.2.0 --target main --generate-notes`.
-3. Watch the **Release and deploy** run on the **Actions** tab. Its summary shows the deployment and the live URL.
+The usual way, and the one agents use, is a version bump:
 
-A release created by another workflow using `GITHUB_TOKEN` does not start the deploy; GitHub does not chain
-workflows that way. Publish it yourself, or with a personal token.
+1. Merge everything the release needs into `main` through pull requests (CI runs on them, see workflow.md).
+2. Open a pull request titled `Release v0.2.0` that changes only `"version"` in `package.json` to `0.2.0` and adds
+   the `0.2.0` section to `CHANGELOG.md`. Label it `ready-to-merge` and merge it when CI is green.
+3. The merge changes `package.json` on `main`, which starts **Release and deploy**. Because the tag `v0.2.0` does not
+   exist yet, it checks and deploys that commit, then creates the tag `v0.2.0` and the GitHub release with notes
+   generated from the merged pull requests. If the deploy fails, no tag or release is created; fix it and merge again.
+
+Other changes to `package.json` (a new dependency, say) also start the workflow, but it sees that the tag for the
+current version already exists and stops within seconds.
+
+The owner can also publish a release on the website (**Releases**, **Draft a new release**, a new tag on `main`,
+**Publish release**). That deploys too, pre-releases included. Keep `package.json`'s version in step afterwards.
 
 ## Redeploy or roll back
 
@@ -42,8 +46,9 @@ The model settings (`LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL`) stay
 for **Production**. The workflow pulls them into the build with `vercel pull`; they are never stored in GitHub or
 printed. After changing them, redeploy the current tag as above.
 
-If the production address ever changes, set the repository variable `PRODUCTION_URL` (default
-`https://ssi-ai-hackathon.vercel.app`) so the health check calls the right place.
+The health check after a deploy calls the production address Vercel gives the deployment (its shortest alias, read
+from the Vercel API). To use a custom domain instead, set the repository variable `PRODUCTION_URL` to it, for example
+`https://turnkey.example.com`.
 
 ## Seeing the deployment for a release
 
