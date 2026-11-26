@@ -12,7 +12,10 @@ name: Release and deploy
 # 3. Run this workflow by hand from the Actions tab with an existing tag, to redeploy it or roll back to it.
 #
 # Each path runs `npm run check` on the exact commit, builds it with the Vercel CLI, deploys it to production and
-# checks /api/health. The browser flows are not run again: CI ran them on the pull request.
+# checks /api/health. The browser flows are not run again: CI ran them on the pull request. After the deploy, the smoke
+# job runs scripts/smoke-live.mjs against the production address: the page, the version, a short link that opens,
+# and one model tool call. It runs in parallel with publish and does not hold back the tag: the build is already
+# live by then, so a failure shows as a red run to act on (redeploy an earlier tag to roll back).
 #
 # Needs three repository secrets (Settings, Secrets and variables, Actions): VERCEL_TOKEN, VERCEL_ORG_ID and
 # VERCEL_PROJECT_ID. docs/process/deploy.md says where to find them. The model key stays in Vercel's environment
@@ -123,6 +126,8 @@ jobs:
     needs: [prepare, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      url: ${{ steps.address.outputs.url }}
     environment:
       name: production
       url: ${{ steps.address.outputs.url }}
@@ -238,6 +243,28 @@ jobs:
             echo ""
             echo "Result: $OUTCOME. Deployment: ${URL:-not created}. Live at ${PRODUCTION_URL:-unknown}"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    name: smoke test the live site
+    needs: [prepare, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium
+      - name: Page, version, short link and one model call on the production address
+        env:
+          SMOKE_URL: ${{ needs.deploy.outputs.url }}
+          EXPECT_VERSION: ${{ needs.prepare.outputs.tag }}
+        run: node scripts/smoke-live.mjs
 
   publish:
     name: create the tag and the GitHub release

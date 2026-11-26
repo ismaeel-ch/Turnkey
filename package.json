@@ -1,6 +1,6 @@
 {
   "name": "turnkey",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Turnkey: describe the app your work needs and a team of agents builds its database, backend, views, pages and tests on a workflow you can watch and change.",
   "license": "MIT",
@@ -31,10 +31,8 @@
     "@ag-ui/client": "^1.0.5",
     "@ag-ui/core": "^1.0.5",
     "@ag-ui/encoder": "^1.0.5",
-    "@ai-sdk/openai": "^3.0.147",
     "@ai-sdk/provider": "^3.0.19",
     "@copilotkit/react-core": "^1.90.2",
-    "@copilotkit/react-ui": "^1.90.2",
     "@copilotkit/runtime": "^1.90.2",
     "@fluentui/react-components": "^9.75.3",
     "@langchain/core": "^1.5.1",
@@ -64,6 +62,7 @@
     "playwright": "1.63.0",
     "prettier": "^3.10.1",
     "typescript": "^5",
+    "undici": "^6.29.1",
     "vitest": "^5.1.2"
   },
   "repository": {

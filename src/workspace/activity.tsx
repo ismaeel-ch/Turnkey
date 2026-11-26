@@ -33,9 +33,8 @@ import { REVIEWERS, flowOf } from './custom';
 import { isDark } from './flow';
 import { Icon } from './ui';
 
-// custom.tsx is not typed yet; these say what its exports hold
-// read when used, not when this module loads: custom.tsx and this file import each other, and in development
-// this module can run before REVIEWERS is initialised
+// custom.tsx is not typed yet; these say what its exports hold. Read REVIEWERS when called, not at module load:
+// custom.tsx imports this module through shell-c.tsx, so at load time REVIEWERS may not be initialised yet.
 const revs = (): Dict<ReviewerInfo> => REVIEWERS as Dict<ReviewerInfo>;
 const flowOfApp = (app: AppRecord): AppFlow => flowOf(app);
 

@@ -149,7 +149,7 @@ export function Onboarding() {
           {'A turnkey job is one that is handed over finished: you turn the key and it works. '}
           {BRAND.name}
           {
-            ' turns one sentence into a complete, working app for any domain: SQLite tables, role-guarded endpoints, switchable views, a dashboard and a guided tour. You watch five agents build it, and code checks every handoff.'
+            ' turns one sentence into a complete, working app for any domain: SQLite tables, role-guarded endpoints, switchable views, a dashboard and a guided tour. You watch five builder agents and a Tester make it, and code checks every handoff.'
           }
         </p>
         <div className="ob-line" aria-hidden="true">
@@ -287,8 +287,12 @@ export function Onboarding() {
               <strong>Live</strong>
               {!liveOK ? (
                 <span className="badge b-warning">Needs internet</span>
+              ) : U.live === 'ready' ? (
+                <span className="badge b-success">Model connected</span>
+              ) : U.live === 'unknown' ? (
+                <span className="badge b-info">Checking the model</span>
               ) : (
-                <span className="badge b-success">You are connected</span>
+                <span className="badge b-warning">No model connected</span>
               )}
             </span>
             <span className="muted">
@@ -410,7 +414,7 @@ export function Onboarding() {
               </li>
             ))}
           </ol>
-          <p className="t-cap muted">A prototype of the hackathon entry. People and records in it are made up.</p>
+          <p className="t-cap muted">An entry for the SSI Agent-A-Thon 2026. People and records in it are made up.</p>
         </aside>
         <main className="ob-main">
           <div className="ob-body" key={o.step}>
