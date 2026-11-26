@@ -1,0 +1,38 @@
+# Owner of every path. The last matching pattern wins, so the folder rules below narrow the default.
+# Owner: ismaeel-ch. Every path has one owner, so every pull request asks for the owner's review.
+
+*                       @ismaeel-ch
+
+# Top-level folders
+/.github/               @ismaeel-ch
+/.claude/               @ismaeel-ch
+/docs/                  @ismaeel-ch
+/public/                @ismaeel-ch
+/scripts/               @ismaeel-ch
+/src/                   @ismaeel-ch
+/tests/                 @ismaeel-ch
+
+# Folders under src
+/src/app/               @ismaeel-ch
+/src/legacy/            @ismaeel-ch
+/src/platform/          @ismaeel-ch
+/src/server/            @ismaeel-ch
+/src/shared/            @ismaeel-ch
+
+# Folders under tests and docs
+/tests/e2e/             @ismaeel-ch
+/tests/unit/            @ismaeel-ch
+/docs/adr/              @ismaeel-ch
+/docs/architecture/     @ismaeel-ch
+/docs/hackathon/        @ismaeel-ch
+/docs/process/          @ismaeel-ch
+
+# Root files
+/package.json           @ismaeel-ch
+/package-lock.json      @ismaeel-ch
+/vercel.json            @ismaeel-ch
+/next.config.ts         @ismaeel-ch
+/CLAUDE.md              @ismaeel-ch
+/AGENTS.md              @ismaeel-ch
+/README.md              @ismaeel-ch
+/CHANGELOG.md           @ismaeel-ch

@@ -1,0 +1,38 @@
+{
+  "_note": "Hand-written from the public OpenAlex works API documentation (select= fields). Not a recorded live response.",
+  "meta": { "count": 2, "db_response_time_ms": 12, "page": 1, "per_page": 2 },
+  "results": [
+    {
+      "id": "https://openalex.org/W1000000001",
+      "doi": "https://doi.org/10.1000/example.one",
+      "title": "Machine learning and deep learning",
+      "display_name": "Machine learning and deep learning",
+      "publication_year": 2021,
+      "cited_by_count": 3578,
+      "authorships": [{ "author": { "display_name": "Christian Janiesch" } }, { "author": { "display_name": "Patrick Zschech" } }],
+      "primary_location": { "landing_page_url": "https://example.org/landing/one" },
+      "abstract_inverted_index": {
+        "Machine": [0],
+        "learning": [1, 9],
+        "is": [2],
+        "a": [3],
+        "method": [4],
+        "that": [5],
+        "improves": [6],
+        "with": [7],
+        "data.": [8]
+      }
+    },
+    {
+      "id": "https://openalex.org/W1000000002",
+      "doi": null,
+      "title": null,
+      "display_name": "A Note on Sample Data",
+      "publication_year": null,
+      "cited_by_count": 0,
+      "authorships": [],
+      "primary_location": { "landing_page_url": "https://example.org/landing/two" },
+      "abstract_inverted_index": null
+    }
+  ]
+}
