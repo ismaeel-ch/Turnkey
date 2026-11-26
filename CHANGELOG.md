@@ -5,21 +5,61 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
-Merged after v0.3.2; goes out with the next release.
+## [0.4.1] - 2026-11-26
 
-### Added
+Live builds pass on a real model, each agent role uses the model that fits it, and the first page load is back under
+its size budget.
 
-- Each table, field and screen shows which agent made or last changed it. ([#114](https://github.com/ismaeel-ch/Turnkey/pull/114))
-- Editing the workflow of a built app re-runs only the stations it touches, after a short pause; a re-run that would
-  rebuild the database asks first. ([#109](https://github.com/ismaeel-ch/Turnkey/pull/109))
+### Fixed
+
+- Live builds on a real model finish with every test passing: the test runner picks the person a test names, a
+  refused workflow step counts as a refusal, and the Backend repair can grant "see their own" access without
+  repeating fixes it already tried. ([#141](https://github.com/ismaeel-ch/Turnkey/pull/141))
+- The first page load is back under the bundle budget: zod no longer loads with the page and React Flow loads on
+  first use. ([#139](https://github.com/ismaeel-ch/Turnkey/pull/139))
 
 ### Changed
 
-- A daily dollar cap on model calls, priced from each call's tokens; an empty model answer counts as an upstream
-  error. ([#110](https://github.com/ismaeel-ch/Turnkey/pull/110))
-- Daily limits on short-link saves. ([#113](https://github.com/ismaeel-ch/Turnkey/pull/113))
-- Stricter lint rules for typed code, and store actions in the workspace shell. ([#108](https://github.com/ismaeel-ch/Turnkey/pull/108)) ([#112](https://github.com/ismaeel-ch/Turnkey/pull/112))
-- README, architecture, decision records, criteria evidence and the submission text match what is built.
+- Researcher, Database and Backend use Sonnet; views, screens, tour, Tester, repairs, reviews and chat changes use
+  Haiku (`LLM_QUICK_ROLES` changes the list). Daily caps reset at midnight UTC and the cap message says what still
+  works; output tokens default to 16,000. ([#141](https://github.com/ismaeel-ch/Turnkey/pull/141))
+- CSS rules for classes nothing renders are removed. ([#126](https://github.com/ismaeel-ch/Turnkey/pull/126))
+
+### Tests
+
+- The production smoke test checks the model badge on the first screen and runs one Live build of the clinic sample
+  when a model is connected. ([#131](https://github.com/ismaeel-ch/Turnkey/pull/131))
+
+## [0.4.0] - 2026-11-26
+
+Agent attribution on the canvas, one deliverable document per app, targeted re-runs after a workflow edit, and
+spending caps.
+
+### Added
+
+- Export a built app as one deliverable document. ([#122](https://github.com/ismaeel-ch/Turnkey/pull/122))
+- The canvas shows which agent made or last changed each table, field and screen. ([#114](https://github.com/ismaeel-ch/Turnkey/pull/114))
+- After a workflow edit, only the affected stations re-run, debounced. ([#109](https://github.com/ismaeel-ch/Turnkey/pull/109))
+- A daily dollar cap on model calls and daily limits on short-link saves. ([#110](https://github.com/ismaeel-ch/Turnkey/pull/110)) ([#113](https://github.com/ismaeel-ch/Turnkey/pull/113))
+- Every API request is logged as structured JSON with its model cost. ([#94](https://github.com/ismaeel-ch/Turnkey/pull/94))
+- Live also checks that Turnkey's own server answers. ([#124](https://github.com/ismaeel-ch/Turnkey/pull/124))
+- An error in one part of the workspace shows a plain message with Try again instead of taking down the page.
+  ([#125](https://github.com/ismaeel-ch/Turnkey/pull/125))
+- The accessibility flow covers every screen, light and dark, and 390 px wide, with the fixes it found.
+  ([#130](https://github.com/ismaeel-ch/Turnkey/pull/130))
+
+### Changed
+
+- LangGraph and the AG-UI client load on first use, with a bundle-size budget in CI. ([#81](https://github.com/ismaeel-ch/Turnkey/pull/81))
+- Review steps move into their own module; store actions in the shell modules; stricter lint rules for typed code.
+  ([#108](https://github.com/ismaeel-ch/Turnkey/pull/108)) ([#112](https://github.com/ismaeel-ch/Turnkey/pull/112)) ([#119](https://github.com/ismaeel-ch/Turnkey/pull/119))
+- Unused workspace exports removed. ([#115](https://github.com/ismaeel-ch/Turnkey/pull/115))
+- README, architecture and submission text refreshed; a pre-submission audit, an up-to-date SECURITY.md and a lint
+  rule for server imports. ([#116](https://github.com/ismaeel-ch/Turnkey/pull/116)) ([#120](https://github.com/ismaeel-ch/Turnkey/pull/120))
+
+### Tests
+
+- The production smoke test also runs as a browser flow, with a manual live-site check. ([#118](https://github.com/ismaeel-ch/Turnkey/pull/118))
 
 ## [0.3.2] - 2026-11-26
 

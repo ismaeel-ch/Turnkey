@@ -15,6 +15,7 @@ import type { RunnableConfig } from '@langchain/core/runnables';
 import { issuesOf } from '@/server/agents/schemas';
 import { parseJSONLoose } from '@/server/agents/json';
 import { detectRole, repairNote } from '@/server/agents/registry';
+import { tierFor } from './tiers';
 import { LlmError, resolveProvider, type ChatMessage, type Provider } from '@/server/llm';
 import {
   MAX_ATTEMPTS,
@@ -90,11 +91,12 @@ export function createStepGraph(options: StepGraphOptions = {}) {
     if (!parsed.ok) return { error: fail('bad_request', parsed.message, 0) };
     if (config.signal?.aborted) return { error: fail('aborted', 'The request was cancelled.', 0) };
     if (!getProvider()) return { error: fail('not_configured', 'No model is configured on this server.', 0) };
-    const { prompt, tier, role, maxAttempts } = parsed.input;
+    const { prompt, tier, role: asked, maxAttempts } = parsed.input;
+    const role = asked ?? detectRole(prompt);
     return {
       prompt,
-      tier,
-      role: role ?? detectRole(prompt),
+      tier: tierFor(role, tier),
+      role,
       maxAttempts: Math.min(maxAttempts, MAX_ATTEMPTS),
       messages: [{ role: 'user', content: prompt }],
     };

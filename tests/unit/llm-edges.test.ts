@@ -139,6 +139,30 @@ describe('http helpers', () => {
       { event: 'ping', data: { b: 2 } },
     ]);
   });
+
+  it('cancels the upstream body when the reader stops early, and leaves a finished one alone', async () => {
+    const open = (reasons: unknown[]) =>
+      new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(enc.encode('data: {"n":1}\ndata: {"n":2}\n'));
+        },
+        cancel: (reason) => void reasons.push(reason),
+      });
+    const cancelled: unknown[] = [];
+    for await (const ev of sseData(open(cancelled))) {
+      expect(ev.data).toEqual({ n: 1 });
+      break; // the answer meter, say, cut the answer here
+    }
+    expect(cancelled).toHaveLength(1);
+
+    const untouched: unknown[] = [];
+    const done = new ReadableStream<Uint8Array>({
+      start: (c) => (c.enqueue(enc.encode('data: {"n":1}\n')), c.close()),
+      cancel: (reason) => void untouched.push(reason),
+    });
+    for await (const ev of sseData(done)) void ev;
+    expect(untouched).toHaveLength(0);
+  });
 });
 
 describe('anthropic provider edges', () => {

@@ -1,4 +1,5 @@
 import { type ReactNode, useLayoutEffect, useRef } from 'react';
+import { fmtUsd, promptTokens, usageLine } from '@/platform/agui/usage';
 import type { BackedDef, BriefedDef } from '@/shared/types/app';
 import type {
   ApiPanel,
@@ -1569,6 +1570,8 @@ export function DebugDrawer({ app }: { app: AppRecord | null }) {
               <th>Model</th>
               <th className="num">Tokens in</th>
               <th className="num">Tokens out</th>
+              <th className="num">From cache</th>
+              <th className="num">Cost</th>
               <th className="num">Latency</th>
               <th className="num">Attempt</th>
             </tr>
@@ -1590,6 +1593,8 @@ export function DebugDrawer({ app }: { app: AppRecord | null }) {
                   {x.est ? '~' : ''}
                   {fmtNum(x.tokOut)}
                 </td>
+                <td className="num mono">{x.cacheRead === undefined ? '–' : fmtNum(x.cacheRead)}</td>
+                <td className="num mono">{x.mode === 'replay' ? '$0' : x.costUsd == null ? '–' : fmtUsd(x.costUsd)}</td>
                 <td className="num mono">{fmtMs(x.ms)}</td>
                 <td className="num mono">{x.attempt}</td>
               </tr>
@@ -1869,7 +1874,17 @@ export function DebugDrawer({ app }: { app: AppRecord | null }) {
               // eslint-disable-next-line react-hooks/purity -- a running run's elapsed time; the store re-renders while it runs
               k('Took', fmtMs((run.t1 || Date.now()) - run.t0)),
               k('Model calls', run.calls + (run.replayed ? ' live, ' + run.replayed + ' replayed' : '')),
-              k('Tokens', run.tokIn + run.tokOut ? '~' + fmtNum(run.tokIn + run.tokOut) : live.length ? '0' : 'sample only'),
+              k(
+                'Tokens',
+                run.usage && run.usage.calls && !run.usage.estimated
+                  ? fmtNum(promptTokens(run.usage) + run.usage.output)
+                  : run.tokIn + run.tokOut
+                    ? '~' + fmtNum(run.tokIn + run.tokOut)
+                    : live.length
+                      ? '0'
+                      : 'sample only',
+              ),
+              k('Cost', run.usage && run.usage.calls ? usageLine(run.usage).split(' · ').slice(1).join(' · ') : '$0'),
               k('Send-backs', run.retries),
             ]
           : k('Run', 'none yet')}

@@ -10,6 +10,7 @@ import type { BaseEvent } from '@ag-ui/core';
 // The AG-UI client and the step contract (with zod) load on the first model call, not with the page.
 import type { RunAgentOptions } from '@/platform/agui/client';
 import type { StepErrorCode, StepInput, StepRole } from '@/shared/agent-contract';
+import { readCallUsage, type CallUsage } from '@/platform/agui/usage';
 
 /** One step of the server's agent graph as the browser sees it: `draft`, `validate`, `repair` (and `guard`, `finish`). */
 export type StepProgress = { name: string; phase: 'start' | 'end'; attempt: number; ok?: boolean; issues?: string[] };
@@ -23,6 +24,8 @@ export type SampleOptions = {
   onStep?: (step: StepProgress) => void;
   /** Every AG-UI event, for the debug drawer. */
   onEvent?: (event: BaseEvent) => void;
+  /** Each model call the server made for this prompt, as it ends: model, tokens, cache hits, cost. Also on failure. */
+  onUsage?: (call: CallUsage) => void;
   /**
    * Model calls the server may make for this prompt, its own repairs included. Default 1: the workspace's stations
    * already send work back with their own checks, and each station is capped at three attempts in total.
@@ -42,7 +45,14 @@ export type SampleResult = {
   /** What the server's shape check found, when it returned the draft unchecked (see `sample`). */
   issues?: string[];
 };
-export type Health = { ok: boolean; live: boolean; version?: string; provider?: string };
+export type Health = {
+  ok: boolean;
+  live: boolean;
+  version?: string;
+  provider?: string;
+  /** Dollars this server instance spent on model calls today (UTC), and the daily cap that stops Live when reached. */
+  today?: { spentUsd: number; capUsd: number };
+};
 
 /** Codes the workspace understands: `not_granted` turns Live off for the session, `rate_limited` asks to wait. */
 export class ModelError extends Error {
@@ -138,6 +148,11 @@ export async function sample(prompt: string, opts: SampleOptions = {}): Promise<
       opts.onText?.({ text: soFar, delta });
     },
     onCustom: (name, value) => {
+      if (name === 'usage') {
+        const call = readCallUsage(value);
+        if (call) opts.onUsage?.(call);
+        return;
+      }
       if (name !== 'issues' || !value || typeof value !== 'object') return;
       const v = value as { attempt?: number; issues?: unknown };
       issues = Array.isArray(v.issues) ? v.issues.map(String) : [];
