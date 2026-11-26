@@ -149,6 +149,12 @@ async function flowDemo(browser, url) {
   await say(page, 'Add an insurance provider field to patients'); await waitIdle(page); a = await appState(page);
   check('add field ran a migration', a.cols.patients.includes('insurance_provider') && a.mig === 1, [a.cols.patients, a.mig, a.last]);
   await sleep(100); await shot(page, '27-change-applied');
+  const touch = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), a = s.apps[t.app]; return { col: a.touched && a.touched['col:patients.insurance_provider'], table: a.touched && a.touched['table:patients'], phone: a.touched && a.touched['col:patients.phone'] }; });
+  check('who touched what: the new field is marked as the Database agent\'s change at your request, the fields from the build keep their maker', touch.col && touch.col.by === 'database' && touch.col.via === 'change' && touch.phone && touch.phone.by === 'database' && touch.phone.via === 'build', touch);
+  await view(page, 'Data'); await page.locator('.split .side-i', { hasText: 'patients' }).first().click(); await page.getByRole('tab', { name: 'Columns' }).click(); await sleep(100);
+  const head = await page.locator('.main-head .touch-note').innerText(), madeBy = await page.locator('.main-body tr', { hasText: 'insurance_provider' }).innerText();
+  check('who touched what: the Data page says who made the table and who changed it last, and each field says who made it', /^Made by the Database agent/.test(head) && /Last change: changed by the Database agent at your request/.test(head) && /Database agent, your request/.test(madeBy), [head, madeBy]);
+  await page.getByRole('tab', { name: 'Rows' }).click(); await view(page, 'Build');
   await say(page, 'Remove the front desk note field from patients'); await page.waitForSelector('.gcard.ask .btn.danger', { timeout: 8000 }); await shot(page, '28-approval');
   await page.locator('.gcard.ask .btn.danger').click(); await waitIdle(page); a = await appState(page);
   check('remove field needed approval and dropped the column', !a.cols.patients.includes('front_desk_note') && a.mig === 2, [a.cols.patients, a.mig]);

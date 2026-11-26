@@ -49,6 +49,17 @@ export interface Tab {
 }
 
 /** One app the owner built. The workspace modules add their own fields; the ones every module relies on are listed. */
+/** Who made or last changed one item of an app's definition (src/workspace/provenance.ts). */
+export interface Touch {
+  /** an agent id, `rules` for the built-in rules, or `you` */
+  by: string;
+  /** the first build, a re-run of some stations, or a change the owner asked for */
+  via: 'build' | 'rerun' | 'change';
+  at: number;
+  run?: number;
+  /** the change step, in plain words */
+  what?: string;
+}
 export interface AppRecord {
   id: string;
   /** account id */
@@ -76,6 +87,8 @@ export interface AppRecord {
   reviews: Dict<Review>;
   /** goes up by one with every change to the definition */
   rev: number;
+  /** who made or last changed each item of the definition, by item key (src/workspace/provenance.ts) */
+  touched?: Dict<Touch>;
   /** the seed rows by table, kept so "Reset data" can put them back */
   seed?: { rows: Dict<Row[]> } | null;
   /** the last permission matrix the Backend check ran */
