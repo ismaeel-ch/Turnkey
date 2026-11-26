@@ -2,6 +2,7 @@
 import {
   BRAND,
   LS,
+  NARROW,
   NO_MODEL,
   PHONE,
   S,
@@ -942,9 +943,13 @@ export function Workspace({ app }) {
             items={more}
           />
         </div>
-        <div className="view">{view === 'app' ? <StageView app={app} /> : body}</div>
+        {/* On a tablet the chat lies over the view, below the header, so the view tabs and Share stay in reach. */}
+        <div className={'view' + (chatShown() && NARROW() ? ' has-chat' : '')}>
+          {view === 'app' ? <StageView app={app} /> : body}
+          {chatShown() && NARROW() && <ChatPanel app={app} />}
+        </div>
       </div>
-      {chatShown() && <ChatPanel app={app} />}
+      {chatShown() && !NARROW() && <ChatPanel app={app} />}
     </div>
   );
 }

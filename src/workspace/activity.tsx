@@ -237,7 +237,26 @@ const useStyles = makeStyles({
     zIndex: 40,
     boxShadow: tokens.shadow8,
   },
-  launchPhone: { top: 'auto', bottom: '96px', transform: 'rotate(180deg)' },
+  // On a phone the edge tab would cover the page, so the launcher becomes an icon button in the title bar, in the
+  // space PhoneBar keeps free for it (.act-slot) just left of the account button.
+  launchPhone: {
+    top: 'calc(env(safe-area-inset-top) + 4px)',
+    right: '40px',
+    left: 'auto',
+    transform: 'none',
+    writingMode: 'horizontal-tb',
+    width: '44px',
+    minWidth: '44px',
+    maxWidth: '44px',
+    height: '44px',
+    padding: 0,
+    borderTopLeftRadius: tokens.borderRadiusCircular,
+    borderBottomLeftRadius: tokens.borderRadiusCircular,
+    borderTopRightRadius: tokens.borderRadiusCircular,
+    borderBottomRightRadius: tokens.borderRadiusCircular,
+    boxShadow: 'none',
+    zIndex: 50,
+  },
   drawer: { width: '440px', maxWidth: '100vw' },
   head: { paddingBottom: tokens.spacingVerticalS },
   bar: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS, flexWrap: 'wrap' },
@@ -330,11 +349,13 @@ export function AgentActivity({ app }: { app: AppRecord | null }) {
       <Button
         className={mergeClasses('act-launch', c.launch, PHONE() && c.launchPhone)}
         appearance={working ? 'primary' : 'secondary'}
-        icon={<Icon n="team" s="16" />}
+        icon={<Icon n="team" s={PHONE() ? '20' : '16'} />}
         aria-expanded={open}
+        aria-label={PHONE() ? (working ? 'Agents, ' + working + ' working' : 'Agents') : undefined}
+        title={PHONE() ? 'Agent activity' : undefined}
         onClick={() => setOpen(!open)}
       >
-        {working ? 'Agents · ' + working + ' working' : 'Agents'}
+        {PHONE() ? null : working ? 'Agents · ' + working + ' working' : 'Agents'}
       </Button>
       <OverlayDrawer
         open={open}
