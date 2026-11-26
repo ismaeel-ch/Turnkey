@@ -280,7 +280,8 @@ export interface ViewState {
   solo: Loose;
   sheet: Loose;
   told: Dict<Loose>;
-  noteDraft: Dict<Loose>;
+  /** unsaved instructions and step jobs the owner is typing, by key */
+  noteDraft: Dict<string>;
   /** release form, per app */
   /** the Release view's form, by app id */
   rel: Dict<{ kind: string | null; text: string | null; busy: boolean }>;
@@ -328,6 +329,8 @@ export interface AgentInfo {
   /** accent colour name */
   acc: string;
   role: string;
+  /** set for a review step: its id */
+  reviewer?: string;
 }
 
 /** What a saved build's station function is given. `answer` is the owner's answer to the Researcher's question. */
@@ -441,13 +444,54 @@ export interface StationLine {
 
 /** An app's build workflow: stations, approvals, added agents and reviewers. */
 export interface AppFlow {
+  /** 1 to 3 attempts per station */
+  attempts: number;
+  /** stations the line stops after for the owner's approval */
+  approve: Dict<boolean>;
+  /** a standing instruction per agent */
+  notes: Dict<string>;
+  /** stations the built-in rules build instead of the agent */
+  by: Dict<string>;
+  /** added steps, in order: library reviewers and the owner's own agents */
   reviewers: string[];
-  [field: string]: Loose;
+  agents: FlowAgent[];
+  /** where a library step sits when it was moved, and whether it applies its changes */
+  at: Dict<string>;
+  auto: Dict<boolean>;
+}
+/** An agent the owner described in a sentence, added to the workflow. */
+export interface FlowAgent {
+  id: string;
+  name: string;
+  job: string;
+  after: string;
+  mode: 'advise' | 'apply';
+  icon: string;
+  acc: string;
 }
 
 /** A reviewer agent's review of an app, with its findings. */
 export interface Review {
-  status: string;
-  findings: { state: string; [field: string]: Loose }[];
-  [field: string]: Loose;
+  status: 'working' | 'ok' | 'failed';
+  at: number;
+  /** the app's revision this review read */
+  rev: number;
+  findings: ReviewFinding[];
+  by: 'model' | 'rules';
+  note: string;
+}
+
+/** One finding of a review, with the fix it proposes and whether that fix was tried out. */
+export interface ReviewFinding {
+  id: string;
+  level: 'high' | 'medium' | 'low';
+  text: string;
+  why: string;
+  fix: string | null;
+  /** open, applying or applied */
+  state: string;
+  /** pass, fail or unknown once the fix was tried out; null before */
+  test: string | null;
+  /** why the fix would not pass, or a note on approval */
+  block: string;
 }
