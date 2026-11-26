@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ErrorScreen } from '@/platform/error-screen';
 import { flushOnHide, openWorkspaceStorage } from '@/platform/storage';
 import { U, attachStorage, notify } from './core';
+import { listenForStorageProblems, noteStorageProblem } from './errors';
 import { setFlowAvailable } from './flow';
 import { boot, Root } from './shell-c';
 
@@ -17,7 +18,11 @@ let started = false;
 function start() {
   if (started) return;
   started = true;
-  void openWorkspaceStorage((p) => console.warn('[storage]', p.message))
+  listenForStorageProblems();
+  void openWorkspaceStorage((p) => {
+    console.warn('[storage]', p.message);
+    noteStorageProblem(p.kind, p.message);
+  })
     .catch(() => null) // never expected: the adapter falls back to memory instead of failing
     .then((storage) => {
       if (storage) attachStorage(storage.lsCompat());
@@ -45,8 +50,9 @@ function preloadWhenIdle() {
     void import('@/platform/agui/client').catch(() => undefined);
     void import('@/shared/agent-contract').catch(() => undefined);
   };
-  if (typeof requestIdleCallback === 'function') requestIdleCallback(load, { timeout: 4000 });
-  else setTimeout(load, 1500);
+  // a few seconds in, so parsing them does not hold up the first screen; then at the next idle moment
+  const idle = () => (typeof requestIdleCallback === 'function' ? requestIdleCallback(load, { timeout: 4000 }) : load());
+  setTimeout(idle, 5000);
 }
 
 export default function Workspace() {

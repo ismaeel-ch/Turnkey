@@ -1,3 +1,4 @@
+import { AreaBoundary } from '@/platform/area-boundary';
 import {
   BRAND,
   LS,
@@ -228,7 +229,7 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
                 }),
             },
             {
-              label: 'What is real in this prototype',
+              label: 'What is real in Turnkey',
               icon: 'info',
               on: () => openDialog('about'),
             },
@@ -298,7 +299,7 @@ export function Home() {
           checking: 'Still connecting to the model. Try again in a moment, or pick a saved build below.',
           nomodel:
             NO_MODEL +
-            ' None of the saved builds matches that sentence, so pick one below. Inside Claude the model comes from the viewer; the hackathon build calls its own server route.',
+            ' None of the saved builds matches that sentence, so pick one below. Live calls the model through Turnkey’s own server route once a model key is set there.',
         };
       if (!tpl) {
         h.note = why[mode.id];
@@ -888,19 +889,21 @@ export function Workspace({ app }: { app: AppRecord }) {
               <Icon n="share" />
             </Btn>
           </div>
-          <div className="view">
-            {chatShown() ? (
-              <ChatPanel app={app} />
-            ) : view === 'app' ? (
-              stageOf(app).tour ? (
-                <StageView app={app} />
+          <AreaBoundary name={chatShown() ? 'The chat' : 'This view'} resetKey={chatShown() ? 'chat' : view}>
+            <div className="view">
+              {chatShown() ? (
+                <ChatPanel app={app} />
+              ) : view === 'app' ? (
+                stageOf(app).tour ? (
+                  <StageView app={app} />
+                ) : (
+                  <AppLauncher app={app} />
+                )
               ) : (
-                <AppLauncher app={app} />
-              )
-            ) : (
-              body
-            )}
-          </div>
+                body
+              )}
+            </div>
+          </AreaBoundary>
         </div>
         <PhoneNav app={app} />
       </div>
@@ -952,11 +955,21 @@ export function Workspace({ app }: { app: AppRecord }) {
         </div>
         {/* On a tablet the chat lies over the view, below the header, so the view tabs and Share stay in reach. */}
         <div className={'view' + (chatShown() && NARROW() ? ' has-chat' : '')}>
-          {view === 'app' ? <StageView app={app} /> : body}
-          {chatShown() && NARROW() && <ChatPanel app={app} />}
+          <AreaBoundary name="This view" resetKey={view}>
+            {view === 'app' ? <StageView app={app} /> : body}
+          </AreaBoundary>
+          {chatShown() && NARROW() && (
+            <AreaBoundary name="The chat">
+              <ChatPanel app={app} />
+            </AreaBoundary>
+          )}
         </div>
       </div>
-      {chatShown() && !NARROW() && <ChatPanel app={app} />}
+      {chatShown() && !NARROW() && (
+        <AreaBoundary name="The chat">
+          <ChatPanel app={app} />
+        </AreaBoundary>
+      )}
     </div>
   );
 }

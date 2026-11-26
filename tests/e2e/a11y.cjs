@@ -97,6 +97,75 @@ async function scheme(browser, s) {
   await page.waitForSelector('.dialog.share');
   await screen(page, s + ': share dialog', '.dialog.share');
   await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.dialog'));
+  // every page of the built app, as its users see it
+  await view(page, 'App');
+  if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click();
+  await page.waitForSelector('.app-nav .nav-i');
+  const pages = await page.locator('.app-nav .nav-i').count();
+  for (let i = 0; i < pages; i++) {
+    await page.locator('.app-nav .nav-i').nth(i).click();
+    await screen(page, s + ': the app, page ' + (i + 1) + ' of ' + pages, '.app');
+  }
+  // panels and dialogs from the title bar
+  await page.locator('.act-launch').click();
+  await page.waitForSelector('.act-panel');
+  await screen(page, s + ': the agent activity panel', '.act-panel');
+  await page.keyboard.press('Escape');
+  await page.locator('.titlebar [data-tour=debug]').click();
+  await page.waitForSelector('.debug');
+  await screen(page, s + ': the debug drawer', '.debug');
+  await page.locator('.titlebar [data-tour=debug]').click();
+  for (const [menu, item, sel] of [
+    ['.acct', 'Settings', '.dialog'],
+    ['[aria-label="Help"]', 'Feature guide', '.dialog'],
+    ['[aria-label="Help"]', 'What is real in Turnkey', '.dialog'],
+  ]) {
+    await page.locator('.titlebar ' + menu).first().click();
+    await page.getByRole('menuitem', { name: item }).click();
+    await page.waitForSelector(sel);
+    await screen(page, s + ': the ' + item + ' dialog', sel);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.dialog'));
+  }
+  // a quest app, with its agent team
+  await page.locator('.newtab').click();
+  await page.waitForSelector('.home');
+  await build(page, 'factcheck');
+  await view(page, 'App');
+  if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click();
+  await page.waitForSelector('.app-nav .nav-i');
+  await screen(page, s + ': a quest app with its agent team');
+  await ctx.close();
+}
+
+/** The same screens at phone width (390 px), where the builder swaps its tabs for a bottom bar. */
+async function phone(browser, s) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: s, reducedMotion: 'reduce', isMobile: true, hasTouch: true });
+  await ctx.route('https://**/*', (route) => route.abort());
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errors.push('pageerror: ' + String(e.stack || e).slice(0, 400)));
+  await enter(page);
+  await screen(page, s + ' 390px: onboarding');
+  await finishOnboarding(page);
+  await screen(page, s + ' 390px: home');
+  await build(page, 'clinic');
+  await screen(page, s + ' 390px: a built app in the builder');
+  await page.locator('.phone-nav .tab-i', { hasText: 'App' }).click();
+  await screen(page, s + ' 390px: the App tab');
+  await page.getByRole('button', { name: 'Open the app' }).click();
+  await page.waitForSelector('.solo .app');
+  if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click();
+  await page.waitForSelector('.app-tabs');
+  await screen(page, s + ' 390px: the app full screen');
+  await page.locator('.app-head .persona').click();
+  await page.waitForSelector('.sheet');
+  await screen(page, s + ' 390px: the app menu sheet');
+  await page.locator('.sheet-i', { hasText: 'Back to Turnkey' }).click();
+  await page.waitForSelector('.phone-nav');
+  await page.locator('.phone-nav .tab-i', { hasText: 'More' }).click();
+  await page.waitForSelector('.sheet');
+  await screen(page, s + ' 390px: the More sheet');
   await ctx.close();
 }
 
@@ -129,12 +198,25 @@ async function keyboard(browser) {
   // reduced motion: no animation or transition runs longer than a blink
   const slow = await page.evaluate(() => [...document.querySelectorAll('body *')].filter((el) => { const cs = getComputedStyle(el); const t = (s) => Math.max(...s.split(',').map((x) => parseFloat(x) * (x.trim().endsWith('ms') ? 1 : 1000))); return t(cs.animationDuration) > 50 && cs.animationName !== 'none' || t(cs.transitionDuration) > 50; }).slice(0, 5).map((el) => el.tagName + '.' + String(el.className).slice(0, 40)));
   check('with reduced motion asked for, nothing animates', slow.length === 0, slow);
+  // the workflow canvas works from the keyboard: a station node takes focus and Enter opens it in the inspector
+  await build(page, 'clinic');
+  await view(page, 'Build');
+  const node = page.locator('.react-flow__node[aria-label^="Database station"]').first();
+  await node.focus();
+  const focused = await page.evaluate(() => !!document.activeElement && document.activeElement.matches('.react-flow__node'));
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('[data-tour="inspector"]', { timeout: 5000 }).catch(() => {});
+  const insp = await page.evaluate(() => { const i = document.querySelector('[data-tour="inspector"]'); return i ? i.innerText.slice(0, 200) : ''; });
+  check('a station on the canvas takes keyboard focus, and Enter opens it in the inspector', focused && /Database/.test(insp), { focused, insp: insp.slice(0, 80) });
+  // the chat composer is reachable and named
+  const composer = await page.evaluate(() => { const t = document.querySelector('.composer textarea'); if (!t) return null; const id = t.id, lab = id && document.querySelector('label[for="' + id + '"]'); return t.getAttribute('aria-label') || (lab && lab.textContent) || t.getAttribute('placeholder') ? true : false; });
+  check('the chat composer has a name a screen reader can read', composer === true, composer);
   await ctx.close();
 }
 
 (async () => {
   const browser = await chromium.launch();
-  for (const step of [() => scheme(browser, 'light'), () => scheme(browser, 'dark'), () => keyboard(browser)]) {
+  for (const step of [() => scheme(browser, 'light'), () => scheme(browser, 'dark'), () => phone(browser, 'light'), () => phone(browser, 'dark'), () => keyboard(browser)]) {
     try { await step(); } catch (e) { errors.push('a11y flow stopped: ' + String(e.stack || e).slice(0, 700)); }
   }
   await browser.close();

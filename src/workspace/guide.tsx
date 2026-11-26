@@ -468,7 +468,7 @@ export const GUIDE: GuideEntry[] = [
     g: 'data',
     icon: 'plug',
     title: 'Connections',
-    what: 'Outside sources the agents and the built apps may use: Wikipedia, Microsoft Learn, World Bank, OpenAlex, arXiv, PatentsView, and your own. In this prototype they return sample responses.',
+    what: 'Outside sources the agents and the built apps may use: Wikipedia, Microsoft Learn, World Bank, OpenAlex, arXiv, PatentsView, and your own. Test on the Connections page calls Wikipedia, World Bank, OpenAlex, arXiv and PatentsView for real through Turnkey’s server; the others show a labelled sample.',
     how: ['Open Connections.', 'Switch one on, test it, or add your own.'],
     go: {
       label: 'Open Connections',
@@ -501,9 +501,9 @@ export const GUIDE: GuideEntry[] = [
     g: 'data',
     icon: 'wifiOff',
     title: 'Offline and install',
-    what: 'Built apps, their data and saved builds work without internet. Live pauses until the connection returns, and so do changes through the model and connections to other systems. Install adds the builder to your desktop in the real product; here it is imitated.',
+    what: 'Built apps, their data and saved builds work without internet. Live pauses until the connection returns, and so do changes through the model and connections to other systems. Install adds Turnkey, or one built app, to your desktop with its own icon, and a service worker keeps it working offline.',
     how: [
-      'Press Online in the title bar to simulate going offline, or really disconnect your device.',
+      'Press Online in the title bar to try going offline, or really disconnect your device.',
       'Open a built app: it still works.',
       'Ask for a change in chat: the built-in rules read it while Live is paused.',
     ],
