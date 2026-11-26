@@ -714,7 +714,15 @@ export function buildSuites(app) {
   return out;
 }
 export const testable = (app) => app.status === 'ready' && !!app.def.brief && !!app.def.process;
-export function testStats(app) {
+/** Counts for badges: what the last run found, or what there is to run. */
+export interface TestStats {
+  total: number;
+  passed: number;
+  failed: number;
+  at: number;
+  fresh: boolean;
+}
+export function testStats(app): TestStats | null {
   // counts for badges: what the last run found, or what there is to run
   const R = TESTS[app.id],
     fresh = R && R.rev === app.rev,
@@ -872,7 +880,7 @@ export function TestRows({ app, suite, only, q }) {
   const rows = suite.tests.filter((x) => (!only || (res[x.id] && !res[x.id].ok)) && (!q || x.name.toLowerCase().indexOf(q) >= 0));
   if (!rows.length) return null;
   return (
-    <ul className="tests">
+    <ul className="tests" tabIndex={0} aria-label={suite.name + ' tests'}>
       {rows.map((x) => {
         const r = res[x.id];
         return (

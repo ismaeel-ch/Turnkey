@@ -268,13 +268,24 @@ export interface TestCase {
   why: string;
   steps: TourStep[];
 }
+/** The app's own icon as data (src/workspace/release.tsx draws it). */
+export interface Logo {
+  glyph: string | null;
+  shape: string;
+  fill: string;
+  mark: string;
+  /** who chose it: ui, rules or you */
+  by: string;
+  /** how often the owner asked for another design */
+  turn?: number;
+}
 export interface Theme {
   accent: string;
   nav: string;
   icon: string;
   density?: string;
   /** the app's own icon: shape, fill and mark */
-  logo?: Dict<Loose> | null;
+  logo?: Logo | null;
 }
 
 /** One schema change made after the first build. */

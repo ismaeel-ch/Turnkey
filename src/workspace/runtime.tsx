@@ -8,7 +8,7 @@ import { REC, allConnectors, callConnector, connOn } from './builds';
 import { TeamConsole } from './room';
 import { resetAppData } from './line';
 import { Avatar, Btn, Empty, Field, Icon, Input, MBar, Menu, Proto, Select, Switch, Textarea, type MenuEntry } from './ui';
-import { AppSheets, AppTabs, isCompact, useElWidth } from './mobile';
+import { AppSheets, AppTabs, isCompact, useElWidth, type SoloItem } from './mobile';
 import { Explorer } from './views-a';
 import { Dash } from './views-b';
 import { AppLogo } from './release';
@@ -17,7 +17,7 @@ import { AppLogo } from './release';
    Nothing here is specific to one app. Tables, columns, roles, workflow, screens and layout all come from
    the definition the agents wrote, and every read or write goes through apiCall (the role-guarded backend). */
 /** Menu entries a page that shows the app on its own adds to the user menu (back, about). */
-export type SoloItems = (MenuEntry | '-')[];
+export type SoloItems = SoloItem[];
 /** The table a status column belongs to; only its name matters. */
 type TableName = Pick<TableDef, 'name'>;
 export const APICACHE = new Map<string, ApiResult>();
@@ -124,8 +124,7 @@ export function stageOf(app: AppRecord): Stage {
   );
 }
 export function AppPane({ app, pane, solo }: { app: AppRecord; pane: Pane; solo?: SoloItems }) {
-  // mobile.tsx is not typed yet: the hook returns a ref callback and the element's width
-  const box = useElWidth() as unknown as [(el: HTMLDivElement | null) => void, number],
+  const box = useElWidth(),
     compact = !pane.test && isCompact(box[1]);
   const def = app.def,
     users = appUsers(app),
@@ -172,7 +171,7 @@ export function AppPane({ app, pane, solo }: { app: AppRecord; pane: Pane; solo?
       ))}
     </nav>
   );
-  const items: SoloItems = [
+  const items: (MenuEntry | '-')[] = [
     {
       head: true,
       label: 'Switch user',
@@ -286,7 +285,7 @@ export function AppLogin({ app, pane, users, solo }: { app: AppRecord; pane: Pan
   return (
     <div className={cx('app app-login', 'acc-' + def.theme.accent)}>
       <div className="login-card">
-        <AppLogo app={app} size={64} cls={undefined} />
+        <AppLogo app={app} size={64} />
         <h2 className="t-sub1">
           {'Sign in to '}
           {app.name}
@@ -355,7 +354,7 @@ export function AppLogin({ app, pane, users, solo }: { app: AppRecord; pane: Pan
             </span>
             <span className="grow" />
             {solo
-              .filter((it): it is MenuEntry => it !== '-' && (it.icon === 'info' || it.icon === 'arrowLeft'))
+              .filter((it): it is Exclude<SoloItem, '-'> => it !== '-' && (it.icon === 'info' || it.icon === 'arrowLeft'))
               .map((it, i) => (
                 <Btn key={i} type="button" className="btn subtle sm" onClick={it.on}>
                   {it.label}
