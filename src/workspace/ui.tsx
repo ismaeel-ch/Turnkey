@@ -1,7 +1,20 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
-import { cloneElement, forwardRef, isValidElement, useState, useEffect, useRef } from 'react';
+import { cloneElement, forwardRef, isValidElement, useEffect, useRef } from 'react';
 import {
   Button,
+  Menu as FluentMenu,
+  MenuDivider,
+  MenuGroupHeader,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
+  MessageBar,
+  MessageBarActions,
+  MessageBarBody,
+  Switch as FluentSwitch,
+  Tab,
+  TabList,
   Field as FluentField,
   Dialog as FluentDialog,
   DialogBody,
@@ -12,7 +25,6 @@ import {
   Spinner as FluentSpinner,
   ToggleButton,
 } from '@fluentui/react-components';
-import { NativeField } from '@/platform/dom';
 import { ICONS } from './icons';
 import { accFor, cx, initials } from './core';
 import { AGENTS } from './line';
@@ -84,36 +96,44 @@ export const Btn = forwardRef(function Btn({ className, children, ...rest }, ref
     </Button>
   );
 });
+/**
+ * Fluent's Switch inside a `label.switch`, so a click on the text toggles it too and tests can find it by class.
+ */
 export function Switch({ on, onChange, text, id, disabled, title }) {
   return (
     <label className={cx('switch', disabled && 'is-off')} title={title}>
-      <NativeField as="input" type="checkbox" id={id} checked={!!on} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
-      <span className="track">
-        <span className="thumb" />
-      </span>
+      <FluentSwitch id={id} checked={!!on} disabled={disabled} onChange={(e, d) => onChange(d.checked)} />
       {text && <span className="switch-t">{text}</span>}
     </label>
   );
 }
+/** Fluent's TabList. Each tab keeps `.tab` (and `.on` when selected) for layout CSS and tests. */
 export function Tabs({ items, value, onChange, cls, label: aria }) {
+  const small = String(cls || '')
+    .split(/\s+/)
+    .includes('sm');
   return (
-    <div className={cx('tabs', cls)} role="tablist" aria-label={aria}>
+    <TabList
+      className={cx('tabs', cls)}
+      aria-label={aria}
+      size={small ? 'small' : 'medium'}
+      selectedValue={value}
+      onTabSelect={(e, d) => onChange(d.value)}
+    >
       {items.map((it) => (
-        <button
+        <Tab
           key={it.id}
-          role="tab"
-          aria-selected={it.id === value}
+          value={it.id}
           className={cx('tab', it.id === value && 'on')}
           data-tour={it.tour}
           title={it.title}
-          onClick={() => onChange(it.id)}
+          icon={it.icon ? <Icon n={it.icon} /> : undefined}
         >
-          {it.icon && <Icon n={it.icon} />}
-          <span>{it.label}</span>
+          {it.label}
           {it.count != null && <span className="tab-n">{it.count}</span>}
-        </button>
+        </Tab>
       ))}
-    </div>
+    </TabList>
   );
 }
 export function Seg({ items, value, onChange, label: aria }) {
@@ -143,14 +163,27 @@ export const TONE_ICON = {
   warning: 'warning',
   danger: 'errorCircle',
 };
+const TONE_INTENT = { info: 'info', success: 'success', warning: 'warning', danger: 'error' };
+/** Fluent's MessageBar. `cls="bar"` makes it a full-width strip with square corners. */
 export function MBar({ tone, children, action, cls }) {
   const t = tone || 'info';
   return (
-    <div className={cx('mbar', 'm-' + t, cls)} role={t === 'danger' || t === 'warning' ? 'alert' : 'status'}>
-      <Icon n={TONE_ICON[t]} />
-      <div className="grow">{children}</div>
-      {action}
-    </div>
+    <MessageBar
+      className={cx('mbar', 'm-' + t, cls)}
+      intent={TONE_INTENT[t] || 'info'}
+      shape={
+        String(cls || '')
+          .split(/\s+/)
+          .includes('bar')
+          ? 'square'
+          : 'rounded'
+      }
+      role={t === 'danger' || t === 'warning' ? 'alert' : 'status'}
+      icon={<Icon n={TONE_ICON[t]} />}
+    >
+      <MessageBarBody className="grow">{children}</MessageBarBody>
+      {action && <MessageBarActions>{action}</MessageBarActions>}
+    </MessageBar>
   );
 }
 export function Empty({ icon, title, text, children }) {
@@ -165,66 +198,55 @@ export function Empty({ icon, title, text, children }) {
     </div>
   );
 }
+/**
+ * Fluent's Menu, drawn in place (`inline`) rather than in a portal, so `.menu-wrap > button` and `.menu .mi` stay
+ * inside the toolbar that owns them. Items: `'-'` divider, `{ head, label }` heading, or
+ * `{ label, icon, hint, check, danger, disabled, on }`.
+ */
 export function Menu({ btn, items, align, title, tour }) {
-  const [open, setOpen] = useState(false),
-    ref = useRef();
-  useEffect(() => {
-    if (!open) return undefined;
-    const h = (e) => {
-        if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-      },
-      k = (e) => {
-        if (e.key === 'Escape') setOpen(false);
-      };
-    document.addEventListener('mousedown', h);
-    document.addEventListener('keydown', k);
-    return () => {
-      document.removeEventListener('mousedown', h);
-      document.removeEventListener('keydown', k);
-    };
-  }, [open]);
+  const list = items.filter(Boolean);
   return (
-    <div className="menu-wrap" ref={ref}>
-      <Btn
-        className={btn.cls || 'btn subtle'}
-        title={title}
-        aria-label={btn.label}
-        data-tour={tour}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
+    <div className="menu-wrap">
+      <FluentMenu
+        inline
+        hasIcons={list.some((it) => it.icon)}
+        positioning={{ position: 'below', align: align === 'left' ? 'start' : 'end', offset: 4 }}
       >
-        {btn.body}
-      </Btn>
-      {open && (
-        <div className={cx('menu', align === 'left' ? 'left' : 'right')} role="menu">
-          {items.filter(Boolean).map((it, i) =>
-            it === '-' ? (
-              <div key={i} className="msep" />
-            ) : it.head ? (
-              <div key={i} className="mlabel">
-                {it.label}
-              </div>
-            ) : (
-              <button
-                key={i}
-                className={cx('mi', it.danger && 'danger')}
-                role="menuitem"
-                disabled={it.disabled}
-                onClick={() => {
-                  setOpen(false);
-                  if (it.on) it.on();
-                }}
-              >
-                {it.icon && <Icon n={it.icon} />}
-                <span className="grow">{it.label}</span>
-                {it.hint && <span className="muted t-cap">{it.hint}</span>}
-                {it.check && <Icon n="check" s="16" />}
-              </button>
-            ),
-          )}
-        </div>
-      )}
+        <MenuTrigger disableButtonEnhancement>
+          <Btn className={btn.cls || 'btn subtle'} title={title} aria-label={btn.label} data-tour={tour}>
+            {btn.body}
+          </Btn>
+        </MenuTrigger>
+        <MenuPopover className={cx('menu', align === 'left' ? 'left' : 'right')}>
+          <MenuList>
+            {list.map((it, i) =>
+              it === '-' ? (
+                <MenuDivider key={i} className="msep" />
+              ) : it.head ? (
+                <MenuGroupHeader key={i} className="mlabel">
+                  {it.label}
+                </MenuGroupHeader>
+              ) : (
+                <MenuItem
+                  key={i}
+                  className={cx('mi', it.danger && 'danger')}
+                  disabled={it.disabled}
+                  icon={it.icon ? <Icon n={it.icon} /> : undefined}
+                  secondaryContent={it.hint || undefined}
+                  onClick={() => {
+                    if (it.on) it.on();
+                  }}
+                >
+                  <span className="mi-row">
+                    <span className="grow">{it.label}</span>
+                    {it.check && <Icon n="check" s="16" />}
+                  </span>
+                </MenuItem>
+              ),
+            )}
+          </MenuList>
+        </MenuPopover>
+      </FluentMenu>
     </div>
   );
 }
