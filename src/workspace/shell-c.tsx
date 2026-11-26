@@ -239,7 +239,7 @@ export function Onboarding() {
         </div>
         {o.err && <MBar tone="warning">{o.err}</MBar>}
         <Btn
-          className="btn subtle"
+          className="btn subtle ob-skip"
           onClick={() => {
             setOb({ name: 'Demo user', user: 'demo', pass: 'demo', err: '', step: 2 });
           }}

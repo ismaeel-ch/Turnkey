@@ -100,8 +100,9 @@ function tableTouchText(app: AppRecord, table: string) {
 export function Grid({ rows, mask }: { rows: Dict<unknown>[]; mask?: boolean }) {
   if (!rows.length) return <p className="muted pad">No rows.</p>;
   const keys = Object.keys(rows[0]);
+  // Wide tables scroll sideways, so the wrapper is a named, focusable region that keyboard users can scroll.
   return (
-    <div className="tbl-wrap">
+    <div className="tbl-wrap" role="region" aria-label="Rows" tabIndex={0}>
       <table className="tbl dense">
         <thead>
           <tr>
@@ -116,7 +117,7 @@ export function Grid({ rows, mask }: { rows: Dict<unknown>[]; mask?: boolean }) 
           {rows.map((r, i) => (
             <tr key={i}>
               {keys.map((k) => (
-                <td key={k} className={typeof r[k] === 'number' ? 'num mono' : ''}>
+                <td key={k} className={typeof r[k] === 'number' ? 'num mono' : String(r[k] ?? '').length <= 24 ? 'nw' : ''}>
                   {r[k] == null ? (
                     <span className="muted">NULL</span>
                   ) : mask && k === 'password' ? (
@@ -1239,10 +1240,12 @@ export function ChatPanel({ app }: { app: AppRecord }) {
     last = app.chat[n - 1],
     draft = U.chatDraft[app.id] || '';
   const answered = last && last.card ? String(last.card.answered) + String(last.card.decided) : '';
+  const settled = !RUNS[app.id] && !PENDING[app.id];
+  // Settling shows the suggestions under the log, which makes it shorter, so scroll again then too.
   useLayoutEffect(() => {
     const el = ref.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [n, app.id, answered]);
+  }, [n, app.id, answered, settled]);
   const send = (text?: string) => sendChat(app, text != null ? text : draft);
   const waiting = busy && (RUNS[app.id].answer || RUNS[app.id].gate),
     idle = !busy && !PENDING[app.id],
