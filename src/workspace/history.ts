@@ -33,6 +33,7 @@ import { S, U, activeTab, clone, commit, emit, hashStr, notify, subscribe, toast
 import { DBX, dbBump, dbExists, dbFlush, dbOpen, qi } from './db';
 import { PENDING, RUNS } from './line';
 import { cancelRerun, queuedRerun } from './rerun';
+import { TEAMS } from './team';
 
 /** What a version keeps of an app. `fp` fingerprints the parts the owner sees, to tell whether anything changed. */
 export interface AppSnap {
@@ -128,9 +129,17 @@ function whatSince(app: AppRecord, since: number, prev: AppSnap | null): string 
   return 'Change the app';
 }
 
-/** True while something is still changing the app, so its state is not a finished version yet. */
+/**
+ * True while something is still changing the app, so its state is not a finished version yet. That includes the app's
+ * own agent team, which writes rows through the definition an undo would swap out.
+ */
 export const appBusy = (app: AppRecord) =>
-  app.status !== 'ready' || !!RUNS[app.id] || !!PENDING[app.id] || !!queuedRerun(app.id) || !!DBX.hold[app.id];
+  app.status !== 'ready' ||
+  !!RUNS[app.id] ||
+  !!PENDING[app.id] ||
+  !!queuedRerun(app.id) ||
+  !!DBX.hold[app.id] ||
+  TEAMS[app.id]?.status === 'running';
 
 const saveTimers: Dict<ReturnType<typeof setTimeout>> = {};
 function persist(appId: string) {

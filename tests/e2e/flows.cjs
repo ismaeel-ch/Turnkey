@@ -1086,6 +1086,11 @@ async function flowRound6(browser, url) {
   const runN = (await appFull(page)).run.n; await worker('rules'); await sleep(6500);
   const held = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return { runs: Object.keys(window.__formwork.wf.runs()), queued: !!window.__formwork.wf.queued(t.app), team: window.__formwork.teams()[t.app].status }; });
   check('a re-run after a workflow edit waits while the app\'s own agents are running, instead of rebuilding under them', held.runs.length === 0 && held.queued && held.team === 'running' && (await appFull(page)).run.n === runN, held);
+  // nor may an undo swap the definition and database out from under the team
+  await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); window.__formwork.wf.cancelRerun(t.app); }); await sleep(1500);
+  await page.evaluate(() => document.activeElement && document.activeElement.blur()); await page.keyboard.press('Control+z'); await sleep(400);
+  const undone = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return { by: s.apps[t.app].flow.by.screens || null, team: window.__formwork.teams()[t.app].status }; });
+  check('undo waits while the app\'s own agents are running', undone.by === 'rules' && undone.team === 'running', undone);
   await worker('agent'); await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); window.__formwork.wf.cancelRerun(t.app); });
   await page.locator('.team-log .gcard.ask .btn.primary').click(); await waitTeam(page); await sleep(300);
   const deb = (await page.locator('.team-log').innerText()).replace(/\s+/g, ' ');
