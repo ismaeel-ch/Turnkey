@@ -23,7 +23,7 @@ import {
 } from './core';
 import { VIEW_ICON, VIEW_LABEL, accOf, apiCall, appUsers, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isNum, viewCfg, viewFit, viewsOf } from './viewspec';
-import { Empty, Icon, MBar, Menu, Seg } from './ui';
+import { Btn, Empty, Icon, MBar, Menu, Seg } from './ui';
 import { Cell, cellText, fetchApi, isStatusCol, optLabel, rowTitle, stateLabel, stateTone } from './runtime';
 import { VChart, VPivot, VTimeline } from './views-b';
 
@@ -314,10 +314,10 @@ export function FilterBox({ app, user, t, st, set }) {
     );
   return (
     <div className="menu-wrap" ref={ref}>
-      <button className={cx('btn sm', st.filters.length && 'on')} aria-expanded={open} onClick={() => setOpen(!open)}>
+      <Btn className={cx('btn sm', st.filters.length && 'on')} aria-expanded={open} onClick={() => setOpen(!open)}>
         <Icon n="filter" s="16" />
         Filter{st.filters.length ? ' · ' + st.filters.length : ''}
-      </button>
+      </Btn>
       {open && (
         <form className="menu right fbox" onSubmit={add}>
           <div className="mlabel">Show rows where</div>
@@ -350,9 +350,9 @@ export function FilterBox({ app, user, t, st, set }) {
             ))}
           </NativeField>
           {ctl}
-          <button className="btn primary sm" type="submit">
+          <Btn className="btn primary sm" type="submit">
             Add filter
-          </button>
+          </Btn>
         </form>
       )}
     </div>
@@ -550,13 +550,13 @@ export function Explorer({ app, user, pane, scr, test }) {
           />
         </div>
         {acc.create && (
-          <button className="btn primary fab" onClick={() => openNew()}>
+          <Btn className="btn primary fab" onClick={() => openNew()}>
             <Icon n="add" />
             <span>
               {'New '}
               {t.one.toLowerCase()}
             </span>
-          </button>
+          </Btn>
         )}
       </div>
       <div className="vx-bar">
@@ -623,15 +623,15 @@ export function Explorer({ app, user, pane, scr, test }) {
         </div>
         <span className="grow" />
         <FilterBox app={app} user={user} t={t} st={st} set={set} />
-        <button className="btn sm" title="Copy the rows you see as CSV" onClick={csv}>
+        <Btn className="btn sm" title="Copy the rows you see as CSV" onClick={csv}>
           <Icon n="copy" s="16" />
           <span className="hide-sm">CSV</span>
-        </button>
+        </Btn>
       </div>
       {st.filters.length > 0 && (
         <div className="chips">
           {st.filters.map(chip)}
-          <button
+          <Btn
             className="btn subtle sm"
             onClick={() =>
               set((s) => {
@@ -641,7 +641,7 @@ export function Explorer({ app, user, pane, scr, test }) {
             }
           >
             Clear all
-          </button>
+          </Btn>
         </div>
       )}
       <div className="vx-body">
@@ -813,7 +813,7 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }) {
         <span className="grow" />
         {!g && pages > 1 && (
           <span className="pager">
-            <button
+            <Btn
               className="btn subtle icon sm"
               aria-label="Previous page"
               disabled={page === 0}
@@ -824,14 +824,14 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }) {
               }
             >
               <Icon n="chevLeft" s="16" />
-            </button>
+            </Btn>
             <span className="t-cap">
               {'Page '}
               {page + 1}
               {' of '}
               {pages}
             </span>
-            <button
+            <Btn
               className="btn subtle icon sm"
               aria-label="Next page"
               disabled={page >= pages - 1}
@@ -842,7 +842,7 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }) {
               }
             >
               <Icon n="chevRight" s="16" />
-            </button>
+            </Btn>
           </span>
         )}
       </div>
@@ -1084,20 +1084,20 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
   return (
     <>
       <div className="vopts">
-        <button className="btn subtle icon sm" aria-label={week ? 'Previous week' : 'Previous month'} onClick={() => move(off - 1)}>
+        <Btn className="btn subtle icon sm" aria-label={week ? 'Previous week' : 'Previous month'} onClick={() => move(off - 1)}>
           <Icon n="chevLeft" s="16" />
-        </button>
+        </Btn>
         <strong className="cal-title">
           {week
             ? first.getDate() + ' ' + MON[first.getMonth()] + ' to ' + end.getDate() + ' ' + MON[end.getMonth()]
             : MONTH[first.getMonth()] + ' ' + first.getFullYear()}
         </strong>
-        <button className="btn subtle icon sm" aria-label={week ? 'Next week' : 'Next month'} onClick={() => move(off + 1)}>
+        <Btn className="btn subtle icon sm" aria-label={week ? 'Next week' : 'Next month'} onClick={() => move(off + 1)}>
           <Icon n="chevRight" s="16" />
-        </button>
-        <button className="btn sm" onClick={() => move(0)}>
+        </Btn>
+        <Btn className="btn sm" onClick={() => move(0)}>
           Today
-        </button>
+        </Btn>
         <Seg
           label="Calendar span"
           items={[
@@ -1366,7 +1366,7 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
         )}
         {!byParent && [lv(0), levels.length > 0 && lv(1), levels.length > 1 && lv(2)]}
         <span className="grow" />
-        <button
+        <Btn
           className="btn subtle sm"
           onClick={() =>
             set((s) => {
@@ -1375,7 +1375,7 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
           }
         >
           Reset
-        </button>
+        </Btn>
       </div>
       {rows.length ? <ul className="tree">{body}</ul> : <NoRows t={t} />}
     </>

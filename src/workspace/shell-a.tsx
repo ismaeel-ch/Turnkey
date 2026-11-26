@@ -46,7 +46,7 @@ import { BuildSummary, FlowView } from './flow';
 import { AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp, rebuild, startBuild, stopRun } from './line';
 import { CustomTab, FlowChips, REVIEWERS, ReviewPanel, answerGate, flowList, flowOf, reviewerAt } from './custom';
 import { TesterPanel } from './tester';
-import { AgentAv, Avatar, CheckList, Empty, Icon, Logo, MBar, Menu, Proto, STATUS_META, Seg, Spinner, Switch, Tabs } from './ui';
+import { Btn, AgentAv, Avatar, CheckList, Empty, Icon, Logo, MBar, Menu, Proto, STATUS_META, Seg, Spinner, Switch, Tabs } from './ui';
 import { AppLauncher, PhoneBar, PhoneNav } from './mobile';
 import { StageView, stageOf, startWalk, stateLabel, stateTone } from './runtime';
 import { enterSolo, keepShared, openShare, sharedApps } from './share';
@@ -149,7 +149,7 @@ export function Titlebar({ tabs, tab }) {
             </span>
           )}
         </span>
-        <button
+        <Btn
           className={cx('btn subtle sm net', !on && 'is-offline')}
           data-tour="net"
           aria-pressed={!on}
@@ -164,14 +164,14 @@ export function Titlebar({ tabs, tab }) {
         >
           <Icon n={on ? 'wifi' : 'wifiOff'} s="16" />
           <span className="hide-md">{on ? 'Online' : 'Offline'}</span>
-        </button>
+        </Btn>
         {!s.installed && (
-          <button className="btn subtle sm hide-md" onClick={() => openDialog('install')}>
+          <Btn className="btn subtle sm hide-md" onClick={() => openDialog('install')}>
             <Icon n="install" s="16" />
             Install
-          </button>
+          </Btn>
         )}
-        <button
+        <Btn
           className={cx('btn subtle icon', s.debug && 'on')}
           data-tour="debug"
           aria-pressed={s.debug}
@@ -183,7 +183,7 @@ export function Titlebar({ tabs, tab }) {
           }}
         >
           <Icon n="bug" />
-        </button>
+        </Btn>
         <Menu
           title="Help"
           btn={{
@@ -373,18 +373,18 @@ export function Home() {
         <span className="row tpl-acts">
           {has ? (
             <>
-              <button className="btn primary sm" onClick={() => openTab(has.id)}>
+              <Btn className="btn primary sm" onClick={() => openTab(has.id)}>
                 Open
-              </button>
-              <button className="btn sm tpl-build" onClick={() => build(id)}>
+              </Btn>
+              <Btn className="btn sm tpl-build" onClick={() => build(id)}>
                 Build another
-              </button>
+              </Btn>
             </>
           ) : (
-            <button className="btn primary sm tpl-build" onClick={() => build(id)}>
+            <Btn className="btn primary sm tpl-build" onClick={() => build(id)}>
               <Icon n="sparkle" s="16" />
               Build this app
-            </button>
+            </Btn>
           )}
         </span>
       </div>
@@ -408,7 +408,7 @@ export function Home() {
             Every app you build is saved in this browser with its data, rules, views and screens, and is still here when you sign in again.
           </span>
         </div>
-        <button
+        <Btn
           className="btn sm"
           onClick={() =>
             openDialog('openlink', {
@@ -418,7 +418,7 @@ export function Home() {
         >
           <Icon n="open" s="16" />
           Open a shared app
-        </button>
+        </Btn>
       </div>
       {apps.length ? (
         <div className="apps">
@@ -469,7 +469,7 @@ export function Home() {
                 {' · '}
                 {ago(a.updated)}
               </span>
-              <button
+              <Btn
                 className="btn subtle icon"
                 aria-label={'Share ' + a.name}
                 title="Share by link"
@@ -477,8 +477,8 @@ export function Home() {
                 onClick={() => openShare(a)}
               >
                 <Icon n="share" />
-              </button>
-              <button
+              </Btn>
+              <Btn
                 className="btn subtle icon"
                 aria-label={'Duplicate ' + a.name}
                 title="Duplicate app with its data"
@@ -486,10 +486,10 @@ export function Home() {
                 onClick={() => dup(a)}
               >
                 <Icon n="copy" />
-              </button>
-              <button className="btn subtle icon" aria-label={'Delete ' + a.name} title="Delete app" onClick={() => del(a)}>
+              </Btn>
+              <Btn className="btn subtle icon" aria-label={'Delete ' + a.name} title="Delete app" onClick={() => del(a)}>
                 <Icon n="trash" />
-              </button>
+              </Btn>
             </div>
           ))}
         </div>
@@ -538,10 +538,10 @@ export function Home() {
               {mode.long}
             </span>
             <span className="grow" />
-            <button className="btn primary" onClick={go}>
+            <Btn className="btn primary" onClick={go}>
               <Icon n="sparkle" />
               Build
-            </button>
+            </Btn>
           </div>
         </div>
         {h.note && <MBar tone="warning">{h.note}</MBar>}
@@ -581,10 +581,10 @@ export function Home() {
             <h2 className="t-sub2">Hackathon quests</h2>
             <span className="t-cap muted">Each one becomes its own app, with a team of three agents that work inside it.</span>
           </div>
-          <button className="btn sm" onClick={buildAll}>
+          <Btn className="btn sm" onClick={buildAll}>
             <Icon n="apps" s="16" />
             Build all three
-          </button>
+          </Btn>
         </div>
         <div className="tpl-grid">{QUESTS.map(card)}</div>
         <div className="col gap0 sec">
@@ -629,13 +629,13 @@ export function Home() {
                       </span>
                     </span>
                   </button>
-                  <button className="btn sm" onClick={() => keepShared(a)}>
+                  <Btn className="btn sm" onClick={() => keepShared(a)}>
                     <Icon n="save" s="16" />
                     <span className="hide-sm">Save to my apps</span>
-                  </button>
-                  <button className="btn subtle icon" aria-label={'Remove ' + a.name} title="Remove this copy" onClick={() => del(a)}>
+                  </Btn>
+                  <Btn className="btn subtle icon" aria-label={'Remove ' + a.name} title="Remove this copy" onClick={() => del(a)}>
                     <Icon n="trash" />
-                  </button>
+                  </Btn>
                 </div>
               ))}
             </div>
@@ -859,7 +859,7 @@ export function Workspace({ app }) {
               {busy && <Spinner />}
               {st[1]}
             </span>
-            <button
+            <Btn
               className="btn subtle icon"
               aria-label="Share by link"
               title="Share by link"
@@ -867,7 +867,7 @@ export function Workspace({ app }) {
               onClick={() => openShare(app)}
             >
               <Icon n="share" />
-            </button>
+            </Btn>
           </div>
           <div className="view">
             {chatShown() ? (
@@ -905,7 +905,7 @@ export function Workspace({ app }) {
             <Tabs cls="views" label="Workspace views" items={tabs} value={isDetail(view) ? 'details' : view} onChange={go} />
           </span>
           <span className="grow" />
-          <button
+          <Btn
             className="btn sm"
             data-tour="share"
             disabled={app.status !== 'ready'}
@@ -914,12 +914,12 @@ export function Workspace({ app }) {
           >
             <Icon n="share" s="16" />
             <span className="hide-md">Share</span>
-          </button>
+          </Btn>
           {!chatShown() && (
-            <button className="btn sm" title="Ask the builders for a change" onClick={() => setChat(true)}>
+            <Btn className="btn sm" title="Ask the builders for a change" onClick={() => setChat(true)}>
               <Icon n="chat" s="16" />
               Chat
-            </button>
+            </Btn>
           )}
           <Menu
             title="More"
@@ -997,24 +997,24 @@ export function BuildView({ app }) {
         )}
         <span className="grow" />
         {busy ? (
-          <button className="btn sm" onClick={() => stopRun(app)}>
+          <Btn className="btn sm" onClick={() => stopRun(app)}>
             <Icon n="stop" s="16" />
             Stop
-          </button>
+          </Btn>
         ) : (
-          <button className="btn sm" onClick={() => rebuildAsk(app)}>
+          <Btn className="btn sm" onClick={() => rebuildAsk(app)}>
             <Icon n="rerun" s="16" />
             Run again
-          </button>
+          </Btn>
         )}
       </div>
       {app.line.research.status === 'waiting' && app.line.research.hold !== 'approval' && (
         <MBar
           tone="warning"
           action={
-            <button className="btn sm" onClick={toChat}>
+            <Btn className="btn sm" onClick={toChat}>
               Answer in chat
-            </button>
+            </Btn>
           }
         >
           The Researcher has a question for you. The line is paused until you answer.
@@ -1024,9 +1024,9 @@ export function BuildView({ app }) {
         <MBar
           tone="warning"
           action={
-            <button className="btn sm primary" onClick={() => answerGate(app, true)}>
+            <Btn className="btn sm primary" onClick={() => answerGate(app, true)}>
               Approve and continue
-            </button>
+            </Btn>
           }
         >
           {'The line is waiting for your approval after '}
@@ -1038,9 +1038,9 @@ export function BuildView({ app }) {
         <MBar
           tone="warning"
           action={
-            <button className="btn sm" onClick={toChat}>
+            <Btn className="btn sm" onClick={toChat}>
               Review in chat
-            </button>
+            </Btn>
           }
         >
           A change is waiting for your approval because it deletes data.
@@ -1050,9 +1050,9 @@ export function BuildView({ app }) {
         <MBar
           tone={app.status === 'failed' ? 'danger' : 'info'}
           action={
-            <button className="btn sm" onClick={() => rebuild(app)}>
+            <Btn className="btn sm" onClick={() => rebuild(app)}>
               Run again
-            </button>
+            </Btn>
           }
         >
           {app.status === 'failed' ? 'The last build failed. The log and the debug drawer show where.' : 'This build did not finish.'}
@@ -1089,7 +1089,7 @@ export function LineView({ app, sel }) {
       </div>
       <div className="flow-foot">
         <span className="grow" />
-        <button
+        <Btn
           className="btn sm"
           data-tour="customize"
           title="Approvals, review steps, instructions and attempts"
@@ -1101,7 +1101,7 @@ export function LineView({ app, sel }) {
         >
           <Icon n="options" s="16" />
           Customize{flowList(flowOf(app)).length > 0 && <span className="tab-n">{flowList(flowOf(app)).length}</span>}
-        </button>
+        </Btn>
       </div>
       <div className="orch">
         <AgentAv id="orchestrator" size="sm" />
@@ -1933,10 +1933,10 @@ export function StationOut({ app, st }) {
           The UI agent wrote these steps from the user stories. Code plays them against the real endpoints inside a savepoint, then rolls
           back.
         </span>
-        <button className="btn sm" onClick={() => startWalk(app)}>
+        <Btn className="btn sm" onClick={() => startWalk(app)}>
           <Icon n="playOutline" s="16" />
           Play it in the app
-        </button>
+        </Btn>
       </div>
       <ol className="tour-list">
         {def.tour.map((s, i) => {
