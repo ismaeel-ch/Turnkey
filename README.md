@@ -61,7 +61,7 @@ One streamed tool call from the model updates shared canvas state:
 
 ```
 src/app/(workspace)   the workspace page          src/server    model gateway, guard rails (server only)
-src/app/(spike)       the spike page              src/platform  React compatibility layer, boot, model client
-src/app/api           health, llm, copilotkit     src/legacy    the workspace modules, ported unchanged
+src/app/(spike)       the spike page              src/platform  browser helpers, sql.js loader, model client
+src/app/api           health, llm, copilotkit     src/workspace the workspace UI: ES modules with JSX
 tests/unit, tests/e2e                             .claude       agents, skills, rules, hooks for Claude Code
 ```

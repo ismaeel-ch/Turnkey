@@ -128,3 +128,13 @@ export function createHost() {
     },
   };
 }
+
+type Host = ReturnType<typeof createHost>;
+let host: Host | null = null;
+/** The model host the workspace uses. A stand-in placed on `window.claude` before the page starts (the browser tests do this) wins. */
+export function modelHost(): Host {
+  const injected = (window as unknown as { claude?: Host }).claude;
+  if (injected) return injected;
+  host ??= createHost();
+  return host;
+}
