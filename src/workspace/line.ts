@@ -1,5 +1,17 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
-import type { AppRecord, ChatCard, ChatMessage, Dict, Loose, Run, RunStep } from '@/shared/types/workspace';
+import type { AppDef, AppTable, BackedDef, Board, Brief, BriefedDef, Check, Untrusted } from '@/shared/types/app';
+import type {
+  AppRecord,
+  ChatCard,
+  ChatMessage,
+  Dict,
+  Loose,
+  Run,
+  RunStep,
+  SavedBuild,
+  StationLine,
+  StationRecording,
+} from '@/shared/types/workspace';
+import type { AskRequest, Ports, RunResult, WorkflowRun } from '@/platform/orchestrator';
 import { AGENTS } from './agents';
 import {
   CAP,
@@ -9,11 +21,13 @@ import {
   PHONE,
   S,
   U,
+  arr,
   brief,
   chatShown,
   clone,
   commit,
   emit,
+  errText,
   label,
   modeNow,
   myApps,
@@ -65,6 +79,7 @@ import { workflowFromFlow } from '@/platform/orchestrator/from-flow';
 import { StoppedError } from '@/platform/orchestrator/types';
 import { SHARE } from './share';
 import { LOGO_FILLS, LOGO_MARKS, LOGO_SHAPES, logChange, normLogo } from './release';
+import { recordTouches, snapshotDef } from './provenance';
 
 /* ===== Turnkey prototype · the line: five agents, six stations, a code orchestrator ===== */
 export interface Station {
@@ -118,7 +133,7 @@ export const STATIONS: Station[] = [
     makes: 'Tour as acceptance test',
   },
 ];
-export const stationIdx = (id: string) => STATIONS.findIndex((s) => s.id === id);
+export const stationIdx = (id: string | undefined) => STATIONS.findIndex((s) => s.id === id);
 /** What a run in progress can be told: stop, or the owner's answer to the question or approval it waits at. */
 export interface RunCtl {
   stop: boolean;
@@ -126,21 +141,35 @@ export interface RunCtl {
   answer?: ((i: number) => void) | null;
   gate?: ((ok: boolean) => void) | null;
   abort?: (() => void) | null;
+  /** the card the run waits on: the Researcher's question or an approval */
+  held?: { answered?: (i: number) => void; decided?: (ok: boolean) => void; cancel: () => void } | null;
+  ctrl?: AbortController | null;
+  wf?: WorkflowRun;
   [field: string]: Loose;
+}
+/** An app on the line. A station runs only after the stations before it filled in their part of the definition. */
+export type BuildApp = AppRecord & { def: BackedDef };
+/** What one station made: its checks and a few facts for the card. */
+export interface StationResult {
+  checks: Check[];
+  facts: string[];
 }
 export const RUNS: Dict<RunCtl> = {},
   PENDING: Dict<(ok: boolean) => void> = {},
-  LIVE = {
+  /** the model client, set once the workspace knows a model is connected */
+  LIVE: {
+    fn: ((prompt: string, opts: Dict<unknown>) => Promise<{ text?: string; truncated?: boolean }>) | null;
+  } = {
     fn: null,
   };
 /** Thrown wherever a run is when the owner stops it. The workflow graph knows it as a stop, not a failure. */
 export class Stopped extends StoppedError {}
-export const fatal = (msg) => {
-  const e = new Error(msg);
+export const fatal = (msg: string): Error & { fatal: true } => {
+  const e = new Error(msg) as Error & { fatal: true };
   e.fatal = true;
   return e;
 };
-export const SPEED = {
+export const SPEED: Dict<number> = {
   normal: 1,
   fast: 0.4,
   instant: 0.03,
@@ -156,7 +185,7 @@ export async function pace(app: AppRecord, ms: number) {
     if (end - Date.now() <= 0) return;
   }
 }
-export const blankLine = () => ({
+export const blankLine = (): StationLine => ({
   status: 'idle',
   attempt: 0,
   attempts: [],
@@ -165,7 +194,7 @@ export const blankLine = () => ({
   note: null,
   results: [],
 });
-export const blankDef = () => ({
+export const blankDef = (): AppDef => ({
   brief: null,
   tables: [],
   users: [],
@@ -185,10 +214,10 @@ export const blankDef = () => ({
   actions: [],
   migrations: [],
 });
-export function newApp(o) {
+export function newApp(o: { request: string; tpl?: string | null; mode: string }) {
   const rec = o.tpl ? REC[o.tpl] : null,
     id = uid('app');
-  const app = {
+  const app: AppRecord = {
     id,
     owner: S.session,
     name: rec ? rec.title : 'New app',
@@ -318,12 +347,12 @@ export function newRun(app: AppRecord, kind: string, name: string, mode: string)
 }
 
 /* ---------- what each station does with an agent's output ---------- */
-export const APPLY = {
+export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: number) => StationResult> = {
   research(app, out, run) {
     const b = normBrief(out),
       checks = checkBrief(b);
     if (checks.every((c) => c.ok)) {
-      b.sources = app.lookups || [];
+      b.sources = arr(app.lookups);
       app.def.brief = b;
       if (!app.renamed) app.name = b.name;
       toolCall(
@@ -343,17 +372,17 @@ export const APPLY = {
       facts: [b.roles.length + ' roles', b.entities.length + ' kinds of record', b.stories.length + ' user stories'],
     };
   },
-  database(app, out, run, attempt) {
+  database(app, out, run, attempt = 1) {
     const sc = normSchema(out, app.def.brief, attempt >= 3, app.shared ? SHARE.maxRows : 0);
     let checks = checkSchemaShape(sc, app.def.brief);
     if (checks.every((c) => c.ok)) {
       checks = checks.concat(buildDatabase(app, sc, ctxOf(app, run, 'database')));
       if (checks.every((c) => c.ok)) {
-        app.seed = {
+        const seed: NonNullable<AppRecord['seed']> = (app.seed = {
           rows: {},
-        };
+        });
         sc.tables.forEach((t) => {
-          app.seed.rows[t.name] = t.rows;
+          seed.rows[t.name] = t.rows;
         });
         app.def.tables = sc.tables.map((t) => ({
           name: t.name,
@@ -407,14 +436,14 @@ export const APPLY = {
       ].concat(be.team ? ['Agent team of ' + be.team.agents.length] : []),
     };
   },
-  views(app, out, run, attempt) {
+  views(app, out, run, attempt = 1) {
     const vw = attempt >= 3 ? mendViews(out, app.def) : normViews(out, app.def),
       checks = checkViews(app.def, vw),
       n = Object.keys(vw.views).reduce((k, t) => k + vw.views[t].length, 0);
     if (checks.every((c) => c.ok)) {
       app.def.views = vw.views;
       app.def.dash = vw.dash;
-      app.def.board = app.def.team ? normBoard(out && out.board, app.def) : null;
+      app.def.board = app.def.team ? (normBoard(out && out.board, app.def) as Board | null) : null;
       app.rev++;
       const r = toolCall(
         ctxOf(app, run, 'views'),
@@ -500,7 +529,7 @@ export const APPLY = {
     };
   },
 };
-export const FALLBACK = {
+export const FALLBACK: Dict<(app: BuildApp, run: Run) => StationResult> = {
   backend: (app, run) => APPLY.backend(app, fallbackBackend(app.def), run),
   views: (app, run) => APPLY.views(app, suggestViews(app.def), run),
   screens: (app, run) => APPLY.screens(app, fallbackUI(app.def), run),
@@ -518,7 +547,7 @@ export const FALLBACK = {
       run,
     ),
 };
-export const CARD = {
+export const CARD: Dict<(app: BuildApp) => ChatCard> = {
   research: (app) => {
     const b = app.def.brief;
     return {
@@ -553,7 +582,7 @@ export const CARD = {
       name: t.label,
       views: viewsOf(app.def, t).map((v) => v.type),
     })),
-    widgets: app.def.dash.widgets.length,
+    widgets: app.def.dash ? app.def.dash.widgets.length : 0,
   }),
   screens: (app) => ({
     type: 'screens',
@@ -573,7 +602,7 @@ export const CARD = {
     })),
   }),
 };
-export const DONE_SAY = {
+export const DONE_SAY: Dict<string> = {
   research: 'The brief passed its checks.',
   database: 'The tables exist in SQLite and the seed rows are in.',
   backend: 'Endpoints and rules are in place. I called every endpoint as every role.',
@@ -583,15 +612,15 @@ export const DONE_SAY = {
 };
 
 /* ---------- where an agent's output comes from: a saved build (Demo) or the model (Live) ---------- */
-export async function produce(app, run, st, attempt, feedback) {
+export async function produce(app: BuildApp, run: Run, st: Station, attempt: number, feedback: string[] | null): Promise<Untrusted> {
   if (st.id === 'walkthrough' && attempt === 1)
     return {
       tour: null,
     }; // the UI agent already wrote the tour; code plays it
   return app.mode === 'live' ? produceLive(app, run, st, attempt, feedback) : produceDemo(app, run, st, attempt);
 }
-export async function produceDemo(app, run, st, attempt) {
-  const rec = REC[app.tpl],
+export async function produceDemo(app: BuildApp, run: Run, st: Station, attempt: number): Promise<Untrusted> {
+  const rec = REC[app.tpl as string] as SavedBuild,
     key = st.id === 'screens' ? 'ui' : st.id,
     ctx = {
       answer: app.answers.q == null ? 0 : app.answers.q,
@@ -602,7 +631,7 @@ export async function produceDemo(app, run, st, attempt) {
     };
   if (st.id === 'research' && rec.lookup && attempt === 1) {
     const lk = rec.lookup,
-      c = CONNECTORS.find((x) => x.id === lk.connector);
+      c = CONNECTORS.find((x) => x.id === lk.connector) as (typeof CONNECTORS)[number];
     if (!connOn(lk.connector))
       say(app, 'researcher', c.name + ' is switched off for this workspace, so I am working from the request alone.');
     else if (!online())
@@ -616,7 +645,7 @@ export async function produceDemo(app, run, st, attempt) {
             tool: lk.tool,
             query: Object.values(lk.args)[0],
             note: lk.note,
-            titles: (r.result.pages || []).map((p) => p.title),
+            titles: arr<{ title: string }>((r.result as { pages?: unknown }).pages).map((p) => p.title),
           },
         ];
         say(app, 'researcher', lk.say);
@@ -648,15 +677,15 @@ export async function produceDemo(app, run, st, attempt) {
     200,
   );
   await pace(app, 700);
-  return rec[key](ctx, attempt);
+  return (rec[key] as StationRecording)(ctx, attempt);
 }
-export const HEAD = (who) =>
+export const HEAD = (who: string) =>
   'You are the ' +
   who +
   ' agent on Turnkey, a line of agents that builds small record-keeping web apps (tables, roles, one status workflow, screens) from one sentence. Code checks your answer and sends it back if it fails, so follow the format exactly. Reply with ONE JSON object and nothing else: no prose, no code fences.\n\n';
-export const fbText = (f) =>
+export const fbText = (f?: string[] | null) =>
   f && f.length ? '\n\nYOUR LAST ANSWER FAILED THESE CHECKS. Fix them and return the full JSON again:\n- ' + f.join('\n- ') : '';
-export const pBrief = (b) =>
+export const pBrief = (b: Brief) =>
   JSON.stringify({
     name: b.name,
     summary: b.summary,
@@ -667,7 +696,7 @@ export const pBrief = (b) =>
     rules: b.rules,
     decision: b.decision,
   });
-export const pTables = (def) =>
+export const pTables = (def: AppDef) =>
   def.tables
     .map(
       (t) =>
@@ -684,7 +713,7 @@ export const pTables = (def) =>
               ':' +
               c.type +
               (c.type === 'select'
-                ? '[' + c.options.join('|') + ']'
+                ? '[' + (c.options || []).join('|') + ']'
                 : c.type === 'ref'
                   ? '->' + c.ref
                   : c.type === 'user' && c.role
@@ -695,8 +724,8 @@ export const pTables = (def) =>
           .join(', '),
     )
     .join('\n');
-export const pUsers = (def) => def.users.map((u, i) => i + 1 + '. ' + u.name + ' (' + u.role + ')').join('; ');
-export const pAccess = (def) =>
+export const pUsers = (def: AppDef) => def.users.map((u, i) => i + 1 + '. ' + u.name + ' (' + u.role + ')').join('; ');
+export const pAccess = (def: BriefedDef) =>
   def.tables
     .map(
       (t) =>
@@ -710,7 +739,7 @@ export const pAccess = (def) =>
           .join(' | '),
     )
     .join('\n');
-export const pFlow = (def) =>
+export const pFlow = (def: BackedDef) =>
   'table ' +
   def.process.table +
   ', column ' +
@@ -719,10 +748,10 @@ export const pFlow = (def) =>
   def.process.initial +
   '\n' +
   def.process.transitions.map((x) => x.id + ': ' + x.from.join('|') + ' -> ' + x.to + ' by ' + x.roles.join('|')).join('\n');
-export const pRoom = (def) => {
+export const pRoom = (def: AppDef) => {
   const tm = def.team;
   if (!tm) return '';
-  const it = tableOf(def, tm.input.table);
+  const it = tableOf(def, tm.input.table) as AppTable;
   return (
     '\n\nAGENT ROOM: this app has agents of its own (' +
     tm.title +
@@ -790,7 +819,7 @@ export const APP_ICONS = [
 export const TOUR_RULES =
   'tour: 4 to 7 steps that replay the user stories as an acceptance test, in order. Each step: {"role":"role id","do":"create|see|transition|denied|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list","screen":"screen name","say":"one present-tense sentence naming the person"}. create: "values" for the required columns (not status; leave out the owner column when the creating role owns the row). see: that role lists the table and must find the record created earlier. transition: runs a workflow transition on that record; it must be allowed for that role from the record\'s current state. denied: that role attempts "action" on "table" and must be refused by the access rules. open: opens "screen". ' +
   VALUE_RULES;
-export const PROMPTS = {
+export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
   research: (app, f) =>
     HEAD('Researcher') +
     'REQUEST: "' +
@@ -892,7 +921,7 @@ export const PROMPTS = {
     '\n\nFORMAT: {"tour":[]}' +
     fbText(f),
 };
-export const LIVE_SAY = {
+export const LIVE_SAY: Dict<string> = {
   views: 'Working out which views fit each table, and designing the dashboard.',
   research: 'Reading the request and working out roles, records and the process.',
   database: 'Designing the tables and writing seed data.',
@@ -902,8 +931,8 @@ export const LIVE_SAY = {
 };
 /* The server's step agent reports its draft, check and repair steps; each one goes on the run's timeline under the
    station's open model call (team runs have no such step and are left alone), and into the event log. */
-const SERVER_STEP = { draft: ['Draft', 'model'], validate: ['Format check', 'check'], repair: ['Repair', 'tool'] };
-export function serverStep(run, agent, app, p) {
+const SERVER_STEP: Dict<[string, string]> = { draft: ['Draft', 'model'], validate: ['Format check', 'check'], repair: ['Repair', 'tool'] };
+export function serverStep(run: Run, agent: string, app: AppRecord, p: Untrusted) {
   const kind = p && SERVER_STEP[p.name];
   if (!kind) return;
   emit('CUSTOM', {
@@ -922,17 +951,26 @@ export function serverStep(run, agent, app, p) {
   }
   notify();
 }
-export async function callModel(app, run, agent, prompt, attempt, ctl?) {
+/** Who pays for and may stop a model call: a run of the line, a reviewer, the change planner or an app's own team. */
+type CallRun = { id: string; calls: number; tokIn: number; tokOut: number };
+export async function callModel(
+  app: AppRecord,
+  run: CallRun,
+  agent: string,
+  prompt: string,
+  attempt: number,
+  ctl?: { stop: boolean; ctrl?: AbortController | null },
+): Promise<Untrusted> {
   // ctl: who may stop this call (a build by default, or an app's own agent team)
   if (!online()) throw fatal('The connection is gone, so Live is paused. Run it again when you are back online.');
   if (!LIVE.fn) throw fatal(NO_MODEL);
   if (U.calls >= CAP) throw fatal('This session reached its cap of ' + CAP + ' model calls.');
-  const r = ctl || RUNS[app.id] || {},
+  const r: { stop?: boolean; ctrl?: AbortController | null } = ctl || RUNS[app.id] || {},
     t0 = performance.now(),
     tier = S.settings.tier === 'quick' ? 'quick' : 'default',
     mid = uid('m');
   let text = '',
-    res = null;
+    res: { text?: string; truncated?: boolean } | null = null;
   r.ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   U.calls++;
   run.calls++;
@@ -947,19 +985,19 @@ export async function callModel(app, run, agent, prompt, attempt, ctl?) {
       modelTier: tier,
       cache: false,
       signal: r.ctrl ? r.ctrl.signal : undefined,
-      onText: (p) => {
+      onText: (p: { text?: string } | null) => {
         text = (p && p.text) || text;
         U.stream[app.id] = text.length;
         notify();
       },
-      onStep: (p) => serverStep(run, agent, app, p),
+      onStep: (p: Untrusted) => serverStep(run as Run, agent, app, p),
       activity: { app: app.id, agent },
     });
     text = (res && res.text) || text;
   } catch (e) {
     U.stream[app.id] = 0;
     if (r.stop) throw new Stopped();
-    const code = e && e.code;
+    const code = (e as { code?: string } | null)?.code;
     if (code === 'not_granted') U.live = 'none';
     throw fatal(
       code === 'not_granted'
@@ -968,7 +1006,7 @@ export async function callModel(app, run, agent, prompt, attempt, ctl?) {
           ? 'The connection dropped during the call, so Live is paused. Run it again when you are back online.'
           : code === 'rate_limited'
             ? 'The model is rate limited right now. Try again in a minute.'
-            : 'The model call failed: ' + ((e && e.message) || code || 'unknown error'),
+            : 'The model call failed: ' + ((e as { message?: string } | null)?.message || code || 'unknown error'),
     );
   }
   U.stream[app.id] = 0;
@@ -1009,7 +1047,7 @@ export async function callModel(app, run, agent, prompt, attempt, ctl?) {
   if (!obj) throw new Error(res && res.truncated ? 'the answer was cut off before the JSON ended' : 'the answer was not valid JSON');
   return obj;
 }
-export async function produceLive(app, run, st, attempt, feedback) {
+export async function produceLive(app: BuildApp, run: Run, st: Station, attempt: number, feedback: string[] | null) {
   say(app, st.agent, attempt > 1 ? 'Fixing what the check found.' : LIVE_SAY[st.id]);
   const note = str(flowOf(app).notes[st.agent]);
   return callModel(
@@ -1031,8 +1069,8 @@ export async function produceLive(app, run, st, attempt, feedback) {
    repair rounds. The ports below are what each node does to this app. When the graph waits for the owner, the run
    returns `waiting`; the card in chat answers it and the run resumes. */
 /** Human in the loop: the Researcher's question. The graph waits; this shows the card and records the answer. */
-export function showQuestion(app, run) {
-  const q = app.def.brief.question,
+export function showQuestion(app: BuildApp, run: Run) {
+  const q = app.def.brief.question as NonNullable<Brief['question']>,
     L = app.line.research;
   L.status = 'waiting';
   const s = stepStart(run, 'research', 'orchestrator', 'Waiting for your answer', 'wait');
@@ -1044,8 +1082,8 @@ export function showQuestion(app, run) {
   });
   setChat(true);
   return {
-    answered(i) {
-      m.card.answered = i;
+    answered(i: number) {
+      if (m.card) m.card.answered = i;
       app.answers.q = i;
       app.def.brief.decision = {
         text: q.text,
@@ -1058,18 +1096,18 @@ export function showQuestion(app, run) {
     },
     cancel() {
       stepEnd(s, false);
-      m.card.answered = -1;
+      if (m.card) m.card.answered = -1;
     },
   };
 }
-export function answerQuestion(app, i) {
+export function answerQuestion(app: AppRecord, i: number) {
   const r = RUNS[app.id];
   if (r && r.answer) {
     r.answer(i);
     if (PHONE() && chatShown()) setChat(false);
   }
 } // on a phone, go back to the workflow to watch it continue
-export function stopRun(app) {
+export function stopRun(app: AppRecord) {
   const r = RUNS[app.id];
   if (!r) return;
   r.stop = true;
@@ -1077,14 +1115,14 @@ export function stopRun(app) {
   if (r.ctrl) {
     try {
       r.ctrl.abort();
-    } catch (e) {}
+    } catch {}
   }
 }
-const triesWord = (n) => (n === 1 ? 'one attempt' : n === 2 ? 'two attempts' : 'three attempts');
-const stationOf = (id) => STATIONS[stationIdx(id)];
+const triesWord = (n: number) => (n === 1 ? 'one attempt' : n === 2 ? 'two attempts' : 'three attempts');
+const stationOf = (id: string) => STATIONS[stationIdx(id)];
 
 /** The definition of this run: the owner's workflow, from the station a partial run starts at. */
-export function workflowOf(app, from) {
+export function workflowOf(app: AppRecord, from?: string) {
   const f = flowOf(app),
     def = workflowFromFlow(f, (id) => REVIEWERS[id], from);
   // only stations that have built-in rules can be given to code
@@ -1093,19 +1131,29 @@ export function workflowOf(app, from) {
 }
 
 /** What each node of the workflow graph does to this app. `cur` holds what one attempt made until its gate reads it. */
-function linePorts(app, run, ctl, o) {
+/** What runBuild tells the ports: the workflow, whether this is a partial run, and what the orchestrator says first. */
+interface LineOpts {
+  def: ReturnType<typeof workflowOf>;
+  part: boolean;
+  first: Station;
+  again: string[];
+  kept: string[];
+  open: () => Promise<void>;
+  snapshot: Dict<unknown> | null;
+}
+function linePorts(app: BuildApp, run: Run, ctl: RunCtl, o: LineOpts): Ports {
   const live = app.mode === 'live',
-    cur = { res: null, unusable: null },
+    cur: { res: StationResult | null; unusable: string[] | null } = { res: null, unusable: null },
     tester = testerSteps(app, run);
   let opened = false;
   // a thrown error leaves the graph as a failed run; one that is not expected is a bug, so say so in the console
   const watch =
-    (fn) =>
-    async (...a) => {
+    <A extends unknown[], R>(fn: (...a: A) => Promise<R>) =>
+    async (...a: A): Promise<R> => {
       try {
         return await fn(...a);
       } catch (e) {
-        if (!(e instanceof Stopped) && !(e && e.fatal)) console.error(e);
+        if (!(e instanceof Stopped) && !(e as { fatal?: boolean } | null)?.fatal) console.error(e);
         throw e;
       }
     };
@@ -1143,7 +1191,7 @@ function linePorts(app, run, ctl, o) {
         } catch (e) {
           console.error(e);
           cur.res = {
-            checks: [chk('The rules could be applied', false, String((e && e.message) || e))],
+            checks: [chk('The rules could be applied', false, errText(e))],
             facts: [],
           };
         }
@@ -1160,7 +1208,7 @@ function linePorts(app, run, ctl, o) {
       commit();
       const fb = cur.unusable || feedback;
       cur.unusable = null;
-      let out = null;
+      let out: Untrusted = null;
       const first = st.id === 'walkthrough' && attempt === 1;
       const s1 = stepStart(
         run,
@@ -1173,10 +1221,11 @@ function linePorts(app, run, ctl, o) {
         out = await produce(app, run, st, attempt, fb);
       } catch (e) {
         stepEnd(s1, false);
-        if (e instanceof Stopped || e.fatal) throw e;
-        cur.unusable = ['The answer was not usable: ' + e.message + '. Return one JSON object in the exact format.'];
+        if (e instanceof Stopped || (e as { fatal?: boolean }).fatal) throw e;
+        const msg = (e as Error).message;
+        cur.unusable = ['The answer was not usable: ' + msg + '. Return one JSON object in the exact format.'];
         cur.res = {
-          checks: [chk('Usable JSON answer', false, e.message)],
+          checks: [chk('Usable JSON answer', false, msg)],
           facts: [],
         };
         return;
@@ -1190,24 +1239,23 @@ function linePorts(app, run, ctl, o) {
       const levels = max < 3 && attempt === max ? [Math.min(attempt, 2), 3] : [attempt];
       for (const lv of levels) {
         try {
+          const snap = snapshotDef(app.def);
           cur.res = APPLY[st.id](app, out, run, lv);
+          recordTouches(app, snap, byRules ? 'rules' : st.agent, run.kind === 'rerun' ? 'rerun' : 'build', run.n);
         } catch (e) {
           console.error(e);
           cur.res = {
-            checks: [chk('The output could be applied', false, String((e && e.message) || e))],
+            checks: [chk('The output could be applied', false, errText(e))],
             facts: [],
           };
         }
         if (cur.res.checks.every((c) => c.ok)) break;
       }
-      stepEnd(
-        s2,
-        cur.res.checks.every((c) => c.ok),
-      );
+      stepEnd(s2, !!cur.res && cur.res.checks.every((c) => c.ok));
     }),
     runGate: watch(async ({ station: sd, attempt }) => {
       const L = app.line[sd.id],
-        res = cur.res,
+        res = cur.res as StationResult,
         issues = issuesOf(res.checks);
       L.checks = res.checks;
       L.facts = res.facts || [];
@@ -1221,7 +1269,7 @@ function linePorts(app, run, ctl, o) {
     fallback: watch(async ({ station: sd }) => {
       const st = stationOf(sd.id),
         L = app.line[st.id],
-        issues = issuesOf(cur.res.checks),
+        issues = issuesOf((cur.res as StationResult).checks),
         fb = FALLBACK[st.id] ? FALLBACK[st.id](app, run) : null;
       if (fb && fb.checks.every((c) => c.ok)) {
         L.checks = fb.checks;
@@ -1293,8 +1341,8 @@ function linePorts(app, run, ctl, o) {
       // steps added while their station had already passed
       const f = flowOf(app);
       return f.reviewers
-        .filter((id) => REVIEWERS[id] && !app.reviews[id])
-        .map((id) => ({ id, name: REVIEWERS[id].name, after: stepAfter(f, id), mode: 'advise' }));
+        .filter((id: string) => REVIEWERS[id] && !app.reviews[id])
+        .map((id: string) => ({ id, name: REVIEWERS[id].name, after: stepAfter(f, id), mode: 'advise' as const }));
     }),
     owner: {
       question: async (sd) => {
@@ -1302,11 +1350,11 @@ function linePorts(app, run, ctl, o) {
         return q && app.answers.q == null ? { text: q.text, options: q.options, recommended: q.recommended } : null;
       },
       answered: watch(async ({ index }) => {
-        if (ctl.held) ctl.held.answered(index);
+        if (ctl.held) ctl.held.answered?.(index);
         ctl.held = null;
       }),
       decided: watch(async ({ approved }) => {
-        if (ctl.held) ctl.held.decided(approved);
+        if (ctl.held) ctl.held.decided?.(approved);
         ctl.held = null;
       }),
     },
@@ -1390,10 +1438,10 @@ function linePorts(app, run, ctl, o) {
 }
 
 /** Wait for the owner's answer to what the run is waiting for. The chat card calls `answer` or `gate`; Stop rejects. */
-function ownerAnswer(app, run, ctl, wf, ask) {
+function ownerAnswer(app: BuildApp, run: Run, ctl: RunCtl, wf: WorkflowRun, ask: AskRequest): Promise<number | boolean> {
   ctl.held = ask.reason === 'question' ? showQuestion(app, run) : showGate(app, run, stationOf(ask.station));
   return new Promise((resolve, reject) => {
-    const settle = (v) => {
+    const settle = (v: number | boolean) => {
       ctl.answer = null;
       ctl.gate = null;
       ctl.abort = null;
@@ -1413,7 +1461,7 @@ function ownerAnswer(app, run, ctl, wf, ask) {
   });
 }
 
-export async function runBuild(app, from) {
+export async function runBuild(app: BuildApp, from?: string) {
   // from: a station id to start at. The stations before it are kept as they are.
   if (RUNS[app.id]) return;
   // LangGraph loads on first use (usually already fetched while the page was idle). Load it before anything changes,
@@ -1424,8 +1472,8 @@ export async function runBuild(app, from) {
     part = i0 > 0,
     live = app.mode === 'live',
     flow = flowOf(app);
-  const run = newRun(app, part ? 'rerun' : 'build', part ? 'From ' + STATIONS[i0].name : 'Build', app.mode),
-    ctl = (RUNS[app.id] = {
+  const run = newRun(app, part ? 'rerun' : 'build', part ? 'From ' + STATIONS[i0].name : 'Build', String(app.mode)),
+    ctl: RunCtl = (RUNS[app.id] = {
       stop: false,
       runId: run.id,
     });
@@ -1443,6 +1491,7 @@ export async function runBuild(app, from) {
           reviews: app.reviews,
           renamed: app.renamed,
           tests: app.tests || null,
+          touched: app.touched || {},
         })
       : null;
   const again = STATIONS.slice(i0).map((s) => s.name),
@@ -1450,12 +1499,13 @@ export async function runBuild(app, from) {
   app.status = 'building';
   app.updated = Date.now();
   if (!part) {
-    app.def = blankDef();
+    app.def = blankDef() as BackedDef; // the stations fill it in, in order
     app.answers = {};
     app.lookups = [];
     app.matrix = null;
     app.seed = null;
     app.reviews = {};
+    app.touched = {};
   }
   STATIONS.forEach((s, i) => {
     if (i >= i0) app.line[s.id] = blankLine();
@@ -1470,7 +1520,7 @@ export async function runBuild(app, from) {
   commit();
   // what the orchestrator says before the first station; it runs inside the graph, so Stop works here too
   const open = async () => {
-    if (!part) pushChat(app, 'user', app.request);
+    if (!part) pushChat(app, 'user', String(app.request));
     say(
       app,
       'orchestrator',
@@ -1503,7 +1553,7 @@ export async function runBuild(app, from) {
     await pace(app, 600);
     if (i0 <= 1) dbDrop(app.id);
   };
-  let res;
+  let res: Pick<RunResult, 'status' | 'reason' | 'ask'>;
   try {
     const def = workflowOf(app, part ? STATIONS[i0].id : undefined);
     const ports = linePorts(app, run, ctl, {
@@ -1528,7 +1578,7 @@ export async function runBuild(app, from) {
     const wf = (ctl.wf = createRun(def, ports, { app: app.id, runId: run.id, threadId: app.id + ':' + run.id }));
     res = await wf.start();
     while (res.status === 'waiting') {
-      const answer = await ownerAnswer(app, run, ctl, wf, res.ask);
+      const answer = await ownerAnswer(app, run, ctl, wf, res.ask as AskRequest);
       res = await wf.resume(answer);
     }
   } catch (e) {
@@ -1536,7 +1586,7 @@ export async function runBuild(app, from) {
     if (e instanceof Stopped) res = { status: 'stopped' };
     else {
       console.error(e);
-      res = { status: 'failed', reason: String((e && e.message) || e) };
+      res = { status: 'failed', reason: errText(e) };
       emit('RUN_ERROR', { runId: run.id, app: app.id, message: res.reason });
       emit('RUN_FINISHED', { runId: run.id, threadId: app.id, app: app.id, status: 'failed' });
     }
@@ -1559,6 +1609,7 @@ export async function runBuild(app, from) {
       app.reviews = b.reviews;
       app.renamed = b.renamed;
       app.tests = b.tests;
+      app.touched = b.touched;
       app.rev++;
       app.status = 'ready';
       run.status = stopped ? 'stopped' : 'failed';
@@ -1601,7 +1652,7 @@ export async function runBuild(app, from) {
     commit();
   }
 }
-export function startBuild(o) {
+export function startBuild(o: { request: string; tpl?: string | null }) {
   // o: { request, tpl } · no tpl means a live build from the sentence
   if (!o.tpl && !liveModelOn()) {
     const m = modeNow().id;
@@ -1625,10 +1676,10 @@ export function startBuild(o) {
   openTab(app.id);
   U.view[app.id] = 'build';
   commit();
-  runBuild(app);
+  runBuild(app as BuildApp);
   return app;
 }
-export function rebuild(app) {
+export function rebuild(app: BuildApp) {
   if (RUNS[app.id]) return;
   if (app.mode === 'live') {
     if (!online())
@@ -1664,7 +1715,7 @@ export function resumeInterrupted() {
     }
   });
 }
-export function duplicateApp(app) {
+export function duplicateApp(app: AppRecord) {
   // a saved app is its definition plus its SQLite file, so a copy is both
   if (RUNS[app.id] || app.status !== 'ready') return null;
   dbFlush(app.id);
@@ -1702,14 +1753,14 @@ export function duplicateApp(app) {
   commit();
   return copy;
 }
-export function deleteApp(app) {
+export function deleteApp(app: AppRecord) {
   stopRun(app);
   stopTeam(app);
   delete TEAMS[app.id];
   delete TESTS[app.id];
   delete SUITES[app.id];
   if (app.shared && S.shared) delete S.shared[app.shared.key];
-  if (U.solo && U.solo.app === app.id) U.solo = null;
+  if (U.solo && (U.solo as { app?: string }).app === app.id) U.solo = null;
   dbDrop(app.id);
   delete S.apps[app.id];
   Object.keys(S.prefs || {}).forEach((k) => {
@@ -1722,7 +1773,7 @@ export function deleteApp(app) {
   });
   commit();
 }
-export function resetAppData(app) {
+export function resetAppData(app: AppRecord) {
   const r = reseed(app);
   toolCall(
     {

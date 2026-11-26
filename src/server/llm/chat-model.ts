@@ -12,7 +12,7 @@ import { ChatGenerationChunk, type ChatResult } from '@langchain/core/outputs';
 import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
 import { convertToOpenAITool } from '@langchain/core/utils/function_calling';
 import { resolveProvider } from './index';
-import { LlmError, type ChatMessage, type ChatRequest, type Provider, type Tier, type ToolDef, type Usage } from './types';
+import { type ChatMessage, type ChatRequest, type Provider, type Tier, type ToolDef, type Usage } from './types';
 
 type OpenAiToolDict = { type?: string; function?: { name?: string; description?: string; parameters?: Record<string, unknown> } };
 
@@ -175,13 +175,6 @@ export function toChatModel(
   const provider = options.provider === undefined ? resolveProvider() : options.provider;
   if (!provider) return null;
   return new GatewayChatModel({ provider, tier, maxTokens: options.maxTokens });
-}
-
-/** Like toChatModel, but throws the LlmError the routes already understand when nothing is configured. */
-export function requireChatModel(tier: Tier = 'default'): GatewayChatModel {
-  const model = toChatModel(tier);
-  if (!model) throw new LlmError('not_configured', 'No model is configured on this deployment.', 503);
-  return model;
 }
 
 /** LangChain's usage shape. `Usage.input` is the uncached part; LangChain's input total counts the cache as well. */

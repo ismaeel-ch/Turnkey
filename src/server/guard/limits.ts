@@ -8,6 +8,8 @@
  *   LLM_RATE_PER_MINUTE     calls per visitor per minute            (default 20)
  *   LLM_GLOBAL_PER_MINUTE   calls from everyone per minute          (default 50; the gateway allows 60)
  *   LLM_DAILY_CALL_CAP      calls from everyone per day             (default 600)
+ *   LLM_DAILY_SPEND_USD     dollars of model calls per day, priced from the tokens each call used (default 5).
+ *                           Calls cut off midway are counted from an estimate (src/server/llm/usage.ts).
  *   LLM_MAX_PROMPT_CHARS    longest prompt accepted                 (default 120000)
  *   LLM_MAX_OUTPUT_TOKENS   most tokens one answer may use          (default 8000)
  *   LLM_MAX_ANSWER_CHARS    longest answer relayed, in characters   (default 4 x the output token cap)
@@ -15,6 +17,8 @@
  *   LIGHT_GLOBAL_PER_MINUTE the same, from everyone                  (default 600)
  *   LIVE_MODE               set to `off` to refuse every model call (saved builds keep working)
  */
+import { spentToday } from '../llm/usage';
+
 type Env = Record<string, string | undefined>;
 
 const num = (v: string | undefined, fallback: number) => {
@@ -27,6 +31,7 @@ export function limitsFrom(env: Env = process.env) {
     perMinute: num(env.LLM_RATE_PER_MINUTE, 20),
     globalPerMinute: num(env.LLM_GLOBAL_PER_MINUTE, 50),
     dailyCap: num(env.LLM_DAILY_CALL_CAP, 600),
+    dailySpendUsd: num(env.LLM_DAILY_SPEND_USD, 5),
     maxPromptChars: num(env.LLM_MAX_PROMPT_CHARS, 120000),
     maxOutputTokens: num(env.LLM_MAX_OUTPUT_TOKENS, 8000),
     maxAnswerChars: num(env.LLM_MAX_ANSWER_CHARS, num(env.LLM_MAX_OUTPUT_TOKENS, 8000) * 4),
@@ -38,7 +43,8 @@ export type Verdict = { ok: true } | { ok: false; code: 'rate_limited' | 'budget
 
 type Window = { start: number; count: number };
 
-export function createLimiter(now: () => number = Date.now) {
+/** `spent` says how many dollars have gone on model calls today; light limiters never check it. */
+export function createLimiter(now: () => number = Date.now, spent: (t: number) => number = spentToday) {
   const visitors = new Map<string, Window>();
   let minute: Window = { start: 0, count: 0 };
   let day: Window = { start: 0, count: 0 };
@@ -46,20 +52,26 @@ export function createLimiter(now: () => number = Date.now) {
   const roll = (w: Window, span: number, t: number) => (t - w.start >= span ? { start: t, count: 0 } : w);
 
   return {
-    /** Counts one call for `who` and says whether it may go ahead. */
-    take(who: string, limits = limitsFrom()): Verdict {
+    /**
+     * Counts `weight` calls for `who` (one request that may make several model calls, such as a tool loop, counts as
+     * all of them up front) and says whether it may go ahead.
+     */
+    take(who: string, limits = limitsFrom(), weight = 1): Verdict {
+      const w = Math.max(1, Math.floor(weight));
       if (limits.off)
         return { ok: false, code: 'off', message: 'Live builds are switched off on this deployment. Saved builds still run.' };
       const t = now();
+      if (Number.isFinite(limits.dailySpendUsd) && spent(t) >= limits.dailySpendUsd)
+        return { ok: false, code: 'budget', message: "Today's allowance for live model calls is used up. Saved builds still run." };
       day = roll(day, 86_400_000, t);
-      if (day.count >= limits.dailyCap)
+      if (day.count + w > limits.dailyCap)
         return { ok: false, code: 'budget', message: "Today's allowance for live model calls is used up. Saved builds still run." };
       minute = roll(minute, 60_000, t);
       const retryAfter = Math.ceil((60_000 - (t - minute.start)) / 1000);
-      if (minute.count >= limits.globalPerMinute)
+      if (minute.count + w > limits.globalPerMinute)
         return { ok: false, code: 'rate_limited', message: 'Many builds are running right now.', retryAfter };
       const mine = roll(visitors.get(who) ?? { start: 0, count: 0 }, 60_000, t);
-      if (mine.count >= limits.perMinute) {
+      if (mine.count + w > limits.perMinute) {
         visitors.set(who, mine);
         return {
           ok: false,
@@ -68,9 +80,9 @@ export function createLimiter(now: () => number = Date.now) {
           retryAfter: Math.ceil((60_000 - (t - mine.start)) / 1000),
         };
       }
-      mine.count++;
-      minute.count++;
-      day.count++;
+      mine.count += w;
+      minute.count += w;
+      day.count += w;
       visitors.set(who, mine);
       if (visitors.size > 5000) for (const [k, w] of visitors) if (t - w.start >= 60_000) visitors.delete(k);
       return { ok: true };
@@ -93,6 +105,7 @@ export function lightLimitsFrom(env: Env = process.env) {
     perMinute: num(env.LIGHT_RATE_PER_MINUTE, 60),
     globalPerMinute: num(env.LIGHT_GLOBAL_PER_MINUTE, 600),
     dailyCap: 1_000_000,
+    dailySpendUsd: Infinity,
     off: false,
   };
 }

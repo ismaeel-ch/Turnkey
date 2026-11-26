@@ -10,7 +10,7 @@
  *
  * and one `finish` node that every run passes through, whether it completed or hit a cap.
  */
-import { Annotation, Command, END, MemorySaver, START, StateGraph, interrupt } from '@langchain/langgraph';
+import { Annotation, END, MemorySaver, START, StateGraph, interrupt } from '@langchain/langgraph';
 import { agentPrompt, reviewPrompt, SYSTEM, type Lookup } from './prompts';
 import { extractJson, normalizeOutput, parseTurn, ruleCheck } from './protocol';
 import type { AgentOutput, AgentSpec, EventSink, Note, TeamLimits, TeamRequest } from './types';
@@ -309,14 +309,12 @@ export function buildTeamGraph(req: TeamRequest, ctx: TeamContext, budget: Budge
   return g.compile({ checkpointer: new MemorySaver() });
 }
 
-export { Command };
-
 /** The compiled graph of a team as a Mermaid diagram, for documentation and the debug view. Calls no model. */
 export async function teamGraphMermaid(req: TeamRequest): Promise<string> {
   const graph = buildTeamGraph(
     req,
     {
-      provider: { id: 'none', model: () => '', stream: async function* () {} },
+      provider: { id: 'none', model: () => '', async *stream() {} },
       tools: { info: () => null, run: async () => ({ ok: false, text: '' }) },
       sink: { emit: () => {} },
     },

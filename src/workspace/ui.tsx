@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type ChangeEvent,
   type InputHTMLAttributes,
+  type ReactElement,
   type ReactNode,
   type Ref,
   type SelectHTMLAttributes,
@@ -116,16 +117,20 @@ export const Btn = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProps
   const t = String(className || '').split(/\s+/);
   const has = (x: string) => t.includes(x);
   const appearance = has('primary') || has('danger') ? 'primary' : has('subtle') ? 'subtle' : 'secondary';
+  // `.btn.icon` holds only an icon. Fluent sizes an icon-only button square when the icon comes in its `icon` slot;
+  // as a child it keeps the 64px minimum width and the text line height (a 64x20 close button on a toast).
+  const iconOnly = has('icon') && isValidElement(children);
   return (
     <Button
       ref={ref}
       className={className}
       appearance={appearance}
       size={has('sm') ? 'small' : has('lg') ? 'large' : 'medium'}
+      icon={iconOnly ? (children as ReactElement) : undefined}
       // ButtonProps is a union (button or link), which a rest spread cannot narrow
       {...(rest as object)}
     >
-      {children}
+      {iconOnly ? undefined : children}
     </Button>
   );
 });

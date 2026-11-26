@@ -1,5 +1,16 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
-import { useLayoutEffect, useRef } from 'react';
+import { type ReactNode, useLayoutEffect, useRef } from 'react';
+import type { BackedDef, BriefedDef } from '@/shared/types/app';
+import type {
+  ApiPanel,
+  AppRecord,
+  BuilderCard,
+  ChatMessage,
+  Connector,
+  ConnectorTool,
+  DataPanel,
+  DebugPanel,
+  Dict,
+} from '@/shared/types/workspace';
 import {
   APILOG,
   BRAND,
@@ -19,6 +30,7 @@ import {
   confirmBox,
   copyText,
   cx,
+  errText,
   dayOffset,
   fmtBytes,
   fmtClock,
@@ -32,7 +44,6 @@ import {
   openDialog,
   saveFile,
   setChat,
-  snake,
   str,
   toast,
 } from './core';
@@ -60,6 +71,7 @@ import {
   checkBackendLive,
   colOf,
   deriveEndpoints,
+  type Endpoint,
   issuesOf,
   roleName,
   tableOf,
@@ -72,9 +84,20 @@ import { FlowCards, flowOf, flowTips } from './custom';
 import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto, Select, Spinner, Switch, Tabs, Textarea } from './ui';
 import { isStatusCol, startWalk } from './runtime';
 import { ReleaseCard } from './release';
+import { latestTouchOfTable, touchOf, touchShort, touchText } from './provenance';
+
+/** Who made a table, and who changed it last if that was later. Apps saved before this was recorded say the Database agent. */
+function tableTouchText(app: AppRecord, table: string) {
+  const made = touchOf(app, 'table:' + table),
+    last = latestTouchOfTable(app, table),
+    first = touchText(made, 'Created by the Database agent from the definition');
+  return last && made && last.at > made.at && last !== made
+    ? first + '. Last change: ' + touchText(last).replace(/^./, (c) => c.toLowerCase())
+    : first;
+}
 
 /* ===== Turnkey prototype · shell: data, API and connections views, the agents chat, the debug drawer ===== */
-export function Grid({ rows, mask }) {
+export function Grid({ rows, mask }: { rows: Dict<unknown>[]; mask?: boolean }) {
   if (!rows.length) return <p className="muted pad">No rows.</p>;
   const keys = Object.keys(rows[0]);
   return (
@@ -113,7 +136,7 @@ export function Grid({ rows, mask }) {
   );
 }
 /** Where the workspace keeps its data, in one sentence for the storage panel. */
-export function storageText(total) {
+export function storageText(total: number) {
   const st = workspaceStorage()?.status();
   const what = 'the workspace state as JSON, and one SQLite file per app, base64-encoded. ' + fmtBytes(total) + ' used';
   if (!LS.ok)
@@ -130,34 +153,54 @@ export function storageText(total) {
     );
   return "Everything is kept in this browser's localStorage: " + what + '; browsers usually allow about 5 MB.';
 }
-export function DataView({ app }) {
+/* Page state lives in the view store (U) so it outlives a re-render. Components read it through these getters and change
+   it only through these actions, never by writing to the store while rendering. */
+const DATA_START: DataPanel = { table: null, tab: 'rows', sql: 'SELECT role, COUNT(*) AS people FROM users GROUP BY role', out: null };
+const dataOf = (appId: string): DataPanel => U.data[appId] || DATA_START;
+function setData(appId: string, patch: Partial<DataPanel>) {
+  U.data[appId] = { ...dataOf(appId), ...patch };
+  notify();
+}
+const API_START: ApiPanel = { ep: null, tab: 'try', uid: null, id: '1', body: '{}', out: null };
+const apiOf = (appId: string): ApiPanel => U.api[appId] || API_START;
+function setApi(appId: string, patch: Partial<ApiPanel>) {
+  U.api[appId] = { ...apiOf(appId), ...patch };
+  notify();
+}
+/** Call one tool of a connector from the Connections page and keep the answer to show. */
+function tryConnector(app: AppRecord, c: Connector, tool: ConnectorTool) {
+  if (!connOn(c.id)) return toast('Switch ' + c.name + ' on first.', 'warning');
+  if (!needNet('Testing a connection')) return;
+  U.connOut = { id: c.id, tool: tool.name, r: callConnector(app, 'orchestrator', null, c.id, tool.name, tool.args) };
+  notify();
+}
+function setChatDraft(appId: string, text: string) {
+  U.chatDraft[appId] = text;
+  notify();
+}
+/** Send a message to the builders and clear the draft. */
+function sendChat(app: AppRecord, text: string) {
+  const t = str(text);
+  if (!t) return;
+  setChatDraft(app.id, '');
+  // handleChat reads the brief's question first; the chat is open on built apps and on builds past the Researcher
+  handleChat(app as AppRecord & { def: BackedDef }, t);
+}
+export function DataView({ app }: { app: AppRecord }) {
   if (!dbExists(app.id) || !app.def.tables.length)
     return <Empty icon="database" title="No database yet" text="The Database agent creates the SQLite tables at the second station." />;
-  const D =
-    U.data[app.id] ||
-    (U.data[app.id] = {
-      table: null,
-      tab: 'rows',
-      sql: 'SELECT role, COUNT(*) AS people FROM users GROUP BY role',
-      out: null,
-    });
+  const D = dataOf(app.id);
   const tables = dbTables(app.id),
     cur = tables.find((t) => t.name === D.table) || tables.find((t) => t.name !== 'users' && t.name !== 'activity') || tables[0],
     tdef = tableOf(app.def, cur.name);
   const runSql = () => {
     try {
       const r = sqlRun(app.id, D.sql, null, 'console');
-      D.out = Array.isArray(r)
-        ? {
-            rows: r,
-          }
-        : {
-            msg: 'Done. ' + r.changes + ' row' + (r.changes === 1 ? '' : 's') + ' changed.',
-          };
+      setData(app.id, {
+        out: Array.isArray(r) ? { rows: r } : { msg: 'Done. ' + r.changes + ' row' + (r.changes === 1 ? '' : 's') + ' changed.' },
+      });
     } catch (e) {
-      D.out = {
-        err: e.message,
-      };
+      setData(app.id, { out: { err: errText(e) } });
     }
     commit();
   };
@@ -175,7 +218,7 @@ export function DataView({ app }) {
     {
       id: 'rows',
       label: 'Rows',
-      count: dbCount(app.id, cur.name),
+      count: Number(dbCount(app.id, cur.name)),
     },
     {
       id: 'cols',
@@ -200,8 +243,7 @@ export function DataView({ app }) {
               key={t.name}
               className={cx('side-i', t.name === cur.name && 'on')}
               onClick={() => {
-                D.table = t.name;
-                notify();
+                setData(app.id, { table: t.name });
               }}
             >
               <Icon n="table" s="16" />
@@ -239,7 +281,7 @@ export function DataView({ app }) {
       <div className="main">
         <div className="main-head">
           <strong className="mono">{cur.name}</strong>
-          <span className="muted t-cap hide-sm">{tdef ? 'Created by the Database agent from the definition' : 'System table'}</span>
+          <span className="muted t-cap hide-sm touch-note">{tdef ? tableTouchText(app, cur.name) : 'System table'}</span>
           <span className="grow" />
           <Tabs
             cls="sm"
@@ -247,8 +289,7 @@ export function DataView({ app }) {
             items={tabs}
             value={D.tab}
             onChange={(v) => {
-              D.tab = v;
-              notify();
+              setData(app.id, { tab: v });
             }}
           />
         </div>
@@ -257,14 +298,18 @@ export function DataView({ app }) {
             <Grid rows={sqlPeek(app.id, 'SELECT * FROM ' + qi(cur.name) + ' ORDER BY "id" DESC LIMIT 200')} mask />
           ) : D.tab === 'cols' ? (
             <Grid
-              rows={sqlPeek(app.id, 'PRAGMA table_info(' + qi(cur.name) + ')').map((c) => ({
-                column: c.name,
-                type: c.type,
-                required: c.notnull ? 'yes' : '',
-                default: c.dflt_value,
-                key: c.pk ? 'primary key' : '',
-                meaning: tdef && colOf(tdef, c.name) ? TYPE_LABEL[colOf(tdef, c.name).type] : '',
-              }))}
+              rows={sqlPeek(app.id, 'PRAGMA table_info(' + qi(cur.name) + ')').map((c) => {
+                const col = tdef && colOf(tdef, String(c.name));
+                return {
+                  column: c.name,
+                  type: c.type,
+                  required: c.notnull ? 'yes' : '',
+                  default: c.dflt_value,
+                  key: c.pk ? 'primary key' : '',
+                  meaning: col ? TYPE_LABEL[col.type] : '',
+                  'made by': col ? touchShort(touchOf(app, 'col:' + cur.name + '.' + String(c.name))) : '',
+                };
+              })}
             />
           ) : D.tab === 'ddl' ? (
             <pre className="code pad">{cur.sql};</pre>
@@ -277,11 +322,11 @@ export function DataView({ app }) {
                 native
                 className="textarea mono"
                 id={'sql-in-' + app.id}
-                rows="4"
+                rows={4}
                 aria-label="SQL"
                 value={D.sql}
                 onInput={(e) => {
-                  D.sql = e.target.value;
+                  setData(app.id, { sql: e.currentTarget.value });
                 }}
               />
               <div className="row">
@@ -298,8 +343,7 @@ export function DataView({ app }) {
                     key={q}
                     className="mono"
                     onClick={() => {
-                      D.sql = q;
-                      notify();
+                      setData(app.id, { sql: q });
                     }}
                   >
                     {q.length > 34 ? q.slice(0, 34) + '…' : q}
@@ -312,7 +356,7 @@ export function DataView({ app }) {
                 ) : D.out.msg ? (
                   <MBar tone="success">{D.out.msg}</MBar>
                 ) : (
-                  <Grid rows={D.out.rows.slice(0, 200)} />
+                  <Grid rows={(D.out.rows || []).slice(0, 200)} />
                 ))}
             </div>
           )}
@@ -321,7 +365,7 @@ export function DataView({ app }) {
     </div>
   );
 }
-export function sampleBody(app, ep) {
+export function sampleBody(app: AppRecord, ep: Endpoint) {
   const def = app.def,
     users = appUsers(app);
   if (ep.id === 'auth.login')
@@ -332,12 +376,12 @@ export function sampleBody(app, ep) {
   const t = tableOf(def, ep.table);
   if (!t) return {};
   if (ep.action === 'create') {
-    const o = {};
+    const o: Dict<unknown> = {};
     t.columns.forEach((c) => {
       if (!c.required || isStatusCol(def, t, c)) return;
       o[c.name] =
         c.type === 'select'
-          ? c.options[0]
+          ? (c.options || [])[0]
           : c.type === 'ref'
             ? 1
             : c.type === 'user'
@@ -368,56 +412,40 @@ export function sampleBody(app, ep) {
   }
   return {};
 }
-export function ApiView({ app }) {
+export function ApiView({ app }: { app: AppRecord }) {
   const def = app.def;
   if (!def.process || !dbExists(app.id))
     return (
       <Empty icon="server" title="No endpoints yet" text="The Backend agent writes the workflow and access rules at the third station." />
     );
-  const A =
-    U.api[app.id] ||
-    (U.api[app.id] = {
-      ep: null,
-      tab: 'try',
-      uid: null,
-      id: '1',
-      body: '{}',
-      out: null,
-    });
-  const eps = deriveEndpoints(def),
-    ep = eps.find((e) => e.id === A.ep) || eps.find((e) => e.action === 'list'),
+  const A = apiOf(app.id);
+  // the Backend agent writes the workflow only after the brief, so the definition has one here
+  const bdef = def as BriefedDef;
+  const eps = deriveEndpoints(bdef),
+    ep = eps.find((e) => e.id === A.ep) || eps.find((e) => e.action === 'list') || eps[0],
     users = appUsers(app),
     user = users.find((u) => u.id === A.uid) || users[0];
-  const groups = [['Sign-in', eps.filter((e) => e.sys)]].concat(def.tables.map((t) => [t.label, eps.filter((e) => e.table === t.name)]));
-  const pick = (e) => {
-    A.ep = e.id;
-    A.body = JSON.stringify(sampleBody(app, e), null, 2);
-    A.out = null;
-    notify();
+  const groups: [string, Endpoint[]][] = [
+    ['Sign-in', eps.filter((e) => e.sys)],
+    ...def.tables.map((t): [string, Endpoint[]] => [t.label, eps.filter((e) => e.table === t.name)]),
+  ];
+  const pick = (e: Endpoint) => {
+    setApi(app.id, { ep: e.id, body: JSON.stringify(sampleBody(app, e), null, 2), out: null });
   };
   const send = () => {
     let body = {};
     try {
       body = A.body.trim() ? JSON.parse(A.body) : {};
-    } catch (e) {
-      A.out = {
-        status: 0,
-        error: 'The body is not valid JSON.',
-      };
-      return notify();
+    } catch {
+      setApi(app.id, { out: { status: 0, error: 'The body is not valid JSON.' } });
+      return;
     }
     const path = ep.path.replace(':id', A.id || '1'),
       r = apiCall(app, ep.open ? null : user, ep.method, path, body, 'try');
-    A.out = Object.assign(
-      {
-        path,
-      },
-      r,
-    );
-    notify();
+    setApi(app.id, { out: { path, ...r } });
   };
   const retest = () => {
-    const c = checkBackendLive(app, {
+    const c = checkBackendLive(app as AppRecord & { def: BriefedDef }, {
       agent: 'orchestrator',
       appId: app.id,
     });
@@ -463,8 +491,7 @@ export function ApiView({ app }) {
             ]}
             value={A.tab}
             onChange={(v) => {
-              A.tab = v;
-              notify();
+              setApi(app.id, { tab: v });
             }}
           />
         </div>
@@ -496,7 +523,7 @@ export function ApiView({ app }) {
                   <thead>
                     <tr>
                       <th>Endpoint</th>
-                      {def.brief.roles.map((r) => (
+                      {bdef.brief.roles.map((r) => (
                         <th key={r.id}>{r.name}</th>
                       ))}
                     </tr>
@@ -510,7 +537,7 @@ export function ApiView({ app }) {
                             <span className={'verb v-' + e.method.toLowerCase()}>{e.method}</span>{' '}
                             <span className="mono">{e.path.replace('/api', '')}</span>
                           </td>
-                          {def.brief.roles.map((r) => {
+                          {bdef.brief.roles.map((r) => {
                             const v = e.roles[r.id],
                               bad = app.matrix && app.matrix.failed.includes(e.id + '|' + r.id);
                             return (
@@ -555,9 +582,7 @@ export function ApiView({ app }) {
                       id={'api-u-' + app.id}
                       value={String(user.id)}
                       onChange={(e) => {
-                        A.uid = +e.target.value;
-                        A.out = null;
-                        notify();
+                        setApi(app.id, { uid: +e.currentTarget.value, out: null });
                       }}
                     >
                       {users.map((u) => (
@@ -580,7 +605,7 @@ export function ApiView({ app }) {
                       min="1"
                       value={A.id}
                       onInput={(e) => {
-                        A.id = e.target.value;
+                        setApi(app.id, { id: e.currentTarget.value });
                       }}
                     />
                   </Field>
@@ -591,10 +616,10 @@ export function ApiView({ app }) {
                       native
                       className="textarea mono"
                       id={'api-b-' + app.id}
-                      rows="6"
+                      rows={6}
                       value={A.body}
                       onInput={(e) => {
-                        A.body = e.target.value;
+                        setApi(app.id, { body: e.currentTarget.value });
                       }}
                     />
                   </Field>
@@ -658,21 +683,12 @@ export function ApiView({ app }) {
     </div>
   );
 }
-export function ConnView({ app }) {
+export function ConnView({ app }: { app: AppRecord }) {
   const list = allConnectors(),
     cur = list.find((c) => c.id === U.conn) || list[0],
     off = !online(),
     out = U.connOut && U.connOut.id === cur.id ? U.connOut : null;
-  const test = (tool) => {
-    if (!connOn(cur.id)) return toast('Switch ' + cur.name + ' on first.', 'warning');
-    if (!needNet('Testing a connection')) return;
-    U.connOut = {
-      id: cur.id,
-      tool: tool.name,
-      r: callConnector(app, 'orchestrator', null, cur.id, tool.name, tool.args),
-    };
-    notify();
-  };
+  const test = (tool: ConnectorTool) => tryConnector(app, cur, tool);
   return (
     <div className="connv">
       {off && (
@@ -736,7 +752,7 @@ export function ConnView({ app }) {
             <strong className="t-sub2">{cur.name}</strong>
             <span className="mono t-cap">{cur.url}</span>
           </div>
-          {cur.custom && (
+          {!!cur.custom && (
             <Btn
               className="btn sm"
               onClick={() => {
@@ -802,9 +818,10 @@ export function ConnView({ app }) {
 }
 
 /* ---------- chat with generative UI cards ---------- */
-export function ChatCard({ app, m }) {
-  const c = m.card,
-    def = app.def;
+export function ChatCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
+  // the build line, the change planner and the Tester write these cards; each `type` has the shape BuilderCard gives it
+  const c = m.card as BuilderCard | null;
+  if (!c) return null;
   switch (c.type) {
     case 'brief':
       return (
@@ -1166,7 +1183,7 @@ export function ChatCard({ app, m }) {
         <div className="gcard bad">
           {arr(c.issues).length ? (
             <ul className="plain">
-              {c.issues.map((x, i) => (
+              {(c.issues || []).map((x, i) => (
                 <li key={i}>{x}</li>
               ))}
             </ul>
@@ -1196,7 +1213,7 @@ export function ChatCard({ app, m }) {
       return null;
   }
 }
-export function Msg({ app, m }) {
+export function Msg({ app, m }: { app: AppRecord; m: ChatMessage }) {
   const mine = m.from === 'user',
     a = AGENTS[m.from];
   return (
@@ -1215,23 +1232,18 @@ export function Msg({ app, m }) {
     </div>
   );
 }
-export function ChatPanel({ app }) {
-  const ref = useRef(),
+export function ChatPanel({ app }: { app: AppRecord }) {
+  const ref = useRef<HTMLDivElement>(null),
     busy = !!RUNS[app.id],
     n = app.chat.length,
     last = app.chat[n - 1],
     draft = U.chatDraft[app.id] || '';
+  const answered = last && last.card ? String(last.card.answered) + String(last.card.decided) : '';
   useLayoutEffect(() => {
     const el = ref.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [n, app.id, last && last.card ? String(last.card.answered) + String(last.card.decided) : '']);
-  const send = (text) => {
-    const t = str(text != null ? text : draft);
-    if (!t) return;
-    U.chatDraft[app.id] = '';
-    handleChat(app, t);
-    notify();
-  };
+  }, [n, app.id, answered]);
+  const send = (text?: string) => sendChat(app, text != null ? text : draft);
   const waiting = busy && (RUNS[app.id].answer || RUNS[app.id].gate),
     idle = !busy && !PENDING[app.id],
     ftips = idle ? flowTips(app) : [],
@@ -1302,7 +1314,7 @@ export function ChatPanel({ app }) {
           native
           className="textarea"
           id={'chat-' + app.id}
-          rows="2"
+          rows={2}
           aria-label="Message the agents"
           placeholder={
             waiting
@@ -1317,8 +1329,7 @@ export function ChatPanel({ app }) {
           }
           value={draft}
           onInput={(e) => {
-            U.chatDraft[app.id] = e.target.value;
-            notify();
+            setChatDraft(app.id, e.currentTarget.value);
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -1336,17 +1347,23 @@ export function ChatPanel({ app }) {
 }
 
 /* ---------- debug drawer: what a developer wants to see ---------- */
-export function DebugDrawer({ app }) {
+/** Change the debug drawer's tab, filter or size. */
+function setDbg(patch: Partial<DebugPanel>) {
+  U.dbg = { ...U.dbg, ...patch };
+  notify();
+}
+export function DebugDrawer({ app }: { app: AppRecord | null }) {
   const D = U.dbg,
     q = D.q.toLowerCase(),
     scope = app && !D.all ? app.id : null,
-    pick = (list, text) =>
+    appOf = (x: object) => (x as { app?: unknown }).app,
+    pick = <T extends object>(list: T[], text: (x: T) => string) =>
       list
-        .filter((x) => (!scope || !x.app || x.app === scope) && (!q || text(x).toLowerCase().indexOf(q) >= 0))
+        .filter((x) => (!scope || !appOf(x) || appOf(x) === scope) && (!q || text(x).toLowerCase().indexOf(q) >= 0))
         .slice(-160)
         .reverse();
   const run = app ? app.runs[app.runs.length - 1] : null,
-    mine = (list) => list.filter((x) => !scope || x.app === scope);
+    mine = <T extends object>(list: T[]) => list.filter((x) => !scope || appOf(x) === scope);
   const mc = mine(MODELCALLS),
     live = mc.filter((x) => x.mode === 'live'),
     tabs = [
@@ -1384,7 +1401,7 @@ export function DebugDrawer({ app }) {
         label: 'Storage',
       },
     ];
-  const fam = (t) =>
+  const fam = (t: string) =>
     /^RUN/.test(t)
       ? 'run'
       : /^STEP/.test(t)
@@ -1396,7 +1413,9 @@ export function DebugDrawer({ app }) {
             : /^TEXT/.test(t)
               ? 'text'
               : 'custom';
-  const who = (id, appId) => {
+  const who = (id0: unknown, app0: unknown) => {
+    const id = str(id0),
+      appId = str(app0);
     const ta = id && !AGENTS[id] ? teamAgentOf(appId, id) : null;
     return id && AGENTS[id] ? (
       <span className="who">
@@ -1412,13 +1431,13 @@ export function DebugDrawer({ app }) {
       id || ''
     );
   };
-  let body;
+  let body: ReactNode;
   if (D.tab === 'events')
     body = (
       <table className="tbl dense dbg-t">
         <tbody>
           {pick(EV, (e) => e.type + ' ' + JSON.stringify(e)).map((e) => {
-            const rest = Object.assign({}, e);
+            const rest: Dict<unknown> = { ...e };
             delete rest.seq;
             delete rest.t;
             delete rest.type;
@@ -1571,12 +1590,14 @@ export function DebugDrawer({ app }) {
             <tr key={i}>
               <td className="mono muted">{fmtClock(x.t)}</td>
               <td>
-                {{
-                  app: 'app',
-                  check: 'check',
-                  tour: 'tour',
-                  try: 'API view',
-                }[x.src] || x.src}
+                {(
+                  {
+                    app: 'app',
+                    check: 'check',
+                    tour: 'tour',
+                    try: 'API view',
+                  } as Dict<string>
+                )[x.src] || x.src}
               </td>
               <td>{x.user}</td>
               <td>{x.role}</td>
@@ -1599,8 +1620,8 @@ export function DebugDrawer({ app }) {
       <div className="json pad-s">
         <p className="muted t-cap">
           The shared canvas state. Agents write to it through tools and every write is sent to the page as a STATE_DELTA event. The workflow
-          is part of it: your edits on the canvas are STATE_DELTA events with source user, and the orchestrator's are workflow.* tool calls.
-          The built app, this drawer and the build pack all read from it.
+          is part of it: your edits on the canvas are STATE_DELTA events with source user, and the orchestrator&apos;s are workflow.* tool
+          calls. The built app, this drawer and the build pack all read from it.
         </p>
         <Json
           open
@@ -1677,7 +1698,7 @@ export function DebugDrawer({ app }) {
                   {k === 'state'
                     ? 'Accounts, tabs, settings, app definitions, chat'
                     : k.indexOf('db:') === 0
-                      ? 'SQLite file of ' + ((S.apps[k.slice(3)] || {}).name || 'a deleted app')
+                      ? 'SQLite file of ' + (S.apps[k.slice(3)]?.name || 'a deleted app')
                       : ''}
                 </td>
                 <td className="num mono">{fmtBytes(LS.size(k))}</td>
@@ -1698,7 +1719,7 @@ export function DebugDrawer({ app }) {
       </div>
     );
   }
-  const k = (name, v) => (
+  const k = (name: string, v: ReactNode) => (
     <span className="kv">
       <span className="muted">{name}</span>
       <strong>{v}</strong>
@@ -1715,8 +1736,7 @@ export function DebugDrawer({ app }) {
           items={tabs}
           value={D.tab}
           onChange={(v) => {
-            D.tab = v;
-            notify();
+            setDbg({ tab: v });
           }}
         />
         <span className="grow" />
@@ -1728,8 +1748,7 @@ export function DebugDrawer({ app }) {
           aria-label="Filter the log"
           value={D.q}
           onInput={(e) => {
-            D.q = e.target.value;
-            notify();
+            setDbg({ q: e.currentTarget.value });
           }}
         />
         {app && (
@@ -1738,8 +1757,7 @@ export function DebugDrawer({ app }) {
             aria-pressed={!!D.all}
             title="Show every workspace, not only this tab"
             onClick={() => {
-              D.all = !D.all;
-              notify();
+              setDbg({ all: !D.all });
             }}
           >
             All tabs
@@ -1765,8 +1783,7 @@ export function DebugDrawer({ app }) {
           title={D.max ? 'Smaller' : 'Larger'}
           aria-label={D.max ? 'Smaller' : 'Larger'}
           onClick={() => {
-            D.max = !D.max;
-            notify();
+            setDbg({ max: !D.max });
           }}
         >
           <Icon n={D.max ? 'chevDown' : 'chevUp'} s="16" />
@@ -1787,6 +1804,7 @@ export function DebugDrawer({ app }) {
         {run
           ? [
               k('Last run', cap(run.kind) + ' ' + run.n + ' · ' + run.status),
+              // eslint-disable-next-line react-hooks/purity -- a running run's elapsed time; the store re-renders while it runs
               k('Took', fmtMs((run.t1 || Date.now()) - run.t0)),
               k('Model calls', run.calls + (run.replayed ? ' live, ' + run.replayed + ' replayed' : '')),
               k('Tokens', run.tokIn + run.tokOut ? '~' + fmtNum(run.tokIn + run.tokOut) : live.length ? '0' : 'sample only'),

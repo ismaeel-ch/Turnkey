@@ -116,6 +116,8 @@ export async function errorFromResponse(res: Response): Promise<LlmError> {
   if (res.status === 401 || res.status === 403) return new LlmError('unauthorized', 'the model gateway refused the key', 401);
   if (/budget/i.test(detail)) return new LlmError('budget', 'the model budget is used up', 429);
   if (res.status === 429) return new LlmError('rate_limited', 'the model gateway is rate limiting', 429);
+  // A success status only reaches here when the answer had no body: the service failed, not the request.
+  if (res.ok) return new LlmError('upstream', 'the model gateway answered ' + res.status + ' with no body');
   return new LlmError(
     res.status >= 500 ? 'upstream' : 'bad_request',
     'the model gateway answered ' + res.status + (detail ? ': ' + detail : ''),

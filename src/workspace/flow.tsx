@@ -1,9 +1,8 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
 import * as React from 'react';
 import * as ReactFlow from '@xyflow/react';
 import { createEagerRoot } from '@/platform/dom';
-import { useState, useEffect, useRef } from 'react';
-import { render, toStyle } from '@/platform/dom';
+import { createElement, useEffect, useRef } from 'react';
+import { toStyle } from '@/platform/dom';
 import { ICONS } from './icons';
 import { PHONE, S, U, arr, cx, notify, openDialog } from './core';
 import { dbCount } from './db';
@@ -29,6 +28,140 @@ import { Btn, AgentAv, Icon, STATUS_META } from './ui';
 import { useWidth } from './views-b';
 import { isDirty, relOf } from './release';
 import { LineView } from './shell-a';
+import type { ComponentType, CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
+import type { Edge, EdgeProps, Node, NodeChange, ReactFlowInstance, Viewport, XYPosition } from '@xyflow/react';
+import type { Root } from 'react-dom/client';
+import type { AppRecord, Dict } from '@/shared/types/workspace';
+import type { BriefedDef } from '@/shared/types/app';
+
+/* ---------- what each node of the canvas shows ---------- */
+/** The colour of a line: not reached, passed, running now, or sent back. */
+type EdgeKind = 'idle' | 'done' | 'live' | 'back';
+interface AgentData {
+  v: boolean;
+  app: string;
+  /** station id, or 'qa' for the Tester */
+  st: string;
+  sel: boolean;
+  status: string;
+  active: boolean;
+  acc: string;
+  icon: string;
+  cap: string;
+  note: string;
+  /** no Customize button (the Tester) */
+  noOpt?: boolean;
+  name: string;
+  tone: string;
+  badge: string;
+  attempt: number;
+  facts: string[];
+  tour?: string;
+}
+interface GateData {
+  v: boolean;
+  app: string;
+  st: string;
+  stName: string;
+  /** the Tester's gate, which runs every test */
+  all?: boolean;
+  state: string;
+  checks: number;
+  passed: number;
+  tests: number;
+  ran: number;
+  tbad: number;
+  busy: boolean;
+  canRun: boolean;
+  asks: { t: string; on: boolean }[];
+  canAdd: boolean;
+  title?: string;
+  tour?: string;
+}
+interface ReviewData {
+  v: boolean;
+  app: string;
+  rid: string;
+  sel: boolean;
+  state: string;
+  name: string;
+  icon: string;
+  acc: string;
+  auto: boolean;
+  custom: boolean;
+  tone: string;
+  badge: string;
+  sub: string;
+  canRun: boolean;
+}
+interface ApprovalData {
+  v: boolean;
+  app: string;
+  st: string;
+  held: boolean;
+  text: string;
+}
+interface TriggerData {
+  v: boolean;
+  text: string | undefined;
+  mode: string;
+}
+interface ReadyData {
+  v: boolean;
+  app: string;
+  ok: boolean;
+  name: string;
+  icon: string;
+  acc: string;
+  rel: string;
+  canRel: boolean;
+  lines: string[];
+}
+interface AppAgentData {
+  v: boolean;
+  app: string;
+  name: string;
+  job: string;
+  icon: string;
+  acc: string;
+  status: string;
+}
+// `ariaLabel` is a Node field, so only the data needs naming
+type FlowNode =
+  | Node<AgentData & Dict<unknown>, 'agent'>
+  | Node<GateData & Dict<unknown>, 'gate'>
+  | Node<ReviewData & Dict<unknown>, 'review'>
+  | Node<ApprovalData & Dict<unknown>, 'approval'>
+  | Node<TriggerData & Dict<unknown>, 'trigger'>
+  | Node<ReadyData & Dict<unknown>, 'ready'>
+  | Node<AppAgentData & Dict<unknown>, 'appagent'>;
+/** A node as the island keeps it: with the signature of what it showed last. */
+type IslandNode = FlowNode & { sig?: string };
+type RouteEdge = Edge<{ cy: number }>;
+export interface FlowGraph {
+  nodes: FlowNode[];
+  edges: RouteEdge[];
+  /** how many rows of added steps the canvas holds, which sets its height */
+  deep: number;
+}
+interface IslandProps {
+  graph: FlowGraph;
+  sig: string;
+  pos: Dict<XYPosition>;
+  onMove: (id: string, p: XYPosition) => void;
+  onPick: (n: FlowNode) => void;
+  dark: boolean;
+  v: boolean;
+  map: boolean;
+  focus: string | null;
+  start: Viewport;
+  fitKey: string;
+  fit: { padding: number; maxZoom: number };
+}
+type FlowInstance = ReactFlowInstance<FlowNode, RouteEdge>;
+export interface FlowKit {
+  Island: ComponentType<IslandProps>;
+}
 
 /* ===== Turnkey prototype · the workflow canvas, drawn with React Flow =====
    The build is a workflow: your request, the agents, a check gate after each one, a send-back arrow when a
@@ -36,16 +169,16 @@ import { LineView } from './shell-a';
    xyflow) draws it, so it can be panned, zoomed and rearranged. React Flow is a React library and the rest
    of this page is Preact, so the canvas is a small React island that is handed plain data on every render.
    If the library cannot be loaded, the page falls back to the plain line of stations. */
-export const FLOW = {
+export const FLOW: { state: 'loading' | 'ready' | 'none'; inst: FlowInstance | null; kit: FlowKit | null } = {
   state: 'loading',
   inst: null,
   kit: null,
 };
-export const setFlowAvailable = (ok) => {
+export const setFlowAvailable = (ok: boolean) => {
   FLOW.state = ok ? 'ready' : 'none';
   try {
     notify();
-  } catch (e) {}
+  } catch {}
 };
 export const isDark = () => {
   const r = document.documentElement,
@@ -67,7 +200,7 @@ export const FL = {
   VY: 150,
   VSTEP: 364,
 }; // RY: a review step sits this far below its gate; RH: the room a row needs for one
-export function openCustom(app, stId) {
+export function openCustom(app: AppRecord, stId: string): void {
   // the canvas hands a station to the inspector's Customize tab
   U.sel[app.id] = stId;
   U.follow[app.id] = false;
@@ -88,62 +221,50 @@ export function openCustom(app, stId) {
     }, 60);
   notify();
 }
-export function flowGraph(app, v) {
+export function flowGraph(app: AppRecord, v: boolean): FlowGraph {
   // plain data: where every node sits and what it shows. v = narrow screen: one column, each gate under its agent
   const def = app.def,
     L = app.line,
     hand = U.handoff[app.id],
     sel = U.sel[app.id],
-    nodes = [],
-    edges = [],
+    nodes: FlowNode[] = [],
+    edges: RouteEdge[] = [],
     W = FL.W,
     ok = testable(app),
     suites = ok ? suiteOf(app) : [],
     T0 = TESTS[app.id],
-    res = T0 && T0.rev === app.rev ? T0.res : {};
+    res: Dict<{ ok: boolean }> = T0 && T0.rev === app.rev ? T0.res : {},
+    // tests.tsx keeps the id of the suite that is running here, though its type says boolean
+    running = T0 ? (T0.running as unknown as string | null | undefined) : null;
   const css = getComputedStyle(document.documentElement),
-    col = (n) => css.getPropertyValue('--' + n).trim() || '#888',
+    col = (n: string) => css.getPropertyValue('--' + n).trim() || '#888',
     C = {
       idle: col('colorNeutralStroke1Hover'),
       done: col('colorStatusSuccessBorder2'),
       live: col('colorBrandStroke1'),
       back: col('colorStatusWarningBorder2'),
     };
+  type Added = { kind: 'review'; id: string } | { kind: 'approval' };
   const flow = flowOf(app),
     NS = STATIONS.length,
-    chain = STATIONS.map((st) =>
+    chain: Added[][] = STATIONS.map((st) =>
       stepsAt(flow, st.id)
-        .map((id) => ({
-          kind: 'review',
-          id,
-        }))
-        .concat(
-          flow.approve[st.id]
-            ? [
-                {
-                  kind: 'approval',
-                },
-              ]
-            : [],
-        ),
+        .map((id): Added => ({ kind: 'review', id }))
+        .concat(flow.approve[st.id] ? [{ kind: 'approval' }] : []),
     );
   chain.push([]); // the Tester is the last stop and has nothing after it but the release
-  const rowOf = (i) => (i < 3 ? 0 : 1),
-    colOf2 = (i) => (i < 3 ? i + 1 : i - 3),
-    deep = (r) =>
-      Math.max.apply(
-        null,
-        chain.map((c, i) => (rowOf(i) === r ? c.length : 0)),
-      );
+  const rowOf = (i: number) => (i < 3 ? 0 : 1),
+    colOf2 = (i: number) => (i < 3 ? i + 1 : i - 3),
+    deep = (r: number) => Math.max(...chain.map((c, i) => (rowOf(i) === r ? c.length : 0)));
   const rowY = [0, FL.ROW2 + deep(0) * FL.RH],
     teamY = rowY[1] + (FL.TEAM - FL.ROW2) + deep(1) * FL.RH + (deep(1) ? 44 : 0),
-    vy = [];
+    vy: number[] = [];
   let yy = FL.VY;
   chain.forEach((c) => {
     vy.push(yy);
     yy += FL.VSTEP + c.length * FL.RH;
   });
-  const at = (i, dy) =>
+  const at = (i: number, dy: number): XYPosition =>
     v
       ? {
           x: 0,
@@ -153,7 +274,16 @@ export function flowGraph(app, v) {
           x: FL.CW * colOf2(i),
           y: rowY[rowOf(i)] + dy,
         };
-  const edge = (id, s, sh, t, th, kind, type, more) =>
+  const edge = (
+    id: string,
+    s: string,
+    sh: string,
+    t: string,
+    th: string,
+    kind: EdgeKind,
+    type?: string,
+    more?: Partial<RouteEdge> | null,
+  ) =>
     edges.push(
       Object.assign(
         {
@@ -170,7 +300,7 @@ export function flowGraph(app, v) {
             strokeDasharray: kind === 'back' ? '6 4' : undefined,
           },
           markerEnd: {
-            type: 'arrowclosed',
+            type: ReactFlow.MarkerType.ArrowClosed,
             color: C[kind],
             width: 14,
             height: 14,
@@ -181,7 +311,7 @@ export function flowGraph(app, v) {
         more || {},
       ),
     );
-  const onward = (i, from, kind) => {
+  const onward = (i: number, from: string, kind: EdgeKind) => {
     // from the last node of stop i to the next stop, or to the finished app
     const wrap = !v && (i === 2 || i === NS),
       down = v || wrap,
@@ -227,10 +357,7 @@ export function flowGraph(app, v) {
       passed = S0.checks.filter((c) => c.ok).length,
       mine = suites.filter((s) => s.station === st.id),
       tn = mine.reduce((n, s) => n + s.tests.length, 0),
-      got = [].concat.apply(
-        [],
-        mine.map((s) => s.tests.map((x) => res[x.id]).filter(Boolean)),
-      ),
+      got = mine.flatMap((s) => s.tests.map((x) => res[x.id]).filter(Boolean)),
       tbad = got.filter((x) => !x.ok).length;
     const rules = flow.by[st.id] === 'rules',
       note = flow.notes[st.agent] || '';
@@ -257,7 +384,7 @@ export function flowGraph(app, v) {
         attempt: S0.attempt,
         facts: S0.facts.length
           ? S0.facts.slice(0, 3)
-          : [S0.status === 'working' && U.stream[app.id] ? 'Receiving ' + U.stream[app.id] + ' characters' : st.makes],
+          : [S0.status === 'working' && U.stream[app.id] ? 'Receiving ' + String(U.stream[app.id]) + ' characters' : st.makes],
         tour: i === 1 ? 'station' : undefined,
       },
     });
@@ -276,7 +403,7 @@ export function flowGraph(app, v) {
                 : 'bad'
               : 'idle';
     const held = S0.status === 'waiting' && S0.hold === 'approval',
-      asks = [];
+      asks: GateData['asks'] = [];
     if (st.id === 'research')
       asks.push({
         t:
@@ -306,7 +433,7 @@ export function flowGraph(app, v) {
         tests: tn,
         ran: got.length,
         tbad,
-        busy: !!(T0 && T0.running && mine.some((s) => s.id === T0.running)),
+        busy: !!(running && mine.some((s) => s.id === running)),
         canRun: ok && !RUNS[app.id],
         asks,
         canAdd: STEP_AT.includes(st.id) || APPROVE_AT.includes(st.id),
@@ -324,7 +451,7 @@ export function flowGraph(app, v) {
       // what the owner added after this gate: agents first, then the approval. The line passes through each one.
       const nid = 'c' + i + '_' + k,
         pos = at(i, FL.GY + FL.RY + k * FL.RH);
-      let done = 'idle';
+      let done: EdgeKind = 'idle';
       if (c.kind === 'review') {
         const rid = c.id,
           rv = REVIEWERS[rid],
@@ -362,7 +489,7 @@ export function flowGraph(app, v) {
                     : rs === 'ok'
                       ? did
                         ? did + (did === 1 ? ' change applied' : ' changes applied')
-                        : R.findings.length
+                        : R && R.findings.length
                           ? 'All handled'
                           : 'Nothing to change'
                       : 'Waiting',
@@ -496,7 +623,7 @@ export function flowGraph(app, v) {
       lines:
         app.status === 'ready'
           ? [
-              def.tables.length + ' tables · ' + deriveEndpoints(def).length + ' endpoints',
+              def.tables.length + ' tables · ' + deriveEndpoints(def as BriefedDef).length + ' endpoints',
               def.screens.length + ' pages' + (st0 ? ' · ' + st0.passed + ' of ' + st0.total + ' tests pass' : ''),
             ].concat(def.team ? [def.team.agents.length + ' agents of its own run inside it'] : [])
           : ['Appears when every gate has passed'],
@@ -504,10 +631,11 @@ export function flowGraph(app, v) {
   });
   edge('e-trig', 'trigger', 'out', 'a0', v ? 'top' : 'in', L.research.status === 'idle' ? 'idle' : 'done', v ? 'straight' : 'smoothstep');
   if (def.team) {
-    const T = TEAMS[app.id];
+    const T = TEAMS[app.id],
+      team = def.team;
     def.team.agents.forEach((a, j) => {
       const s = T ? T.steps[j].status : 'idle',
-        wait = !!(T && T.wait && def.team.pause && def.team.pause.before === a.id);
+        wait = !!(T && T.wait && team.pause && team.pause.before === a.id);
       nodes.push({
         id: 't' + j,
         type: 'appagent',
@@ -551,29 +679,30 @@ export function flowGraph(app, v) {
     deep: deep(0) + deep(1),
   };
 }
-export function flowKit() {
+export function flowKit(): FlowKit {
   // the React pieces, made once the libraries have loaded
   if (FLOW.kit) return FLOW.kit;
   const R = React,
     RF = ReactFlow,
     e = R.createElement,
-    POS = {
+    POS: Record<'left' | 'right' | 'top' | 'bottom', ReactFlow.Position> = {
       left: RF.Position.Left,
       right: RF.Position.Right,
       top: RF.Position.Top,
       bottom: RF.Position.Bottom,
     };
-  const ic = (n, s) =>
+  const ic = (n: string, s?: string) =>
     e('svg', {
       className: 'ic' + (s ? ' s' + s : ''),
       viewBox: '0 0 20 20',
       fill: 'currentColor',
       'aria-hidden': true,
       dangerouslySetInnerHTML: {
-        __html: ICONS[n] || ICONS.circle,
+        __html: ICONS[n as keyof typeof ICONS] || ICONS.circle,
       },
     });
-  const hs = (list) =>
+  type HandleSpec = [id: string, type: 'source' | 'target', side: keyof typeof POS, style?: CSSProperties | null];
+  const hs = (list: HandleSpec[]) =>
     list.map((h) =>
       e(RF.Handle, {
         key: h[0],
@@ -581,15 +710,15 @@ export function flowKit() {
         type: h[1],
         position: POS[h[2]],
         isConnectable: false,
-        style: h[3],
+        style: h[3] || undefined,
       }),
     );
-  const appOf = (d) => S.apps[d.app],
-    stop = (fn) => (ev) => {
+  const appOf = (d: { app: string }) => S.apps[d.app],
+    stop = (fn: () => unknown) => (ev: ReactMouseEvent) => {
       ev.stopPropagation();
       fn();
     };
-  const Agent = ({ data: d }) =>
+  const Agent = ({ data: d }: { data: AgentData }) =>
     e(
       'div',
       {
@@ -715,7 +844,7 @@ export function flowKit() {
         ),
       ),
     );
-  const Gate = ({ data: d }) =>
+  const Gate = ({ data: d }: { data: GateData }) =>
     e(
       'div',
       {
@@ -760,7 +889,7 @@ export function flowKit() {
                 title: d.all ? 'Run every test' : 'Run the ' + d.tests + ' tests of this gate',
                 'aria-label': d.all ? 'Run every test' : 'Run the ' + d.tests + ' tests of this gate',
                 disabled: !d.canRun || d.busy,
-                onClick: stop(() => (d.all ? runTests(appOf(d)) : runTests(appOf(d), (s) => s.station === d.st))),
+                onClick: stop(() => (d.all ? runTests(appOf(d)) : runTests(appOf(d), (s: { station: string }) => s.station === d.st))),
               },
               d.busy
                 ? e('span', {
@@ -816,7 +945,7 @@ export function flowKit() {
           )
         : null,
     );
-  const Review = ({ data: d }) =>
+  const Review = ({ data: d }: { data: ReviewData }) =>
     e(
       'div',
       {
@@ -853,7 +982,7 @@ export function flowKit() {
             title: 'Run this step now',
             'aria-label': 'Run ' + d.name + ' now',
             disabled: !d.canRun,
-            onClick: stop(() => reviewNow(appOf(d), d.rid)),
+            onClick: stop(() => reviewNow(appOf(d), d.rid, false)),
           },
           d.state === 'working'
             ? e('span', {
@@ -912,7 +1041,7 @@ export function flowKit() {
         d.sub,
       ),
     );
-  const Approval = ({ data: d }) =>
+  const Approval = ({ data: d }: { data: ApprovalData }) =>
     e(
       'div',
       {
@@ -982,7 +1111,7 @@ export function flowKit() {
           )
         : null,
     );
-  const Trigger = ({ data: d }) =>
+  const Trigger = ({ data: d }: { data: TriggerData }) =>
     e(
       'div',
       {
@@ -1029,7 +1158,7 @@ export function flowKit() {
         d.text,
       ),
     );
-  const Ready = ({ data: d }) =>
+  const Ready = ({ data: d }: { data: ReadyData }) =>
     e(
       'div',
       {
@@ -1125,7 +1254,7 @@ export function flowKit() {
           )
         : null,
     );
-  const AppAgent = ({ data: d }) =>
+  const AppAgent = ({ data: d }: { data: AppAgentData }) =>
     e(
       'div',
       {
@@ -1179,7 +1308,7 @@ export function flowKit() {
         d.job,
       ),
     );
-  const Route = (p) => {
+  const Route = (p: EdgeProps<RouteEdge>) => {
     const r = RF.getSmoothStepPath({
       sourceX: p.sourceX,
       sourceY: p.sourceY,
@@ -1207,15 +1336,19 @@ export function flowKit() {
   };
   // React Flow measures where a node's handles are once, when the node first appears. If the node's data changes in the same few frames, that
   // measurement can be dropped and the node's edges are not drawn. So after changes settle, every node is measured again.
-  const Sync = ({ sig, ids }) => {
+  const Sync = ({ sig, ids }: { sig: string; ids: string[] }) => {
     const upd = RF.useUpdateNodeInternals(),
-      s = R.useRef({
+      box = R.useRef<{ t: ReturnType<typeof setTimeout> | 0; dirty: boolean; ids: string[] }>({
         t: 0,
         dirty: false,
         ids,
-      }).current;
-    s.ids = ids;
+      });
     R.useEffect(() => {
+      // eslint-disable-next-line react-hooks/immutability -- the ref holds the latest ids for the timer below
+      box.current.ids = ids;
+    });
+    R.useEffect(() => {
+      const s = box.current;
       const go = () => {
         s.t = setTimeout(() => {
           s.t = 0;
@@ -1226,10 +1359,16 @@ export function flowKit() {
           }
         }, 160);
       };
+      // eslint-disable-next-line react-hooks/immutability -- a timer is pending: ask it to run once more
       if (s.t) s.dirty = true;
       else go();
     }, [sig]);
-    R.useEffect(() => () => clearTimeout(s.t), []);
+    R.useEffect(() => {
+      const s = box.current;
+      return () => {
+        if (s.t) clearTimeout(s.t);
+      };
+    }, []);
     return null;
   };
   const NODES = {
@@ -1244,12 +1383,11 @@ export function flowKit() {
     EDGES = {
       route: Route,
     };
-  const Island = (p) => {
-    const st = R.useState(p.graph.nodes),
+  const Island = (p: IslandProps) => {
+    const st = R.useState<IslandNode[]>(p.graph.nodes),
       nodes = st[0],
       setNodes = st[1],
-      inst = R.useRef(null),
-      box = R.useRef(null);
+      inst = R.useRef<FlowInstance | null>(null);
     R.useEffect(() => {
       setNodes((prev) =>
         p.graph.nodes.map((n) => {
@@ -1258,32 +1396,20 @@ export function flowKit() {
             sig = JSON.stringify([at, n.width, n.data]);
           return o && o.type === n.type && o.sig === sig && o.position.x === at.x && o.position.y === at.y
             ? o
-            : Object.assign({}, o && o.type === n.type ? o : null, n, {
-                position: at,
-                sig,
-              });
+            : ({ ...(o && o.type === n.type ? o : null), ...n, position: at, sig } as IslandNode);
         }),
       );
     }, [p.sig]); // a node that did not change keeps its object, so React Flow leaves it alone
     R.useEffect(() => {
-      const go = (d) =>
+      const go = (d: number) =>
           setTimeout(
             () => {
-              // a hidden canvas has no size, and fitting it would give React Flow a viewport of NaN
-              if (!inst.current || !box.current?.clientWidth || !box.current?.clientHeight) return;
+              if (!inst.current) return;
               if (p.v)
-                inst.current.setViewport(p.start, {
+                void inst.current.setViewport(p.start, {
                   duration: 200,
                 });
-              else
-                inst.current.fitView(
-                  Object.assign(
-                    {
-                      duration: d,
-                    },
-                    p.fit,
-                  ),
-                );
+              else void inst.current.fitView({ duration: d, ...p.fit });
             },
             d ? 90 : 420,
           ),
@@ -1291,19 +1417,19 @@ export function flowKit() {
         t2 = p.v ? 0 : go(0);
       return () => {
         clearTimeout(t);
-        clearTimeout(t2);
+        if (t2) clearTimeout(t2);
       };
     }, [p.fitKey]); /* fitted twice: nodes that were just added are measured a moment later */
     R.useEffect(() => {
       if (!p.v || !p.focus || !inst.current) return;
       const n = inst.current.getNode(p.focus);
       if (n)
-        inst.current.setCenter(n.position.x + 110, n.position.y + 170, {
+        void inst.current.setCenter(n.position.x + 110, n.position.y + 170, {
           zoom: p.start.zoom,
           duration: 350,
         });
     }, [p.focus, p.v]);
-    const onNodesChange = (chs) => {
+    const onNodesChange = (chs: NodeChange<IslandNode>[]) => {
       chs.forEach((c) => {
         if (c.type === 'position' && c.position && c.dragging) p.onMove(c.id, c.position);
         if (c.type === 'select' && c.selected) {
@@ -1311,72 +1437,65 @@ export function flowKit() {
           if (n && (n.type === 'agent' || n.type === 'gate' || n.type === 'review')) p.onPick(n);
         }
       });
-      setNodes((nds) => RF.applyNodeChanges(chs, nds));
+      setNodes((nds) => RF.applyNodeChanges<IslandNode>(chs, nds));
     };
-    return e(
-      RF.ReactFlow,
-      {
-        ref: box,
-        nodes,
-        edges: p.graph.edges,
-        nodeTypes: NODES,
-        edgeTypes: EDGES,
-        onNodesChange,
-        onNodeClick: (ev, n) => p.onPick(n),
-        onInit: (i) => {
-          inst.current = i;
-          FLOW.inst = i;
-        },
-        fitView: !p.v,
-        fitViewOptions: p.fit,
-        defaultViewport: p.start,
-        colorMode: p.dark ? 'dark' : 'light',
-        nodesConnectable: false,
-        edgesFocusable: false,
-        selectNodesOnDrag: false,
-        zoomOnScroll: false,
-        panOnScroll: false,
-        preventScrolling: false,
-        zoomOnDoubleClick: false,
-        minZoom: 0.2,
-        maxZoom: 1.6,
-        deleteKeyCode: null,
-        attributionPosition: 'bottom-left',
-      },
-      e(RF.Background, {
-        variant: 'dots',
-        gap: 18,
-        size: 1.4,
-      }),
-      e(Sync, {
-        sig: p.sig,
-        ids: p.graph.nodes.map((n) => n.id),
-      }),
-      p.map
-        ? e(RF.MiniMap, {
-            pannable: true,
-            zoomable: true,
-            position: 'bottom-right',
-            nodeStrokeWidth: 3,
-            nodeBorderRadius: 8,
-            ariaLabel: 'Map of the workflow',
-            style: {
-              width: 150,
-              height: 96,
-            },
-          })
-        : null,
+    /* eslint-disable react-hooks/immutability -- React Flow hands over its instance once; the zoom buttons outside the island use it too */
+    const onInit = (i: FlowInstance) => {
+      inst.current = i;
+      FLOW.inst = i;
+    };
+    return (
+      <RF.ReactFlow<IslandNode, RouteEdge>
+        nodes={nodes}
+        edges={p.graph.edges}
+        nodeTypes={NODES}
+        edgeTypes={EDGES}
+        onNodesChange={onNodesChange}
+        onNodeClick={(_ev, n) => p.onPick(n)}
+        onInit={onInit}
+        fitView={!p.v}
+        fitViewOptions={p.fit}
+        defaultViewport={p.start}
+        colorMode={p.dark ? 'dark' : 'light'}
+        nodesConnectable={false}
+        edgesFocusable={false}
+        selectNodesOnDrag={false}
+        zoomOnScroll={false}
+        panOnScroll={false}
+        preventScrolling={false}
+        zoomOnDoubleClick={false}
+        minZoom={0.2}
+        maxZoom={1.6}
+        deleteKeyCode={null}
+        attributionPosition="bottom-left"
+      >
+        <RF.Background variant={RF.BackgroundVariant.Dots} gap={18} size={1.4} />
+        <Sync sig={p.sig} ids={p.graph.nodes.map((n) => n.id)} />
+        {p.map ? (
+          <RF.MiniMap
+            pannable
+            zoomable
+            position="bottom-right"
+            nodeStrokeWidth={3}
+            nodeBorderRadius={8}
+            ariaLabel="Map of the workflow"
+            style={{ width: 150, height: 96 }}
+          />
+        ) : null}
+      </RF.ReactFlow>
     );
+    /* eslint-enable react-hooks/immutability */
   };
-  return (FLOW.kit = {
-    Island,
-    e,
-  });
+  return (FLOW.kit = { Island });
 }
-export function FlowView({ app, sel }) {
+/** Where the owner dragged the nodes of one canvas; the object is kept, so drags write straight into it. */
+function flowPosFor(key: string): Dict<XYPosition> {
+  return U.flowPos[key] || (U.flowPos[key] = {});
+}
+export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) {
   // the Preact side: keeps a React root alive and hands it fresh data on every render
-  const ref = useRef(),
-    root = useRef(),
+  const ref = useRef<HTMLDivElement>(null),
+    root = useRef<Root | null>(null),
     w = useWidth(ref),
     ready = FLOW.state === 'ready';
   useEffect(() => {
@@ -1390,24 +1509,26 @@ export function FlowView({ app, sel }) {
       setTimeout(() => {
         try {
           r.unmount();
-        } catch (e) {}
+        } catch {}
       }, 0);
     };
   }, [ready]);
+  /* eslint-disable react-hooks/refs -- the canvas's width now, before useWidth has caught up with a resize */
   const wNow = ref.current && ref.current.clientWidth ? ref.current.clientWidth : w,
     v = wNow < 700,
     team = app.def.team ? app.def.team.agents.length : 0,
     fl = flowOf(app),
     nrev = fl.reviewers.length,
-    pos = U.flowPos[app.id + (v ? ':v' : '')] || (U.flowPos[app.id + (v ? ':v' : '')] = {}),
+    pos = flowPosFor(app.id + (v ? ':v' : '')),
     n = U.flowN || 0,
     map = U.flowMap == null ? !v : U.flowMap;
+  /* eslint-enable react-hooks/refs */
   useEffect(() => {
     if (!root.current || !ref.current || !ref.current.clientWidth) return;
     const K = flowKit(),
       graph = flowGraph(app, v),
       live = STATIONS.findIndex((s) => ['working', 'checking', 'sentback', 'waiting'].includes(app.line[s.id].status));
-    const pick = (node) => {
+    const pick = (node: FlowNode) => {
       const i = +node.id.slice(1);
       if ((node.type === 'agent' || node.type === 'gate') && node.data.st === 'qa') {
         U.sel[app.id] = 'qa';
@@ -1475,12 +1596,12 @@ export function FlowView({ app, sel }) {
       notify();
     };
     root.current.render(
-      K.e(K.Island, {
+      createElement(K.Island, {
         key: v ? 'column' : 'rows',
         graph,
         sig: JSON.stringify(graph.nodes.map((x) => [x.id, x.position, x.width, x.data])) + n,
         pos,
-        onMove: (id, p) => {
+        onMove: (id: string, p: XYPosition) => {
           pos[id] = p;
         },
         onPick: pick,
@@ -1519,16 +1640,12 @@ export function FlowView({ app, sel }) {
     );
   });
   if (!ready) return <LineView app={app} sel={sel} />;
-  const z = (fn) => () => {
+  const z = (fn: (i: FlowInstance) => unknown) => () => {
       if (FLOW.inst) fn(FLOW.inst);
     },
     deepNow = [0, 1].reduce(
       (n, r) =>
-        n +
-        Math.max.apply(
-          null,
-          STATIONS.map((st, i) => ((i < 3 ? 0 : 1) === r ? stepsAt(fl, st.id).length + (fl.approve[st.id] ? 1 : 0) : 0)),
-        ),
+        n + Math.max(...STATIONS.map((st, i) => ((i < 3 ? 0 : 1) === r ? stepsAt(fl, st.id).length + (fl.approve[st.id] ? 1 : 0) : 0))),
       0,
     );
   return (
@@ -1644,22 +1761,22 @@ export function FlowView({ app, sel }) {
           {' on a gate to add an approval or an agent of your own, use the options button on an agent, or ask in chat.'}
         </span>
       </div>
-      <FlowChips app={app} />
+      <FlowChips app={app} empty={undefined} />
     </div>
   );
 }
-export function BuildSummary({ app }) {
+export function BuildSummary({ app }: { app: AppRecord }) {
   // the overview strip above the workflow: what was built, at a glance
   const def = app.def,
     st = testStats(app),
     run = app.runs[app.runs.length - 1],
-    go = (v) => () => {
+    go = (v: string) => () => {
       U.view[app.id] = v;
       notify();
     },
-    views = Object.keys(def.views || {}).reduce((k, t) => k + def.views[t].length, 0);
-  const tile = (label, value, sub, on, tone) => (
-    <button className={cx('kpi mini', tone)} disabled={!on} onClick={on}>
+    views = Object.values(def.views || {}).reduce((k, list) => k + list.length, 0);
+  const tile = (label: string, value: string | number, sub: string, on: (() => void) | null, tone?: string) => (
+    <button className={cx('kpi mini', tone)} disabled={!on} onClick={on || undefined}>
       <span className="kpi-l">{label}</span>
       <span className="kpi-v">{value}</span>
       <span className="kpi-s">{sub}</span>
@@ -1671,11 +1788,11 @@ export function BuildSummary({ app }) {
         'Tables',
         def.tables.length || '–',
         def.tables.length && app.status === 'ready'
-          ? def.tables.reduce((k, t) => k + dbCount(app.id, t.name), 0) + ' rows in SQLite'
+          ? def.tables.reduce((k, t) => k + Number(dbCount(app.id, t.name)), 0) + ' rows in SQLite'
           : 'in SQLite',
         def.tables.length ? go('data') : null,
       )}
-      {tile('Endpoints', def.process ? deriveEndpoints(def).length : '–', 'guarded by role', def.process ? go('api') : null)}
+      {tile('Endpoints', def.process ? deriveEndpoints(def as BriefedDef).length : '–', 'guarded by role', def.process ? go('api') : null)}
       {tile('Views', views || '–', def.dash ? 'plus a dashboard' : 'per table', def.screens.length ? go('app') : null)}
       {tile(
         'Pages',

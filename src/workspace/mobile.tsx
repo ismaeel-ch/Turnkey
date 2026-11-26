@@ -1,5 +1,7 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
+import type { KeyboardEvent, MouseEvent, ReactNode, TouchEvent } from 'react';
+import type { AppUser, Screen } from '@/shared/types/app';
+import type { AppRecord, PhoneSheet, Tab } from '@/shared/types/workspace';
 import {
   BRAND,
   S,
@@ -36,6 +38,25 @@ import { AppLogo, isDirty, relOf } from './release';
 import { Inspector, isDetail, rebuildAsk, viewOf } from './shell-a';
 import { startTour } from './shell-c';
 
+/** A row of the built app's account menu: an action, or '-' for a divider. */
+export type SoloItem = '-' | { label: string; icon?: string; on: () => void };
+/** What a built app's pane keeps for the phone layout: which bottom sheet is open. */
+export interface PhonePane {
+  sheet?: string | null;
+}
+/** Opens or closes a bottom sheet of a built app ('more' pages, or the account sheet). */
+function setPaneSheet(pane: PhonePane, sheet: string | null): void {
+  pane.sheet = sheet;
+  notify();
+}
+/** Moves the builder's phone layout to one view of an app, closing the chat and any sheet. */
+function phoneGo(app: AppRecord, view: string, chat: boolean): void {
+  U.view[app.id] = view;
+  if (chat) setChat(false);
+  U.sheet = null;
+  notify();
+}
+
 /* ===== Turnkey prototype · phone layouts =====
    On a phone nothing is a shrunken web page. A built app gets a title bar, a bottom tab bar, a floating New button, full-screen
    record pages and bottom sheets. The builder gets its own bottom navigation, a switcher for open workspaces, and opens built apps
@@ -44,27 +65,44 @@ import { startTour } from './shell-c';
 export function useElWidth() {
   // the width of an element that may come and go between renders
   const st = useState(0),
-    ro = useRef(null),
+    ro = useRef<ResizeObserver | null>(null),
     set = st[1];
-  const ref = useRef((el) => {
-    if (ro.current) {
-      ro.current.disconnect();
-      ro.current = null;
-    }
-    if (!el) return;
-    const fit = () => set((old) => (el.clientWidth && el.clientWidth !== old ? el.clientWidth : old));
-    fit();
-    if (typeof ResizeObserver !== 'undefined') {
-      ro.current = new ResizeObserver(fit);
-      ro.current.observe(el);
-    }
-  }).current;
-  return [ref, st[0]];
+  const ref = useCallback(
+    (el: HTMLElement | null) => {
+      if (ro.current) {
+        ro.current.disconnect();
+        ro.current = null;
+      }
+      if (!el) return;
+      const fit = () => set((old) => (el.clientWidth && el.clientWidth !== old ? el.clientWidth : old));
+      fit();
+      if (typeof ResizeObserver !== 'undefined') {
+        ro.current = new ResizeObserver(fit);
+        ro.current.observe(el);
+      }
+    },
+    [set],
+  );
+  return [ref, st[0]] as const;
 }
-export const isCompact = (w) => (w || window.innerWidth) <= 640;
-export function Sheet({ title, sub, onClose, children, cls, tall }) {
+export const isCompact = (w?: number) => (w || window.innerWidth) <= 640;
+export function Sheet({
+  title,
+  sub,
+  onClose,
+  children,
+  cls,
+  tall,
+}: {
+  title: string;
+  sub?: string;
+  onClose: () => void;
+  children?: ReactNode;
+  cls?: string;
+  tall?: boolean;
+}) {
   // a panel that rises from the bottom; drag the handle down, tap outside or press Escape to close
-  const ref = useRef(),
+  const ref = useRef<HTMLElement>(null),
     drag = useRef({
       on: false,
       y: 0,
@@ -76,20 +114,20 @@ export function Sheet({ title, sub, onClose, children, cls, tall }) {
         el.focus({
           preventScroll: true,
         });
-      } catch (e) {}
+      } catch {}
     }
   }, []);
-  const ts = (e) => {
+  const ts = (e: TouchEvent) => {
       drag.on = true;
       drag.y = e.touches[0].clientY;
     },
-    tm = (e) => {
+    tm = (e: TouchEvent) => {
       if (!drag.on || !ref.current) return;
       const dy = Math.max(0, e.touches[0].clientY - drag.y);
       ref.current.style.transition = 'none';
       ref.current.style.transform = 'translateY(' + dy + 'px)';
     };
-  const te = (e) => {
+  const te = (e: TouchEvent) => {
     if (!drag.on || !ref.current) return;
     drag.on = false;
     const t = e.changedTouches && e.changedTouches[0],
@@ -101,7 +139,7 @@ export function Sheet({ title, sub, onClose, children, cls, tall }) {
   return (
     <div
       className={cx('sheet-wrap', cls)}
-      onMouseDown={(e) => {
+      onMouseDown={(e: MouseEvent) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
@@ -110,9 +148,9 @@ export function Sheet({ title, sub, onClose, children, cls, tall }) {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        tabIndex="-1"
+        tabIndex={-1}
         ref={ref}
-        onKeyDown={(e) => {
+        onKeyDown={(e: KeyboardEvent) => {
           if (e.key === 'Escape') {
             e.stopPropagation();
             onClose();
@@ -138,7 +176,21 @@ export function Sheet({ title, sub, onClose, children, cls, tall }) {
     </div>
   );
 }
-export const SheetRow = ({ icon, av, label: text, hint, on, onClick, check, danger, disabled, end }) => (
+export interface SheetRowProps {
+  icon?: string;
+  /** shown instead of the icon: an avatar or app badge */
+  av?: ReactNode;
+  label: string;
+  hint?: string;
+  on?: boolean;
+  onClick: () => void;
+  check?: boolean;
+  danger?: boolean;
+  disabled?: boolean;
+  /** shown at the end of the row: a switch or a chevron */
+  end?: ReactNode;
+}
+export const SheetRow = ({ icon, av, label: text, hint, on, onClick, check, danger, disabled, end }: SheetRowProps) => (
   <button className={cx('sheet-i', on && 'on', danger && 'danger')} disabled={disabled} onClick={onClick}>
     {av ||
       (icon && (
@@ -156,7 +208,17 @@ export const SheetRow = ({ icon, av, label: text, hint, on, onClick, check, dang
 );
 
 /* ---------- inside a built app ---------- */
-export function AppTabs({ screens, scr, pane, go }) {
+export function AppTabs({
+  screens,
+  scr,
+  pane,
+  go,
+}: {
+  screens: Screen[];
+  scr: Screen | undefined;
+  pane: PhonePane;
+  go: (id: string) => void;
+}) {
   // up to five places at the bottom; the rest go under More
   const max = screens.length > 5 ? 4 : 5,
     main = screens.slice(0, max),
@@ -172,7 +234,7 @@ export function AppTabs({ screens, scr, pane, go }) {
           onClick={() => go(s.id)}
         >
           <span className="tab-ic">
-            <Icon n={s.icon} s="24" />
+            <Icon n={s.icon || ''} s="24" />
           </span>
           <span className="tab-l">{s.name}</span>
         </button>
@@ -182,10 +244,7 @@ export function AppTabs({ screens, scr, pane, go }) {
           className={cx('tab-i', inRest && 'on')}
           aria-haspopup="dialog"
           aria-label={'More pages: ' + rest.map((s) => s.name).join(', ')}
-          onClick={() => {
-            pane.sheet = 'more';
-            notify();
-          }}
+          onClick={() => setPaneSheet(pane, 'more')}
         >
           <span className="tab-ic">
             <Icon n="more" s="24" />
@@ -196,12 +255,29 @@ export function AppTabs({ screens, scr, pane, go }) {
     </nav>
   );
 }
-export function AppSheets({ app, pane, user, users, screens, scr, go, swap, solo }) {
+export function AppSheets({
+  app,
+  pane,
+  user,
+  users,
+  screens,
+  scr,
+  go,
+  swap,
+  solo,
+}: {
+  app: AppRecord;
+  pane: PhonePane;
+  user: AppUser;
+  users: AppUser[];
+  screens: Screen[];
+  scr: Screen | undefined;
+  go: (id: string) => void;
+  swap: (u: AppUser | null) => void;
+  solo?: SoloItem[] | null;
+}) {
   const def = app.def,
-    close = () => {
-      pane.sheet = null;
-      notify();
-    },
+    close = () => setPaneSheet(pane, null),
     max = screens.length > 5 ? 4 : 5;
   if (pane.sheet === 'more')
     return (
@@ -212,8 +288,8 @@ export function AppSheets({ app, pane, user, users, screens, scr, go, swap, solo
               key={s.id}
               icon={s.icon}
               label={s.name}
-              on={scr && s.id === scr.id}
-              check={scr && s.id === scr.id}
+              on={!!scr && s.id === scr.id}
+              check={!!scr && s.id === scr.id}
               onClick={() => go(s.id)}
             />
           ))}
@@ -237,7 +313,7 @@ export function AppSheets({ app, pane, user, users, screens, scr, go, swap, solo
         ))}
       </div>
       <div className="sheet-list">
-        {arr(solo).map((it, i) =>
+        {arr<SoloItem>(solo).map((it, i) =>
           it === '-' ? null : (
             <SheetRow
               key={i}
@@ -257,7 +333,7 @@ export function AppSheets({ app, pane, user, users, screens, scr, go, swap, solo
 }
 
 /* ---------- the builder on a phone ---------- */
-export const sheetOpen = (kind, more) => {
+export const sheetOpen = (kind: PhoneSheet['kind'], more?: Omit<PhoneSheet, 'kind'>) => {
     U.sheet = Object.assign(
       {
         kind,
@@ -270,7 +346,7 @@ export const sheetOpen = (kind, more) => {
     U.sheet = null;
     notify();
   };
-export function PhoneBar({ tabs, tab }) {
+export function PhoneBar({ tabs, tab }: { tabs: Tab[]; tab: Tab | null }) {
   // title bar: home, the workspace switcher, the menu
   const app = tab && tab.app ? S.apps[tab.app] : null,
     acct = me();
@@ -299,26 +375,22 @@ export function PhoneBar({ tabs, tab }) {
       </button>
       <span className="grow" />
       {!online() && <span className="badge b-warning">Offline</span>}
+      <span className="act-slot" aria-hidden="true" />
       <button className="acct" aria-haspopup="dialog" aria-label="Menu" data-tour="account" onClick={() => sheetOpen('menu')}>
-        <Avatar name={acct.name} size="sm" acc="blue" />
+        <Avatar name={acct ? acct.name : ''} size="sm" acc="blue" />
       </button>
     </header>
   );
 }
-export function PhoneNav({ app }) {
+export function PhoneNav({ app }: { app: AppRecord }) {
   // bottom navigation of a workspace
   const view = viewOf(app),
     chat = chatShown(),
     rel = relOf(app),
     needs = app.line.research.status === 'waiting' || !!PENDING[app.id],
-    st = testStats(app);
-  const go = (v) => {
-    U.view[app.id] = v;
-    if (chat) setChat(false);
-    U.sheet = null;
-    notify();
-  };
-  const item = (id, icon, text, on, onClick, dot) => (
+    failed = testStats(app)?.failed || 0;
+  const go = (v: string) => phoneGo(app, v, chat);
+  const item = (id: string, icon: string, text: string, on: boolean, onClick: () => void, dot?: string | null) => (
     <button key={id} className={cx('tab-i', on && 'on')} aria-current={on ? 'page' : undefined} onClick={onClick}>
       <span className="tab-ic">
         <Icon n={icon} s="24" />
@@ -330,7 +402,7 @@ export function PhoneNav({ app }) {
   return (
     <nav className="phone-nav" aria-label="Workspace" data-tour="views">
       {item('build', 'flow', 'Build', !chat && view === 'build', () => go('build'), RUNS[app.id] ? 'live' : null)}
-      {item('app', 'window', 'App', !chat && view === 'app', () => go('app'))}
+      {item('app', 'window', 'App', !chat && view === 'app', () => go('app'), null)}
       {item(
         'release',
         'rocket',
@@ -358,12 +430,12 @@ export function PhoneNav({ app }) {
           sheetOpen('more', {
             app: app.id,
           }),
-        st && st.failed ? 'bad' : null,
+        failed ? 'bad' : null,
       )}
     </nav>
   );
 }
-export function AppLauncher({ app }) {
+export function AppLauncher({ app }: { app: AppRecord }) {
   // the App tab on a phone: the app opens full screen, like an app, instead of inside the builder
   const def = app.def,
     users = appUsers(app),
@@ -378,7 +450,7 @@ export function AppLauncher({ app }) {
         />
       </div>
     );
-  const open = (u) =>
+  const open = (u: AppUser | null) =>
     enterSolo(app, {
       from: 'own',
       as: u ? u.username : null,
@@ -437,7 +509,7 @@ export function AppLauncher({ app }) {
     </div>
   );
 }
-export function PhoneSheets({ app }) {
+export function PhoneSheets({ app }: { app: AppRecord | null }) {
   // the sheets of the builder: workspaces, menu, more, inspector
   const sh = U.sheet;
   if (!sh) return null;
@@ -491,7 +563,7 @@ export function PhoneSheets({ app }) {
                 app: null,
               };
               tabsNow().push(t);
-              S.active[S.session] = t.id;
+              if (S.session) S.active[S.session] = t.id;
               U.sheet = null;
               commit();
             }}
@@ -501,18 +573,18 @@ export function PhoneSheets({ app }) {
     );
   }
   if (sh.kind === 'menu') {
-    const tog = (on) => (
+    const tog = (on: boolean) => (
         <span className={cx('switch-pill', on && 'on')} aria-hidden="true">
           <i />
         </span>
       ),
-      act = (fn) => () => {
+      act = (fn: () => unknown) => () => {
         U.sheet = null;
         fn();
         notify();
       };
     return (
-      <Sheet cls="fixed" title={acct.name} sub={acct.username + ' · ' + BRAND.name} onClose={sheetClose}>
+      <Sheet cls="fixed" title={acct ? acct.name : ''} sub={(acct ? acct.username : '') + ' · ' + BRAND.name} onClose={sheetClose}>
         <div className="sheet-list">
           <SheetRow
             icon="sparkle"
@@ -587,13 +659,13 @@ export function PhoneSheets({ app }) {
   if (sh.kind === 'more') {
     const busy = !!RUNS[app.id],
       ready = app.status === 'ready',
-      go = (v) => () => {
+      go = (v: string) => () => {
         U.view[app.id] = v;
         U.sheet = null;
         if (chatShown()) setChat(false);
         notify();
       },
-      act = (fn) => () => {
+      act = (fn: () => unknown) => () => {
         U.sheet = null;
         fn();
         notify();

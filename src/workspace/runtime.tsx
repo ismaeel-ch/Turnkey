@@ -71,7 +71,7 @@ export function cellText(app, user, t, c, v, depth) {
       return String(v);
   }
 }
-export const rowTitle = (app, user, t, row, col) =>
+export const rowTitle = (app, user, t, row, col?) =>
   cellText(app, user, t, colOf(t, col || t.title), row[col || t.title], 0) || t.one + ' #' + row.id;
 export function Cell({ app, user, t, c, v }) {
   if (v == null || v === '') return <span className="muted">–</span>;

@@ -1,6 +1,9 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
+import type { ReactNode } from 'react';
 import { render } from '@/platform/dom';
-import { S, U, ago, arr, commit, cx, emit, fmtMs, label, notify, sleep, str, toast, toolCall } from './core';
+import type { AppDef, AppTable, AppUser, BriefedDef, ColumnDef, Role, Screen, TestCase, Transition, Untrusted } from '@/shared/types/app';
+import type { SqlRow, SqlValue } from '@/shared/types/sqljs';
+import type { AppRecord, Dict } from '@/shared/types/workspace';
+import { S, U, ago, arr, commit, cx, emit, errText, fmtMs, label, notify, sleep, str, toast, toolCall } from './core';
 import { dbRollback, dbSavepoint, qi, ql, sqlRun } from './db';
 import {
   VIEW_LABEL,
@@ -16,15 +19,28 @@ import {
   tourExec,
   tourValues,
 } from './engine';
+import type { TourState } from './engine';
 import { mayOpen, viewFit, viewsOf } from './viewspec';
 import { REC } from './builds';
 import { TEAMS, canRunTeam, checkTeam, teamApply } from './team';
+import type { TeamRun } from './team';
 import { RUNS, SPEED, STATIONS } from './line';
+import type { Station } from './line';
 import { CASE_EXPECT } from './tester';
 import { AgentAv, Btn, Card, Empty, Icon, Input, Seg, Spinner } from './ui';
 import { AppPane, newPane, stateLabel } from './runtime';
 import { Explorer } from './views-a';
 import { Dash } from './views-b';
+
+// runtime.tsx and the views are not typed yet: these say what this module passes them. They cast at call
+// time, because these modules import each other and an import is not set yet while this module loads.
+type ViewProps = { app: AppRecord; user: AppUser | undefined; pane: unknown; scr: Partial<Screen> & { id: string }; test?: boolean };
+type PaneProps = { app: AppRecord; pane: { uid: number; screen: string; test: boolean }; solo?: boolean };
+const Pane = (p: PaneProps) => (AppPane as (p: PaneProps) => ReactNode)(p);
+const ExplorerView = (p: ViewProps) => (Explorer as (p: ViewProps) => ReactNode)(p);
+const DashView = (p: ViewProps) => (Dash as (p: ViewProps) => ReactNode)(p);
+const labelOfState = (def: AppDef, t: AppTable, c: ColumnDef | null | undefined, v: string) =>
+  (stateLabel as (def: AppDef, t: AppTable, c: ColumnDef | null | undefined, v: string) => string)(def, t, c, v);
 
 /* ===== Turnkey prototype · the generated test suite =====
    Every app gets a suite of tests, generated from what the agents wrote: each table, link, access rule,
@@ -36,7 +52,15 @@ export interface TestResult {
   actual: string;
 }
 /** App id -> the last test run: the definition version it ran on, when, how long, and each test's result. */
-export const TESTS: Record<string, { rev: number; at: number; ms: number; res: Record<string, TestResult>; running?: boolean }> = {};
+export interface TestRun {
+  rev: number;
+  at: number;
+  ms: number;
+  res: Dict<TestResult>;
+  /** the id of the suite that is running now, or null */
+  running?: string | null;
+}
+export const TESTS: Dict<TestRun> = {};
 export const SUITE_META = [
   {
     id: 'brief',
@@ -103,39 +127,53 @@ export const SUITE_META = [
       'Written by the Tester agent from the rules and user stories of the brief. Each case is played through the real endpoints as the named people.',
   },
 ];
-export const tOk = (ok, actual) => ({
+export const tOk = (ok: unknown, actual: unknown): TestResult => ({
   ok: !!ok,
   actual: actual == null ? '' : String(actual),
 });
-export function mountCheck(vnode, sel) {
+export function mountCheck(vnode: ReactNode, sel: string) {
   // draw something off-screen with the real data and say whether it appeared
   const host = document.createElement('div');
-  let out;
+  let out: TestResult;
   try {
     render(vnode, host);
     const n = host.querySelectorAll(sel).length;
     out = tOk(n > 0, n > 0 ? 'drawn' : 'nothing was drawn');
   } catch (e) {
-    out = tOk(false, String((e && e.message) || e));
+    out = tOk(false, errText(e));
   }
   try {
     render(null, host);
-  } catch (e) {}
+  } catch {
+    // the host is thrown away either way
+  }
   return out;
 }
-export const SUITES = {}; // built once per revision of an app
+/** Built once per revision of an app. */
+export const SUITES: Dict<{ app: AppRecord; def: AppDef; rev: number; suites: Suite[] }> = {};
 /** One suite of tests: the station it checks, and its tests. */
 export interface Suite {
   id: string;
   name: string;
   station: string;
-  tests: { id: string; name: string; [field: string]: unknown }[];
-  [field: string]: unknown;
+  icon: string;
+  about: string;
+  tests: TestDef[];
+  /** runs every test of the suite and returns each result by test id */
+  exec: () => Dict<TestResult>;
 }
-export function suiteOf(app): Suite[] {
+/** One test: what it checks and what it expects. */
+export interface TestDef {
+  id: string;
+  name: string;
+  expect: string;
+}
+/** A built app: brief, tables and workflow all exist. */
+type TestApp = AppRecord & { def: BriefedDef };
+export function suiteOf(app: AppRecord): Suite[] {
   const c = SUITES[app.id];
   if (c && c.app === app && c.def === app.def && c.rev === app.rev) return c.suites;
-  const suites = buildSuites(app);
+  const suites = buildSuites(app as TestApp);
   SUITES[app.id] = {
     app,
     def: app.def,
@@ -144,26 +182,22 @@ export function suiteOf(app): Suite[] {
   };
   return suites;
 }
-export function buildSuites(app) {
+export function buildSuites(app: TestApp) {
   // the tests, as { id, name, expect } per suite, with one exec() per suite that returns every result
   const def = app.def,
     users = appUsers(app),
     P = def.process,
     roles = def.brief.roles,
-    userOf = (rid) => users.find((u) => u.role === rid),
-    out = [],
-    sql = (text, params) => sqlRun(app.id, text, params || null, 'check');
-  const add = (id, tests, exec) => {
+    userOf = (rid: string) => users.find((u) => u.role === rid),
+    out: Suite[] = [],
+    sql = (text: string, params?: SqlValue[]) => sqlRun(app.id, text, params || null, 'check') as SqlRow[]; // every caller reads rows, or ignores the result
+  const add = (id: string, tests: TestDef[], exec: () => Dict<TestResult>) => {
     if (tests.length)
       out.push(
-        Object.assign(
-          {},
-          SUITE_META.find((s) => s.id === id),
-          {
-            tests,
-            exec,
-          },
-        ),
+        Object.assign({}, SUITE_META.find((s) => s.id === id) as (typeof SUITE_META)[number], {
+          tests,
+          exec,
+        }),
       );
   };
   // brief
@@ -176,7 +210,7 @@ export function buildSuites(app) {
       expect: 'holds',
     })),
     () => {
-      const r = {};
+      const r: Dict<TestResult> = {};
       checkBrief(def.brief).forEach((c, i) => {
         r['brief:' + i] = tOk(c.ok, c.detail);
       });
@@ -184,8 +218,8 @@ export function buildSuites(app) {
     },
   );
   // database
-  const dbT = [],
-    dbF = {};
+  const dbT: TestDef[] = [],
+    dbF: Dict<() => TestResult> = {};
   def.tables.forEach((t) => {
     dbT.push({
       id: 'db:cols:' + t.name,
@@ -203,7 +237,7 @@ export function buildSuites(app) {
     t.columns
       .filter((c) => c.type === 'ref' || c.type === 'user')
       .forEach((c) => {
-        const target = c.type === 'ref' ? c.ref : 'users',
+        const target = c.type === 'ref' ? String(c.ref) : 'users',
           id = 'db:link:' + t.name + '.' + c.name;
         dbT.push({
           id,
@@ -224,12 +258,14 @@ export function buildSuites(app) {
         expect: '0 rows with an empty ' + req.map((c) => c.name).join(', '),
       });
       dbF[id] = () => {
-        const n = sql(
-          'SELECT COUNT(*) AS n FROM ' +
-            qi(t.name) +
-            ' WHERE ' +
-            req.map((c) => qi(c.name) + ' IS NULL OR ' + qi(c.name) + " = ''").join(' OR '),
-        )[0].n;
+        const n = Number(
+          sql(
+            'SELECT COUNT(*) AS n FROM ' +
+              qi(t.name) +
+              ' WHERE ' +
+              req.map((c) => qi(c.name) + ' IS NULL OR ' + qi(c.name) + " = ''").join(' OR '),
+          )[0].n,
+        );
         return tOk(n === 0, n ? n + (n === 1 ? ' row has' : ' rows have') + ' an empty ' + req.map((c) => c.name).join(' or ') : 'none');
       };
     }
@@ -238,19 +274,21 @@ export function buildSuites(app) {
     const id = 'db:states';
     dbT.push({
       id,
-      name: 'Every ' + tableOf(def, P.table).one.toLowerCase() + ' has a status the workflow knows',
+      name: 'Every ' + (tableOf(def, P.table) as AppTable).one.toLowerCase() + ' has a status the workflow knows',
       expect: 'only ' + P.states.map((s) => s.id).join(', '),
     });
     dbF[id] = () => {
-      const n = sql(
-        'SELECT COUNT(*) AS n FROM ' +
-          qi(P.table) +
-          ' WHERE ' +
-          qi(P.column) +
-          ' NOT IN (' +
-          P.states.map((s) => ql(s.id)).join(', ') +
-          ')',
-      )[0].n;
+      const n = Number(
+        sql(
+          'SELECT COUNT(*) AS n FROM ' +
+            qi(P.table) +
+            ' WHERE ' +
+            qi(P.column) +
+            ' NOT IN (' +
+            P.states.map((s) => ql(s.id)).join(', ') +
+            ')',
+        )[0].n,
+      );
       return tOk(n === 0, n + ' rows with an unknown status');
     };
   }
@@ -283,12 +321,12 @@ export function buildSuites(app) {
     return tOk(!miss.length, miss.length ? 'nobody is a ' + miss.join(', ') : sql('SELECT COUNT(*) AS n FROM "users"')[0].n + ' people');
   };
   add('database', dbT, () => {
-    const r = {};
+    const r: Dict<TestResult> = {};
     dbT.forEach((x) => {
       try {
         r[x.id] = dbF[x.id]();
       } catch (e) {
-        r[x.id] = tOk(false, String((e && e.message) || e));
+        r[x.id] = tOk(false, errText(e));
       }
     });
     return r;
@@ -296,7 +334,7 @@ export function buildSuites(app) {
   if (!P) return out;
   // permissions: every endpoint as every role
   const eps = deriveEndpoints(def).filter((e) => !e.sys),
-    permT = [];
+    permT: TestDef[] = [];
   eps.forEach((ep) =>
     roles.forEach((role) => {
       if (userOf(role.id))
@@ -307,7 +345,7 @@ export function buildSuites(app) {
         });
     }),
   );
-  const ownT = [];
+  const ownT: (TestDef & { t: AppTable; role: Role })[] = [];
   def.tables.forEach((t) =>
     roles.forEach((role) => {
       if (accOf(def, role.id, t.name).list === 'own' && userOf(role.id))
@@ -330,7 +368,7 @@ export function buildSuites(app) {
       })),
     ),
     () => {
-      const r = {};
+      const r: Dict<TestResult> = {};
       testMatrix(app).forEach((m) => {
         r['perm:' + m.ep + '|' + m.role] = tOk(
           m.ok,
@@ -349,9 +387,9 @@ export function buildSuites(app) {
         );
       });
       ownT.forEach((x) => {
-        const u = userOf(x.role.id),
+        const u = userOf(x.role.id) as AppUser,
           res = apiCall(app, u, 'GET', '/api/' + x.t.name, {}, 'check'),
-          leak = res.status === 200 ? res.data.filter((row) => row[x.t.owner || 'created_by'] !== u.id).length : -1;
+          leak = res.status === 200 ? res.data.filter((row: Dict<unknown>) => row[x.t.owner || 'created_by'] !== u.id).length : -1;
         r[x.id] = tOk(
           leak === 0,
           leak < 0
@@ -365,12 +403,12 @@ export function buildSuites(app) {
     },
   );
   // workflow: each action really moves a record, and is refused for a role that may not take it
-  const pt = tableOf(def, P.table),
+  const pt = tableOf(def, P.table) as AppTable,
     own = pt.owner || 'created_by',
-    wfT = [
+    wfT: (TestDef & { x?: Transition; role?: Role; allow?: boolean })[] = [
       {
         id: 'wf:reach',
-        name: 'Every status can be reached from ' + stateLabel(def, pt, colOf(pt, P.column), P.initial),
+        name: 'Every status can be reached from ' + labelOfState(def, pt, colOf(pt, P.column), P.initial),
         expect: P.states.length + ' statuses reachable',
       },
     ];
@@ -404,8 +442,8 @@ export function buildSuites(app) {
       expect: x.expect,
     })),
     () => {
-      const r = {},
-        seen = new Set([P.initial]);
+      const r: Dict<TestResult> = {},
+        seen = new Set<string>([P.initial]);
       let grew = true;
       while (grew) {
         grew = false;
@@ -419,24 +457,26 @@ export function buildSuites(app) {
       const lost = P.states.filter((s) => !seen.has(s.id)).map((s) => s.label);
       r['wf:reach'] = tOk(!lost.length, lost.length ? 'no path to ' + lost.join(', ') : 'all reachable');
       wfT.slice(1).forEach((c) => {
+        const x = c.x as Transition,
+          role = c.role as Role;
         dbSavepoint(app.id, 'wf');
         try {
-          const u = userOf(c.role.id),
+          const u = userOf(role.id) as AppUser,
             row = sql('SELECT "id" FROM ' + qi(pt.name) + ' ORDER BY "id" LIMIT 1')[0];
           if (!row) {
             r[c.id] = tOk(true, 'no ' + pt.label.toLowerCase() + ' to try it on');
             return;
           }
-          sql('UPDATE ' + qi(pt.name) + ' SET ' + qi(P.column) + ' = ?, ' + qi(own) + ' = ? WHERE "id" = ?', [c.x.from[0], u.id, row.id]); // put one record in the right state, owned by this person, inside the savepoint
-          const res = apiCall(app, u, 'POST', '/api/' + pt.name + '/' + row.id + '/' + c.x.id, {}, 'check');
+          sql('UPDATE ' + qi(pt.name) + ' SET ' + qi(P.column) + ' = ?, ' + qi(own) + ' = ? WHERE "id" = ?', [x.from[0], u.id, row.id]); // put one record in the right state, owned by this person, inside the savepoint
+          const res = apiCall(app, u, 'POST', '/api/' + pt.name + '/' + row.id + '/' + x.id, {}, 'check');
           r[c.id] = c.allow
             ? tOk(
-                res.status === 200 && res.data[P.column] === c.x.to,
+                res.status === 200 && res.data[P.column] === x.to,
                 res.status === 200 ? 'now ' + res.data[P.column] : res.status + ' ' + res.error,
               )
             : tOk(res.status === 403, res.status + (res.status === 403 ? ' Forbidden' : ' but should be refused'));
         } catch (e) {
-          r[c.id] = tOk(false, String((e && e.message) || e));
+          r[c.id] = tOk(false, errText(e));
         } finally {
           dbRollback(app.id, 'wf');
         }
@@ -445,10 +485,12 @@ export function buildSuites(app) {
     },
   );
   // the app's own agents
-  if (def.team) {
-    const cases = (REC[app.tpl] && REC[app.tpl].cases) || [],
-      runner = users.find((u) => canRunTeam(def, u.role)),
-      it = tableOf(def, def.team.input.table);
+  const team = def.team;
+  if (team) {
+    const cases = (app.tpl && REC[app.tpl] && REC[app.tpl].cases) || [],
+      runner = users.find((u) => canRunTeam(def, u.role)) as AppUser,
+      it = tableOf(def, team.input.table) as AppTable,
+      tapp = app as Parameters<typeof teamApply>[0];
     add(
       'agents',
       [
@@ -465,8 +507,8 @@ export function buildSuites(app) {
         })),
       ),
       () => {
-        const r = {},
-          ck = checkTeam(def, def.team);
+        const r: Dict<TestResult> = {},
+          ck = checkTeam(def, team);
         r['team:role'] = tOk(ck.ok, ck.detail);
         cases.forEach((c, i) => {
           dbSavepoint(app.id, 'tm');
@@ -481,22 +523,22 @@ export function buildSuites(app) {
                 row: made.data.id,
                 made: {},
                 notes: [],
-              },
-              st = apiCall(app, runner, 'POST', '/api/' + it.name + '/' + T.row + '/' + def.team.start, {}, 'check'),
-              bad = [];
+              } as unknown as TeamRun, // a dry run: teamApply reads only the row and what the agents made
+              st = apiCall(app, runner, 'POST', '/api/' + it.name + '/' + T.row + '/' + team.start, {}, 'check'),
+              bad: string[] = [];
             let wrote = 0;
-            def.team.agents.forEach((a) => {
-              const did = teamApply(app, runner, T, a, c.script.find((x) => x.agent === a.id) || {});
+            team.agents.forEach((a) => {
+              const did = teamApply(tapp, runner, T, a, (c.script || []).find((x: Untrusted) => x.agent === a.id) || {});
               wrote += did.rows.length + did.updated;
               did.problems.forEach((p) => bad.push(a.name + ': ' + p));
             });
-            const end = apiCall(app, runner, 'POST', '/api/' + it.name + '/' + T.row + '/' + def.team.done, {}, 'check');
+            const end = apiCall(app, runner, 'POST', '/api/' + it.name + '/' + T.row + '/' + team.done, {}, 'check');
             r['team:case:' + i] = tOk(
               st.status === 200 && end.status === 200 && !bad.length,
               bad.length ? bad[0] : end.status !== 200 ? end.status + ' ' + end.error : wrote + ' writes, closed as ' + end.data[P.column],
             );
           } catch (e) {
-            r['team:case:' + i] = tOk(false, String((e && e.message) || e));
+            r['team:case:' + i] = tOk(false, errText(e));
           } finally {
             dbRollback(app.id, 'tm');
           }
@@ -506,12 +548,12 @@ export function buildSuites(app) {
     );
   }
   // views and dashboard
-  const vT = [];
+  const vT: (TestDef & { t: AppTable; v: { type: string } })[] = [];
   def.tables.forEach((t) =>
     viewsOf(def, t).forEach((v) =>
       vT.push({
         id: 'view:' + t.name + ':' + v.type,
-        name: t.label + ' opens as ' + VIEW_LABEL[v.type].toLowerCase(),
+        name: t.label + ' opens as ' + VIEW_LABEL[v.type as keyof typeof VIEW_LABEL].toLowerCase(),
         expect: 'fits the columns and draws',
         t,
         v,
@@ -528,13 +570,13 @@ export function buildSuites(app) {
     }));
   add(
     'views',
-    vT.concat(dT).map((x) => ({
+    (vT as TestDef[]).concat(dT).map((x) => ({
       id: x.id,
       name: x.name,
       expect: x.expect,
     })),
     () => {
-      const r = {};
+      const r: Dict<TestResult> = {};
       vT.forEach((x) => {
         const why = viewFit(def, x.t, x.v.type),
           u = users.find((p) => accOf(def, p.role, x.t.name).list !== 'none');
@@ -548,7 +590,7 @@ export function buildSuites(app) {
         }
         r[x.id] = mountCheck(
           <div className="app">
-            <Explorer
+            <ExplorerView
               app={app}
               user={u}
               pane={newPane(9)}
@@ -569,7 +611,7 @@ export function buildSuites(app) {
       dT.forEach((x) => {
         r[x.id] = mountCheck(
           <div className="app">
-            <Dash
+            <DashView
               app={app}
               user={userOf(x.role.id)}
               pane={newPane(9)}
@@ -588,7 +630,7 @@ export function buildSuites(app) {
     },
   );
   // pages
-  const pT = [];
+  const pT: (TestDef & { s: Screen; rid: string })[] = [];
   def.screens.forEach((s) =>
     s.roles.forEach((rid) => {
       if (userOf(rid))
@@ -609,19 +651,19 @@ export function buildSuites(app) {
   }));
   add(
     'pages',
-    pT.concat(lT).map((x) => ({
+    (pT as TestDef[]).concat(lT).map((x) => ({
       id: x.id,
       name: x.name,
       expect: x.expect,
     })),
     () => {
-      const r = {};
+      const r: Dict<TestResult> = {};
       pT.forEach((x) => {
         r[x.id] = mountCheck(
-          <AppPane
+          <Pane
             app={app}
             pane={{
-              uid: userOf(x.rid).id,
+              uid: (userOf(x.rid) as AppUser).id,
               screen: x.s.id,
               test: true,
             }}
@@ -631,7 +673,7 @@ export function buildSuites(app) {
       });
       lT.forEach((x) => {
         const bad = def.screens
-          .filter((s) => s.roles.includes(x.role.id) && tableOf(def, s.table) && !mayOpen(def, x.role.id, s.type, s.table))
+          .filter((s) => s.roles.includes(x.role.id) && tableOf(def, s.table) && !mayOpen(def, x.role.id, s.type, s.table as string))
           .map((s) => s.name);
         r[x.id] = tOk(
           !bad.length,
@@ -659,8 +701,8 @@ export function buildSuites(app) {
                 : 'the page opens',
     })),
     () => {
-      const r = {},
-        st = {
+      const r: Dict<TestResult> = {},
+        st: TourState = {
           rows: {},
           last: null,
         };
@@ -677,7 +719,7 @@ export function buildSuites(app) {
     },
   );
   // test cases: what the Tester agent wrote, each in its own savepoint
-  const cs = arr(def.cases);
+  const cs = arr<TestCase>(def.cases);
   add(
     'scenarios',
     cs.map((c) => ({
@@ -686,9 +728,9 @@ export function buildSuites(app) {
       expect: c.steps.map((s) => CASE_EXPECT[s.do]).join(', then '),
     })),
     () => {
-      const r = {};
+      const r: Dict<TestResult> = {};
       cs.forEach((c) => {
-        const st = {
+        const st: TourState = {
           rows: {},
           last: null,
         };
@@ -701,7 +743,7 @@ export function buildSuites(app) {
             return x.ok;
           });
         } catch (e) {
-          bad = String((e && e.message) || e);
+          bad = errText(e);
         } finally {
           dbRollback(app.id, 'tcase');
         }
@@ -712,8 +754,16 @@ export function buildSuites(app) {
   );
   return out;
 }
-export const testable = (app) => app.status === 'ready' && !!app.def.brief && !!app.def.process;
-export function testStats(app) {
+export const testable = (app: AppRecord) => app.status === 'ready' && !!app.def.brief && !!app.def.process;
+/** Counts for badges: what the last run found, or what there is to run. */
+export interface TestStats {
+  total: number;
+  passed: number;
+  failed: number;
+  at: number;
+  fresh: boolean;
+}
+export function testStats(app: AppRecord): TestStats | null {
   // counts for badges: what the last run found, or what there is to run
   const R = TESTS[app.id],
     fresh = R && R.rev === app.rev,
@@ -738,7 +788,7 @@ export function testStats(app) {
       }
     : null;
 }
-export function runTestsSync(app, only?) {
+export function runTestsSync(app: AppRecord, only?: (s: Suite) => boolean) {
   // run every suite (or one station's suites) now; returns the summary
   if (!testable(app)) return null;
   const t0 = performance.now(),
@@ -764,13 +814,13 @@ export function runTestsSync(app, only?) {
     () => {
       suites.forEach((s) => {
         if (only && !only(s)) return;
-        let got;
+        let got: Dict<TestResult>;
         try {
           got = s.exec();
         } catch (e) {
           got = {};
           s.tests.forEach((x) => {
-            got[x.id] = tOk(false, String((e && e.message) || e));
+            got[x.id] = tOk(false, errText(e));
           });
         }
         Object.assign(R.res, got);
@@ -802,7 +852,7 @@ export function runTestsSync(app, only?) {
     app.tests,
   );
 }
-export async function runTests(app, only?) {
+export async function runTests(app: AppRecord, only?: (s: Suite) => boolean) {
   // the same, suite by suite, so the screen can show progress
   if (!testable(app) || RUNS[app.id] || (TESTS[app.id] && TESTS[app.id].running)) return;
   if (TEAMS[app.id] && TEAMS[app.id].status === 'running')
@@ -864,8 +914,8 @@ export async function runTests(app, only?) {
       st.failed ? 'warning' : 'success',
     );
 }
-export function TestRows({ app, suite, only, q }) {
-  const R = TESTS[app.id] || {},
+export function TestRows({ app, suite, only, q }: { app: AppRecord; suite: Suite; only?: boolean; q?: string }) {
+  const R: Partial<TestRun> = TESTS[app.id] || {},
     res = R.rev === app.rev ? R.res || {} : {},
     busy = R.running === suite.id;
   const rows = suite.tests.filter((x) => (!only || (res[x.id] && !res[x.id].ok)) && (!q || x.name.toLowerCase().indexOf(q) >= 0));
@@ -885,7 +935,20 @@ export function TestRows({ app, suite, only, q }) {
     </ul>
   );
 }
-export function TestsView({ app }) {
+/** what the Tests view shows: only failures, a search, and which suites are folded */
+interface TestsViewState {
+  only: boolean;
+  q: string;
+  shut: Dict<boolean>;
+}
+function testsViewOf(appId: string): TestsViewState {
+  return (U.tv[appId] as TestsViewState | undefined) || { only: false, q: '', shut: {} };
+}
+function setTestsView(appId: string, patch: Partial<TestsViewState>) {
+  U.tv[appId] = { ...testsViewOf(appId), ...patch };
+  notify();
+}
+export function TestsView({ app }: { app: AppRecord }) {
   if (!testable(app))
     return (
       <div className="tests-view">
@@ -897,16 +960,10 @@ export function TestsView({ app }) {
       </div>
     );
   const suites = suiteOf(app),
-    R = TESTS[app.id] || {},
+    R: Partial<TestRun> = TESTS[app.id] || {},
     fresh = R.rev === app.rev,
     res = fresh ? R.res || {} : {},
-    tv =
-      U.tv[app.id] ||
-      (U.tv[app.id] = {
-        only: false,
-        q: '',
-        shut: {},
-      }),
+    tv = testsViewOf(app.id),
     total = suites.reduce((n, s) => n + s.tests.length, 0);
   const done = Object.values(res),
     passed = done.filter((x) => x.ok).length,
@@ -919,8 +976,8 @@ export function TestsView({ app }) {
         <div className="col gap0 grow">
           <h2 className="t-sub1">Tests</h2>
           <span className="t-cap muted">
-            Generated from this app's definition. Every table, link, access rule, workflow action, view, page and tour step is a test. They
-            run against the real database and endpoints, and anything they write is rolled back.
+            Generated from this app&apos;s definition. Every table, link, access rule, workflow action, view, page and tour step is a test.
+            They run against the real database and endpoints, and anything they write is rolled back.
           </span>
         </div>
         <Btn className="btn primary" disabled={busy} onClick={() => runTests(app)}>
@@ -951,7 +1008,7 @@ export function TestsView({ app }) {
         <div className="kpi">
           <span className="kpi-l">Last run</span>
           <span className="kpi-v sm">{fresh && R.at ? ago(R.at) : 'Not since the last change'}</span>
-          <span className="kpi-s">{fresh && R.at ? 'took ' + fmtMs(R.ms) : 'run them again'}</span>
+          <span className="kpi-s">{fresh && R.at ? 'took ' + fmtMs(R.ms || 0) : 'run them again'}</span>
         </div>
       </div>
       <div className="row wrap">
@@ -969,8 +1026,7 @@ export function TestsView({ app }) {
           ]}
           value={tv.only ? 'failed' : 'all'}
           onChange={(v) => {
-            tv.only = v === 'failed';
-            notify();
+            setTestsView(app.id, { only: v === 'failed' });
           }}
         />
         <div className="search">
@@ -983,8 +1039,7 @@ export function TestsView({ app }) {
             placeholder="Search tests"
             value={tv.q}
             onInput={(e) => {
-              tv.q = e.target.value;
-              notify();
+              setTestsView(app.id, { q: (e.target as HTMLInputElement).value });
             }}
           />
         </div>
@@ -1002,12 +1057,11 @@ export function TestsView({ app }) {
                 className="suite-t"
                 aria-expanded={!shut}
                 onClick={() => {
-                  tv.shut[s.id] = !shut;
-                  notify();
+                  setTestsView(app.id, { shut: { ...tv.shut, [s.id]: !shut } });
                 }}
               >
                 <Icon n={shut ? 'chevRight' : 'chevDown'} s="16" />
-                <AgentAv id={(STATIONS.find((x) => x.id === s.station) || {}).agent} size="sm" />
+                <AgentAv id={STATIONS.find((x) => x.id === s.station)?.agent || ''} size="sm" />
                 <span className="col gap0">
                   <strong>{s.name}</strong>
                   <span className="t-cap muted">{s.about}</span>
@@ -1029,11 +1083,11 @@ export function TestsView({ app }) {
     </div>
   );
 }
-export function StationTests({ app, st }) {
+export function StationTests({ app, st }: { app: AppRecord; st: Station }) {
   // the same tests, in the inspector of the station they belong to
   if (!testable(app)) return <p className="muted">Tests appear here when the app is built.</p>;
   const suites = suiteOf(app).filter((s) => s.station === st.id),
-    R = TESTS[app.id] || {},
+    R: Partial<TestRun> = TESTS[app.id] || {},
     busy = !!R.running || !!RUNS[app.id];
   if (!suites.length) return <p className="muted">This station has no tests of its own.</p>;
   return (

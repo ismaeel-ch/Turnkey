@@ -12,7 +12,7 @@ import { BuiltInAgent } from "@copilotkit/runtime/v2";
 import { litellmModel } from "@/lib/model";
 import { NODE_KINDS } from "@/lib/canvas";
 import { createEchoAgent, ECHO_AGENT_ID } from "./echo-agent";
-import { wrapStepAgent } from "./step-adapter";
+import { wrapStepAgent, type StepLikeAgent } from "./step-adapter";
 
 export type AgentMap = Record<string, AbstractAgent> & { default: AbstractAgent };
 
@@ -22,6 +22,8 @@ export function createArchitect(): AbstractAgent {
     name: "Architect",
     model: litellmModel(),
     maxSteps: 3,
+    // a few short node titles and one sentence: a small cap keeps a public visitor from asking for essays
+    maxOutputTokens: 1024,
     prompt: [
       "You are the Architect agent in Turnkey, an app builder.",
       "The user describes an app. Put its building blocks on the shared canvas.",
@@ -55,18 +57,38 @@ const STEP_REPAIRS = "agent:step:repair";
  * each repair attempt is counted here, so a repair loop is held to the same per-minute and daily caps.
  */
 export async function createStepAguiAgent(): Promise<AbstractAgent> {
-  const [{ createStepAgent }, { limiter, limitsFrom }] = await Promise.all([import("@/server/graph/step"), import("@/server/guard/limits")]);
+  const [{ createStepAgent }, { limiter, limitsFrom }, { checkPrompt }] = await Promise.all([
+    import("@/server/graph/step"),
+    import("@/server/guard/limits"),
+    import("@/server/guard/prompt"),
+  ]);
   const limits = limitsFrom();
   return wrapStepAgent(
-    createStepAgent({
+    guardStepPrompt(checkPrompt, createStepAgent({
       maxTokens: limits.maxOutputTokens,
       admit: (attempt) => {
         if (attempt === 1) return null;
         const v = limiter.take(STEP_REPAIRS, limits);
         return v.ok ? null : { code: v.code === "off" ? "not_configured" : v.code, message: v.message };
       },
-    }),
+    })),
   );
+}
+
+/**
+ * The prompt policy for agent `step`, the same one /api/llm and /api/agent/step apply: only the prompts Turnkey's
+ * own agents write may reach the model, so the public route is not a free general-purpose chat. Checked before the
+ * first model call.
+ */
+export function guardStepPrompt(check: (prompt: unknown) => { ok: boolean; message?: string }, inner: StepLikeAgent): StepLikeAgent {
+  return {
+    run(input, options) {
+      const prompt = input && typeof input === "object" ? (input as { prompt?: unknown }).prompt : undefined;
+      const verdict = check(prompt);
+      if (!verdict.ok) return Promise.resolve({ error: { code: "bad_request", message: verdict.message ?? "This prompt is not allowed." } });
+      return inner.run(input, options);
+    },
+  };
 }
 
 registerAgent("default", createArchitect);
@@ -107,9 +129,4 @@ export async function resolveAgents(env: Record<string, string | undefined> = pr
 export function unregisterAgent(id: string): void {
   loaders.delete(id);
   loaded.delete(id);
-}
-
-/** Forget loaded agents (tests). */
-export function resetRegistry(): void {
-  loaded.clear();
 }

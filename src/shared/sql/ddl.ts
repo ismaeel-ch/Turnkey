@@ -35,19 +35,5 @@ export const SYSTEM_SQL: readonly string[] = [
   'CREATE TABLE "activity" (\n  "id" INTEGER PRIMARY KEY AUTOINCREMENT,\n  "at" TEXT NOT NULL,\n  "user_id" INTEGER REFERENCES "users"("id"),\n  "table_name" TEXT NOT NULL,\n  "row_id" INTEGER,\n  "action" TEXT NOT NULL,\n  "detail" TEXT\n)',
 ];
 
-/** Tables with links pointing at earlier ones first (`topoOrder` in db.js). */
-export function tableOrder(tables: TableDef[]): TableDef[] {
-  const left = tables.slice();
-  const out: TableDef[] = [];
-  const names = new Set<string>();
-  while (left.length) {
-    const i = left.findIndex((t) => t.columns.every((c) => c.type !== 'ref' || c.ref === t.name || names.has(c.ref || '')));
-    const t = left.splice(i < 0 ? 0 : i, 1)[0];
-    out.push(t);
-    names.add(t.name);
-  }
-  return out;
-}
-
 /** Every statement that creates an app's database, in the order the workspace runs them. */
 export const schemaSql = (tables: TableDef[]): string[] => [...SYSTEM_SQL, ...tables.map(createTableSql)];
