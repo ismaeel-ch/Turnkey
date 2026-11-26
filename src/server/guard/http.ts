@@ -4,7 +4,7 @@
  * Every refusal is JSON `{ code, message }` with `cache-control: no-store`. Codes: not_configured, rate_limited,
  * budget, bad_request, too_large.
  */
-import { z } from 'zod';
+import type { z } from 'zod';
 import { visitorOf } from './limits';
 
 export type ErrorCode = 'not_configured' | 'rate_limited' | 'budget' | 'bad_request' | 'too_large';
