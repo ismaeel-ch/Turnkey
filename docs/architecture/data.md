@@ -398,7 +398,7 @@ the browser. No dependencies, no Node or DOM APIs.
   stray `options` or `ref`, more seed rows than the 40 kept.
 - `issueLines(result)` turns errors into lines for a repair prompt, for example `appointments.room_id: "room_id" points to "rooms", which is not one of the tables (…)`.
 - `schemaSql(tables)` returns the `CREATE TABLE` statements the workspace runs; `createTableSql`, `columnSql`,
-  `quoteIdent`, `quoteLiteral`, `tableOrder` match `createTableSQL`, `colSQL`, `qi`, `ql`, `topoOrder` in `db.js`/`engine.js`.
+  `quoteIdent`, `quoteLiteral` match `createTableSQL`, `colSQL`, `qi`, `ql` in `db.js`/`engine.js`.
 
 Agreement with the workspace is tested against the real definitions: `tests/unit/sql/legacy-records.ts` runs the saved
 builds (`REC` in `builds.js` and `quests.js`, all seven apps) in a sandbox, and the tests check that they normalise to

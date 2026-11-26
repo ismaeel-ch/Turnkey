@@ -76,6 +76,7 @@ async function main() {
       LITELLM_API_KEY: '',
       OPENAI_API_KEY: '',
       BLOB_READ_WRITE_TOKEN: '',
+      BLOB_STORE_ID: '',
       SHARE_STORE_DIR: shares,
     };
     server = spawn(path.join(root, 'node_modules', '.bin', 'next'), ['start', '-p', String(port)], {

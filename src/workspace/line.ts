@@ -145,7 +145,7 @@ export interface RunCtl {
   [field: string]: Loose;
 }
 /** An app on the line. A station runs only after the stations before it filled in their part of the definition. */
-type BuildApp = AppRecord & { def: BackedDef };
+export type BuildApp = AppRecord & { def: BackedDef };
 /** What one station made: its checks and a few facts for the card. */
 export interface StationResult {
   checks: Check[];

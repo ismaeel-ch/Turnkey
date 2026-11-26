@@ -46,20 +46,24 @@ export function createLimiter(now: () => number = Date.now) {
   const roll = (w: Window, span: number, t: number) => (t - w.start >= span ? { start: t, count: 0 } : w);
 
   return {
-    /** Counts one call for `who` and says whether it may go ahead. */
-    take(who: string, limits = limitsFrom()): Verdict {
+    /**
+     * Counts `weight` calls for `who` (one request that may make several model calls, such as a tool loop, counts as
+     * all of them up front) and says whether it may go ahead.
+     */
+    take(who: string, limits = limitsFrom(), weight = 1): Verdict {
+      const w = Math.max(1, Math.floor(weight));
       if (limits.off)
         return { ok: false, code: 'off', message: 'Live builds are switched off on this deployment. Saved builds still run.' };
       const t = now();
       day = roll(day, 86_400_000, t);
-      if (day.count >= limits.dailyCap)
+      if (day.count + w > limits.dailyCap)
         return { ok: false, code: 'budget', message: "Today's allowance for live model calls is used up. Saved builds still run." };
       minute = roll(minute, 60_000, t);
       const retryAfter = Math.ceil((60_000 - (t - minute.start)) / 1000);
-      if (minute.count >= limits.globalPerMinute)
+      if (minute.count + w > limits.globalPerMinute)
         return { ok: false, code: 'rate_limited', message: 'Many builds are running right now.', retryAfter };
       const mine = roll(visitors.get(who) ?? { start: 0, count: 0 }, 60_000, t);
-      if (mine.count >= limits.perMinute) {
+      if (mine.count + w > limits.perMinute) {
         visitors.set(who, mine);
         return {
           ok: false,
@@ -68,9 +72,9 @@ export function createLimiter(now: () => number = Date.now) {
           retryAfter: Math.ceil((60_000 - (t - mine.start)) / 1000),
         };
       }
-      mine.count++;
-      minute.count++;
-      day.count++;
+      mine.count += w;
+      minute.count += w;
+      day.count += w;
       visitors.set(who, mine);
       if (visitors.size > 5000) for (const [k, w] of visitors) if (t - w.start >= 60_000) visitors.delete(k);
       return { ok: true };
