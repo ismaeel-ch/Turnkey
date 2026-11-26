@@ -90,7 +90,7 @@ export interface AppRecord {
   /** when the app was installed on its own in this browser */
   installed?: number;
   /** the last test run's counts, kept with the app */
-  tests?: { total: number; passed: number; failed: number; at: number; rev: number } | null;
+  tests?: { total: number; passed: number; failed: number; at: number; rev: number; notRun?: number } | null;
   /** the last ten runs of the build line, oldest first */
   runs: Run[];
   /** the conversation with the agents, newest last */

@@ -31,25 +31,8 @@ import { LineView } from './shell-a';
 import type { ComponentType, CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import type { Edge, EdgeProps, Node, NodeChange, ReactFlowInstance, Viewport, XYPosition } from '@xyflow/react';
 import type { Root } from 'react-dom/client';
-import type { AppFlow, AppRecord, Dict, ReviewerInfo } from '@/shared/types/workspace';
+import type { AppRecord, Dict } from '@/shared/types/workspace';
 import type { BriefedDef } from '@/shared/types/app';
-
-// custom.tsx, tests.tsx and team.tsx are not typed yet; these say what their exports hold
-const REVS = REVIEWERS as Dict<ReviewerInfo>;
-const flowOfApp = (app: AppRecord): AppFlow => flowOf(app);
-const stepsAtFlow = (f: AppFlow, station: string): string[] => stepsAt(f, station);
-interface TestCounts {
-  total: number;
-  passed: number;
-  failed: number;
-  fresh?: boolean;
-}
-const countsOf = (app: AppRecord): TestCounts | null => testStats(app) as TestCounts | null;
-interface TeamRunView {
-  steps: { status: string }[];
-  wait?: unknown;
-}
-const teamRunOf = (appId: string): TeamRunView | undefined => TEAMS[appId] as unknown as TeamRunView | undefined;
 
 /* ---------- what each node of the canvas shows ---------- */
 /** The colour of a line: not reached, passed, running now, or sent back. */
@@ -262,10 +245,10 @@ export function flowGraph(app: AppRecord, v: boolean): FlowGraph {
       back: col('colorStatusWarningBorder2'),
     };
   type Added = { kind: 'review'; id: string } | { kind: 'approval' };
-  const flow = flowOfApp(app),
+  const flow = flowOf(app),
     NS = STATIONS.length,
     chain: Added[][] = STATIONS.map((st) =>
-      stepsAtFlow(flow, st.id)
+      stepsAt(flow, st.id)
         .map((id): Added => ({ kind: 'review', id }))
         .concat(flow.approve[st.id] ? [{ kind: 'approval' }] : []),
     );
@@ -471,7 +454,7 @@ export function flowGraph(app: AppRecord, v: boolean): FlowGraph {
       let done: EdgeKind = 'idle';
       if (c.kind === 'review') {
         const rid = c.id,
-          rv = REVS[rid],
+          rv = REVIEWERS[rid],
           R = (app.reviews || {})[rid],
           auto = stepAuto(flow, rid),
           open = R && R.status === 'ok' ? R.findings.filter((x) => x.state === 'open').length : 0,
@@ -542,7 +525,7 @@ export function flowGraph(app: AppRecord, v: boolean): FlowGraph {
     const i = NS,
       Q = app.qa,
       cases = arr(def.cases).length,
-      st0 = countsOf(app),
+      st0 = testStats(app),
       stt = !Q ? (cases && L.walkthrough.status === 'ok' ? 'ok' : 'idle') : Q.status,
       active = stt === 'working' || stt === 'checking',
       meta = STATUS_META[stt] || STATUS_META.idle,
@@ -611,7 +594,7 @@ export function flowGraph(app: AppRecord, v: boolean): FlowGraph {
     onward(i, 'g' + i, app.status === 'ready' && !RUNS[app.id] ? 'done' : 'idle');
   }
   const ry = yy,
-    st0 = countsOf(app),
+    st0 = testStats(app),
     rel = relOf(app),
     dirty = isDirty(app);
   nodes.push({
@@ -648,7 +631,7 @@ export function flowGraph(app: AppRecord, v: boolean): FlowGraph {
   });
   edge('e-trig', 'trigger', 'out', 'a0', v ? 'top' : 'in', L.research.status === 'idle' ? 'idle' : 'done', v ? 'straight' : 'smoothstep');
   if (def.team) {
-    const T = teamRunOf(app.id),
+    const T = TEAMS[app.id],
       team = def.team;
     def.team.agents.forEach((a, j) => {
       const s = T ? T.steps[j].status : 'idle',
@@ -1534,7 +1517,7 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
   const wNow = ref.current && ref.current.clientWidth ? ref.current.clientWidth : w,
     v = wNow < 700,
     team = app.def.team ? app.def.team.agents.length : 0,
-    fl = flowOfApp(app),
+    fl = flowOf(app),
     nrev = fl.reviewers.length,
     pos = flowPosFor(app.id + (v ? ':v' : '')),
     n = U.flowN || 0,
@@ -1662,7 +1645,7 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
     },
     deepNow = [0, 1].reduce(
       (n, r) =>
-        n + Math.max(...STATIONS.map((st, i) => ((i < 3 ? 0 : 1) === r ? stepsAtFlow(fl, st.id).length + (fl.approve[st.id] ? 1 : 0) : 0))),
+        n + Math.max(...STATIONS.map((st, i) => ((i < 3 ? 0 : 1) === r ? stepsAt(fl, st.id).length + (fl.approve[st.id] ? 1 : 0) : 0))),
       0,
     );
   return (
@@ -1785,7 +1768,7 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
 export function BuildSummary({ app }: { app: AppRecord }) {
   // the overview strip above the workflow: what was built, at a glance
   const def = app.def,
-    st = countsOf(app),
+    st = testStats(app),
     run = app.runs[app.runs.length - 1],
     go = (v: string) => () => {
       U.view[app.id] = v;
