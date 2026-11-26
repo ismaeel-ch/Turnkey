@@ -1363,8 +1363,11 @@ export function flowTips(app) {
 }
 
 /* ---------- approval, where the owner put it ---------- */
-export function askGate(app, run, st) {
-  // human in the loop: the line waits here until the owner approves
+/**
+ * Human in the loop: the workflow graph stops after this station until the owner approves. The graph does the
+ * waiting; this shows the approval card and records the owner's decision on it.
+ */
+export function showGate(app, run, st) {
   const L = app.line[st.id];
   L.status = 'waiting';
   L.hold = 'approval';
@@ -1378,8 +1381,7 @@ export function askGate(app, run, st) {
       '. Look at what ' +
       (L.byRules ? 'the rules' : AGENTS[st.agent].name) +
       ' made, then approve it and ' +
-      next.name +
-      ' starts.',
+      (next ? next.name + ' starts.' : 'the Tester starts.'),
     {
       type: 'gate',
       station: st.id,
@@ -1387,49 +1389,25 @@ export function askGate(app, run, st) {
       decided: null,
     },
   );
-  emit('CUSTOM', {
-    name: 'interrupt',
-    app: app.id,
-    value: {
-      reason: 'approval',
-      station: st.id,
-    },
-  });
   setChat(true);
-  return new Promise((resolve, reject) => {
-    const r = RUNS[app.id];
-    r.gate = (ok) => {
-      r.gate = null;
-      r.abort = null;
+  return {
+    decided(ok) {
       m.card.decided = ok ? 'approved' : 'stopped';
       L.hold = null;
       stepEnd(s, ok);
       pushChat(app, 'user', ok ? 'Approved' : 'Stop here');
-      emit('CUSTOM', {
-        name: 'resume',
-        app: app.id,
-        value: {
-          approved: ok,
-          station: st.id,
-        },
-      });
       if (ok) {
         L.status = 'ok';
         L.approved = Date.now();
-        commit();
-        resolve();
-      } else {
-        commit();
-        reject(new Stopped());
       }
-    };
-    r.abort = () => {
+      commit();
+    },
+    cancel() {
       stepEnd(s, false);
       m.card.decided = 'stopped';
       L.hold = null;
-      reject(new Stopped());
-    };
-  });
+    },
+  };
 }
 export function answerGate(app, ok) {
   const r = RUNS[app.id];
