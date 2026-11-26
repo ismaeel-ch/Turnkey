@@ -1,4 +1,3 @@
-// @ts-nocheck -- reads the workspace's untyped store (S, EV, app objects); typed once core.ts is
 /*
  * Agent activity: a panel that shows which agent is working, on what step, which tools it called, who handed work
  * to whom, and which checks sent work back. It reads AG-UI events: the workspace's own log (EV) and, through the
@@ -25,6 +24,8 @@ import {
   webLightTheme,
 } from '@fluentui/react-components';
 import { deriveActivity, subscribeAgentEvents } from '@/platform/agui/activity';
+import type { ActivityItem, ActivityKind, ActivityModel, AgentState, AgentStatus, RawAgentEvent } from '@/platform/agui/activity';
+import type { AppRecord, AppFlow, Dict, ReviewerInfo } from '@/shared/types/workspace';
 import { EV, PHONE, S, cap, cx, emit, fmtClock } from './core';
 import { AGENTS } from './agents';
 import { STATIONS } from './line';
@@ -32,10 +33,23 @@ import { REVIEWERS, flowOf } from './custom';
 import { isDark } from './flow';
 import { Icon } from './ui';
 
+// custom.tsx is not typed yet; these say what its exports hold
+const REVS = REVIEWERS as Dict<ReviewerInfo>;
+const flowOfApp = (app: AppRecord): AppFlow => flowOf(app);
+
+/** What the panel shows for one agent. */
+export interface AgentCard {
+  id: string;
+  name: string;
+  icon: string;
+  acc: string;
+  role: string;
+}
+
 /* ---------- who is who ---------- */
 
 // the roles of agent `step` on the server (src/shared/agent-contract.ts), as the builder agent that plays them
-const ROLE_AGENT = {
+const ROLE_AGENT: Dict<string> = {
   research: 'researcher',
   database: 'database',
   backend: 'backend',
@@ -46,7 +60,7 @@ const ROLE_AGENT = {
 };
 
 /** The agent a step belongs to, when the event does not name one. */
-export function agentOfEvent(e) {
+export function agentOfEvent(e: RawAgentEvent | null | undefined): string | null {
   const s = e && e.stepName;
   if (typeof s !== 'string') return null;
   const st = STATIONS.find((x) => x.id === s);
@@ -57,7 +71,8 @@ export function agentOfEvent(e) {
 }
 
 /** Name, icon, colour and job of an agent: a builder, a reviewer, or one of an app's own team. */
-export function agentInfo(id, app) {
+export function agentInfo(id: string | null | undefined, app?: AppRecord | null): AgentCard {
+  id = id || '';
   const key = AGENTS[id] ? id : ROLE_AGENT[id];
   const a = key && AGENTS[key];
   if (a) return { id, name: a.name, icon: a.icon, acc: a.acc, role: a.role };
@@ -70,7 +85,7 @@ export function agentInfo(id, app) {
   return { id, name: cap(String(id || 'Agent').replace(/_/g, ' ')), icon: 'bot', acc: 'steel', role: '' };
 }
 
-function Av({ info, size }) {
+function Av({ info, size }: { info: AgentCard; size?: 'xs' }) {
   return (
     <span className={cx('av sq', size && 'av-' + size, 'acc-' + info.acc)} title={info.name + ' agent'} aria-hidden="true">
       <Icon n={info.icon} s={size === 'xs' ? '12' : '16'} />
@@ -80,13 +95,17 @@ function Av({ info, size }) {
 
 /* ---------- the model, from the events ---------- */
 
-let cache = { key: '', model: null };
+let cache: { key: string; model: ActivityModel | null } = { key: '', model: null };
 /** The activity of one app (or of every app with no id), derived from the event log. */
-export function activityNow(appId) {
+export function activityNow(appId?: string | null): ActivityModel {
   const last = EV.length ? EV[EV.length - 1].seq : 0;
   const key = (appId || '*') + ':' + EV.length + ':' + last;
-  if (cache.key !== key) cache = { key, model: deriveActivity(EV, { agentOf: agentOfEvent, app: appId || null }) };
-  return cache.model;
+  let model = cache.model;
+  if (cache.key !== key || !model) {
+    model = deriveActivity(EV, { agentOf: agentOfEvent, app: appId || null });
+    cache = { key, model };
+  }
+  return model;
 }
 
 // server agents publish their AG-UI events on the bus; the workspace log keeps them with everything else
@@ -102,31 +121,32 @@ export function startActivityBridge() {
 
 /* ---------- words ---------- */
 
-const STEP_WORDS = {
+const STEP_WORDS: Dict<string> = {
   guard: 'checking the request',
   draft: 'writing a draft',
   validate: 'checking the draft',
   repair: 'fixing the draft',
   finish: 'finishing',
 };
-const stepName = (it) => {
+type StepRef = Pick<ActivityItem, 'step' | 'server'>;
+const stepName = (it: StepRef): string => {
   if (!it.step) return 'a step';
   if (it.server) return STEP_WORDS[it.step] || it.step;
   const st = STATIONS.find((x) => x.id === it.step);
   if (st) return st.name;
   if (it.step === 'tests') return 'Tests';
-  if (it.step.startsWith('review_')) return (REVIEWERS[it.step.slice(7)] || { short: 'a review' }).short;
+  if (it.step.startsWith('review_')) return REVS[it.step.slice(7)]?.short || 'a review';
   return cap(it.step.replace(/_/g, ' '));
 };
 // "the Research station", "the security review", "Tests": how a step reads in a sentence
-const stepPhrase = (it) => {
+const stepPhrase = (it: StepRef): string => {
   if (!it.server && STATIONS.some((x) => x.id === it.step)) return 'the ' + stepName(it) + ' station';
   if (!it.server && it.step && it.step.startsWith('review_')) return 'the ' + stepName(it).toLowerCase();
   return stepName(it);
 };
-const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many || one + 's');
+const plural = (n: number | undefined, one: string, many?: string) => n + ' ' + (n === 1 ? one : many || one + 's');
 
-function sentence(it, app) {
+function sentence(it: ActivityItem, app: AppRecord | null): string {
   const who = it.agent ? agentInfo(it.agent, app).name : 'The run';
   switch (it.kind) {
     case 'run_started':
@@ -168,7 +188,7 @@ function sentence(it, app) {
   }
 }
 
-const KIND_ICON = {
+const KIND_ICON: Record<ActivityKind, string> = {
   run_started: 'flow',
   run_finished: 'checkCircle',
   run_failed: 'errorCircle',
@@ -184,14 +204,15 @@ const KIND_ICON = {
   state: 'braces',
   handoff: 'arrowRight',
 };
-const FILTERS = {
+type Filter = 'all' | 'steps' | 'tools' | 'checks';
+const FILTERS: Record<Filter, (it: ActivityItem) => boolean> = {
   all: () => true,
   steps: (it) =>
     ['step_started', 'step_finished', 'handoff', 'waiting', 'resumed', 'run_started', 'run_finished', 'run_failed'].includes(it.kind),
   tools: (it) => it.kind === 'tool_call',
   checks: (it) => ['checks', 'sent_back', 'issues'].includes(it.kind),
 };
-const STATE_BADGE = {
+const STATE_BADGE: Record<AgentState, { color: 'brand' | 'warning' | 'success' | 'danger' | 'informative'; text: string }> = {
   working: { color: 'brand', text: 'Working' },
   waiting: { color: 'warning', text: 'Waiting for you' },
   done: { color: 'success', text: 'Done' },
@@ -286,15 +307,17 @@ const useStyles = makeStyles({
   para: { display: 'block', marginBottom: tokens.spacingVerticalS, color: tokens.colorNeutralForeground2 },
 });
 
+type Styles = ReturnType<typeof useStyles>;
+
 /* ---------- the panel ---------- */
 
-export function AgentActivity({ app }) {
+export function AgentActivity({ app }: { app: AppRecord | null }) {
   const c = useStyles();
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState('activity');
+  const [tab, setTab] = useState<string>('activity');
   const [all, setAll] = useState(false);
-  const [filter, setFilter] = useState('all');
-  const [shown, setShown] = useState({});
+  const [filter, setFilter] = useState<Filter>('all');
+  const [shown, setShown] = useState<Dict<boolean>>({});
   useEffect(() => startActivityBridge(), []);
   const scope = all || !app ? null : app.id;
   const model = activityNow(scope);
@@ -330,7 +353,7 @@ export function AgentActivity({ app }) {
           >
             Agents at work
           </DrawerHeaderTitle>
-          <TabList size="small" selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Agent panel">
+          <TabList size="small" selectedValue={tab} onTabSelect={(_, d) => setTab(String(d.value))} aria-label="Agent panel">
             <Tab value="activity" className="act-tab-activity">
               Activity
             </Tab>
@@ -344,7 +367,7 @@ export function AgentActivity({ app }) {
             <>
               <div className={c.bar}>
                 <Text size={200} className={c.grow}>
-                  {scope ? 'This app: ' + app.name : 'Every app in this workspace'}
+                  {scope && app ? 'This app: ' + app.name : 'Every app in this workspace'}
                 </Text>
                 {app && <Switch className="act-all" label="All apps" checked={all} onChange={(_, d) => setAll(d.checked)} />}
               </div>
@@ -389,7 +412,7 @@ export function AgentActivity({ app }) {
                     What happened
                   </Text>
                 </div>
-                <TabList size="small" selectedValue={filter} onTabSelect={(_, d) => setFilter(d.value)} aria-label="Show">
+                <TabList size="small" selectedValue={filter} onTabSelect={(_, d) => setFilter(d.value as Filter)} aria-label="Show">
                   <Tab value="all">Everything</Tab>
                   <Tab value="steps">Steps and hand-offs</Tab>
                   <Tab value="tools">Tool calls</Tab>
@@ -469,15 +492,15 @@ export function AgentActivity({ app }) {
 }
 
 /** The agents to list: this app's team (builders, reviewers it uses, its own team) and anyone else seen in the events. */
-function rosterOf(app, model) {
-  const ids = [];
-  const add = (id) => {
+function rosterOf(app: AppRecord | null, model: ActivityModel): { info: AgentCard; st: AgentStatus }[] {
+  const ids: string[] = [];
+  const add = (id: string | null | undefined) => {
     if (id && !ids.includes(id)) ids.push(id);
   };
   if (app) {
     STATIONS.forEach((s) => add(s.agent));
     if (AGENTS.tester) add('tester');
-    const f = flowOf(app);
+    const f = flowOfApp(app);
     (f.reviewers || []).forEach((r) => add('rv_' + r));
     if (app.def && app.def.team) app.def.team.agents.forEach((a) => add(a.id));
   }
@@ -486,19 +509,19 @@ function rosterOf(app, model) {
     .forEach(add);
   return ids.map((id) => ({
     info: agentInfo(id, app),
-    st: model.agents[id] || { id, state: 'idle', step: null, steps: 0, tools: 0, sentBack: 0, last: 0 },
+    st: model.agents[id] || ({ id, state: 'idle', step: null, steps: 0, tools: 0, sentBack: 0, last: 0 } satisfies AgentStatus),
   }));
 }
 
 /* ---------- how it works ---------- */
 
-function HowItWorks({ app, model, c }) {
-  const f = app ? flowOf(app) : null;
+function HowItWorks({ app, model, c }: { app: AppRecord | null; model: ActivityModel; c: Styles }) {
+  const f = app ? flowOfApp(app) : null;
   const attempts = f && f.attempts >= 1 && f.attempts <= 3 ? f.attempts : 3;
   const team = app && app.def && app.def.team;
-  const stateOf = (id) => (model.agents[id] ? model.agents[id].state : 'idle');
+  const stateOf = (id: string): AgentState => (model.agents[id] ? model.agents[id].state : 'idle');
   const stations = STATIONS.concat(
-    AGENTS.tester ? [{ id: 'tests', name: 'Tests', agent: 'tester', makes: 'Test cases, run and repaired' }] : [],
+    AGENTS.tester ? [{ id: 'tests', name: 'Tests', agent: 'tester', out: 'tests', makes: 'Test cases, run and repaired' }] : [],
   );
   return (
     <div className="act-how">
@@ -527,7 +550,7 @@ function HowItWorks({ app, model, c }) {
           {stations.map((st, i) => {
             const info = agentInfo(st.agent, app);
             const s = stateOf(st.agent);
-            const reviewers = f ? (f.reviewers || []).filter((r) => REVIEWERS[r] && REVIEWERS[r].after === st.id) : [];
+            const reviewers = f ? (f.reviewers || []).filter((r) => REVS[r] && REVS[r].after === st.id) : [];
             const asks = f && f.approve && f.approve[st.id];
             const byRules = f && f.by && f.by[st.id] === 'rules';
             return (
@@ -555,8 +578,8 @@ function HowItWorks({ app, model, c }) {
                     {(reviewers.length > 0 || asks) && (
                       <div className={c.chips}>
                         {reviewers.map((r) => (
-                          <Badge key={r} appearance="outline" size="small" icon={<Icon n={REVIEWERS[r].icon} s="12" />}>
-                            {'Then ' + REVIEWERS[r].name}
+                          <Badge key={r} appearance="outline" size="small" icon={<Icon n={REVS[r].icon} s="12" />}>
+                            {'Then ' + REVS[r].name}
                           </Badge>
                         ))}
                         {asks && (
