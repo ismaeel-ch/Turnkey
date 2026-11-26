@@ -5,6 +5,9 @@
 - Production deploys only through `.github/workflows/release.yml`, which runs when a release is made. It checks that
   the commit is on `main`, runs `npm run check` on it, builds it with the Vercel CLI and deploys that exact build to
   production. Then it calls `/api/health` on the production address.
+- `vercel.json` fixes the framework (`nextjs`) and the install, build and output settings, so the build does not
+  depend on the Vercel project's own settings. The workflow stops before deploying if the build has no server
+  routes.
 - Nothing else deploys. `vercel.json` sets `git.deploymentEnabled` to `false`, so Vercel's Git integration does not
   deploy merges, pushes or pull requests. The repository can stay connected to Vercel; it just never starts a build.
 
@@ -46,8 +49,9 @@ The model settings (`LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL`) stay
 for **Production**. The workflow pulls them into the build with `vercel pull`; they are never stored in GitHub or
 printed. After changing them, redeploy the current tag as above.
 
-If the production address ever changes, set the repository variable `PRODUCTION_URL` (default
-`https://ssi-ai-hackathon.vercel.app`) so the health check calls the right place.
+The health check after a deploy calls the production address Vercel gives the deployment (its shortest alias, read
+from the Vercel API). To use a custom domain instead, set the repository variable `PRODUCTION_URL` to it, for example
+`https://turnkey.example.com`.
 
 ## Seeing the deployment for a release
 

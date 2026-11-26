@@ -6,7 +6,8 @@
  *
  * The visitor's headers and cookies are never passed on: only the query text and the item count reach the source.
  */
-import { limiter, visitorOf } from '@/server/guard/limits';
+import { lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
+import { visitorKey } from '@/server/guard/http';
 import { getConnector } from '@/server/connectors';
 import type { ConnectorErrorCode } from '@/server/connectors/types';
 
@@ -25,7 +26,7 @@ const json = (status: number, body: unknown, headers?: Record<string, string>) =
   Response.json(body, { status, headers: { 'cache-control': 'no-store', ...headers } });
 
 export async function GET(request: Request, { params }: { params: Promise<{ name: string }> }) {
-  const verdict = limiter.take(visitorOf(request));
+  const verdict = lightLimiter.take(visitorKey(request), lightLimitsFrom());
   if (!verdict.ok) {
     const headers = verdict.retryAfter ? { 'retry-after': String(verdict.retryAfter) } : undefined;
     return json(verdict.code === 'off' ? 503 : 429, { ok: false, code: verdict.code, message: verdict.message }, headers);

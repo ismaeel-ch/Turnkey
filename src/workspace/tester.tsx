@@ -24,7 +24,7 @@ import {
 } from './line';
 import { applyChangeSync, parseChange, planOps } from './changes';
 import { stName } from './custom';
-import { AgentAv, Empty, Icon, MBar } from './ui';
+import { Btn, AgentAv, Empty, Icon, MBar } from './ui';
 import { logChange } from './release';
 
 /* ===== Turnkey prototype · the Tester: test cases written by an agent, run by code, failures sent back for repair =====
@@ -702,10 +702,10 @@ export function TesterPanel({ app }) {
                   : 'Working'
             : 'Not run in this session'}
         </span>
-        <button className="btn sm" disabled={busy || !testable(app)} onClick={() => runTests(app)}>
+        <Btn className="btn sm" disabled={busy || !testable(app)} onClick={() => runTests(app)}>
           <Icon n="play" s="16" />
           Run every test
-        </button>
+        </Btn>
       </div>
       <div className="insp-body col gap12">
         <p className="muted t-cap">

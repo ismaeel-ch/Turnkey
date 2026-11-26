@@ -56,7 +56,7 @@ import { TeamAv, teamAgentOf } from './team';
 import { AGENTS, PENDING, RUNS, STATIONS, answerQuestion, resetAppData } from './line';
 import { handleChat, suggestChanges } from './changes';
 import { FlowCards, flowOf, flowTips } from './custom';
-import { AgentAv, Empty, Field, Icon, Json, MBar, Proto, Spinner, Switch, Tabs } from './ui';
+import { Btn, AgentAv, Empty, Field, Icon, Json, MBar, Proto, Spinner, Switch, Tabs } from './ui';
 import { isStatusCol, startWalk } from './runtime';
 import { ReleaseCard } from './release';
 
@@ -188,19 +188,19 @@ export function DataView({ app }) {
               : 'Not saved: storage is unavailable here'}
           </span>
           {U.dl && (
-            <button className="btn sm" onClick={() => saveFile(snake(app.name) + '.sqlite', dbBytes(app.id), 'application/x-sqlite3')}>
+            <Btn className="btn sm" onClick={() => saveFile(snake(app.name) + '.sqlite', dbBytes(app.id), 'application/x-sqlite3')}>
               <Icon n="download" s="16" />
               Export .sqlite
-            </button>
+            </Btn>
           )}
-          <button className="btn sm" onClick={() => copyText(dbDump(app.id), 'SQL dump')}>
+          <Btn className="btn sm" onClick={() => copyText(dbDump(app.id), 'SQL dump')}>
             <Icon n="copy" s="16" />
             Copy as SQL
-          </button>
-          <button className="btn sm" onClick={reset}>
+          </Btn>
+          <Btn className="btn sm" onClick={reset}>
             <Icon n="reset" s="16" />
             Reset data
-          </button>
+          </Btn>
         </div>
       </aside>
       <div className="main">
@@ -252,10 +252,10 @@ export function DataView({ app }) {
                 }}
               />
               <div className="row">
-                <button className="btn primary sm" onClick={runSql}>
+                <Btn className="btn primary sm" onClick={runSql}>
                   <Icon n="play" s="16" />
                   Run
-                </button>
+                </Btn>
                 {[
                   'SELECT name, sql FROM sqlite_master',
                   'SELECT * FROM activity ORDER BY id DESC LIMIT 20',
@@ -453,10 +453,10 @@ export function ApiView({ app }) {
                       '.'
                     : ''}
                 </span>
-                <button className="btn sm" onClick={retest}>
+                <Btn className="btn sm" onClick={retest}>
                   <Icon n="shield" s="16" />
                   Run the tests again
-                </button>
+                </Btn>
               </div>
               <div className="tbl-wrap">
                 <table className="tbl dense">
@@ -567,10 +567,10 @@ export function ApiView({ app }) {
                   </Field>
                 )}
                 <div className="row">
-                  <button className="btn primary" onClick={send}>
+                  <Btn className="btn primary" onClick={send}>
                     <Icon n="send" s="16" />
                     Send
-                  </button>
+                  </Btn>
                   {!allowed && (
                     <span className="t-cap muted">
                       {roleName(def, user.role)}
@@ -652,10 +652,10 @@ export function ConnView({ app }) {
           <h2 className="t-sub1">Connections</h2>
           <span className="muted">Third-party systems the agents and built apps may call. Any REST API or MCP server can be added.</span>
         </div>
-        <button className="btn primary" onClick={() => openDialog('addconn')}>
+        <Btn className="btn primary" onClick={() => openDialog('addconn')}>
           <Icon n="add" />
           Add connection
-        </button>
+        </Btn>
       </div>
       <div className="conn-grid">
         {list.map((c) => (
@@ -704,7 +704,7 @@ export function ConnView({ app }) {
             <span className="mono t-cap">{cur.url}</span>
           </div>
           {cur.custom && (
-            <button
+            <Btn
               className="btn sm"
               onClick={() => {
                 S.custom = S.custom.filter((x) => x.id !== cur.id);
@@ -715,7 +715,7 @@ export function ConnView({ app }) {
             >
               <Icon n="trash" s="16" />
               Remove
-            </button>
+            </Btn>
           )}
         </div>
         <p className="muted t-cap">
@@ -743,9 +743,9 @@ export function ConnView({ app }) {
                   <td>{t.desc}</td>
                   <td className="mono t-cap">{JSON.stringify(t.args)}</td>
                   <td>
-                    <button className="btn sm" disabled={off} title={off ? 'Needs internet' : 'Call this tool'} onClick={() => test(t)}>
+                    <Btn className="btn sm" disabled={off} title={off ? 'Needs internet' : 'Call this tool'} onClick={() => test(t)}>
                       Test
-                    </button>
+                    </Btn>
                   </td>
                 </tr>
               ))}
@@ -898,7 +898,7 @@ export function ChatCard({ app, m }) {
             ))}
           </div>
           <div className="row">
-            <button
+            <Btn
               className="btn sm"
               onClick={() => {
                 U.view[app.id] = 'tests';
@@ -907,7 +907,7 @@ export function ChatCard({ app, m }) {
             >
               <Icon n="beaker" s="16" />
               Open the tests
-            </button>
+            </Btn>
           </div>
         </div>
       );
@@ -987,7 +987,7 @@ export function ChatCard({ app, m }) {
       return (
         <div className="gcard ok">
           <div className="row wrap">
-            <button
+            <Btn
               className="btn primary sm"
               onClick={() => {
                 U.view[app.id] = 'app';
@@ -996,12 +996,12 @@ export function ChatCard({ app, m }) {
             >
               <Icon n="window" s="16" />
               Open the app
-            </button>
-            <button className="btn sm" onClick={() => startWalk(app)}>
+            </Btn>
+            <Btn className="btn sm" onClick={() => startWalk(app)}>
               <Icon n="playOutline" s="16" />
               Play the walkthrough
-            </button>
-            <button
+            </Btn>
+            <Btn
               className="btn sm"
               onClick={() =>
                 openDialog('pack', {
@@ -1011,7 +1011,7 @@ export function ChatCard({ app, m }) {
             >
               <Icon n="document" s="16" />
               Build pack
-            </button>
+            </Btn>
           </div>
         </div>
       );
@@ -1055,12 +1055,12 @@ export function ChatCard({ app, m }) {
             </span>
           ) : live ? (
             <div className="row">
-              <button className="btn danger sm" onClick={() => PENDING[app.id](true)}>
+              <Btn className="btn danger sm" onClick={() => PENDING[app.id](true)}>
                 Approve and delete
-              </button>
-              <button className="btn sm" onClick={() => PENDING[app.id](false)}>
+              </Btn>
+              <Btn className="btn sm" onClick={() => PENDING[app.id](false)}>
                 Keep the data
-              </button>
+              </Btn>
             </div>
           ) : (
             <span className="t-cap muted">No longer waiting for an answer.</span>
@@ -1139,7 +1139,7 @@ export function ChatCard({ app, m }) {
             </ul>
           ) : null}
           <div className="row wrap">
-            <button
+            <Btn
               className="btn sm"
               onClick={() => {
                 S.settings.debug = true;
@@ -1148,7 +1148,7 @@ export function ChatCard({ app, m }) {
             >
               <Icon n="bug" s="16" />
               Open debug
-            </button>
+            </Btn>
           </div>
         </div>
       );
@@ -1217,9 +1217,9 @@ export function ChatPanel({ app }) {
             <AgentAv key={id} id={id} size="xs" />
           ))}
         </span>
-        <button className="btn subtle icon sm" aria-label="Hide the agents panel" title="Hide" onClick={() => setChat(false)}>
+        <Btn className="btn subtle icon sm" aria-label="Hide the agents panel" title="Hide" onClick={() => setChat(false)}>
           <Icon n="panelRight" s="16" />
-        </button>
+        </Btn>
       </div>
       <div className="msgs" ref={ref} aria-live="polite">
         {app.chat.map((m) => (
@@ -1294,9 +1294,9 @@ export function ChatPanel({ app }) {
             }
           }}
         />
-        <button className="btn primary icon" type="submit" aria-label="Send" disabled={!draft.trim()}>
+        <Btn className="btn primary icon" type="submit" aria-label="Send" disabled={!draft.trim()}>
           <Icon n="send" />
-        </button>
+        </Btn>
       </form>
     </aside>
   );
@@ -1698,7 +1698,7 @@ export function DebugDrawer({ app }) {
           }}
         />
         {app && (
-          <button
+          <Btn
             className={cx('btn subtle sm', D.all && 'on')}
             aria-pressed={!!D.all}
             title="Show every workspace, not only this tab"
@@ -1708,9 +1708,9 @@ export function DebugDrawer({ app }) {
             }}
           >
             All tabs
-          </button>
+          </Btn>
         )}
-        <button
+        <Btn
           className="btn subtle icon sm"
           title="Clear the logs"
           aria-label="Clear the logs"
@@ -1724,8 +1724,8 @@ export function DebugDrawer({ app }) {
           }}
         >
           <Icon n="broom" s="16" />
-        </button>
-        <button
+        </Btn>
+        <Btn
           className="btn subtle icon sm"
           title={D.max ? 'Smaller' : 'Larger'}
           aria-label={D.max ? 'Smaller' : 'Larger'}
@@ -1735,8 +1735,8 @@ export function DebugDrawer({ app }) {
           }}
         >
           <Icon n={D.max ? 'chevDown' : 'chevUp'} s="16" />
-        </button>
-        <button
+        </Btn>
+        <Btn
           className="btn subtle icon sm"
           aria-label="Close debug"
           title="Close"
@@ -1746,7 +1746,7 @@ export function DebugDrawer({ app }) {
           }}
         >
           <Icon n="dismiss" s="16" />
-        </button>
+        </Btn>
       </div>
       <div className="dbg-kpis">
         {run

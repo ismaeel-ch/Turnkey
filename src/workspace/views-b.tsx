@@ -4,7 +4,7 @@ import { toStyle } from '@/platform/dom';
 import { DOW, MON, cap, cx, fmtDate, fmtNum, fmtTime, isoDate, notify, parseISO, toast, today } from './core';
 import { accOf, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isNum } from './viewspec';
-import { Empty, Icon, Seg, Switch } from './ui';
+import { Btn, Empty, Icon, Seg, Switch } from './ui';
 import { cellText, fetchApi, rowTitle, stateLabel, stateTone } from './runtime';
 import { NoRows, Pick, choices, passes, vxState } from './views-a';
 
@@ -825,9 +825,9 @@ export function VPivot({ app, user, pane, scr, t, rows, cfg, setCfg, set, drill 
           opts={cats.filter((c) => c.name !== cc.name)}
           onChange={(v) => setCfg('rows', v)}
         />
-        <button className="btn subtle icon sm" title="Swap rows and columns" aria-label="Swap rows and columns" onClick={swap}>
+        <Btn className="btn subtle icon sm" title="Swap rows and columns" aria-label="Swap rows and columns" onClick={swap}>
           <Icon n="swap" s="16" />
-        </button>
+        </Btn>
         <Pick
           id={id + 'c'}
           label="Columns"
@@ -1073,23 +1073,23 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
   return (
     <>
       <div className="vopts">
-        <button className="btn subtle icon sm" aria-label="Earlier" onClick={() => move((st.tlOff || 0) - Math.round(span / 2))}>
+        <Btn className="btn subtle icon sm" aria-label="Earlier" onClick={() => move((st.tlOff || 0) - Math.round(span / 2))}>
           <Icon n="chevLeft" s="16" />
-        </button>
+        </Btn>
         <strong className="cal-title">
           {dayText(isoDate(ws))}
           {' to '}
           {dayText(isoDate(new Date(ws.getTime() + (span - 1) * day)))}
         </strong>
-        <button className="btn subtle icon sm" aria-label="Later" onClick={() => move((st.tlOff || 0) + Math.round(span / 2))}>
+        <Btn className="btn subtle icon sm" aria-label="Later" onClick={() => move((st.tlOff || 0) + Math.round(span / 2))}>
           <Icon n="chevRight" s="16" />
-        </button>
-        <button className="btn sm" onClick={() => move(0)}>
+        </Btn>
+        <Btn className="btn sm" onClick={() => move(0)}>
           Today
-        </button>
-        <button className="btn sm" title="Jump to the first record" onClick={fit}>
+        </Btn>
+        <Btn className="btn sm" title="Jump to the first record" onClick={fit}>
           First
-        </button>
+        </Btn>
         <Seg
           label="Zoom"
           items={[
@@ -1451,14 +1451,14 @@ export function Dash({ app, user, pane, scr, test }) {
         <div className="row between">
           <h3 className="widget-h">{w.label}</h3>
           {w.kind !== 'recent' && (
-            <button
+            <Btn
               className="btn subtle icon sm"
               title="Open in the chart view"
               aria-label={'Open ' + w.label + ' in the chart view'}
               onClick={openChart}
             >
               <Icon n="open" s="16" />
-            </button>
+            </Btn>
           )}
         </div>
         {body}
@@ -1497,7 +1497,7 @@ export function Dash({ app, user, pane, scr, test }) {
         )}
         {ds.f.map(chip)}
         {(ds.f.length > 0 || ds.range !== 'all') && (
-          <button
+          <Btn
             className="btn subtle sm"
             onClick={() => {
               ds.f = [];
@@ -1506,7 +1506,7 @@ export function Dash({ app, user, pane, scr, test }) {
             }}
           >
             Clear
-          </button>
+          </Btn>
         )}
       </div>
       {W.length ? (

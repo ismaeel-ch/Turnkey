@@ -27,13 +27,14 @@ import { REC } from './builds';
 import { runTestsSync, testStats } from './tests';
 import { APPLY, STATIONS, blankDef, blankLine, deleteApp, newRun, pushChat, resetAppData } from './line';
 import { normCases } from './tester';
-import { Dialog, Field, Icon, MBar, Seg, Spinner } from './ui';
+import { Btn, Dialog, Field, Icon, MBar, Seg, Spinner } from './ui';
 import { AppPane, newPane } from './runtime';
 import {
   AppLogo,
   carryData,
   clearIdentity,
   draftNotes,
+  installInputOf,
   isDirty,
   relOf,
   releaseApp,
@@ -42,6 +43,8 @@ import {
   verCmp,
   verText,
 } from './release';
+import { appInstallLinks, holdInstallLinks, setInstallLinks } from '@/platform/pwa/app';
+import { lastInstalledAt, onInstallPrompt, runningInstalled } from '@/platform/pwa/prompt';
 
 /* ===== Turnkey prototype · share an app by link, and the app-only view =====
    A share link carries the app itself: the five definitions the agents wrote and the rows to start with, compressed into the part of
@@ -122,11 +125,26 @@ export const framed = () => {
     return true;
   }
 };
+/* A code is either a whole app ("0." or "1." and the packed app) or "i." and an app's lasting id: the start address
+   of an installed app, which reopens the copy already saved in this browser. */
 export const shareCode = (input) => {
   const s = str(input).trim(),
-    m = /#app=([01]\.[A-Za-z0-9_-]+)/.exec(s) || /^([01]\.[A-Za-z0-9_-]+)$/.exec(s);
+    m =
+      /#app=([01]\.[A-Za-z0-9_-]+|i\.[A-Za-z0-9_-]{1,40})(?![A-Za-z0-9_-])/.exec(s) ||
+      /^([01]\.[A-Za-z0-9_-]+|i\.[A-Za-z0-9_-]{1,40})$/.exec(s);
   return m ? m[1] : null;
 };
+/** The saved app an installed app's "i.<id>" start address points at: the newest guest copy with that id, else one
+ *  of the owner's own apps. */
+export function installedApp(key) {
+  const ready = (a) => a.status === 'ready' && dbExists(a.id);
+  const all = Object.values(S.apps);
+  return (
+    all.find((a) => a.shared && !a.shared.preview && a.shared.uid === key && ready(a)) ||
+    all.find((a) => !a.shared && (a.uid === key || a.id === key) && ready(a)) ||
+    null
+  );
+}
 export const shareLink = (code) => {
   let base = '';
   try {
@@ -349,6 +367,15 @@ export async function openShared(input, o) {
   const code = shareCode(input);
   if (!code) throw new Error('That is not a Turnkey app link. A link ends with #app= followed by a long code.');
   if (code.length > SHARE.maxCode) throw new Error('That link is too long to be an app.');
+  if (code.startsWith('i.')) {
+    // opened from the home screen, the dock or the Start menu: the app is already in this browser
+    const saved = installedApp(code.slice(2));
+    if (!saved) throw new Error('This app is no longer saved in this browser. Open its link again to get it back.');
+    if (runningInstalled() && !saved.installed) saved.installed = Date.now();
+    enterSolo(saved, { from: 'link', back: o.back || null });
+    commit();
+    return saved;
+  }
   if (!S.shared) S.shared = {};
   const key = 'k' + hashStr(code);
   let app = S.shared[key] ? S.apps[S.shared[key]] : null,
@@ -563,12 +590,12 @@ export function ShareDialog({ p }) {
         cls="share"
         foot={
           <>
-            <button className="btn" onClick={closeDialog}>
+            <Btn className="btn" onClick={closeDialog}>
               Not now
-            </button>
-            <button className="btn primary" id="sh-release" data-autofocus disabled={!!block || sh.rbusy} onClick={first}>
+            </Btn>
+            <Btn className="btn primary" id="sh-release" data-autofocus disabled={!!block || sh.rbusy} onClick={first}>
               {sh.rbusy ? <Spinner /> : <Icon n="rocket" s="16" />}Release version 1.0 and make the link
-            </button>
+            </Btn>
           </>
         }
       >
@@ -595,14 +622,14 @@ export function ShareDialog({ p }) {
       cls="share"
       foot={
         <>
-          <button className="btn" disabled={!sh.code} onClick={preview}>
+          <Btn className="btn" disabled={!sh.code} onClick={preview}>
             <Icon n="eye" s="16" />
             Preview what they see
-          </button>
-          <button className="btn primary" data-autofocus disabled={!sh.code} onClick={() => copyText(link, 'Link')}>
+          </Btn>
+          <Btn className="btn primary" data-autofocus disabled={!sh.code} onClick={() => copyText(link, 'Link')}>
             <Icon n="copy" s="16" />
             Copy link
-          </button>
+          </Btn>
         </>
       }
     >
@@ -617,7 +644,7 @@ export function ShareDialog({ p }) {
           </span>
         </div>
         {dirty && (
-          <button
+          <Btn
             className="btn sm"
             onClick={() => {
               closeDialog();
@@ -626,7 +653,7 @@ export function ShareDialog({ p }) {
             }}
           >
             Release the draft
-          </button>
+          </Btn>
         )}
       </div>
       <p>
@@ -698,7 +725,7 @@ export function ShareDialog({ p }) {
             value={sh.busy ? 'Packing the app…' : link}
             onFocus={(e) => e.target.select()}
           />
-          <button
+          <Btn
             className="btn icon"
             title="Copy the link"
             aria-label="Copy the link"
@@ -706,7 +733,7 @@ export function ShareDialog({ p }) {
             onClick={() => copyText(link, 'Link')}
           >
             <Icon n="copy" />
-          </button>
+          </Btn>
         </div>
       </Field>
       <ul className="share-facts">
@@ -770,12 +797,12 @@ export function OpenLinkDialog({ p }) {
           />
         </Field>
         <div className="row end">
-          <button type="button" className="btn" onClick={closeDialog}>
+          <Btn type="button" className="btn" onClick={closeDialog}>
             Cancel
-          </button>
-          <button type="submit" className="btn primary" disabled={!!p.busy}>
+          </Btn>
+          <Btn type="submit" className="btn primary" disabled={!!p.busy}>
             {p.busy ? <Spinner /> : <Icon n="open" s="16" />}Open the app
-          </button>
+          </Btn>
         </div>
       </form>
     </Dialog>
@@ -791,9 +818,9 @@ export function AboutAppDialog({ p }) {
       title={'About ' + app.name}
       onClose={closeDialog}
       foot={
-        <button className="btn primary" data-autofocus onClick={closeDialog}>
+        <Btn className="btn primary" data-autofocus onClick={closeDialog}>
           Close
-        </button>
+        </Btn>
       }
     >
       <div className="install-app">
@@ -864,8 +891,24 @@ export function SoloShell() {
     up = app.shared && app.shared.updated && !app.shared.updated.seen ? app.shared.updated : null;
   useEffect(() => {
     setIdentity(app);
-    return clearIdentity;
+    // the browser installs whatever manifest the page links: while the app is open alone, that is the app's own
+    const stop = holdInstallLinks(document, appInstallLinks(installInputOf(app)), app.name);
+    return () => {
+      stop();
+      clearIdentity();
+      setInstallLinks(document, null);
+    };
   }, [app.id, app.name, app.rev]);
+  useEffect(() => {
+    // the browser reports an install it made while this app was open alone: mark the app
+    const since = Date.now();
+    return onInstallPrompt(() => {
+      if (lastInstalledAt() >= since && !app.installed) {
+        app.installed = lastInstalledAt();
+        commit();
+      }
+    });
+  }, [app.id]);
   const reset = async () => {
     if (
       await confirmBox({
@@ -918,9 +961,9 @@ export function SoloShell() {
         <div className="solo-note" role="status">
           <Icon n="eye" s="16" />
           <span className="grow">Preview: this is all that someone with the link sees.</span>
-          <button className="btn sm" onClick={exitSolo}>
+          <Btn className="btn sm" onClick={exitSolo}>
             Close preview
-          </button>
+          </Btn>
         </div>
       )}
       {up && (
@@ -939,7 +982,7 @@ export function SoloShell() {
               : 'Your ' + up.kept + ' records were kept.'}
             {app.shared.notes.length ? ' New: ' + app.shared.notes.slice(0, 2).join(' · ') : ''}
           </span>
-          <button
+          <Btn
             className="btn sm"
             onClick={() => {
               up.seen = true;
@@ -947,7 +990,7 @@ export function SoloShell() {
             }}
           >
             OK
-          </button>
+          </Btn>
         </div>
       )}
       {so.from === 'link' && !app.installed && !so.noInstall && (
@@ -958,7 +1001,7 @@ export function SoloShell() {
             <strong>{app.name}</strong>
             {' to open it from your desktop or home screen, under its own icon.'}
           </span>
-          <button
+          <Btn
             className="btn sm primary"
             id="solo-install"
             onClick={() =>
@@ -968,8 +1011,8 @@ export function SoloShell() {
             }
           >
             Install
-          </button>
-          <button
+          </Btn>
+          <Btn
             className="btn subtle icon sm"
             aria-label="Not now"
             onClick={() => {
@@ -978,7 +1021,7 @@ export function SoloShell() {
             }}
           >
             <Icon n="dismiss" s="16" />
-          </button>
+          </Btn>
         </div>
       )}
       <AppPane app={app} pane={so.pane} solo={extra} />

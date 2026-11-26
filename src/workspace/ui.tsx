@@ -1,5 +1,17 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
-import { useState, useEffect, useRef } from 'react';
+import { cloneElement, forwardRef, isValidElement, useState, useEffect, useRef } from 'react';
+import {
+  Button,
+  Field as FluentField,
+  Dialog as FluentDialog,
+  DialogBody,
+  DialogContent,
+  DialogActions,
+  DialogSurface,
+  DialogTitle,
+  Spinner as FluentSpinner,
+  ToggleButton,
+} from '@fluentui/react-components';
 import { NativeField } from '@/platform/dom';
 import { ICONS } from './icons';
 import { accFor, cx, initials } from './core';
@@ -47,9 +59,31 @@ export function AgentAv({ id, size }) {
     </span>
   );
 }
+/** Fluent's spinner, small enough to sit in a line of text. */
 export function Spinner() {
-  return <span className="spin" role="status" aria-label="Working" />;
+  return <FluentSpinner className="spin" size="extra-tiny" role="status" aria-label="Working" />;
 }
+/**
+ * Every button in the workspace. The old class names stay on the element (`btn primary sm`, `btn subtle icon` ...)
+ * because tests and layout CSS use them; they also pick the Fluent appearance and size.
+ */
+export const Btn = forwardRef(function Btn({ className, children, ...rest }, ref) {
+  const t = String(className || '').split(/\s+/);
+  const has = (x) => t.includes(x);
+  const appearance = has('primary') || has('danger') ? 'primary' : has('subtle') ? 'subtle' : 'secondary';
+  return (
+    <Button
+      ref={ref}
+      className={className}
+      appearance={appearance}
+      size={has('sm') ? 'small' : has('lg') ? 'large' : 'medium'}
+      iconOnly={has('icon')}
+      {...rest}
+    >
+      {children}
+    </Button>
+  );
+});
 export function Switch({ on, onChange, text, id, disabled, title }) {
   return (
     <label className={cx('switch', disabled && 'is-off')} title={title}>
@@ -86,16 +120,19 @@ export function Seg({ items, value, onChange, label: aria }) {
   return (
     <div className="seg" role="group" aria-label={aria}>
       {items.map((it) => (
-        <button
+        <ToggleButton
           key={it.id}
+          appearance="subtle"
+          shape="square"
+          size="medium"
+          checked={it.id === value}
           className={cx(it.id === value && 'on')}
-          aria-pressed={it.id === value}
           title={it.title}
+          icon={it.icon ? <Icon n={it.icon} s="16" /> : undefined}
           onClick={() => onChange(it.id)}
         >
-          {it.icon && <Icon n={it.icon} s="16" />}
           {it.label}
-        </button>
+        </ToggleButton>
       ))}
     </div>
   );
@@ -148,7 +185,7 @@ export function Menu({ btn, items, align, title, tour }) {
   }, [open]);
   return (
     <div className="menu-wrap" ref={ref}>
-      <button
+      <Btn
         className={btn.cls || 'btn subtle'}
         title={title}
         aria-label={btn.label}
@@ -158,7 +195,7 @@ export function Menu({ btn, items, align, title, tour }) {
         onClick={() => setOpen(!open)}
       >
         {btn.body}
-      </button>
+      </Btn>
       {open && (
         <div className={cx('menu', align === 'left' ? 'left' : 'right')} role="menu">
           {items.filter(Boolean).map((it, i) =>
@@ -191,10 +228,11 @@ export function Menu({ btn, items, align, title, tour }) {
     </div>
   );
 }
-export function Dialog({ title, children, foot, onClose, wide, cls }) {
+/** Moves focus into a dialog when it opens: the marked field, else the first field, else the main button. */
+function FocusOnOpen() {
   const ref = useRef();
   useEffect(() => {
-    const el = ref.current;
+    const el = ref.current && ref.current.closest('.dialog');
     if (!el) return;
     const f =
       el.querySelector('[data-autofocus]') ||
@@ -205,55 +243,76 @@ export function Dialog({ title, children, foot, onClose, wide, cls }) {
       f.focus();
     } catch (e) {}
   }, []);
+  return <span ref={ref} hidden />;
+}
+/**
+ * Fluent hides everything behind a modal dialog (aria-hidden on the page root). Our dialogs are removed by the store,
+ * not closed through Fluent, and the hiding was left in place, so screen readers and role queries lost the page.
+ * Once the last dialog is gone, undo it on the page root.
+ */
+function useRestorePage() {
+  useEffect(
+    () => () => {
+      const sweep = () => {
+        if (document.querySelector('.dialog')) return;
+        const r = document.getElementById('root');
+        if (r && r.getAttribute('aria-hidden') === 'true') r.removeAttribute('aria-hidden');
+      };
+      setTimeout(sweep, 0);
+      setTimeout(sweep, 300);
+    },
+    [],
+  );
+}
+export function Dialog({ title, children, foot, onClose, wide, cls }) {
+  useRestorePage();
   return (
-    <div
-      className="overlay"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && onClose) onClose();
+    <FluentDialog
+      open
+      modalType="modal"
+      onOpenChange={(e, d) => {
+        if (!d.open && onClose) onClose();
       }}
     >
-      <div
-        className={cx('dialog', wide && 'wide', cls)}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        ref={ref}
-        tabIndex="-1"
-        onKeyDown={(e) => {
-          if (e.key === 'Escape' && onClose) {
-            e.stopPropagation();
-            onClose();
-          }
-        }}
-      >
-        <div className="dhead">
-          <h2 className="t-sub1 grow">{title}</h2>
-          {onClose && (
-            <button className="btn subtle icon" aria-label="Close" onClick={onClose}>
-              <Icon n="dismiss" />
-            </button>
-          )}
-        </div>
-        <div className="dbody">{children}</div>
-        {foot && <div className="dfoot">{foot}</div>}
-      </div>
-    </div>
+      <DialogSurface className={cx('dialog', wide && 'wide', cls)}>
+        <DialogBody className="dlg">
+          <div className="dhead">
+            <DialogTitle as="h2" className="t-sub1 grow">
+              {title}
+            </DialogTitle>
+            {onClose && (
+              <Btn className="btn subtle icon" aria-label="Close" onClick={onClose}>
+                <Icon n="dismiss" />
+              </Btn>
+            )}
+          </div>
+          <DialogContent className="dbody">{children}</DialogContent>
+          {foot && <DialogActions className="dfoot">{foot}</DialogActions>}
+        </DialogBody>
+        <FocusOnOpen />
+      </DialogSurface>
+    </FluentDialog>
   );
 }
 export function Field({ label: text, hint, error, id, children, cls }) {
   return (
-    <div className={cx('field', error && 'has-err', cls)}>
-      <label htmlFor={id}>{text}</label>
-      {children}
-      {error ? (
-        <span className="field-err">
-          <Icon n="errorCircle" s="12" />
-          {error}
-        </span>
-      ) : hint ? (
-        <span className="field-hint">{hint}</span>
-      ) : null}
-    </div>
+    <FluentField
+      className={cx('field', error && 'has-err', cls)}
+      label={text ? { children: text, htmlFor: id } : undefined}
+      hint={!error && hint ? { className: 'field-hint', children: hint } : undefined}
+      validationState={error ? 'error' : 'none'}
+      validationMessage={error ? { className: 'field-err', children: error } : undefined}
+    >
+      {(p) =>
+        isValidElement(children) && (typeof children.type === 'function' || /^(input|select|textarea)$/.test(children.type))
+          ? cloneElement(children, {
+              id: children.props.id || p.id,
+              'aria-describedby': children.props['aria-describedby'] || p['aria-describedby'],
+              'aria-invalid': p['aria-invalid'],
+            })
+          : children
+      }
+    </FluentField>
   );
 }
 export function Json({ v, k, open }) {
