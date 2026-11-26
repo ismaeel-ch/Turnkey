@@ -331,12 +331,27 @@ async function flowLive(browser, url) {
   await page.locator('.titlebar .net').click(); await page.locator('.newtab').click(); await page.waitForSelector('.home'); await page.fill('#home-prompt', 'anything'); await page.locator('.prompt .btn.primary').click(); await sleep(200);
   check('live: offline blocks a live build', await page.locator('.wtab').count() === 6 && (await page.locator('.toast').allInnerTexts()).join(' ').includes('offline'), await page.locator('.toast').allInnerTexts());
   await page.locator('.titlebar .net').click();
-  // an app's own agents in Live: each one makes its own model call, and code turns row numbers into ids
+  // an app's own agents in Live: the team runs on the server (/api/agent/team, stood in for here with the same AG-UI
+  // events it streams), and the browser writes each agent's answer through the app's API, turning row numbers into ids
+  const teamRuns = [];
+  await page.route('**/api/agent/team', async (route) => {
+    const body = JSON.parse(route.request().postData() || '{}'), agents = (body.team && body.team.agents) || [], runId = body.runId || 'run';
+    teamRuns.push(agents.map((a) => 'team:' + a.name).join(','));
+    const ev = [{ type: 'RUN_STARTED', threadId: runId, runId }];
+    for (const a of agents) {
+      const out = Object.assign({ rows: [], update: [], summary: null }, TEAM_OUT[a.name] || { say: 'Nothing to add.' });
+      ev.push({ type: 'STEP_STARTED', stepName: a.id }, { type: 'CUSTOM', name: 'check', value: { agent: a.id, ok: true, sentBack: false, by: 'rules' } });
+      ev.push({ type: 'TEXT_MESSAGE_START', messageId: 'm_' + a.id, role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'm_' + a.id, delta: out.say }, { type: 'TEXT_MESSAGE_END', messageId: 'm_' + a.id });
+      ev.push({ type: 'STATE_DELTA', delta: [{ op: 'add', path: '/outputs/' + a.id, value: out }] }, { type: 'STEP_FINISHED', stepName: a.id });
+    }
+    ev.push({ type: 'RUN_FINISHED', threadId: runId, runId, result: { status: 'done' } });
+    await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: ev.map((e) => 'data: ' + JSON.stringify(e) + '\n\n').join('') });
+  });
   await st(page, () => { window.__mode = ''; window.__calls = []; }); await page.locator('.newtab').click(); await page.waitForSelector('.home'); await page.locator('[data-tpl="factcheck"] .tpl-build').click(); await waitReady(page, 60000);
   await st(page, () => { window.__formwork.view().calls = 0; }); await view(page, 'App'); await page.locator('.persona-btn').first().click(); await land(page); await page.waitForSelector('.team');
   await page.fill('#tm0_title', 'Launch note'); await page.fill('#tm0_text', 'The Pacific is the largest ocean. Our app has a million users.'); await page.locator('.team-start button[type=submit]').click(); await waitTeam(page);
   const tr = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), T = window.__formwork.teams()[t.app]; return { status: T.status, live: T.live, steps: T.steps.map((x) => [x.status, x.rows.length, x.updated, x.problems.length]), made: Object.keys(T.made).map((k) => k + ':' + T.made[k].length).join(','), error: T.error }; });
-  check('live team: three model calls, rows written through the API, a bad row refused without stopping the run', tr.status === 'done' && tr.live && JSON.stringify(tr.steps) === '[["ok",2,0,0],["ok",2,0,1],["ok",0,3,0]]' && tr.made === 'claims:2,evidence:2' && (await st(page, () => window.__calls)).join(',') === 'team:Extractor,team:Researchers,team:Verifier', [tr, await st(page, () => window.__calls)]);
+  check('live team: one server run of three agents, rows written through the API, a bad row refused without stopping the run', tr.status === 'done' && tr.live && JSON.stringify(tr.steps) === '[["ok",2,0,0],["ok",2,0,1],["ok",0,3,0]]' && tr.made === 'claims:2,evidence:2' && teamRuns.join('|') === 'team:Extractor,team:Researchers,team:Verifier' && !(await st(page, () => window.__calls)).some((x) => x.startsWith('team:')), [tr, teamRuns, await st(page, () => window.__calls)]);
   check('live team: the agent could not set the status itself, the workflow did', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Checked', await page.locator('.team-log .badge').first().innerText());
   await shot(page, '54-live-team');
   await st(page, () => { window.__formwork.view().calls = 0; }); // this flow now makes more model calls than one session's cap allows, so start the count again for the last case
