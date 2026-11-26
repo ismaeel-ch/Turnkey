@@ -1,12 +1,11 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
-import { NativeField } from '@/platform/dom';
 import { BRAND, U, arr, confirmBox, cx, fmtDate, fmtDateTime, fmtNum, label, needNet, notify, online, toast } from './core';
 import { DBX, dbExists } from './db';
 import { accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec } from './engine';
 import { REC, allConnectors, callConnector, connOn } from './builds';
 import { TeamConsole } from './room';
 import { resetAppData } from './line';
-import { Btn, Avatar, Empty, Field, Icon, MBar, Menu, Proto, Switch } from './ui';
+import { Avatar, Btn, Empty, Field, Icon, Input, MBar, Menu, Proto, Select, Switch, Textarea } from './ui';
 import { AppSheets, AppTabs, isCompact, useElWidth } from './mobile';
 import { Explorer } from './views-a';
 import { Dash } from './views-b';
@@ -310,8 +309,8 @@ export function AppLogin({ app, pane, users, solo }) {
             login(f.u, f.p);
           }}
         >
-          <NativeField
-            as="input"
+          <Input
+            native
             className="input"
             id={'lu' + app.id + pane.n}
             aria-label="Username"
@@ -322,8 +321,8 @@ export function AppLogin({ app, pane, users, solo }) {
               f.u = e.target.value;
             }}
           />
-          <NativeField
-            as="input"
+          <Input
+            native
             className="input"
             id={'lp' + app.id + pane.n}
             aria-label="Password"
@@ -383,23 +382,23 @@ export function FieldInput({ app, user, c, f, idp }) {
     };
   let ctl;
   if (c.type === 'longtext')
-    ctl = <NativeField as="textarea" className="textarea" id={id} rows="3" value={v || ''} onInput={(e) => set(e.target.value)} />;
+    ctl = <Textarea native className="textarea" id={id} rows="3" value={v || ''} onInput={(e) => set(e.target.value)} />;
   else if (c.type === 'bool') ctl = <Switch id={id} on={!!v} onChange={(x) => set(x ? 1 : 0)} text={v ? 'Yes' : 'No'} />;
   else if (c.type === 'select')
     ctl = (
-      <NativeField as="select" className="select" id={id} value={v || ''} onChange={(e) => set(e.target.value || null)}>
+      <Select native className="select" id={id} value={v || ''} onChange={(e) => set(e.target.value || null)}>
         <option value="">{c.required ? 'Choose…' : 'None'}</option>
         {c.options.map((o) => (
           <option key={o} value={o}>
             {optLabel(c, o)}
           </option>
         ))}
-      </NativeField>
+      </Select>
     );
   else if (c.type === 'user')
     ctl = (
-      <NativeField
-        as="select"
+      <Select
+        native
         className="select"
         id={id}
         value={v == null ? '' : String(v)}
@@ -414,15 +413,15 @@ export function FieldInput({ app, user, c, f, idp }) {
               {c.role ? '' : ' · ' + roleName(def, u.role)}
             </option>
           ))}
-      </NativeField>
+      </Select>
     );
   else if (c.type === 'ref') {
     const rt = tableOf(def, c.ref),
       res = fetchApi(app, user, '/api/' + c.ref);
     ctl =
       res.status === 200 ? (
-        <NativeField
-          as="select"
+        <Select
+          native
           className="select"
           id={id}
           value={v == null ? '' : String(v)}
@@ -434,10 +433,10 @@ export function FieldInput({ app, user, c, f, idp }) {
               {rowTitle(app, user, rt, r)}
             </option>
           ))}
-        </NativeField>
+        </Select>
       ) : (
-        <NativeField
-          as="input"
+        <Input
+          native
           className="input"
           id={id}
           type="number"
@@ -449,8 +448,8 @@ export function FieldInput({ app, user, c, f, idp }) {
       );
   } else
     ctl = (
-      <NativeField
-        as="input"
+      <Input
+        native
         className="input"
         id={id}
         type={
@@ -994,8 +993,8 @@ export function StageView({ app }) {
         <label className="t-cap muted hide-sm" htmlFor={'pv' + app.id}>
           Preview as
         </label>
-        <NativeField
-          as="select"
+        <Select
+          native
           className="select sm"
           id={'pv' + app.id}
           aria-label="Preview as"
@@ -1010,7 +1009,7 @@ export function StageView({ app }) {
               {roleName(def, u.role)}
             </option>
           ))}
-        </NativeField>
+        </Select>
         <Btn
           className={cx('btn sm', st.split && 'on')}
           aria-pressed={st.split}
