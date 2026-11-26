@@ -1248,7 +1248,8 @@ export function flowKit() {
     const st = R.useState(p.graph.nodes),
       nodes = st[0],
       setNodes = st[1],
-      inst = R.useRef(null);
+      inst = R.useRef(null),
+      box = R.useRef(null);
     R.useEffect(() => {
       setNodes((prev) =>
         p.graph.nodes.map((n) => {
@@ -1268,7 +1269,8 @@ export function flowKit() {
       const go = (d) =>
           setTimeout(
             () => {
-              if (!inst.current) return;
+              // a hidden canvas has no size, and fitting it would give React Flow a viewport of NaN
+              if (!inst.current || !box.current?.clientWidth || !box.current?.clientHeight) return;
               if (p.v)
                 inst.current.setViewport(p.start, {
                   duration: 200,
@@ -1314,6 +1316,7 @@ export function flowKit() {
     return e(
       RF.ReactFlow,
       {
+        ref: box,
         nodes,
         edges: p.graph.edges,
         nodeTypes: NODES,
