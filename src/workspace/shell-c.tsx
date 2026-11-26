@@ -1,7 +1,7 @@
 import { AreaBoundary } from '@/platform/area-boundary';
 import { engineProblem, storageProblem } from './errors';
 import { modelHost } from '@/platform/model-client';
-import { type ReactNode, useState, useLayoutEffect, useSyncExternalStore } from 'react';
+import { type ReactNode, Suspense, lazy, useState, useLayoutEffect, useSyncExternalStore } from 'react';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 import type { BackedDef } from '@/shared/types/app';
 import type { SqlValue } from '@/shared/types/sqljs';
@@ -98,6 +98,11 @@ import { HistoryDialog } from './history-ui';
 import { historyHooks } from './history';
 import { Home, Titlebar, Workspace, lineApp } from './shell-a';
 import { DebugDrawer } from './shell-b';
+import { installShortcuts, setSingleKeys } from './commands';
+
+// The command palette and the shortcuts dialog load the first time one opens (Ctrl/Cmd+K or "?").
+const PaletteDialog = lazy(() => import('./palette').then((m) => ({ default: m.PaletteDialog })));
+const ShortcutsDialog = lazy(() => import('./palette').then((m) => ({ default: m.ShortcutsDialog })));
 
 /* ===== Turnkey prototype · shell: first-run onboarding, sign-in, dialogs, guided tour, boot ===== */
 /* The forms below keep their state in the view store (U), so it outlives a re-render. Components read it through a
@@ -720,6 +725,12 @@ export function SettingsDialog() {
         <SetRow title="Simulate offline" text="Pretend the connection is gone, to see Live pause and what keeps working.">
           <Switch id="set-off" label="Simulate offline" on={s.offline} onChange={setOffline} />
         </SetRow>
+        <SetRow
+          title="Single-key shortcuts"
+          text="Letters such as G then B, and ? for the list. Ctrl or Cmd with K always opens the commands."
+        >
+          <Switch id="set-keys" label="Single-key shortcuts" on={s.keys !== false} onChange={setSingleKeys} />
+        </SetRow>
         <SetRow title="Agents panel" text="Show the chat beside the canvas.">
           <Switch id="set-chat" label="Agents panel" on={s.chat} onChange={(v) => set('chat', v)} />
         </SetRow>
@@ -1240,6 +1251,18 @@ export function DialogHost() {
       return <AddStepDialog p={p} />;
     case 'guide':
       return <GuideDialog p={p} />;
+    case 'palette':
+      return (
+        <Suspense fallback={null}>
+          <PaletteDialog />
+        </Suspense>
+      );
+    case 'keys':
+      return (
+        <Suspense fallback={null}>
+          <ShortcutsDialog />
+        </Suspense>
+      );
     case 'history':
       return <HistoryDialog p={p} />;
     default:
@@ -1719,6 +1742,7 @@ export function probeClaude(tries: number) {
   }
 }
 export function boot() {
+  installShortcuts();
   LS.probe();
   loadState();
   applyTheme();

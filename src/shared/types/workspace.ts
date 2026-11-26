@@ -31,6 +31,8 @@ export interface Settings {
   /** the docked chat is open (wide screens) */
   chat: boolean;
   tourDone: boolean;
+  /** single-key shortcuts such as "g b" and "?" (Ctrl/Cmd+K always works); off lets every key reach the page */
+  keys: boolean;
 }
 
 export interface Account {
