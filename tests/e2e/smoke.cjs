@@ -291,12 +291,36 @@ async function liveBuild(browser, errors) {
     const t = a.tests;
     if (a.status === 'ready' && a.mode === 'live' && t && t.total > 0 && t.failed === 0)
       record(name, 'pass', `${a.name}: ${calls} model calls, ${took} s, ${t.total} tests pass`);
-    else
-      record(name, 'fail', `status ${a.status}, mode ${a.mode}, ${calls} model calls, ${took} s, tests ${JSON.stringify(t)}`);
+    else {
+      const bad = t && t.failed ? await failingTests(page) : '';
+      record(
+        name,
+        'fail',
+        `${a.name}: status ${a.status}, mode ${a.mode}, ${calls} model calls, ${took} s, ` +
+          (t ? `${t.failed} of ${t.total} tests fail` : 'no tests') +
+          (bad ? `: ${bad}` : ''),
+      );
+    }
   } catch (e) {
     record(name, 'fail', firstLine(e));
   } finally {
     await ctx.close();
+  }
+}
+
+/** The names and reasons of the failing tests, read from the Tests view, for the summary. */
+async function failingTests(page) {
+  try {
+    await page.locator('.views .tab', { hasText: 'Details' }).first().click();
+    await page.locator('.subtabs').getByRole('tab', { name: 'Tests', exact: true }).click();
+    await page.waitForSelector('.tests-view .test.bad', { timeout: 15000 });
+    const items = await page.locator('.tests-view .test.bad').allInnerTexts();
+    return items
+      .slice(0, 4)
+      .map((x) => x.replace(/\s+/g, ' ').trim().slice(0, 200))
+      .join(' | ');
+  } catch {
+    return '';
   }
 }
 
