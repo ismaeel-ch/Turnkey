@@ -50,8 +50,9 @@ function preloadWhenIdle() {
     void import('@/platform/agui/client').catch(() => undefined);
     void import('@/shared/agent-contract').catch(() => undefined);
   };
-  if (typeof requestIdleCallback === 'function') requestIdleCallback(load, { timeout: 4000 });
-  else setTimeout(load, 1500);
+  // a few seconds in, so parsing them does not hold up the first screen; then at the next idle moment
+  const idle = () => (typeof requestIdleCallback === 'function' ? requestIdleCallback(load, { timeout: 4000 }) : load());
+  setTimeout(idle, 5000);
 }
 
 export default function Workspace() {
