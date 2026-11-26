@@ -1,6 +1,6 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
-import type { AppRecord } from '@/shared/types/workspace';
 import { useState, useSyncExternalStore } from 'react';
+import type { BriefedDef, Logo, Theme, Untrusted } from '@/shared/types/app';
+import type { AppRecord, ChatMessage, Dict, Release, ViewState } from '@/shared/types/workspace';
 import { ACC_HEX } from '@/styles/theme.generated';
 import { toStyle } from '@/platform/dom';
 import { ICONS } from './icons';
@@ -17,6 +17,7 @@ import {
   confirmBox,
   cx,
   emit,
+  errText,
   hashStr,
   label,
   me,
@@ -29,7 +30,7 @@ import {
   toolCall,
   uid,
 } from './core';
-import { dbDrop, dbRelease, dbRollback, dbSave, dbSavepoint, qi, sqlRun, topoOrder } from './db';
+import { dbDrop, dbRelease, dbRollback, dbSave, dbSavepoint, qi, sqlRows, sqlRun, topoOrder } from './db';
 import { buildDatabase } from './engine';
 import { TEAMS } from './team';
 import { runTestsSync, testStats } from './tests';
@@ -46,7 +47,7 @@ import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@
 export const LOGO_SHAPES = ['squircle', 'circle', 'hexagon', 'shield', 'tile'],
   LOGO_FILLS = ['gradient', 'solid', 'split', 'ring'],
   LOGO_MARKS = ['none', 'dot', 'spark', 'bar'];
-export const LOGO_WORD = {
+export const LOGO_WORD: Dict<string> = {
   squircle: 'rounded square',
   circle: 'circle',
   hexagon: 'hexagon',
@@ -61,22 +62,26 @@ export const LOGO_WORD = {
   spark: 'a spark',
   bar: 'an underline',
 };
-export function normLogo(o, theme, name) {
+export function normLogo(o: Untrusted, theme: Pick<Theme, 'icon'>, name: string): Logo {
   // anything the UI agent leaves out is filled in from the app's name, so two apps rarely look alike
   o = o || {};
   let n = 0;
   const key = str(name) + '|' + theme.icon;
   for (let i = 0; i < key.length; i++) n = (n * 31 + key.charCodeAt(i)) >>> 0;
   return {
-    glyph: ICONS[o.glyph] ? o.glyph : null,
+    glyph: (ICONS as Dict<string>)[o.glyph] ? o.glyph : null,
     shape: LOGO_SHAPES.includes(o.shape) ? o.shape : LOGO_SHAPES[n % 5],
     fill: LOGO_FILLS.includes(o.fill) ? o.fill : LOGO_FILLS[(n >>> 3) % 4],
     mark: LOGO_MARKS.includes(o.mark) ? o.mark : LOGO_MARKS[(n >>> 6) % 4],
     by: o.shape || o.fill || o.glyph ? 'ui' : 'rules',
   };
 }
-export function logoOf(app) {
-  const th = (app.def && app.def.theme) || {},
+/** An app's icon with the accent it is drawn in. */
+export type LogoView = Logo & { accent: string; glyph: string };
+const IC = ICONS as Dict<string>,
+  HEX = ACC_HEX as Dict<string[]>;
+export function logoOf(app: AppRecord): LogoView {
+  const th: Partial<Theme> = (app.def && app.def.theme) || {},
     lg =
       th.logo ||
       normLogo(
@@ -87,27 +92,29 @@ export function logoOf(app) {
         app.name,
       );
   return {
-    glyph: ICONS[lg.glyph] ? lg.glyph : ICONS[th.icon] ? th.icon : ICONS[app.icon] ? app.icon : 'apps',
+    glyph: lg.glyph && IC[lg.glyph] ? lg.glyph : th.icon && IC[th.icon] ? th.icon : IC[app.icon] ? app.icon : 'apps',
     shape: lg.shape,
     fill: lg.fill,
     mark: lg.mark,
-    accent: ACC_HEX[th.accent] ? th.accent : ACC_HEX[app.accent] ? app.accent : 'blue',
+    accent: th.accent && HEX[th.accent] ? th.accent : HEX[app.accent] ? app.accent : 'blue',
     by: lg.by,
   };
 }
-export function logoSvg(lg, size) {
-  const c = ACC_HEX[lg.accent] || ACC_HEX.blue,
+export function logoSvg(lg: LogoView, size?: number) {
+  const c = HEX[lg.accent] || HEX.blue,
     s = size || 64,
     g = 'lg-' + lg.accent,
     small = lg.fill === 'ring';
-  const shape = {
-    squircle: '<rect width="100" height="100" rx="24"/>',
-    circle: '<circle cx="50" cy="50" r="50"/>',
-    hexagon:
-      '<path d="M44 3.5a12 12 0 0 1 12 0l31 18a12 12 0 0 1 6 10.4v36.2a12 12 0 0 1-6 10.4l-31 18a12 12 0 0 1-12 0l-31-18a12 12 0 0 1-6-10.4V31.9a12 12 0 0 1 6-10.4z"/>',
-    shield: '<path d="M50 2c13 8.5 26 12 40 12v38c0 22-15 38-40 46C25 90 10 74 10 52V14c14 0 27-3.500 40-12z"/>',
-    tile: '<rect width="100" height="100" rx="9"/>',
-  }[lg.shape];
+  const shape = (
+    {
+      squircle: '<rect width="100" height="100" rx="24"/>',
+      circle: '<circle cx="50" cy="50" r="50"/>',
+      hexagon:
+        '<path d="M44 3.5a12 12 0 0 1 12 0l31 18a12 12 0 0 1 6 10.4v36.2a12 12 0 0 1-6 10.4l-31 18a12 12 0 0 1-12 0l-31-18a12 12 0 0 1-6-10.4V31.9a12 12 0 0 1 6-10.4z"/>',
+      shield: '<path d="M50 2c13 8.5 26 12 40 12v38c0 22-15 38-40 46C25 90 10 74 10 52V14c14 0 27-3.500 40-12z"/>',
+      tile: '<rect width="100" height="100" rx="9"/>',
+    } as Dict<string>
+  )[lg.shape];
   const bg =
     lg.fill === 'gradient'
       ? '<g fill="url(#' + g + ')">' + shape + '</g>'
@@ -166,7 +173,7 @@ export function logoSvg(lg, size) {
     ') scale(' +
     k +
     ')" fill="#fff">' +
-    (ICONS[lg.glyph] || ICONS.apps) +
+    (IC[lg.glyph] || IC.apps) +
     '</g>' +
     mark +
     '</svg>'
@@ -184,7 +191,7 @@ export function AppLogo({ app, size, cls }: { app: AppRecord; size?: number; cls
     />
   );
 }
-export const logoText = (app) => {
+export const logoText = (app: AppRecord) => {
   const lg = logoOf(app);
   return (
     'A ' +
@@ -198,10 +205,11 @@ export const logoText = (app) => {
     (lg.mark !== 'none' ? ', with ' + LOGO_WORD[lg.mark] : '')
   );
 };
-export const logoUrl = (app, size) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(logoSvg(logoOf(app), size || 256));
-export function logoPng(app, size) {
+export const logoUrl = (app: AppRecord, size?: number) =>
+  'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(logoSvg(logoOf(app), size || 256));
+export function logoPng(app: AppRecord, size?: number) {
   // a real PNG, drawn from the same data
-  return new Promise((res, rej) => {
+  return new Promise<Blob>((res, rej) => {
     const img = new Image(),
       s = size || 512;
     img.onload = () => {
@@ -209,7 +217,7 @@ export function logoPng(app, size) {
         const cv = document.createElement('canvas');
         cv.width = s;
         cv.height = s;
-        cv.getContext('2d').drawImage(img, 0, 0, s, s);
+        (cv.getContext('2d') as CanvasRenderingContext2D).drawImage(img, 0, 0, s, s);
         cv.toBlob((b) => (b ? res(b) : rej(new Error('The icon could not be drawn.'))), 'image/png');
       } catch (e) {
         rej(e);
@@ -219,15 +227,15 @@ export function logoPng(app, size) {
     img.src = logoUrl(app, s);
   });
 }
-export async function saveLogo(app) {
+export async function saveLogo(app: AppRecord) {
   try {
     const b = await logoPng(app, 512);
     if (await saveFile(snake(app.name) + '-icon.png', b, 'image/png')) toast('Icon saved as a 512 pixel PNG.', 'success');
   } catch (e) {
-    toast(String((e && e.message) || e), 'warning');
+    toast(errText(e), 'warning');
   }
 }
-export function redesignLogo(app) {
+export function redesignLogo(app: AppRecord) {
   // "another design": the next shape, fill and mark. In the hosted build the UI agent is asked again.
   const th = app.def.theme,
     lg = Object.assign({}, th.logo || normLogo(null, th, app.name)),
@@ -258,8 +266,8 @@ export function redesignLogo(app) {
   });
   commit();
 }
-export let IDENT = null;
-export function setIdentity(app) {
+export let IDENT: { title: string } | null = null;
+export function setIdentity(app: AppRecord) {
   // the browser tab, and anything that installs the page, sees the app and not the builder
   try {
     if (!IDENT)
@@ -267,7 +275,7 @@ export function setIdentity(app) {
         title: document.title,
       };
     document.title = app.name;
-    let l = document.querySelector('link[data-app-icon]');
+    let l = document.querySelector<HTMLLinkElement>('link[data-app-icon]');
     if (!l) {
       l = document.createElement('link');
       l.rel = 'icon';
@@ -276,15 +284,15 @@ export function setIdentity(app) {
     }
     l.type = 'image/svg+xml';
     l.href = logoUrl(app, 64);
-    let m = document.querySelector('meta[data-app-color]');
+    let m = document.querySelector<HTMLMetaElement>('meta[data-app-color]');
     if (!m) {
       m = document.createElement('meta');
       m.name = 'theme-color';
       m.setAttribute('data-app-color', '');
       document.head.appendChild(m);
     }
-    m.content = (ACC_HEX[logoOf(app).accent] || ACC_HEX.blue)[0];
-  } catch (e) {}
+    m.content = (HEX[logoOf(app).accent] || HEX.blue)[0];
+  } catch {}
 }
 export function clearIdentity() {
   try {
@@ -294,14 +302,14 @@ export function clearIdentity() {
       const el = document.querySelector(q);
       if (el) el.remove();
     });
-  } catch (e) {}
+  } catch {}
 }
 
 /* ---------- versions ---------- */
-export const relList = (app) => arr(app.releases),
-  relOf = (app) => relList(app)[0] || null,
-  SIGC = {};
-export function appSig(app) {
+export const relList = (app: AppRecord) => arr<Release>(app.releases),
+  relOf = (app: AppRecord): Release | null => relList(app)[0] || null,
+  SIGC: Dict<{ rev: number; name: string; sig: string | number }> = {};
+export function appSig(app: AppRecord) {
   const c = SIGC[app.id];
   if (c && c.rev === app.rev && c.name === app.name) return c.sig;
   const d = app.def,
@@ -328,15 +336,15 @@ export function appSig(app) {
   };
   return sig;
 }
-export const isDirty = (app) => {
+export const isDirty = (app: AppRecord) => {
   const r = relOf(app);
   return !!r && r.sig !== appSig(app);
 };
-export const verParts = (v) =>
+export const verParts = (v: unknown) =>
     String(v || '0')
       .split('.')
       .map((x) => parseInt(x, 10) || 0),
-  verCmp = (a, b) => {
+  verCmp = (a: unknown, b: unknown) => {
     const x = verParts(a),
       y = verParts(b);
     for (let i = 0; i < 3; i++) {
@@ -345,7 +353,7 @@ export const verParts = (v) =>
     }
     return 0;
   };
-export const verNext = (v, kind) => {
+export const verNext = (v: string, kind: string) => {
   const p = verParts(v);
   return kind === 'major'
     ? p[0] + 1 + '.0'
@@ -353,14 +361,14 @@ export const verNext = (v, kind) => {
       ? p[0] + '.' + (p[1] || 0) + '.' + ((p[2] || 0) + 1)
       : p[0] + '.' + ((p[1] || 0) + 1);
 };
-export const REL_KIND = {
+export const REL_KIND: Dict<string> = {
   first: 'First release',
   fix: 'Fixes',
   feature: 'New features',
   major: 'Big change',
   rollback: 'Rolled back',
 };
-export function logChange(app, text, station) {
+export function logChange(app: AppRecord, text: string, station?: string) {
   if (!app.log) app.log = [];
   app.log.push({
     at: Date.now(),
@@ -369,11 +377,11 @@ export function logChange(app, text, station) {
   });
   if (app.log.length > 80) app.log.splice(0, app.log.length - 80);
 }
-export const draftLog = (app) => {
+export const draftLog = (app: AppRecord) => {
   const r = relOf(app);
-  return arr(app.log).filter((x) => !r || x.at > r.at);
+  return (app.log || []).filter((x) => !r || x.at > r.at);
 };
-export const PAST = [
+export const PAST: [RegExp, string][] = [
   [/^Add /, 'Added '],
   [/^Rename /, 'Renamed '],
   [/^Remove /, 'Removed '],
@@ -391,11 +399,11 @@ export const PAST = [
   [/^Move /, 'Moved '],
   [/^Switch /, 'Switched '],
 ];
-export const pastTense = (t) => {
+export const pastTense = (t: string) => {
   for (const p of PAST) if (p[0].test(t)) return t.replace(p[0], p[1]);
   return t;
 };
-export function suggestKind(app) {
+export function suggestKind(app: AppRecord) {
   const lg = draftLog(app);
   return !relOf(app)
     ? 'first'
@@ -405,8 +413,8 @@ export function suggestKind(app) {
         ? 'feature'
         : 'fix';
 }
-export function draftNotes(app) {
-  const d = app.def;
+export function draftNotes(app: AppRecord) {
+  const d = app.def as BriefedDef;
   if (!relOf(app))
     return [
       'First release: ' +
@@ -417,8 +425,8 @@ export function draftNotes(app) {
         (d.team ? ', with a team of ' + d.team.agents.length + ' agents inside' : '') +
         '.',
     ];
-  const seen = {},
-    out = [];
+  const seen: Dict<number> = {},
+    out: string[] = [];
   draftLog(app).forEach((x) => {
     const t = pastTense(x.text);
     if (!seen[t]) {
@@ -428,7 +436,7 @@ export function draftNotes(app) {
   });
   return out.length ? out.slice(-12) : ['Small changes.'];
 }
-export function releaseBlock(app) {
+export function releaseBlock(app: AppRecord) {
   // why a release cannot happen right now, or null
   if (app.status !== 'ready') return 'The build has not finished.';
   if (RUNS[app.id]) return 'The builders are still working on this app.';
@@ -437,9 +445,10 @@ export function releaseBlock(app) {
   if (st && st.fresh && st.failed) return st.failed + ' of ' + st.total + ' tests fail. A version is released only when every test passes.';
   return null;
 }
-export async function releaseApp(app, kind, notes) {
-  if (releaseBlock(app)) {
-    toast(releaseBlock(app), 'warning');
+export async function releaseApp(app: AppRecord, kind: string, notes: string[]) {
+  const why = releaseBlock(app);
+  if (why) {
+    toast(why, 'warning');
     return null;
   }
   const ts = runTestsSync(app);
@@ -464,17 +473,17 @@ export async function releaseApp(app, kind, notes) {
   pack.ver = v;
   pack.uid = app.uid;
   pack.notes = list;
-  let code;
+  let code: string;
   try {
     code = await squeeze(JSON.stringify(pack));
-  } catch (e) {
+  } catch {
     toast('The version could not be packed.', 'danger');
     return null;
   }
-  const rel = {
+  const rel: Release = {
     v,
     at: Date.now(),
-    by: me() ? me().name : '',
+    by: me()?.name || '',
     kind: k,
     notes: list.length ? list : draftNotes(app),
     sig: appSig(app),
@@ -544,7 +553,7 @@ export async function releaseApp(app, kind, notes) {
   commit();
   return rel;
 }
-export async function openVersion(app, rel) {
+export async function openVersion(app: AppRecord, rel: Release) {
   if (!rel.pack) return toast('The snapshot of version ' + rel.v + ' was let go to save room. Its notes are still here.', 'info');
   try {
     await openShared(rel.pack, {
@@ -552,10 +561,10 @@ export async function openVersion(app, rel) {
       back: app.id,
     });
   } catch (e) {
-    toast(String((e && e.message) || e), 'danger');
+    toast(errText(e), 'danger');
   }
 }
-export async function rollbackTo(app, rel) {
+export async function rollbackTo(app: AppRecord, rel: Release) {
   if (RUNS[app.id] || !rel.pack) return;
   if (
     !(await confirmBox({
@@ -569,7 +578,7 @@ export async function rollbackTo(app, rel) {
     }))
   )
     return;
-  let tmp = null;
+  let tmp: AppRecord | null = null;
   try {
     tmp = appFromPack(readPack(await unsqueeze(rel.pack)), 'rb' + Date.now(), true);
     app.def = tmp.def;
@@ -577,12 +586,13 @@ export async function rollbackTo(app, rel) {
     app.name = tmp.name;
     app.icon = tmp.icon;
     app.accent = tmp.accent;
+    const from = tmp;
     STATIONS.forEach((s) => {
-      app.line[s.id] = tmp.line[s.id];
+      app.line[s.id] = from.line[s.id];
       app.line[s.id].note = 'From version ' + rel.v;
     });
   } catch (e) {
-    toast('Version ' + rel.v + ' could not be restored: ' + String((e && e.message) || e), 'danger');
+    toast('Version ' + rel.v + ' could not be restored: ' + errText(e), 'danger');
     return;
   } finally {
     if (tmp) {
@@ -596,10 +606,11 @@ export async function rollbackTo(app, rel) {
     {
       tables: app.def.tables.map((t) =>
         Object.assign({}, t, {
-          rows: (app.seed.rows || {})[t.name] || [],
+          rows: (app.seed?.rows || {})[t.name] || [],
         }),
       ),
       users: app.def.users,
+      repaired: false,
     },
     {
       agent: 'orchestrator',
@@ -625,13 +636,13 @@ export async function rollbackTo(app, rel) {
   toast('The draft is version ' + rel.v + ' again.', 'success');
   commit();
 }
-export function carryData(from, to) {
+export function carryData(from: AppRecord, to: AppRecord) {
   // an update keeps the records: every table and column both versions have is copied across, with its ids
   const kept = {
       tables: 0,
       rows: 0,
     },
-    names = (id, t) => sqlRun(id, 'PRAGMA table_info(' + qi(t) + ')', null, 'update').map((c) => c.name);
+    names = (id: string, t: string) => sqlRows(id, 'PRAGMA table_info(' + qi(t) + ')', null, 'update').map((c) => String(c.name));
   dbSavepoint(to.id, 'carry');
   try {
     topoOrder(to.def.tables)
@@ -643,7 +654,7 @@ export function carryData(from, to) {
       if (!from.def.tables.some((x) => x.name === t.name)) return;
       const have = names(from.id, t.name),
         cols = names(to.id, t.name).filter((c) => have.includes(c)),
-        rows = sqlRun(from.id, 'SELECT * FROM ' + qi(t.name) + ' ORDER BY "id"', null, 'update');
+        rows = sqlRows(from.id, 'SELECT * FROM ' + qi(t.name) + ' ORDER BY "id"', null, 'update');
       rows.forEach((r) => {
         sqlRun(
           to.id,
@@ -656,32 +667,32 @@ export function carryData(from, to) {
       kept.tables++;
     });
     dbRelease(to.id, 'carry');
-  } catch (e) {
+  } catch {
     dbRollback(to.id, 'carry');
     return null;
   }
   dbSave(to.id);
   return kept;
 }
-export const verText = (app) => {
+export const verText = (app: AppRecord) => {
   const sh = app.shared,
     r = relOf(app);
   return sh && sh.ver ? 'Version ' + sh.ver : r ? 'Version ' + r.v + (isDirty(app) ? ' + draft changes' : '') : 'Draft, not released yet';
 };
 
 /* ---------- the Release view ---------- */
-export function Journey({ app }) {
+export function Journey({ app }: { app: AppRecord }) {
   // where this app stands, in four plain steps
   const st = testStats(app),
     ready = app.status === 'ready',
     rel = relOf(app),
     dirty = isDirty(app),
     busy = !!RUNS[app.id],
-    go = (v) => () => {
+    go = (v: string) => () => {
       U.view[app.id] = v;
       notify();
     };
-  const steps = [
+  const steps: { id: string; n: string; done: boolean; now?: boolean; bad?: boolean; sub: string; go?: () => void }[] = [
     {
       id: 'build',
       n: 'Build',
@@ -734,25 +745,25 @@ export function Journey({ app }) {
     </ol>
   );
 }
-export function ReleaseView({ app }) {
+/** The Release view's form, kept in the view state so it outlives a re-render. */
+type RelForm = ViewState['rel'][string];
+const relForm = (id: string): RelForm => U.rel[id] || { kind: null, text: null, busy: false };
+function setRelForm(id: string, patch: Partial<RelForm>) {
+  U.rel[id] = { ...relForm(id), ...patch };
+  notify();
+}
+export function ReleaseView({ app }: { app: AppRecord }) {
   const rel = relOf(app),
     dirty = isDirty(app),
     block = releaseBlock(app),
     st = testStats(app),
-    R =
-      U.rel[app.id] ||
-      (U.rel[app.id] = {
-        kind: null,
-        text: null,
-        busy: false,
-      });
+    R = relForm(app.id);
   const kind = rel ? R.kind || suggestKind(app) : 'first',
     v = rel ? verNext(rel.v, kind) : '1.0',
     text = R.text != null ? R.text : draftNotes(app).join('\n'),
     can = !block && (!rel || dirty);
   const go = async () => {
-    R.busy = true;
-    notify();
+    setRelForm(app.id, { busy: true });
     const r = await releaseApp(
       app,
       kind,
@@ -761,12 +772,7 @@ export function ReleaseView({ app }) {
         .map((x) => x.replace(/^[-•*]\s*/, '').trim())
         .filter(Boolean),
     );
-    R.busy = false;
-    if (r) {
-      R.text = null;
-      R.kind = null;
-    }
-    notify();
+    setRelForm(app.id, r ? { busy: false, text: null, kind: null } : { busy: false });
   };
   const kinds = [
     {
@@ -862,8 +868,7 @@ export function ReleaseView({ app }) {
                   items={kinds}
                   value={kind}
                   onChange={(k) => {
-                    R.kind = k;
-                    notify();
+                    setRelForm(app.id, { kind: k });
                   }}
                 />
               </Field>
@@ -890,8 +895,7 @@ export function ReleaseView({ app }) {
                 rows={Math.min(8, Math.max(3, text.split('\n').length + 1))}
                 value={text}
                 onInput={(e) => {
-                  R.text = e.target.value;
-                  notify();
+                  setRelForm(app.id, { text: (e.target as HTMLTextAreaElement).value });
                 }}
               />
             </Field>
@@ -944,7 +948,7 @@ export function ReleaseView({ app }) {
                   <Icon n="share" s="16" />
                   Share by link
                 </Btn>
-                <Btn className="btn" disabled={!rel || !rel.pack} onClick={() => openVersion(app, rel)}>
+                <Btn className="btn" disabled={!rel || !rel.pack} onClick={() => rel && openVersion(app, rel)}>
                   <Icon n="eye" s="16" />
                   See what they get
                 </Btn>
@@ -1051,14 +1055,14 @@ export function ReleaseView({ app }) {
     </div>
   );
 }
-export function ReleaseCard({ app, m }) {
-  const c = m.card;
+export function ReleaseCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
+  const c = m.card || { type: 'released' };
   return (
     <div className="gcard ok">
       <div className="gc-h">
         <Icon n="rocket" s="16" />
         {'Version '}
-        {c.v}
+        {String(c.v)}
         {' released'}
       </div>
       <ul className="plain flow-items">
@@ -1095,7 +1099,7 @@ export function ReleaseCard({ app, m }) {
 /* While an app is open on its own (see SoloShell in share.tsx) the page links that app's manifest and icon, so the
    browser installs it under its own name and icon, not Turnkey's. The browser's offer comes as an event (Chrome, Edge);
    Safari and Firefox install from their menu instead. Inside a frame nothing can be installed, so the flow is shown. */
-export function installInputOf(app) {
+export function installInputOf(app: AppRecord) {
   const lg = logoOf(app);
   return {
     name: app.name,
@@ -1109,7 +1113,15 @@ export function installInputOf(app) {
   };
 }
 const noOffer = () => false;
-export function InstallAppDialog({ p }) {
+/** Marks an app as installed on its own in this browser, or not. */
+function markInstalled(id: string, v: boolean) {
+  const a = S.apps[id];
+  if (!a) return;
+  if (v) a.installed = Date.now();
+  else delete a.installed;
+  commit();
+}
+export function InstallAppDialog({ p }: { p: { app: string } }) {
   const offered = useSyncExternalStore(onInstallPrompt, canPromptInstall, noOffer);
   const [asked, setAsked] = useState(false);
   const app = S.apps[p.app];
@@ -1119,10 +1131,8 @@ export function InstallAppDialog({ p }) {
     inFrame = framed(),
     // the browser made an offer for this app's manifest: its own Install dialog does the work
     real = offered && !inFrame;
-  const set = (v) => {
-    if (v) app.installed = Date.now();
-    else delete app.installed;
-    commit();
+  const set = (v: boolean) => {
+    markInstalled(app.id, v);
     closeDialog();
     toast(
       v

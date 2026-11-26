@@ -1,6 +1,8 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
-import type { AppRecord } from '@/shared/types/workspace';
 import { NativeField } from '@/platform/dom';
+import type { AppTable, BackedDef, BriefedDef, ColumnDef, Untrusted } from '@/shared/types/app';
+import type { FormEvent, ReactNode } from 'react';
+import type { AppFlow, AppRecord, ChatMessage, Dict, AddedAgent, Review, ReviewFinding, ReviewerInfo, Run } from '@/shared/types/workspace';
+import type { Station } from './line';
 import {
   NARROW,
   NO_MODEL,
@@ -16,6 +18,7 @@ import {
   confirmBox,
   cx,
   emit,
+  errText,
   label,
   notify,
   online,
@@ -30,6 +33,7 @@ import {
   liveModelOn,
 } from './core';
 import { dbCount, dbExists, dbRollback, dbSavepoint, qi, sqlPeek } from './db';
+import type { SqlRow } from '@/shared/types/sqljs';
 import { ACCENTS, LIMITS, accOf, colOf, tableOf } from './engine';
 import { TESTS, runTestsSync } from './tests';
 import {
@@ -54,6 +58,7 @@ import {
   stepStart,
 } from './line';
 import { applyChangeSync, handleChat, parseChange, planOps } from './changes';
+import type { ParsedChange } from './changes';
 import { keepFix } from './tester';
 import { Btn, AgentAv, Dialog, Field, Icon, MBar, Seg, Spinner, Switch } from './ui';
 import { rebuildAsk } from './shell-a';
@@ -69,14 +74,16 @@ export const APPROVE_AT = ['research', 'database', 'backend', 'views', 'screens'
 export const RULES_AT = ['views', 'screens']; // stations code can do without the agent
 export const NOTE_FOR = ['researcher', 'database', 'backend', 'views', 'ui'];
 export const NOTE_MAX = 280;
-export const NOTE_HINT = {
+export const NOTE_HINT: Dict<string> = {
   researcher: 'Example: keep it to three roles at most',
   database: 'Example: every table needs a notes field',
   backend: 'Example: only managers may delete anything',
   views: 'Example: always include a calendar when there is a date',
   ui: 'Example: keep page names to two words',
 };
-export const REVIEWERS = {
+/** A reviewer agent from the library, or one the owner described. */
+export type Reviewer = ReviewerInfo;
+export const REVIEWERS: Record<string, Reviewer> = {
   data: {
     name: 'Data reviewer',
     short: 'Data review',
@@ -134,7 +141,7 @@ REVIEWERS.style = {
   job: 'Fits the layout to the app: compact rows for wide tables, navigation that suits the number of pages.',
   auto: true,
 };
-export const regStep = (id, r) => {
+export const regStep = (id: string, r: Reviewer) => {
   r.id = id;
   REVIEWERS[id] = r;
   AGENTS['rv_' + id] = {
@@ -152,11 +159,11 @@ export const STEP_AT = ['database', 'backend', 'views', 'screens', 'walkthrough'
   STEP_ICONS = ['bot', 'wand', 'sparkle', 'puzzle', 'target', 'glasses', 'tag', 'wrench'],
   JOB_MAX = 400;
 export const LIB = () => Object.keys(REVIEWERS).filter((k) => !REVIEWERS[k].custom); // the library; agents the owner described are registered beside it, one id each
-export const reviewerAt = (stId) => ['data', 'security', 'insight', 'wording'].find((id) => REVIEWERS[id].after === stId) || null;
-export const stepAfter = (f, id) => (f.at && f.at[id]) || (REVIEWERS[id] || {}).after;
-export const stepAuto = (f, id) => (f.auto && id in f.auto ? !!f.auto[id] : !!(REVIEWERS[id] || {}).auto);
-export const stepsAt = (f, stId) => f.reviewers.filter((id) => REVIEWERS[id] && stepAfter(f, id) === stId);
-export const normAgent = (a, i) => {
+export const reviewerAt = (stId: string) => ['data', 'security', 'insight', 'wording'].find((id) => REVIEWERS[id].after === stId) || null;
+export const stepAfter = (f: AppFlow, id: string): string => (f.at && f.at[id]) || REVIEWERS[id]?.after;
+export const stepAuto = (f: AppFlow, id: string) => (f.auto && id in f.auto ? !!f.auto[id] : !!REVIEWERS[id]?.auto);
+export const stepsAt = (f: AppFlow, stId: string) => f.reviewers.filter((id) => REVIEWERS[id] && stepAfter(f, id) === stId);
+export const normAgent = (a: Untrusted, i: number): AddedAgent | null => {
   a = a || {};
   const name = str(a.name).replace(/\s+/g, ' ').slice(0, 32),
     job = str(a.job).replace(/\s+/g, ' ').slice(0, JOB_MAX),
@@ -173,16 +180,16 @@ export const normAgent = (a, i) => {
       }
     : null;
 };
-export const stName = (id: string): string => (STATIONS.find((s) => s.id === id) || {}).name || label(id);
-export const firstStationOf = (agent) => STATIONS.findIndex((s) => s.agent === agent);
-export const agentThe = (id, low) => {
+export const stName = (id: string): string => STATIONS.find((s) => s.id === id)?.name || label(id);
+export const firstStationOf = (agent: string) => STATIONS.findIndex((s) => s.agent === agent);
+export const agentThe = (id: string, low?: boolean) => {
   const n = AGENTS[id].name,
     t = id === 'researcher' || id === 'views' ? 'The ' + n : 'The ' + n + ' agent';
   return low ? 't' + t.slice(1) : t;
 };
 
 /* ---------- the workflow as data ---------- */
-export const blankFlow = () => ({
+export const blankFlow = (): AppFlow => ({
   attempts: 3,
   approve: {},
   notes: {},
@@ -192,7 +199,7 @@ export const blankFlow = () => ({
   at: {},
   auto: {},
 });
-export function normFlow(f) {
+export function normFlow(f: Untrusted): AppFlow {
   // whatever was stored, shared or typed becomes a valid workflow: unknown stations, agents and reviewers are dropped
   const o = blankFlow();
   f = f && typeof f === 'object' ? f : {};
@@ -210,7 +217,7 @@ export function normFlow(f) {
   RULES_AT.forEach((s) => {
     if (f.by && f.by[s] === 'rules') o.by[s] = 'rules';
   });
-  arr(f.agents).forEach((a, i) => {
+  arr(f.agents).forEach((a: Untrusted, i) => {
     const x = normAgent(a, i);
     if (x && o.agents.length < 6 && !o.agents.some((y) => y.id === x.id)) {
       o.agents.push(x);
@@ -227,7 +234,7 @@ export function normFlow(f) {
       });
     }
   });
-  arr(f.reviewers).forEach((id) => {
+  arr<string>(f.reviewers).forEach((id) => {
     if (
       REVIEWERS[id] &&
       (!REVIEWERS[id].custom || o.agents.some((a) => a.id === id)) &&
@@ -243,20 +250,20 @@ export function normFlow(f) {
     if (lib && STEP_AT.includes(to) && to !== REVIEWERS[id].after && stationIdx(to) >= stationIdx(REVIEWERS[id].after)) o.at[id] = to;
     if (f.auto && id in f.auto && !!f.auto[id] !== !!REVIEWERS[id].auto && lib) o.auto[id] = !!f.auto[id];
   });
-  const order = arr(f.reviewers);
+  const order = arr<string>(f.reviewers);
   o.reviewers.sort((a, b) => stationIdx(stepAfter(o, a)) - stationIdx(stepAfter(o, b)) || order.indexOf(a) - order.indexOf(b));
   return o;
 }
-export const flowDefault = () => normFlow((S.flows || {})[S.session]);
-export function flowOf(app) {
+export const flowDefault = () => normFlow((S.flows || {})[String(S.session)]);
+export function flowOf(app: AppRecord): AppFlow {
   if (!app.flow) app.flow = blankFlow();
   if (!app.reviews) app.reviews = {};
   return app.flow;
 }
-export const flowSame = (a, b) => JSON.stringify(normFlow(a)) === JSON.stringify(normFlow(b));
-export function flowList(f) {
+export const flowSame = (a: unknown, b: unknown) => JSON.stringify(normFlow(a)) === JSON.stringify(normFlow(b));
+export function flowList(f: AppFlow) {
   // the workflow in words: one short line for each thing that differs from the standard one
-  const out = [];
+  const out: { icon: string; text: string }[] = [];
   APPROVE_AT.forEach((s) => {
     if (f.approve[s])
       out.push({
@@ -297,7 +304,20 @@ export function flowList(f) {
 }
 
 /* ---------- the tools that change it. The owner's clicks and the orchestrator's tool calls both land here. ---------- */
-export const FLOW_TOOLS = {
+/** What a workflow tool did: `same` when nothing changed, else the delta and a line for the chat. */
+export interface FlowResult {
+  same?: boolean;
+  text: string;
+  op?: string;
+  path?: string;
+  value?: unknown;
+  icon?: string;
+  /** a step to run now that it is in the workflow */
+  review?: string;
+  /** the station a build should run again from */
+  from?: number | null;
+}
+export const FLOW_TOOLS: Dict<(app: AppRecord, a: Untrusted) => FlowResult> = {
   set_approval(app, a) {
     const s = a.station,
       f = flowOf(app),
@@ -327,8 +347,8 @@ export const FLOW_TOOLS = {
   add_step(app, a) {
     // a step from the library, or an agent the owner describes: a name, a job in plain words, and where it sits
     const f = flowOf(app);
-    let id = a.step,
-      rv = id ? REVIEWERS[id] : null;
+    let id: string = a.step,
+      rv: Reviewer | null = id ? REVIEWERS[id] : null;
     const after = a.after,
       mode = a.mode === 'advise' ? 'advise' : a.mode === 'apply' ? 'apply' : null;
     if (after && !STEP_AT.includes(after))
@@ -369,6 +389,7 @@ export const FLOW_TOOLS = {
         },
         f.agents.length,
       );
+      if (!ag) throw new Error('The agent needs a name and a job.');
       f.agents.push(ag);
       f.reviewers.push(ag.id);
       rv = regStep(ag.id, {
@@ -479,7 +500,7 @@ export const FLOW_TOOLS = {
     if (!rv.custom && stationIdx(to) < stationIdx(rv.after))
       throw new Error(rv.short + ' reads ' + rv.reads + ', so it cannot sit before ' + stName(rv.after) + '.');
     if (rv.custom) {
-      f.agents.find((x) => x.id === id).after = to;
+      (f.agents.find((x) => x.id === id) as AddedAgent).after = to;
       rv.after = to;
     } else if (to === rv.after) delete f.at[id];
     else f.at[id] = to;
@@ -504,7 +525,7 @@ export const FLOW_TOOLS = {
         text: rv.short + (auto ? ' already applies its changes.' : ' already only advises.'),
       };
     if (rv.custom) {
-      f.agents.find((x) => x.id === id).mode = auto ? 'apply' : 'advise';
+      (f.agents.find((x) => x.id === id) as AddedAgent).mode = auto ? 'apply' : 'advise';
       rv.auto = auto;
     } else if (auto === !!rv.auto) delete f.auto[id];
     else f.auto[id] = auto;
@@ -668,7 +689,7 @@ export const FLOW_TOOLS = {
   },
   save_default(app) {
     if (!S.flows) S.flows = {};
-    S.flows[S.session] = clone(normFlow(flowOf(app)));
+    S.flows[String(S.session)] = clone(normFlow(flowOf(app)));
     return {
       path: '/defaults/workflow',
       value: flowList(flowOf(app)).length ? 'custom' : 'standard',
@@ -677,12 +698,18 @@ export const FLOW_TOOLS = {
     };
   },
 };
-export function flowApply(app, calls, by) {
+/** One call of a workflow tool, from a click or from the chat. */
+export interface FlowCall {
+  tool: string;
+  args?: Untrusted;
+}
+export type FlowApplied = ReturnType<typeof flowApply>;
+export function flowApply(app: AppRecord, calls: FlowCall[], by: string) {
   // by: 'you' (canvas, inspector, dialog) or 'orchestrator' (asked in chat, so each change is a frontend tool call)
   const before = JSON.stringify(normFlow(flowOf(app))),
-    done = [],
-    errors = [],
-    fx = {
+    done: { icon?: string; text: string; same?: boolean }[] = [],
+    errors: string[] = [],
+    fx: { review: string[]; from: number | null } = {
       review: [],
       from: null,
     },
@@ -691,9 +718,9 @@ export function flowApply(app, calls, by) {
       appId: app.id,
       runId: (RUNS[app.id] || {}).runId,
     };
-  arr(calls).forEach((c) => {
+  arr<FlowCall>(calls).forEach((c) => {
     const fn = FLOW_TOOLS[c.tool];
-    let r = null;
+    let r: FlowResult | null = null;
     if (!fn) return void errors.push('I do not know how to do that to the workflow.');
     if (by === 'orchestrator') {
       const t = toolCall(
@@ -701,10 +728,11 @@ export function flowApply(app, calls, by) {
         'workflow.' + c.tool,
         c.args || {},
         () => {
-          r = fn(app, c.args || {});
+          const out = fn(app, c.args || {});
+          r = out;
           return {
-            changed: !r.same,
-            note: r.text,
+            changed: !out.same,
+            note: out.text,
           };
         },
         'frontend',
@@ -714,9 +742,10 @@ export function flowApply(app, calls, by) {
       try {
         r = fn(app, c.args || {});
       } catch (e) {
-        return void errors.push(String((e && e.message) || e));
+        return void errors.push(errText(e));
       }
     }
+    if (!r) return;
     if (r.same)
       return void done.push({
         icon: 'info',
@@ -753,7 +782,7 @@ export function flowApply(app, calls, by) {
     changed: JSON.stringify(app.flow) !== before,
   };
 }
-export function flowAfter(app, res, by) {
+export function flowAfter(app: AppRecord, res: FlowApplied, by: string) {
   // say what changed, then let only the agents it touches run again
   const real = res.done.filter((d) => !d.same),
     ready = app.status === 'ready',
@@ -807,14 +836,14 @@ export function flowAfter(app, res, by) {
         say(app, 'rv_' + id, 'I will read ' + REVIEWERS[id].reads + ' when the build passes ' + stName(stepAfter(flowOf(app), id)) + '.');
     });
 }
-export function flowEdit(app, calls) {
+export function flowEdit(app: AppRecord, calls: FlowCall[]) {
   const res = flowApply(app, calls, 'you');
   flowAfter(app, res, 'you');
   return res;
 }
 
 /* ---------- chat: a message about the workflow becomes tool calls ---------- */
-export const ST_WORDS = [
+export const ST_WORDS: [RegExp, string][] = [
   [/\b(brief|research(er)?|requirements?)\b/, 'research'],
   [/\b(tables?|database|schema|data model|sqlite)\b/, 'database'],
   [/\b(back ?end|endpoints?|api|access rules?|rules|permissions?)\b/, 'backend'],
@@ -822,32 +851,32 @@ export const ST_WORDS = [
   [/\b(screens?|pages?|ui|layout|front ?end)\b/, 'screens'],
   [/\b(walk ?through|tour|acceptance( test)?|app is (ready|finished|done))\b/, 'walkthrough'],
 ];
-export const AG_WORDS = [
+export const AG_WORDS: [RegExp, string][] = [
   [/\bresearch(er)?\b/, 'researcher'],
   [/\b(database|data|tables?|schema)\b/, 'database'],
   [/\bback ?end\b/, 'backend'],
   [/\b(view advisor|views?|advisor|dashboards?)\b/, 'views'],
   [/\b(ui|screens?|pages?|front ?end|design(er)?|layout)\b/, 'ui'],
 ];
-export const RV_WORDS = [
+export const RV_WORDS: [RegExp, string][] = [
   [/\b(security|access|permissions?|rights)\b/, 'security'],
   [/\b(data|schema|tables?|database)\b/, 'data'],
   [/\b(insights?|dashboards?|analytics|charts?)\b/, 'insight'],
   [/\b(wording|labels?|copy|ux|usability|text|pages?)\b/, 'wording'],
 ];
-export const pickWord = (list, s) => {
-  let best = null;
-  list.forEach((x) => {
+export const pickWord = (list: [RegExp, string][], s: string) => {
+  let best: { at: number; id: string } | null = null;
+  for (const x of list) {
     const m = x[0].exec(s);
     if (m && (!best || m.index < best.at))
       best = {
         at: m.index,
         id: x[1],
       };
-  });
+  }
   return best ? best.id : null;
 };
-export const NUMW = {
+export const NUMW: Dict<number> = {
   one: 1,
   two: 2,
   three: 3,
@@ -859,11 +888,11 @@ export const NUMW = {
 };
 export const FLOW_HELP =
   'You can also change how I build: “ask me before the screens are built”, “add a normalise step”, “add an agent called Brand stylist after screens that uses the colour teal”, “add a security review”, “allow 2 attempts”, “tell the UI agent to keep page names short”, “let the rules build the views”, “run again from views”, “show the workflow”.';
-export const STEP_WORDS = [
+export const STEP_WORDS: [RegExp, string][] = [
   [/\b(normali[sz](e|er|ation|ing)?|tidy(ing)? (up )?(the )?tables|clean(ing)? (up )?(the )?tables)\b/, 'normalize'],
   [/\b(styl(e|ist|ing)|ui customi[sz]ation|polish(ing)? (the )?ui|look and feel)\b/, 'style'],
 ];
-export function stepByWords(q, app) {
+export function stepByWords(q: string, app?: AppRecord | null) {
   // a step this workflow has, or one from the library, named loosely
   const s = str(q).toLowerCase().trim(),
     mine = app ? flowOf(app).agents : [],
@@ -872,7 +901,15 @@ export function stepByWords(q, app) {
       mine.find((a) => s && (a.name.toLowerCase().includes(s) || s.includes(a.name.toLowerCase())));
   return own ? own.id : pickWord(STEP_WORDS, s) || (/review/.test(s) ? pickWord(RV_WORDS, s) : null);
 }
-export function parseFlow(text, app) {
+/** What a chat message asks of the workflow, or null when it is not about the workflow. */
+export interface FlowAsk {
+  show?: boolean;
+  calls?: FlowCall[];
+  rerun?: string;
+  review?: string;
+  reply?: string;
+}
+export function parseFlow(text: string, app?: AppRecord | null): FlowAsk | null {
   // null when the message is not about the workflow
   const raw = String(text)
       .trim()
@@ -881,7 +918,7 @@ export function parseFlow(text, app) {
       .toLowerCase()
       .replace(/^(please|can you|could you|i want you to|i'd like you to|i would like you to)\s+/, '')
       .replace(/\s+/g, ' ');
-  let m;
+  let m: RegExpExecArray | null;
   const all = /\b(every|each|all)\b/;
   if (
     /^(show|list|open|what is|what's) (me )?(the |my |this |our )?(build )?workflow( settings| customi[sz]ations?| changes)?$/.test(s) ||
@@ -934,8 +971,8 @@ export function parseFlow(text, app) {
       };
   }
   // steps the owner adds to the workflow: one from the library, or an agent described in a sentence
-  const afterOf = (t) => (t ? pickWord(ST_WORDS, t) : null),
-    nameOf = (t) =>
+  const afterOf = (t: string | undefined) => (t ? pickWord(ST_WORDS, t) : null),
+    nameOf = (t: string) =>
       str(t)
         .replace(/^["“']|["”']$/g, '')
         .trim();
@@ -1238,7 +1275,7 @@ export function parseFlow(text, app) {
       };
   }
   // approvals: "ask me before the screens are built", "pause after the database", "let me approve the tables", "stop asking me"
-  const place = (rest) => {
+  const place = (rest: string): string[] | 'first' | null => {
     // which station to stop after
     const r = rest.replace(
       /\bare (built|made|created|written|designed|laid out)\b|\bis (built|made|created|written)\b|\b(get|gets) (built|made)\b|\bstarts?\b|\bruns?\b|\b(station|step|agent)\b|\byou (build|make|create|write|design|lay out|start)\b/g,
@@ -1317,7 +1354,7 @@ export function parseFlow(text, app) {
   }
   return null;
 }
-export async function flowChat(app, wf) {
+export async function flowChat(app: AppRecord, wf: FlowAsk) {
   if (wf.reply) return void say(app, 'orchestrator', wf.reply);
   if (wf.show)
     return void say(
@@ -1349,13 +1386,13 @@ export async function flowChat(app, wf) {
     }
     return void reviewNow(app, wf.review, true);
   }
-  const res = flowApply(app, wf.calls, 'orchestrator');
+  const res = flowApply(app, wf.calls || [], 'orchestrator');
   flowAfter(app, res, 'orchestrator');
 }
-export function flowTips(app) {
+export function flowTips(app: AppRecord) {
   // example chips: things the owner has not switched on yet
   const f = flowOf(app),
-    out = [];
+    out: string[] = [];
   if (!f.approve.views && !f.approve.screens) out.push('Ask me before the screens are built');
   if (!f.reviewers.includes('security')) out.push('Add a security review');
   else if (!f.reviewers.includes('insight')) out.push('Add an insight review');
@@ -1368,7 +1405,7 @@ export function flowTips(app) {
  * Human in the loop: the workflow graph stops after this station until the owner approves. The graph does the
  * waiting; this shows the approval card and records the owner's decision on it.
  */
-export function showGate(app, run, st) {
+export function showGate(app: AppRecord, run: Run, st: Station) {
   const L = app.line[st.id];
   L.status = 'waiting';
   L.hold = 'approval';
@@ -1392,8 +1429,8 @@ export function showGate(app, run, st) {
   );
   setChat(true);
   return {
-    decided(ok) {
-      m.card.decided = ok ? 'approved' : 'stopped';
+    decided(ok: boolean) {
+      if (m.card) m.card.decided = ok ? 'approved' : 'stopped';
       L.hold = null;
       stepEnd(s, ok);
       pushChat(app, 'user', ok ? 'Approved' : 'Stop here');
@@ -1405,12 +1442,12 @@ export function showGate(app, run, st) {
     },
     cancel() {
       stepEnd(s, false);
-      m.card.decided = 'stopped';
+      if (m.card) m.card.decided = 'stopped';
       L.hold = null;
     },
   };
 }
-export function answerGate(app, ok) {
+export function answerGate(app: AppRecord, ok: boolean) {
   const r = RUNS[app.id];
   if (r && r.gate) {
     r.gate(ok);
@@ -1419,7 +1456,12 @@ export function answerGate(app, ok) {
 }
 
 /* ---------- review steps: one reviewer reads one station's output and advises ---------- */
-export const LEVELS = {
+export type Level = ReviewFinding['level'];
+/** what a reviewer finds, before it is numbered and tried out */
+export type Finding = Pick<ReviewFinding, 'level' | 'text' | 'why' | 'fix'>;
+/** an app whose brief and workflow exist, which is what a change request needs */
+type BuiltApp = AppRecord & { def: BackedDef };
+export const LEVELS: Record<Level, { text: string; cls: string; n: number }> = {
   high: {
     text: 'Important',
     cls: 'b-danger',
@@ -1436,29 +1478,30 @@ export const LEVELS = {
     n: 2,
   },
 };
-export const rankFindings = (list) => {
-  const seen = {};
+export const rankFindings = (list: Finding[]) => {
+  const seen: Dict<number> = {};
   return list
     .filter((f) => f && f.text && !seen[f.text] && (seen[f.text] = 1))
     .sort((a, b) => LEVELS[a.level].n - LEVELS[b.level].n)
     .slice(0, 4);
 };
-export const byCol = (c) => (/\b(to|by|on|per|in|at|for)$/i.test(c.label) ? '"' + lc(c.label) + '"' : lc(c.label)); // a label that ends in a preposition is quoted, so the request does not read "by assigned to to the dashboard"
-export const lc = (s) =>
+export const byCol = (c: { label?: string }) =>
+  /\b(to|by|on|per|in|at|for)$/i.test(c.label || '') ? '"' + lc(c.label) + '"' : lc(c.label); // a label that ends in a preposition is quoted, so the request does not read "by assigned to to the dashboard"
+export const lc = (s: unknown) =>
   String(s || '')
     .split(' ')
     .map((w) => (/^[A-Z0-9]{2,}$/.test(w) ? w : w.toLowerCase()))
     .join(' '); // lower case, but an acronym such as HR or IP keeps its capitals
-export const REVIEW_RULES = {
+export const REVIEW_RULES: Dict<(app: AppRecord) => Finding[]> = {
   // Demo, and the fallback when no model answers: code reads the definition the way the reviewer would
   data(app) {
     const def = app.def,
-      out = [],
+      out: Finding[] = [],
       main = def.process ? def.process.table : def.brief && def.brief.process.entity;
     def.tables.forEach((t) => {
       const cols = t.columns,
         room = cols.length < LIMITS.cols,
-        named = (re) => cols.some((c) => re.test(c.name) || re.test(snake(c.label)));
+        named = (re: RegExp) => cols.some((c) => re.test(c.name) || re.test(snake(c.label)));
       if (t.name === main && room && !cols.some((c) => c.type === 'date' || c.type === 'datetime'))
         out.push({
           level: 'medium',
@@ -1473,7 +1516,7 @@ export const REVIEW_RULES = {
           why: 'Without one, people put notes into fields meant for something else.',
           fix: 'Add a notes field to ' + lc(t.label),
         });
-      const n = dbCount(app.id, t.name);
+      const n = Number(dbCount(app.id, t.name));
       if (n > 0 && n < 5)
         out.push({
           level: 'low',
@@ -1493,8 +1536,8 @@ export const REVIEW_RULES = {
     return rankFindings(out);
   },
   security(app) {
-    const def = app.def,
-      out = [],
+    const def = app.def as BriefedDef,
+      out: Finding[] = [],
       roles = def.brief.roles,
       main = def.process && def.process.table;
     def.tables.forEach((t) =>
@@ -1540,11 +1583,11 @@ export const REVIEW_RULES = {
   },
   insight(app) {
     const def = app.def,
-      out = [],
+      out: Finding[] = [],
       W = (def.dash && def.dash.widgets) || [],
       main = tableOf(def, def.process ? def.process.table : '') || def.tables[0],
       statusCol = def.process && def.process.column;
-    const charted = (t, c) => W.some((w) => w.table === t.name && (w.x === c.name || w.split === c.name));
+    const charted = (t: AppTable, c: ColumnDef) => W.some((w) => w.table === t.name && (w.x === c.name || w.split === c.name));
     if (main && !W.some((w) => w.kind === 'line')) {
       const d = main.columns.find((c) => c.type === 'date' || c.type === 'datetime');
       if (d && !charted(main, d))
@@ -1562,7 +1605,7 @@ export const REVIEW_RULES = {
           c.type === 'select' ||
           c.type === 'bool' ||
           c.type === 'user' ||
-          (c.type === 'ref' && tableOf(def, c.ref) && dbCount(app.id, c.ref) <= 6);
+          (c.type === 'ref' && !!c.ref && tableOf(def, c.ref) && Number(dbCount(app.id, c.ref)) <= 6);
         if (few && !(t === main && c.name === statusCol) && !charted(t, c))
           out.push({
             level: 'low',
@@ -1575,8 +1618,8 @@ export const REVIEW_RULES = {
     return rankFindings(out).slice(0, 3);
   },
   wording(app) {
-    const def = app.def,
-      out = [],
+    const def = app.def as BriefedDef,
+      out: Finding[] = [],
       scr = def.screens || [],
       theme = def.theme || {};
     if (scr.length >= 7 && theme.nav === 'top')
@@ -1606,7 +1649,7 @@ export const REVIEW_RULES = {
       });
     def.tables.forEach((t) =>
       t.columns.forEach((c) => {
-        if (/_/.test(c.label) || /\bid$/i.test(c.label)) {
+        if (/_/.test(String(c.label)) || /\bid$/i.test(String(c.label))) {
           const nice = cap(
             lc(c.label)
               .replace(/_/g, ' ')
@@ -1645,12 +1688,12 @@ export const REVIEW_RULES = {
 REVIEW_RULES.normalize = (app) => {
   // free text that repeats, and the same fact kept twice
   const def = app.def,
-    out = [];
+    out: Finding[] = [];
   if (!dbExists(app.id)) return out;
   def.tables.forEach((t) =>
     t.columns.forEach((c) => {
       if (c.type !== 'text' || c.name === t.title) return;
-      let rows = [];
+      let rows: SqlRow[] = [];
       try {
         rows = sqlPeek(
           app.id,
@@ -1664,10 +1707,10 @@ REVIEW_RULES.normalize = (app) => {
             qi(c.name) +
             " <> '' GROUP BY 1",
         );
-      } catch (e) {
+      } catch {
         rows = [];
       }
-      const total = rows.reduce((n, r) => n + r.n, 0);
+      const total = rows.reduce((n, r) => n + Number(r.n), 0);
       if (rows.length >= 2 && rows.length <= 5 && total >= rows.length * 2)
         out.push({
           level: 'medium',
@@ -1700,7 +1743,7 @@ REVIEW_RULES.style = (app) => {
   const def = app.def,
     th = def.theme || {},
     n = (def.screens || []).length,
-    out = [];
+    out: Finding[] = [];
   if (!n) return out;
   if (th.density !== 'compact' && def.tables.some((t) => t.columns.length >= 8))
     out.push({
@@ -1725,8 +1768,8 @@ REVIEW_RULES.style = (app) => {
     });
   return rankFindings(out);
 };
-export function reviewPrompt(app, id) {
-  const def = app.def,
+export function reviewPrompt(app: AppRecord, id: string) {
+  const def = app.def as BriefedDef,
     rv = REVIEWERS[id];
   const ctx = {
     data: 'TABLES (name:type, * = required):\n' + pTables(def),
@@ -1738,7 +1781,7 @@ export function reviewPrompt(app, id) {
       '\n\nTABLES:\n' +
       pTables(def) +
       '\n\nACCESS:\n' +
-      (def.process ? pAccess(def) : ''),
+      (def.process ? pAccess(def as BackedDef) : ''),
     insight:
       'TABLES:\n' +
       pTables(def) +
@@ -1764,7 +1807,7 @@ export function reviewPrompt(app, id) {
   const all =
     'TABLES (name:type, * = required):\n' +
     pTables(def) +
-    (def.process ? '\n\nACCESS:\n' + pAccess(def) + '\n\nWORKFLOW:\n' + pFlow(def) : '') +
+    (def.process ? '\n\nACCESS:\n' + pAccess(def as BackedDef) + '\n\nWORKFLOW:\n' + pFlow(def as BackedDef) : '') +
     (def.screens && def.screens.length
       ? '\n\nSCREENS: ' +
         def.screens.map((s) => s.name + ' (' + s.type + ' on ' + s.table + ')').join('; ') +
@@ -1789,30 +1832,32 @@ export function reviewPrompt(app, id) {
     '\n\nList at most 4 findings that matter to the people who will use this app. Leave out anything that is fine. For each finding, "fix" is ONE change request the owner could send, written like one of these lines, or null when no such change fixes it:\n- Add a <name> field to <table>\n- Remove the <field> field from <table>\n- Rename <field> in <table> to "<new name>"\n- Let <role> see|create|edit|delete their own <table>\n- Stop <role> from seeing|creating|editing|deleting <table>\n- Add a chart of <table> by <column> to the dashboard\n- Add a board|calendar|timeline|chart|pivot|tree|cards of <table> by <column>\n- Remove the <screen name> screen\n- Turn <field> in <table> into a choice\n- Use side navigation\n- Use the colour <name>\n- Make the rows compact\n\nFORMAT: {"findings":[{"level":"high|medium|low","text":"one sentence: what is wrong","why":"one short sentence","fix":"one change request, or null"}]}'
   );
 }
-export const normFindings = (o) =>
+export const normFindings = (o: Untrusted) =>
   rankFindings(
-    arr(o && o.findings).map((f) =>
+    arr<Untrusted>(o && o.findings).flatMap((f): Finding[] =>
       f && str(f.text)
-        ? {
-            level: LEVELS[lc(f.level)] ? lc(f.level) : 'low',
-            text: str(f.text).slice(0, 220),
-            why: str(f.why).slice(0, 180),
-            fix:
-              str(f.fix) && lc(f.fix) !== 'null'
-                ? str(f.fix)
-                    .replace(/[.!]+$/, '')
-                    .slice(0, 160)
-                : null,
-          }
-        : null,
+        ? [
+            {
+              level: lc(f.level) in LEVELS ? (lc(f.level) as Level) : 'low',
+              text: str(f.text).slice(0, 220),
+              why: str(f.why).slice(0, 180),
+              fix:
+                str(f.fix) && lc(f.fix) !== 'null'
+                  ? str(f.fix)
+                      .replace(/[.!]+$/, '')
+                      .slice(0, 160)
+                  : null,
+            },
+          ]
+        : [],
     ),
   );
-export function tryFix(app, fix) {
+export function tryFix(app: BuiltApp, fix: string): { test: string; block: string } {
   // would this change pass every check? Apply it for real inside a savepoint, run the checks, then put everything back
-  let plan;
+  let plan: Partial<ParsedChange>;
   try {
     plan = parseChange(app, fix);
-  } catch (e) {
+  } catch {
     plan = {};
   }
   if (!plan.ops || !plan.ops.length)
@@ -1851,7 +1896,7 @@ export function tryFix(app, fix) {
       runN: 0,
     });
   } catch (e) {
-    err = String((e && e.message) || e);
+    err = errText(e);
   }
   dbRollback(app.id, 'dry');
   const b = JSON.parse(keep);
@@ -1865,7 +1910,7 @@ export function tryFix(app, fix) {
   app.line.walkthrough.results = b.results;
   app.rev = rev + 3;
   if (fresh) T.rev = app.rev;
-  if (tsum) app.tests.rev = app.rev; // the definition is what it was, so what the tests found still holds
+  if (tsum && app.tests) app.tests.rev = app.rev; // the definition is what it was, so what the tests found still holds
   Object.keys(app.reviews || {}).forEach((k) => {
     if (app.reviews[k].rev === rev) app.reviews[k].rev = app.rev;
   }); // and so does every review that was up to date
@@ -1886,7 +1931,7 @@ export function tryFix(app, fix) {
     block: p.steps.some((s) => s.destructive) ? 'It deletes data, so you will be asked to approve it.' : '',
   };
 }
-export async function verifyFindings(app, only) {
+export async function verifyFindings(app: AppRecord, only?: string) {
   // once the whole app exists, every proposed fix is tried out and put back, so Apply is never a surprise
   const out = {
     n: 0,
@@ -1906,7 +1951,7 @@ export async function verifyFindings(app, only) {
       for (const f of R.findings) {
         if (!f.fix || f.state !== 'open' || f.test) continue;
         try {
-          Object.assign(f, tryFix(app, f.fix));
+          Object.assign(f, tryFix(app as BuiltApp, f.fix));
         } catch (e) {
           console.error(e);
           f.test = 'unknown';
@@ -1924,14 +1969,14 @@ export async function verifyFindings(app, only) {
   commit();
   return out;
 }
-export async function runReview(app, id, run, own) {
+export async function runReview(app: AppRecord, id: string, run: Run, own?: boolean) {
   // advisory: a reviewer never stops the line. own: asked for on a finished app, outside a build
   const rv = REVIEWERS[id],
     who = 'rv_' + id,
     auto = stepAuto(flowOf(app), id),
     st = STATIONS[stationIdx(stepAfter(flowOf(app), id))],
     model = liveModelOn() && (own || app.mode === 'live');
-  const R = (app.reviews[id] = {
+  const R: Review = (app.reviews[id] = {
     status: 'working',
     at: Date.now(),
     rev: app.rev,
@@ -1953,7 +1998,7 @@ export async function runReview(app, id, run, own) {
     (rv.custom ? 'Your agent' : auto ? 'Step' : 'Review') + (model ? ' · model call' : ' · rules'),
     model ? 'model' : 'tool',
   );
-  let list = null;
+  let list: Finding[] | null = null;
   try {
     if (model) {
       try {
@@ -1961,7 +2006,7 @@ export async function runReview(app, id, run, own) {
       } catch (e) {
         if (e instanceof Stopped) throw e;
         R.by = 'rules';
-        R.note = 'The model did not answer (' + String(e.message || e).replace(/\.$/, '') + '), so the built-in rules did this review.';
+        R.note = 'The model did not answer (' + errText(e).replace(/\.$/, '') + '), so the built-in rules did this review.';
       }
     }
     if (!list) {
@@ -2047,10 +2092,10 @@ export async function runReview(app, id, run, own) {
   );
   commit();
 }
-export async function reviewNow(app, id, viaChat) {
+export async function reviewNow(app: AppRecord, id: string, viaChat?: boolean) {
   // run one review on a finished app. Only this reviewer works; no station runs again.
   const rv = REVIEWERS[id],
-    tell = (t) => (viaChat ? say(app, 'orchestrator', t) : toast(t, 'info'));
+    tell = (t: string) => (viaChat ? say(app, 'orchestrator', t) : toast(t, 'info'));
   if (!rv) return;
   if (RUNS[app.id] || PENDING[app.id]) return void tell('A run is in progress. I will take that when it has finished.');
   if (app.status !== 'ready') return void tell(rv.short + ' runs when the build passes ' + stName(stepAfter(flowOf(app), id)) + '.');
@@ -2072,8 +2117,8 @@ export async function reviewNow(app, id, viaChat) {
   } catch (e) {
     run.status = e instanceof Stopped ? 'stopped' : 'failed';
     if (!(e instanceof Stopped)) {
-      if (!e.fatal) console.error(e);
-      say(app, 'orchestrator', 'The review stopped. ' + String(e.message || e), {
+      if (!(e as { fatal?: boolean } | null)?.fatal) console.error(e);
+      say(app, 'orchestrator', 'The review stopped. ' + errText(e), {
         type: 'error',
       });
     }
@@ -2090,7 +2135,7 @@ export async function reviewNow(app, id, viaChat) {
   });
   commit();
 }
-export async function applyFinding(app, id, fid) {
+export async function applyFinding(app: AppRecord, id: string, fid: string) {
   // a finding's fix is an ordinary change request: plan, approval if it deletes data, savepoint, re-check, roll back on failure
   const R = (app.reviews || {})[id],
     f = R && R.findings.find((x) => x.id === fid);
@@ -2101,7 +2146,7 @@ export async function applyFinding(app, id, fid) {
   f.state = 'applying';
   notify();
   try {
-    await handleChat(app, f.fix, {
+    await handleChat(app as BuiltApp, f.fix, {
       rules: f.test === 'pass',
     });
   } catch (e) {
@@ -2122,19 +2167,19 @@ export async function applyFinding(app, id, fid) {
   } // the app changed, so the fixes still open are tried again
   commit();
 }
-export function customRules(app, rv) {
+export function customRules(app: AppRecord, rv: Reviewer) {
   // an agent the owner described, without a model: every sentence of its job that reads as a change becomes one
-  const out = [];
+  const out: Finding[] = [];
   str(rv.job)
     .split(/(?<=[.!?;])\s+|\n+|\s+(?:and then|then)\s+/i)
     .map((x) => x.trim().replace(/[.!?;]+$/, ''))
     .filter(Boolean)
     .slice(0, 8)
     .forEach((sent) => {
-      let plan = null;
+      let plan: ParsedChange | null = null;
       try {
         plan = parseChange(app, sent);
-      } catch (e) {
+      } catch {
         plan = null;
       }
       if (plan && plan.ops && plan.ops.length)
@@ -2147,7 +2192,7 @@ export function customRules(app, rv) {
     });
   return out;
 }
-export function applyAuto(app, run, only, own) {
+export function applyAuto(app: AppRecord, run: Run, only?: string, own?: boolean) {
   // steps set to apply: every proposed change goes through the same checked pipeline as a change asked for in chat
   const f = flowOf(app),
     out = {
@@ -2157,11 +2202,11 @@ export function applyAuto(app, run, only, own) {
   f.reviewers.forEach((id) => {
     const R = (app.reviews || {})[id];
     if ((only && only !== id) || !R || R.status !== 'ok' || !stepAuto(f, id)) return;
-    const items = [];
+    const items: string[] = [];
     R.findings.forEach((x) => {
       if (!x.fix || x.state !== 'open' || x.test === 'fail') return;
       out.n++;
-      const r = keepFix(app, x.fix, ctxOf(app, run, 'rv_' + id));
+      const r = keepFix(app as BuiltApp, x.fix, ctxOf(app, run, 'rv_' + id));
       if (r.ok) {
         x.state = 'applied';
         x.test = 'pass';
@@ -2205,7 +2250,7 @@ export function applyAuto(app, run, only, own) {
   }
   return out;
 }
-export function dismissFinding(app, id, fid) {
+export function dismissFinding(app: AppRecord, id: string, fid: string) {
   const R = (app.reviews || {})[id],
     f = R && R.findings.find((x) => x.id === fid);
   if (f && f.state === 'open') {
@@ -2215,9 +2260,9 @@ export function dismissFinding(app, id, fid) {
 }
 
 /* ---------- running again from one station: the stations before it are kept ---------- */
-export async function rerunFrom(app, stId, viaChat) {
+export async function rerunFrom(app: AppRecord, stId: string, viaChat?: boolean) {
   const i = stationIdx(stId),
-    tell = (t) => (viaChat ? say(app, 'orchestrator', t) : toast(t, 'info'));
+    tell = (t: string) => (viaChat ? say(app, 'orchestrator', t) : toast(t, 'info'));
   if (i < 0) return;
   if (RUNS[app.id] || PENDING[app.id]) return void tell('A run is in progress. I will take that when it has finished.');
   if (app.status !== 'ready')
@@ -2252,11 +2297,11 @@ export async function rerunFrom(app, stId, viaChat) {
     if (U.live !== 'ready') return void tell(NO_MODEL + ' This app was built by the model, so its stations cannot run again here.');
   }
   U.view[app.id] = 'build';
-  runBuild(app, stId);
+  runBuild(app as BuiltApp, stId);
 }
 
 /* ---------- what the owner sees: the Customize tab, the settings dialog, the review panel, the chat cards ---------- */
-export function CustRow({ icon, title, text, children }) {
+export function CustRow({ icon, title, text, children }: { icon: string; title: ReactNode; text: ReactNode; children?: ReactNode }) {
   return (
     <div className="cust-row">
       <span className="cust-ic">
@@ -2270,28 +2315,32 @@ export function CustRow({ icon, title, text, children }) {
     </div>
   );
 }
-export function CustomTab({ app, st }) {
+/** the owner's unsaved text in an instruction or job field; no text forgets it */
+function setNoteDraft(key: string, text?: string) {
+  if (text === undefined) delete U.noteDraft[key];
+  else U.noteDraft[key] = text;
+}
+export function CustomTab({ app, st }: { app: AppRecord; st: Station }) {
   // the Customize tab of a station: what the owner may change about this step, and about the line as a whole
   const f = flowOf(app),
     rid = reviewerAt(st.id),
     rv = rid && REVIEWERS[rid],
-    a = AGENTS[st.agent],
     busy = !!RUNS[app.id],
     ready = app.status === 'ready',
     next = STATIONS[stationIdx(st.id) + 1];
-  const drafts = U.noteDraft || (U.noteDraft = {}),
+  const drafts = U.noteDraft,
     key = app.id + ':' + st.agent,
     saved = f.notes[st.agent] || '',
     draft = drafts[key] != null ? drafts[key] : saved;
-  const edit = (tool, args) =>
+  const edit = (tool: string, args: Untrusted) =>
       flowEdit(app, [
         {
           tool,
           args,
         },
       ]),
-    saveNote = (t) => {
-      delete drafts[key];
+    saveNote = (t: string) => {
+      setNoteDraft(key);
       edit('set_note', {
         agent: st.agent,
         text: t,
@@ -2371,13 +2420,13 @@ export function CustomTab({ app, st }) {
           <Seg
             label="Attempts per station"
             items={[1, 2, 3].map((n) => ({
-              id: n,
+              id: String(n),
               label: String(n),
             }))}
-            value={f.attempts}
+            value={String(f.attempts)}
             onChange={(n) =>
               edit('set_attempts', {
-                n,
+                n: Number(n),
               })
             }
           />
@@ -2401,8 +2450,8 @@ export function CustomTab({ app, st }) {
             maxLength={NOTE_MAX}
             placeholder={NOTE_HINT[st.agent]}
             value={draft}
-            onInput={(e) => {
-              drafts[key] = e.target.value;
+            onInput={(e: InputEvent) => {
+              setNoteDraft(key, (e.target as HTMLTextAreaElement).value);
               notify();
             }}
           />
@@ -2446,7 +2495,7 @@ export function CustomTab({ app, st }) {
     </div>
   );
 }
-export function FlowChips({ app, empty }: { app: AppRecord; empty?: boolean }) {
+export function FlowChips({ app, empty }: { app: AppRecord; empty?: string }) {
   const list = flowList(flowOf(app));
   return list.length ? (
     <div className="flow-chips">
@@ -2461,12 +2510,12 @@ export function FlowChips({ app, empty }: { app: AppRecord; empty?: boolean }) {
     <span className="muted t-cap">{empty}</span>
   ) : null;
 }
-export function WorkflowDialog({ p }) {
+export function WorkflowDialog({ p }: { p: { app: string } }) {
   // every workflow setting of one app in one place
   const app = S.apps[p.app];
   if (!app) return null;
   const f = flowOf(app),
-    edit = (tool, args) =>
+    edit = (tool: string, args: Untrusted) =>
       flowEdit(app, [
         {
           tool,
@@ -2476,7 +2525,7 @@ export function WorkflowDialog({ p }) {
     std = flowSame(f, blankFlow()),
     isDef = flowSame(f, flowDefault()),
     busy = !!RUNS[app.id];
-  const openSt = (id) => {
+  const openSt = (id: string) => {
     closeDialog();
     U.view[app.id] = 'build';
     U.bview[app.id] = 'line';
@@ -2631,13 +2680,13 @@ export function WorkflowDialog({ p }) {
         <Seg
           label="Attempts per station"
           items={[1, 2, 3].map((n) => ({
-            id: n,
+            id: String(n),
             label: String(n),
           }))}
-          value={f.attempts}
+          value={String(f.attempts)}
           onChange={(n) =>
             edit('set_attempts', {
-              n,
+              n: Number(n),
             })
           }
         />
@@ -2654,7 +2703,7 @@ export function WorkflowDialog({ p }) {
     </Dialog>
   );
 }
-export function Findings({ app, id, compact }) {
+export function Findings({ app, id, compact }: { app: AppRecord; id: string; compact?: boolean }) {
   const R = (app.reviews || {})[id],
     rv = REVIEWERS[id],
     busy = !!RUNS[app.id] || !!PENDING[app.id],
@@ -2768,7 +2817,7 @@ export function Findings({ app, id, compact }) {
     </div>
   );
 }
-export function ReviewPanel({ app, id, bare }) {
+export function ReviewPanel({ app, id, bare }: { app: AppRecord; id: string; bare?: boolean }) {
   // the inspector of an added step: what it found, and how it is set up
   const rv = REVIEWERS[id],
     busy = !!RUNS[app.id],
@@ -2780,7 +2829,7 @@ export function ReviewPanel({ app, id, bare }) {
     R = app.reviews[id],
     D = U.noteDraft,
     key = app.id + '|job|' + id;
-  const edit = (tool, args) =>
+  const edit = (tool: string, args: Untrusted) =>
       flowEdit(app, [
         {
           tool,
@@ -2862,9 +2911,9 @@ export function ReviewPanel({ app, id, bare }) {
               id={'st-at-' + id}
               value={at}
               disabled={busy}
-              onChange={(e) =>
+              onChange={(e: Event) =>
                 edit('move_step', {
-                  after: e.target.value,
+                  after: (e.target as HTMLSelectElement).value,
                 })
               }
             >
@@ -2896,8 +2945,8 @@ export function ReviewPanel({ app, id, bare }) {
                 rows="3"
                 maxLength={JOB_MAX}
                 value={D[key] != null ? D[key] : ag.job}
-                onInput={(e) => {
-                  D[key] = e.target.value;
+                onInput={(e: InputEvent) => {
+                  setNoteDraft(key, (e.target as HTMLTextAreaElement).value);
                   notify();
                 }}
               />
@@ -2908,7 +2957,7 @@ export function ReviewPanel({ app, id, bare }) {
                 disabled={D[key] == null || D[key].trim() === ag.job || busy}
                 onClick={() => {
                   const t = D[key];
-                  delete D[key];
+                  setNoteDraft(key);
                   edit('edit_step', {
                     job: t,
                   });
@@ -2925,7 +2974,20 @@ export function ReviewPanel({ app, id, bare }) {
     </section>
   );
 }
-export function AddStepDialog({ p }) {
+/** the dialog's props, which also hold what the owner has typed so far */
+interface AddStepProps {
+  app: string;
+  after: string;
+  mode?: string;
+  name?: string;
+  job?: string;
+  err?: string;
+}
+function setAddStep(p: AddStepProps, patch: Partial<AddStepProps>) {
+  Object.assign(p, patch);
+  notify();
+}
+export function AddStepDialog({ p }: { p: AddStepProps }) {
   // the plus on a gate: an approval, a step from the library, or an agent described in a sentence
   const app = S.apps[p.app];
   if (!app) return null;
@@ -2935,12 +2997,12 @@ export function AddStepDialog({ p }) {
     canStep = STEP_AT.includes(st),
     canAsk = APPROVE_AT.includes(st),
     mode = p.mode || 'apply';
-  const add = (calls) => {
+  const add = (calls: FlowCall[]) => {
       closeDialog();
       flowEdit(app, calls);
     },
     lib = LIB().filter((id) => stationIdx(REVIEWERS[id].after) <= stationIdx(st));
-  const make = (e) => {
+  const make = (e: FormEvent) => {
     e.preventDefault();
     const name = str(p.name),
       job = str(p.job);
@@ -2948,8 +3010,7 @@ export function AddStepDialog({ p }) {
       if (!name) throw new Error('Give the agent a name.');
       if (job.length < 8) throw new Error('Say in a sentence what it should do.');
     } catch (er) {
-      p.err = er.message;
-      return notify();
+      return setAddStep(p, { err: errText(er) });
     }
     add([
       {
@@ -3050,10 +3111,8 @@ export function AddStepDialog({ p }) {
                   maxLength="32"
                   placeholder="For example: Table tidier"
                   value={p.name || ''}
-                  onInput={(e) => {
-                    p.name = e.target.value;
-                    p.err = '';
-                    notify();
+                  onInput={(e: InputEvent) => {
+                    setAddStep(p, { name: (e.target as HTMLInputElement).value, err: '' });
                   }}
                 />
               </Field>
@@ -3071,10 +3130,8 @@ export function AddStepDialog({ p }) {
                   maxLength={JOB_MAX}
                   placeholder="For example: Make the rows compact. Use the colour teal."
                   value={p.job || ''}
-                  onInput={(e) => {
-                    p.job = e.target.value;
-                    p.err = '';
-                    notify();
+                  onInput={(e: InputEvent) => {
+                    setAddStep(p, { job: (e.target as HTMLTextAreaElement).value, err: '' });
                   }}
                 />
               </Field>
@@ -3086,10 +3143,7 @@ export function AddStepDialog({ p }) {
                     type="button"
                     className="chip"
                     onClick={() => {
-                      p.name = x[0];
-                      p.job = x[1];
-                      p.err = '';
-                      notify();
+                      setAddStep(p, { name: x[0], job: x[1], err: '' });
                     }}
                   >
                     {x[0]}
@@ -3113,8 +3167,7 @@ export function AddStepDialog({ p }) {
                   ]}
                   value={mode}
                   onChange={(v) => {
-                    p.mode = v;
-                    notify();
+                    setAddStep(p, { mode: v });
                   }}
                 />
                 <Btn className="btn primary" type="submit" id="as-create" disabled={busy && false}>
@@ -3133,9 +3186,27 @@ export function AddStepDialog({ p }) {
     </Dialog>
   );
 }
-export function FlowCards({ app, m }) {
+/** the workflow's chat cards, as this module writes them */
+interface FlowCard {
+  type: string;
+  quiet?: boolean;
+  items: { icon: string; text: string }[];
+  from?: string;
+  undone?: boolean;
+  before: string;
+  after: string;
+  station: string;
+  decided?: string | null;
+  facts?: string[];
+  reviewer: string;
+  stamp: number;
+}
+function markUndone(c: FlowCard) {
+  c.undone = true;
+}
+export function FlowCards({ app, m }: { app: AppRecord; m: ChatMessage }) {
   // the workflow's cards in chat
-  const c = m.card,
+  const c = m.card as unknown as FlowCard,
     ready = app.status === 'ready',
     busy = !!RUNS[app.id],
     toCanvas = () => {
@@ -3167,7 +3238,7 @@ export function FlowCards({ app, m }) {
         )}
         <div className="row wrap">
           {c.from && ready && (
-            <Btn className="btn sm" disabled={busy} onClick={() => rerunFrom(app, c.from)}>
+            <Btn className="btn sm" disabled={busy} onClick={() => rerunFrom(app, c.from || '')}>
               <Icon n="rerun" s="16" />
               {'Run again from '}
               {stName(c.from)}
@@ -3182,7 +3253,7 @@ export function FlowCards({ app, m }) {
               className="btn sm subtle"
               disabled={!canUndo}
               onClick={() => {
-                c.undone = true;
+                markUndone(c);
                 const r = flowApply(
                   app,
                   [
@@ -3230,7 +3301,7 @@ export function FlowCards({ app, m }) {
         </div>
         {arr(c.facts).length > 0 && (
           <ul className="plain">
-            {c.facts.map((x, i) => (
+            {arr<string>(c.facts).map((x, i) => (
               <li key={i}>{x}</li>
             ))}
           </ul>

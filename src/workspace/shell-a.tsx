@@ -469,8 +469,8 @@ export function Home() {
                   ? 'Building'
                   : a.status === 'ready' && relOf(a)
                     ? isDirty(a)
-                      ? 'Draft · ' + relOf(a).v + ' is out'
-                      : 'Version ' + relOf(a).v
+                      ? 'Draft · ' + relOf(a)?.v + ' is out'
+                      : 'Version ' + relOf(a)?.v
                     : cap(a.status)}
               </span>
               <span className="t-cap muted hide-sm">
@@ -720,6 +720,8 @@ export const RUN_KIND: Record<string, string> = {
   review: 'Review',
   step: 'Step',
 };
+/** The line's run functions are typed for a full definition; a run fills it in station by station, so any app may start one. */
+export const lineApp = (app: AppRecord) => app as Parameters<typeof rebuild>[0];
 export async function rebuildAsk(app: AppRecord) {
   if (RUNS[app.id]) return;
   if (
@@ -731,7 +733,7 @@ export async function rebuildAsk(app: AppRecord) {
     }))
   )
     return;
-  rebuild(app);
+  rebuild(lineApp(app));
 }
 export function DetailsView({ app, view }: { app: AppRecord; view: string }) {
   // everything a developer would ask for, kept one step away from everyone else
@@ -1064,7 +1066,7 @@ export function BuildView({ app }: { app: AppRecord }) {
         <MBar
           tone={app.status === 'failed' ? 'danger' : 'info'}
           action={
-            <Btn className="btn sm" onClick={() => rebuild(app)}>
+            <Btn className="btn sm" onClick={() => rebuild(lineApp(app))}>
               Run again
             </Btn>
           }
@@ -1083,7 +1085,7 @@ export function BuildView({ app }: { app: AppRecord }) {
     </div>
   );
 }
-export function LineView({ app, sel }: { app: AppRecord; sel: string }) {
+export function LineView({ app, sel }: { app: AppRecord; sel?: string | null }) {
   const hand = U.handoff[app.id];
   return (
     <div className="line-wrap" data-tour="line">
@@ -1349,7 +1351,7 @@ export function Inspector({ app, sid, bare }: { app: AppRecord; sid: string; bar
       (fl.approve[st.id] ? 1 : 0) +
       (fl.by[st.id] === 'rules' ? 1 : 0) +
       (fl.notes[st.agent] ? 1 : 0) +
-      (fl.reviewers.includes(reviewerAt(st.id)) ? 1 : 0);
+      (fl.reviewers.includes(reviewerAt(st.id) || '') ? 1 : 0);
   return (
     <section className={cx('inspector', bare && 'bare')} data-tour="inspector" aria-label={st.name + ' inspector'}>
       <div className="insp-head">
