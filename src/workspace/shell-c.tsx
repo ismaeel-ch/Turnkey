@@ -2,7 +2,7 @@
 import { modelHost } from '@/platform/model-client';
 import { useState, useLayoutEffect } from 'react';
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
-import { render, toStyle, NativeField } from '@/platform/dom';
+import { render, toStyle } from '@/platform/dom';
 import {
   APILOG,
   BRAND,
@@ -66,7 +66,7 @@ import { LIVE, RUNS, STATIONS, deleteApp, pushChat, resumeInterrupted, runBuild,
 import { buildPack, parseChange, planOps, runChange } from './changes';
 import { AddStepDialog, REVIEWERS, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
 import { keepFix, suggestCases } from './tester';
-import { Btn, AgentAv, Dialog, Field, Icon, Logo, MBar, Proto, Seg, Spinner, Switch, TONE_ICON } from './ui';
+import { AgentAv, Btn, Dialog, Field, Icon, Input, Logo, MBar, Proto, Seg, Select, Spinner, Switch, TONE_ICON } from './ui';
 import { PhoneSheets } from './mobile';
 import { AgentActivity, activityNow } from './activity';
 import { APICACHE, stageOf } from './runtime';
@@ -196,8 +196,8 @@ export function Onboarding() {
         </p>
         <div className="form-grid one">
           <Field id="ob-name" label="Your name">
-            <NativeField
-              as="input"
+            <Input
+              native
               className="input"
               id="ob-name"
               data-autofocus
@@ -209,8 +209,8 @@ export function Onboarding() {
             />
           </Field>
           <Field id="ob-user" label="Username">
-            <NativeField
-              as="input"
+            <Input
+              native
               className="input"
               id="ob-user"
               autoComplete="off"
@@ -221,8 +221,8 @@ export function Onboarding() {
             />
           </Field>
           <Field id="ob-pass" label="Password" hint="At least 4 characters. Stored in this browser only, hashed.">
-            <NativeField
-              as="input"
+            <Input
+              native
               className="input"
               id="ob-pass"
               type="password"
@@ -504,8 +504,8 @@ export function SignIn() {
         )}
         {f.create && (
           <Field id="si-name" label="Your name">
-            <NativeField
-              as="input"
+            <Input
+              native
               className="input"
               id="si-name"
               autoComplete="off"
@@ -521,8 +521,8 @@ export function SignIn() {
           label="Username"
           hint={!f.create && S.accounts.length ? 'Accounts in this browser: ' + S.accounts.map((a) => a.username).join(', ') : ''}
         >
-          <NativeField
-            as="input"
+          <Input
+            native
             className="input"
             id="si-user"
             data-autofocus
@@ -534,8 +534,8 @@ export function SignIn() {
           />
         </Field>
         <Field id="si-pass" label="Password">
-          <NativeField
-            as="input"
+          <Input
+            native
             className="input"
             id="si-pass"
             type="password"
@@ -954,8 +954,8 @@ export function RenameDialog({ p }) {
     <Dialog title="Rename app" onClose={closeDialog}>
       <form className="col gap12" onSubmit={save}>
         <Field id="rn-name" label="App name">
-          <NativeField
-            as="input"
+          <Input
+            native
             className="input"
             id="rn-name"
             data-autofocus
@@ -1022,8 +1022,8 @@ export function AddConnDialog({ p }) {
     <Dialog title="Add a connection" onClose={closeDialog}>
       <form className="col gap12" onSubmit={add}>
         <Field id="ac-kind" label="Kind">
-          <NativeField
-            as="select"
+          <Select
+            native
             className="select"
             id="ac-kind"
             value={p.kind}
@@ -1034,11 +1034,11 @@ export function AddConnDialog({ p }) {
           >
             <option value="MCP server">MCP server (HTTP)</option>
             <option value="REST API">REST API</option>
-          </NativeField>
+          </Select>
         </Field>
         <Field id="ac-name" label="Name">
-          <NativeField
-            as="input"
+          <Input
+            native
             className="input"
             id="ac-name"
             data-autofocus
@@ -1053,8 +1053,8 @@ export function AddConnDialog({ p }) {
           label="Address"
           hint={p.kind === 'MCP server' ? "The server's streamable HTTP endpoint." : 'The base address of the API.'}
         >
-          <NativeField
-            as="input"
+          <Input
+            native
             className="input mono"
             id="ac-url"
             placeholder="https://"
@@ -1069,8 +1069,8 @@ export function AddConnDialog({ p }) {
           label="Sign-in"
           hint="Keys are set as server environment variables. They never reach the browser or the repository."
         >
-          <NativeField
-            as="select"
+          <Select
+            native
             className="select"
             id="ac-auth"
             value={p.auth}
@@ -1081,7 +1081,7 @@ export function AddConnDialog({ p }) {
           >
             <option value="none">No key needed</option>
             <option value="key">API key, stored on the server</option>
-          </NativeField>
+          </Select>
         </Field>
         {p.err && <MBar tone="warning">{p.err}</MBar>}
         <div className="row end">
