@@ -9,19 +9,7 @@ import { deriveEndpoints } from './engine';
 import { TEAMS } from './team';
 import { TESTS, runTests, suiteOf, testStats, testable } from './tests';
 import { AGENTS, RUNS, STATIONS } from './line';
-import {
-  APPROVE_AT,
-  FlowChips,
-  STEP_AT,
-  answerGate,
-  flowEdit,
-  flowList,
-  flowOf,
-  reviewNow,
-  stName,
-  stepAuto,
-  stepsAt,
-} from './custom';
+import { APPROVE_AT, FlowChips, STEP_AT, answerGate, flowEdit, flowList, flowOf, reviewNow, stName, stepAuto, stepsAt } from './custom';
 import { REVIEWERS } from './reviewers';
 import { Btn, AgentAv, Icon, STATUS_META } from './ui';
 import { useWidth } from './views-b';
@@ -1509,6 +1497,22 @@ export function flowKit(): FlowKit {
 function flowPosFor(key: string): Dict<XYPosition> {
   return U.flowPos[key] || (U.flowPos[key] = {});
 }
+/**
+ * How tall the wide canvas should be so the whole workflow fits at the width it has. Sized to the viewport alone, the
+ * graph (about as tall as it is wide) was fitted by its height and shrank node text to 6 or 7 px, with half the
+ * canvas empty beside it. Never shorter than 460px, never taller than the graph needs at full size.
+ */
+function fitHeight(app: AppRecord, width: number, deep: number): number {
+  const g = flowGraph(app, false);
+  if (!g.nodes.length || !width) return Math.min(1040, 660 + 96 * deep);
+  const xs = g.nodes.map((n) => n.position.x),
+    ys = g.nodes.map((n) => n.position.y),
+    gw = Math.max(...g.nodes.map((n) => n.position.x + (n.width || FL.W))) - Math.min(...xs),
+    gh = Math.max(...ys) + FL.RH - Math.min(...ys),
+    pad = 0.06,
+    zoom = Math.min(1.1, (width * (1 - 2 * pad)) / gw);
+  return Math.round(Math.max(460, Math.min(1100, (gh * zoom) / (1 - 2 * pad))));
+}
 export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) {
   // the Preact side: keeps a React root alive and hands it fresh data on every render
   const ref = useRef<HTMLDivElement>(null),
@@ -1670,7 +1674,7 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
     <div className="line-wrap flow-wrap" data-tour="line">
       <div
         className={cx('flow-canvas', v && 'narrow')}
-        style={toStyle(v ? null : 'height:clamp(460px,calc(100dvh - 330px),' + Math.min(1040, 660 + 96 * deepNow) + 'px)')}
+        style={toStyle(v ? null : 'height:' + fitHeight(app, w, deepNow) + 'px')}
         ref={ref}
         role="group"
         aria-label="The build workflow. Select a node to inspect it, or use its controls to change the workflow."
