@@ -20,21 +20,33 @@ export type ToolDef = { name: string; description: string; parameters: Record<st
 /** A tool call made by the model. `args` is parsed JSON (an object when the model followed the schema). */
 export type ToolCall = { id: string; name: string; args: unknown };
 
+/** How hard the model thinks: `low` … `max`. See features.ts for the default of each tier. */
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 /**
- * Note: there is no `temperature`. Current Claude models (Sonnet and Haiku 5.5) reject any value but the default, so it
- * is never sent. `toolChoice` is `auto` unless a caller asks otherwise; nothing here forces a tool by name.
+ * Note: there is no `temperature`. Current Claude models reject sampling settings, so none is ever sent. Tools always
+ * go to the model as `auto`: `required` is said in the system prompt instead, because Opus 5.5 and Sonnet 5.5 refuse a
+ * forced tool choice.
  */
 export type ChatRequest = {
   messages: ChatMessage[];
   tier: Tier;
   maxTokens?: number;
+  /** How hard to think on this request. Unset: the tier's default (`default` → medium, `quick` → low). */
+  effort?: Effort;
+  /** Mark the stable start of the prompt for caching. Default true; set false for a one-off prompt. */
+  cache?: boolean;
   /** Optional. Works with every provider: native tool calls where supported, a JSON protocol otherwise. */
   tools?: ToolDef[];
   toolChoice?: 'auto' | 'none' | 'required';
   signal?: AbortSignal;
 };
 
-export type Usage = { input?: number; output?: number };
+/**
+ * Token counts and cost of one call. `input` is input that was NOT served from or written to the cache;
+ * `cacheRead` and `cacheWrite` are the cached parts. `costUsd` is what the call cost, when the price is known.
+ */
+export type Usage = { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; costUsd?: number };
 
 /** `tool_call` chunks arrive (whole, never in pieces) only when the request had `tools`, before `done`. */
 export type ChatChunk =

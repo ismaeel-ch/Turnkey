@@ -18,6 +18,8 @@
  *   CLAUDE_CODE_MODEL  alias for the Claude Code command (default sonnet); CLAUDE_CODE_MODEL_FAST (default haiku).
  *                      Development only: refused when NODE_ENV is production or VERCEL is set
  *   LLM_TOOL_MODE      auto | native | json: how tool calls reach the model (see tools.ts)
+ *   LLM_LOG_USAGE      0 turns off the one-line token and cost log per call (see usage.ts)
+ *   LLM_BUDGET_USD     the budget shown beside the running cost in /api/health (default 25)
  *
  * Keys are read here and nowhere else, never logged, never sent to the browser, never in a NEXT_PUBLIC_ variable.
  */
@@ -26,12 +28,15 @@ import { claudeCode } from './providers/claude-code';
 import { mockProvider } from './providers/mock';
 import { openAiCompatible } from './providers/openai-compatible';
 import { withTools } from './tools';
+import { withUsage } from './usage';
 import { isDevelopment, onPath } from './local';
 import type { Provider } from './types';
 
 export * from './types';
 export { complete } from './complete';
 export { withTools, toolModeFor, toolModeSetting } from './tools';
+export { EFFORT_BY_TIER, costOf, effortFor, isClaudeModel, priceOf } from './features';
+export { usageTotals, withUsage, type UsageTotals } from './usage';
 
 type Env = Record<string, string | undefined>;
 const has = (v: string | undefined): v is string => typeof v === 'string' && v.trim() !== '';
@@ -73,7 +78,8 @@ const KEYS = [
 
 function build(env: Env): Provider | null {
   const inner = resolveRaw(env);
-  return inner ? withTools(inner, env) : null;
+  // Usage is wrapped first, so the one-off tool probe in withTools is priced and counted too.
+  return inner ? withTools(withUsage(inner, env), env) : null;
 }
 
 function resolveRaw(env: Env): Provider | null {
