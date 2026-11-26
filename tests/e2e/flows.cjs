@@ -796,6 +796,10 @@ async function flowCustom(browser, url) {
   check('the connection returns: Live switches itself back on', m.on && m.sw.on && !m.sw.off && /Live is on again/.test(await toasts()), [m, await toasts()]);
   const evs = await st(page, () => window.__formwork.logs.EV.filter((e) => e.type === 'CUSTOM' && e.name === 'connectivity').map((e) => e.value.online + '/' + e.value.live));
   check('each change of the connection is one AG-UI custom event', evs.slice(-2).join(' ') === 'false/false true/true' && evs.length === 4, evs);
+  await st(page, () => { const f = window.fetch; window.__realFetch = f; window.fetch = (u, o) => (String(u).includes('/api/health') ? Promise.reject(new TypeError('Failed to fetch')) : f(u, o)); return window.__formwork.wf.reach(); }); m = await mode();
+  check('the browser says online but the server cannot be reached: Live pauses as if offline', !m.on && m.sw.off && m.id === 'offline', m);
+  await st(page, () => { window.fetch = window.__realFetch; return window.__formwork.wf.reach(); }); m = await mode();
+  check('the server answers again: Live switches itself back on', m.on && !m.sw.off && m.id !== 'offline', m);
   await page.locator('.titlebar .net').click(); await sleep(250); m = await mode();
   check('the offline test button pauses Live in the same way', !m.on && m.sw.off && m.id === 'offline', m);
   await page.locator('.titlebar .net').click(); await sleep(250); m = await mode();

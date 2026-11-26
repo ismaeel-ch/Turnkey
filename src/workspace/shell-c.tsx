@@ -33,6 +33,7 @@ import {
   modeNow,
   myApps,
   netChanged,
+  checkReach,
   netInfo,
   notify,
   online,
@@ -1741,8 +1742,12 @@ export function boot() {
     } catch {}
   };
   setNetWas(online()); // Live follows the connection: listen for it coming and going
-  window.addEventListener('online', netChanged);
+  window.addEventListener('online', () => {
+    netChanged();
+    void checkReach(); // the browser says the connection is back: make sure the server answers too
+  });
   window.addEventListener('offline', netChanged);
+  void checkReach();
   window.addEventListener('resize', notify);
   try {
     // the Network Information API is not in every browser, nor in the DOM types
@@ -1753,6 +1758,7 @@ export function boot() {
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush();
+    else void checkReach();
   });
   window.__formwork = {
     save: () => {
@@ -1791,6 +1797,7 @@ export function boot() {
       rerun: (app: AppRecord, st: string) => runBuild(lineApp(app), st),
       review: reviewNow,
       mode: modeNow,
+      reach: checkReach,
       runs: () => RUNS,
       dirty: isDirty,
       relOf,
