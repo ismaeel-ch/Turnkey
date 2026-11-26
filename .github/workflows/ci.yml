@@ -94,8 +94,9 @@ jobs:
 
   ci:
     name: ci
-    # Runs whenever the checks ran, pass or fail; skipped with them when the pull request has no label.
-    if: always() && needs.check.result != 'skipped'
+    # Runs whenever the checks ran, pass or fail. Skipped with them when the pull request has no label, and skipped
+    # when a newer run cancels this one (adding the label right after opening does that), so neither shows red.
+    if: ${{ !cancelled() && needs.check.result != 'skipped' }}
     needs: [check, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 2

@@ -17,7 +17,8 @@ deployed, so this release also carries the changes merged just before it.
 - CI runs only on pull requests labelled `ready-to-merge`; production deploys only on a release; Dependabot is off.
   ([#40](https://github.com/ismaeel-ch/Turnkey/pull/40))
 - A release is made by merging a version bump in `package.json`, which deploys and then creates the tag and the
-  GitHub release. CI shows as skipped, not failed, on pull requests without the label.
+  GitHub release. CI shows as skipped, not failed, on pull requests without the label
+  and on runs replaced by a newer one.
   ([#43](https://github.com/ismaeel-ch/Turnkey/pull/43))
 
 ## [0.1.0] - 2026-11-26
