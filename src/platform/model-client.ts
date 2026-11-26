@@ -28,6 +28,8 @@ export type SampleOptions = {
    */
   maxAttempts?: number;
   role?: StepRole;
+  /** Who this call is for the agent activity panel (workspace agent id and app id); `false` keeps it out. */
+  activity?: RunAgentOptions['activity'];
   /** For tests. */
   fetch?: typeof fetch;
 };
@@ -109,6 +111,7 @@ export async function sample(prompt: string, opts: SampleOptions = {}): Promise<
     forwardedProps: input,
     signal: opts.signal,
     fetch: opts.fetch,
+    ...(opts.activity !== undefined ? { activity: opts.activity } : {}),
     onEvent: opts.onEvent,
     onStepStarted: (name) => {
       if (name === 'draft') attempt++;

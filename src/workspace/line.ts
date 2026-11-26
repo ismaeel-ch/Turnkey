@@ -927,6 +927,7 @@ export async function callModel(app, run, agent, prompt, attempt, ctl) {
         notify();
       },
       onStep: (p) => serverStep(run, agent, app, p),
+      activity: { app: app.id, agent },
     });
     text = (res && res.text) || text;
   } catch (e) {
