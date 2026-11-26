@@ -1,0 +1,157 @@
+/* Turnkey service worker. Written by hand; scripts/build-pwa.mjs names its version and lists what to keep.
+   Registered as /sw.js?v=<version>, so every deployment is a new worker with a new cache.
+
+   - install:  keep the page, the stylesheet, the SQLite engine, the icons and the Next.js chunks the page names.
+   - fetch:    the page and the icons answer from the cache and are refreshed in the background; files whose names
+               change with their content (/_next/static, /vendor) answer from the cache and go to the network once.
+   - never:    anything under /api/, anything that is not a GET, anything on another origin.
+   - activate: delete every cache of an older deployment. */
+'use strict';
+
+const VERSION = new URL(self.location.href).searchParams.get('v') || 'dev';
+const PREFIX = 'turnkey-';
+const CACHE = PREFIX + VERSION;
+
+const isSafeVersion = /^[0-9a-z]{1,32}$/.test(VERSION);
+
+async function precacheList() {
+  if (!isSafeVersion) return ['/'];
+  const res = await fetch('/vendor/precache.' + VERSION + '.json', { cache: 'no-store' });
+  if (!res.ok) throw new Error('precache list ' + res.status);
+  const list = await res.json();
+  return Array.isArray(list.urls) ? list.urls.filter((u) => typeof u === 'string' && u.charAt(0) === '/') : ['/'];
+}
+
+async function put(cache, url) {
+  try {
+    const res = await fetch(url, { cache: 'reload' });
+    if (res.ok) await cache.put(url, res);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// The files the page needs that only the page knows: /_next/static/... chunks and styles it links to.
+async function chunksOf(cache, pageUrl) {
+  const res = await cache.match(pageUrl);
+  if (!res) return [];
+  const text = await res.clone().text();
+  const found = new Set();
+  const re = /\/_next\/static\/[A-Za-z0-9_\-./%~]+\.(?:js|css|woff2?)/g;
+  let m;
+  while ((m = re.exec(text))) found.add(m[0]);
+  return [...found];
+}
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      const urls = await precacheList();
+      // The listed files must all arrive, or this worker does not install and the old one keeps working.
+      const results = await Promise.all(urls.map((u) => put(cache, u)));
+      if (!results[0]) throw new Error('the page could not be kept');
+      // Chunks are best effort: the page also sends the ones it loaded once it is open.
+      await Promise.all((await chunksOf(cache, '/')).map((u) => put(cache, u)));
+      await self.skipWaiting();
+    })(),
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      for (const key of await caches.keys()) if (key.startsWith(PREFIX) && key !== CACHE) await caches.delete(key);
+      await self.clients.claim();
+    })(),
+  );
+});
+
+self.addEventListener('message', (event) => {
+  const d = event.data;
+  if (!d || d.type !== 'keep' || !Array.isArray(d.urls)) return;
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      for (const u of d.urls.slice(0, 200)) {
+        if (typeof u !== 'string') continue;
+        let url;
+        try { url = new URL(u, self.location.origin); } catch { continue; }
+        if (url.origin !== self.location.origin || !/^\/(_next\/static|vendor)\//.test(url.pathname)) continue;
+        if (!(await cache.match(url.pathname + url.search))) await put(cache, url.pathname + url.search);
+      }
+    })(),
+  );
+});
+
+const IMMUTABLE = /^\/(_next\/static|vendor)\//;
+const SHELL = /^\/(a\/(manifest|icon)|icons\/|manifest\.webmanifest$|favicon\.ico$|icon\.svg$|apple-icon\.png$)/;
+
+async function refresh(cache, key, request) {
+  try {
+    const res = await fetch(request, { cache: 'no-cache' });
+    if (res.ok) await cache.put(key, res.clone());
+    return res;
+  } catch {
+    return null;
+  }
+}
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  const path = url.pathname;
+  if (path.startsWith('/api/') || path === '/sw.js') return;
+  if (url.searchParams.has('_rsc') || req.headers.get('rsc')) return;
+
+  if (req.mode === 'navigate') {
+    if (path !== '/') return; // /spike and anything else go to the network as before
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE);
+        const hit = await cache.match('/');
+        const update = refresh(cache, '/', new Request('/', { headers: { accept: 'text/html' } }));
+        if (hit) {
+          event.waitUntil(update);
+          return hit;
+        }
+        return (await update) || Response.error();
+      })(),
+    );
+    return;
+  }
+
+  if (IMMUTABLE.test(path)) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE);
+        const key = path + url.search;
+        const hit = await cache.match(key);
+        if (hit) return hit;
+        const res = await fetch(req);
+        if (res.ok) event.waitUntil(cache.put(key, res.clone()));
+        return res;
+      })(),
+    );
+    return;
+  }
+
+  if (SHELL.test(path)) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE);
+        const key = path + url.search;
+        const hit = await cache.match(key);
+        const update = refresh(cache, key, req);
+        if (hit) {
+          event.waitUntil(update);
+          return hit;
+        }
+        return (await update) || Response.error();
+      })(),
+    );
+  }
+});

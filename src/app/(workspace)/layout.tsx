@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import assets from '@/platform/generated/assets.json';
+import PwaRegister from '@/platform/pwa/PwaRegister';
 
 export const metadata: Metadata = {
   title: 'Turnkey',
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {/* The workspace stylesheet is a static file written by scripts/build-legacy.mjs, served byte for byte. */}
         <link rel="stylesheet" href={assets.css} precedence="default" />
         {children}
+        <PwaRegister />
       </body>
     </html>
   );
