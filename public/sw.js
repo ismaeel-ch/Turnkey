@@ -1,7 +1,8 @@
 /* Turnkey service worker. Written by hand; it has no build step.
    Registered as /sw.js?v=<build id> (src/platform/pwa/register.ts), so every deployment is a new worker with a new cache.
 
-   - install:  keep the page, the SQLite engine, the icons, and the stylesheet and chunks the page names.
+   - install:  keep the page, the SQLite engine, the icons, the stylesheet and chunks the page names, and every chunk those
+               chunks can load later (a Demo build, the workflow canvas), so nothing is missing once the connection goes.
    - fetch:    the page and the icons answer from the cache and are refreshed in the background; files whose names
                change with their content (/_next/static, /vendor) answer from the cache and go to the network once.
    - never:    anything under /api/, anything that is not a GET, anything on another origin.
@@ -51,13 +52,40 @@ async function namedBy(cache, pageUrl) {
   return [...found];
 }
 
+// A chunk names the chunks it loads on demand as "static/chunks/<name>.js" inside its own code. Following those names from
+// the page's chunks finds everything the workspace can load later, without a build step. Capped, in files and in depth.
+const NAMED_IN_CHUNK = /(?:\/_next\/)?static\/(?:chunks|media)\/[A-Za-z0-9_\-.~]+\.(?:js|css|woff2)/g;
+const MAX_FOLLOWED = 120;
+
+async function follow(cache, start) {
+  const seen = new Set(start);
+  const queue = start.filter((u) => /\.js(\?|$)/.test(u));
+  while (queue.length && seen.size < MAX_FOLLOWED) {
+    const res = await cache.match(queue.shift());
+    if (!res) continue;
+    const text = await res.text();
+    const found = [];
+    for (const m of text.matchAll(NAMED_IN_CHUNK)) {
+      const u = m[0].startsWith('/') ? m[0] : '/_next/' + m[0];
+      if (!seen.has(u) && seen.size < MAX_FOLLOWED) {
+        seen.add(u);
+        found.push(u);
+      }
+    }
+    await Promise.all(found.map((u) => put(cache, u)));
+    for (const u of found) if (u.endsWith('.js')) queue.push(u);
+  }
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE);
       // The page must arrive, or this worker does not install and the previous one keeps working.
       if (!(await put(cache, '/'))) throw new Error('the page could not be kept');
-      await Promise.all([...FIXED.slice(1), ...(await namedBy(cache, '/'))].map((u) => put(cache, u)));
+      const named = await namedBy(cache, '/');
+      await Promise.all([...FIXED.slice(1), ...named].map((u) => put(cache, u)));
+      await follow(cache, named);
       await self.skipWaiting();
     })(),
   );
@@ -151,8 +179,9 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         const cache = await caches.open(CACHE);
         const key = path + url.search;
-        // The engine is asked for with and without a version in the address; both are the same file within one cache.
-        const hit = (await cache.match(key)) || (path.startsWith('/vendor/') ? await cache.match(path) : undefined);
+        // A file is asked for with and without a query (the engine's version, a deployment id); the name carries the
+        // content, so both are the same file within one cache.
+        const hit = (await cache.match(key)) || (url.search ? await cache.match(path) : undefined);
         if (hit) return hit;
         const res = await fetch(req);
         if (res.ok) event.waitUntil(cache.put(key, res.clone()));

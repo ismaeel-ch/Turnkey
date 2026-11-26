@@ -15,11 +15,12 @@
  *
  * A call that stops before the provider reports its usage (the visitor left, or the answer hit the size limit) is
  * still paid for, so it is counted from an estimate: about four characters to a token, for the prompt and for the
- * text that came back.
+ * text that came back. So is a call whose provider finished without reporting usage at all.
  *
  * The totals live in this server instance's memory: on Vercel each instance counts its own calls since it started.
  * `spentToday()` is what src/server/guard/limits.ts checks against LLM_DAILY_SPEND_USD.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { log as serverLog, noteModelCall } from '../log';
 import { costOf, effortFor } from './features';
 import type { ChatChunk, ChatRequest, Provider, Usage } from './types';
@@ -104,9 +105,55 @@ function shouldLog(env: Env): boolean {
   return !env.VITEST;
 }
 
+/**
+ * What one model call cost, as an agent run reports it to the browser (a CUSTOM `usage` AG-UI event). Model names,
+ * token counts and dollars only: never the prompt, the answer, the provider's address or a key.
+ */
+export type CallUsage = {
+  model: string;
+  tier: ChatRequest['tier'];
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  /** null when the model is missing from the price table. */
+  costUsd: number | null;
+  ms: number;
+  /** True when the call stopped before the provider reported its usage, so the tokens are an estimate. */
+  estimated: boolean;
+};
+
+const meters = new AsyncLocalStorage<(call: CallUsage) => void>();
+
+/**
+ * Runs `fn` with a meter: every model call that ends inside it, however deep, is also passed to `onCall`. An agent
+ * run uses this to tell the browser what each of its calls cost. A meter that throws never stops the call.
+ */
+export function meterCalls<T>(onCall: (call: CallUsage) => void, fn: () => T): T {
+  return meters.run(onCall, fn);
+}
+
 /** Adds one finished call to the totals and logs it. */
-export function recordUsage(r: UsageRecord, env: Env = process.env, log?: (line: string) => void) {
-  noteModelCall(r.usage); // the request's own log line (src/server/log.ts) carries its calls' tokens and cost
+export function recordUsage(r: UsageRecord, env: Env = process.env, log?: (line: string) => void, estimated = false) {
+  noteModelCall(r.usage);
+  const meter = meters.getStore();
+  if (meter)
+    try {
+      const c = Math.round((r.usage.costUsd ?? NaN) * 1e6) / 1e6;
+      meter({
+        model: r.model,
+        tier: r.tier,
+        input: r.usage.input ?? 0,
+        output: r.usage.output ?? 0,
+        cacheRead: r.usage.cacheRead ?? 0,
+        cacheWrite: r.usage.cacheWrite ?? 0,
+        costUsd: Number.isFinite(c) ? c : null,
+        ms: r.ms,
+        estimated,
+      });
+    } catch {
+      // the browser's copy of the numbers must never break the call itself
+    } // the request's own log line (src/server/log.ts) carries its calls' tokens and cost
   totals.calls += 1;
   totals.input += r.usage.input ?? 0;
   totals.output += r.usage.output ?? 0;
@@ -158,10 +205,12 @@ export function withUsage(inner: Provider, env: Env = process.env, log?: (line: 
             continue;
           }
           settled = true;
-          const usage: Usage = { ...chunk.usage };
+          // A gateway that leaves usage out of its stream still bills the call: estimate it, as for a call cut short,
+          // so the daily dollar cap does not go blind.
+          const usage: Usage = chunk.usage ? { ...chunk.usage } : estimateUsage(request, outChars);
           if (usage.costUsd === undefined) {
             const cost = costOf(model, usage);
-            if (cost !== null && chunk.usage) usage.costUsd = cost;
+            if (cost !== null) usage.costUsd = cost;
           }
           recordUsage(
             { provider: inner.id, model, tier: request.tier, effort: effortFor(request), usage, ms: Date.now() - started },
@@ -185,6 +234,7 @@ export function withUsage(inner: Provider, env: Env = process.env, log?: (line: 
             { provider: inner.id, model, tier: request.tier, effort: effortFor(request), usage, ms: Date.now() - started },
             env,
             log,
+            true,
           );
         }
       }

@@ -2,8 +2,8 @@ name: Live site check
 
 # Runs the production smoke test (tests/e2e/smoke.cjs) against the live site, by hand only. Use it to check the live
 # site between releases, for example after changing an environment variable in Vercel. It never runs on its own, so
-# it adds nothing to the CI on pull requests. It makes at most one small model call (the health probe), and only when
-# a model is configured. Each run also leaves one short link named release-check in the short-link store.
+# it adds nothing to the CI on pull requests. When a model is configured it runs one Live build of the clinic sample
+# (about ten model calls) and one health probe; turn the build off with the live_build input. Each run also leaves one short link named release-check in the short-link store.
 
 on:
   workflow_dispatch:
@@ -17,6 +17,11 @@ on:
         description: Version the site should report, for example v0.3.2 (leave empty to skip this check)
         required: false
         type: string
+      live_build:
+        description: Run one Live build of the clinic sample (about ten model calls)
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -29,7 +34,7 @@ jobs:
   smoke:
     name: smoke test the live site
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -43,4 +48,5 @@ jobs:
         env:
           TK_URL: ${{ inputs.url }}
           EXPECT_VERSION: ${{ inputs.version }}
+          SMOKE_LIVE_BUILD: ${{ inputs.live_build && '1' || '0' }}
         run: node tests/e2e/smoke.cjs
