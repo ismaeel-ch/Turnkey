@@ -21,6 +21,8 @@ const eslintConfig = defineConfig([
       'src/workspace/icons.ts',
       'src/workspace/quests.ts',
       'src/workspace/registry.ts',
+      'src/workspace/viewspec.tsx',
+      'src/workspace/changes.ts',
     ],
     rules: {
       '@typescript-eslint/ban-ts-comment': 'off',

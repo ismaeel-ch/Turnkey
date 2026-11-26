@@ -1,7 +1,22 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
 import { render } from '@/platform/dom';
+import type {
+  AppDef,
+  AppTable,
+  BackedDef,
+  BriefedDef,
+  Check,
+  ColumnDef,
+  Dash as DashSpec,
+  DashWidget,
+  DashWidgetKind,
+  Screen,
+  TourStep,
+  Untrusted,
+  ViewSpec,
+} from '@/shared/types/app';
+import type { AppRecord, Dict } from '@/shared/types/workspace';
 import { ICONS } from './icons';
-import { arr, label, snake, str } from './core';
+import { arr, errText, label, snake, str } from './core';
 import { ACCENTS, LIMITS, VIEW_ICON, VIEW_LABEL, VIEW_TYPES, accOf, appUsers, chk, colOf, roleName, tableOf } from './engine';
 import { canRunTeam } from './team';
 import { suggestBoard } from './room';
@@ -14,8 +29,8 @@ import { Dash } from './views-b';
 /* ===== Turnkey prototype · the view catalog, the View advisor's output, screens =====
    The catalog is a registry: a view is one component plus one rule that says which tables it fits.
    The View advisor agent recommends views per table; code checks every recommendation against the rule. */
-export const DATA_VIEWS = ['table', 'board', 'calendar', 'timeline', 'chart', 'pivot', 'tree', 'cards'];
-export const VIEW_ALIAS = {
+export const DATA_VIEWS: readonly string[] = ['table', 'board', 'calendar', 'timeline', 'chart', 'pivot', 'tree', 'cards'];
+export const VIEW_ALIAS: Dict<string> = {
   list: 'table',
   grid: 'table',
   kanban: 'board',
@@ -27,7 +42,7 @@ export const VIEW_ALIAS = {
   gantt: 'timeline',
   schedule: 'calendar',
 };
-export const VIEW_WHAT = {
+export const VIEW_WHAT: Dict<string> = {
   table: 'Rows and columns with sorting, grouping and totals',
   board: 'Cards in columns, moved by drag and drop',
   calendar: 'Records on the days they happen',
@@ -37,10 +52,10 @@ export const VIEW_WHAT = {
   tree: 'Records nested under groups or parents',
   cards: 'A gallery of records for scanning',
 };
-export const isCat = (c) => ['select', 'user', 'ref', 'bool'].includes(c.type),
-  isDate = (c) => c.type === 'date' || c.type === 'datetime',
-  isNum = (c) => c.type === 'number' || c.type === 'money';
-export function viewFit(def, t, type) {
+export const isCat = (c: ColumnDef) => ['select', 'user', 'ref', 'bool'].includes(c.type),
+  isDate = (c: ColumnDef) => c.type === 'date' || c.type === 'datetime',
+  isNum = (c: ColumnDef) => c.type === 'number' || c.type === 'money';
+export function viewFit(def: AppDef, t: AppTable, type: string): string | null {
   // null when the view fits the table, otherwise the reason it does not
   const cats = t.columns.filter(isCat).length,
     dates = t.columns.filter(isDate).length,
@@ -64,20 +79,23 @@ export function viewFit(def, t, type) {
       return 'is not in the view catalog';
   }
 }
-export const guessEnd = (t, start) => {
+export const guessEnd = (t: AppTable, start: string | null) => {
   const c = t.columns.find((x) => x.type === 'date' && x.name !== start && /end|until|due|finish/.test(x.name));
   return c ? c.name : null;
 };
-export const normMeasure = (t, m) => {
+export const normMeasure = (t: AppTable, m: unknown) => {
   const x = /^(sum|avg):(.+)$/.exec(String(m || ''));
-  return x && colOf(t, snake(x[2])) && isNum(colOf(t, snake(x[2]))) ? x[1] + ':' + snake(x[2]) : 'count';
+  const c = x && colOf(t, snake(x[2]));
+  return x && c && isNum(c) ? x[1] + ':' + snake(x[2]) : 'count';
 };
-export function viewCfg(def, t, type, u) {
+/** The columns a view of a table needs (`by`, `date`, `x` and so on), keeping the advisor's choices that are valid. */
+export type ViewCfg = Dict<string | string[] | null>;
+export function viewCfg(def: AppDef, t: AppTable, type: string, u: Untrusted): ViewCfg {
   // fills in the columns a view needs, keeping the advisor's choices when they are valid
   u = u || {};
   const P = def.process && def.process.table === t.name ? def.process : null,
     status = P ? P.column : null;
-  const col = (n, test) => {
+  const col = (n: unknown, test?: (c: ColumnDef) => boolean) => {
     const c = colOf(t, snake(n));
     return c && (!test || test(c)) ? c.name : null;
   };
@@ -85,9 +103,9 @@ export function viewCfg(def, t, type, u) {
     dates = t.columns.filter(isDate),
     sels = t.columns.filter((c) => c.type === 'select'),
     self = t.columns.find((c) => c.type === 'ref' && c.ref === t.name);
-  const firstCat = (skip) =>
-    (cats.find((c) => c.name !== skip && c.type !== 'bool' && c.name !== (self && self.name)) || cats.find((c) => c.name !== skip) || {})
-      .name || null;
+  const firstCat = (skip?: string | null) =>
+    (cats.find((c) => c.name !== skip && c.type !== 'bool' && c.name !== (self && self.name)) || cats.find((c) => c.name !== skip))?.name ||
+    null;
   switch (type) {
     case 'board':
       return {
@@ -128,20 +146,20 @@ export function viewCfg(def, t, type, u) {
     case 'tree': {
       const lv = arr(u.levels)
         .map((n) => col(n, isCat))
-        .filter(Boolean)
+        .filter((n): n is string => !!n)
         .slice(0, 3);
       return {
         parent: self ? self.name : null,
-        levels: lv.length ? lv : [firstCat(status), status].filter(Boolean).slice(0, 2),
+        levels: lv.length ? lv : [firstCat(status), status].filter((n): n is string => !!n).slice(0, 2),
       };
     }
     default:
       return {};
   }
 }
-export function normDashWidget(w, def) {
+export function normDashWidget(w: Untrusted, def: AppDef): DashWidget | null {
   w = w || {};
-  const kind = ['kpi', 'bar', 'stack', 'line', 'recent'].includes(w.kind)
+  const kind: DashWidgetKind | null = ['kpi', 'bar', 'stack', 'line', 'recent'].includes(w.kind)
       ? w.kind
       : w.kind === 'count' || w.kind === 'sum'
         ? 'kpi'
@@ -152,7 +170,7 @@ export function normDashWidget(w, def) {
   if (!kind || !t) return null;
   const x = colOf(t, snake(w.x || w.column)),
     split = colOf(t, snake(w.split)),
-    where = {};
+    where: Dict<unknown> = {};
   if (w.where && typeof w.where === 'object')
     Object.keys(w.where).forEach((k) => {
       const c = colOf(t, snake(k));
@@ -172,9 +190,15 @@ export function normDashWidget(w, def) {
     where,
   };
 }
-export function normViews(o, def) {
+/** The View advisor's answer, once normalised. */
+export interface ViewsDraft {
+  views: Dict<ViewSpec[]>;
+  dash: DashSpec;
+  dropped: number;
+}
+export function normViews(o: Untrusted, def: AppDef): ViewsDraft {
   o = o || {};
-  const views = {},
+  const views: Dict<ViewSpec[]> = {},
     d = o.dashboard || {};
   def.tables.forEach((t) => {
     views[t.name] = [];
@@ -182,7 +206,7 @@ export function normViews(o, def) {
   arr(o.views).forEach((v) => {
     const t = tableOf(def, snake(v && v.table));
     if (!t) return;
-    arr(v.use).forEach((u) => {
+    arr(v.use).forEach((u: Untrusted) => {
       u =
         typeof u === 'string'
           ? {
@@ -215,7 +239,7 @@ export function normViews(o, def) {
     all = arr(d.widgets),
     widgets = all
       .map((w) => normDashWidget(w, def))
-      .filter(Boolean)
+      .filter((w): w is DashWidget => !!w)
       .slice(0, 10);
   return {
     views,
@@ -224,7 +248,7 @@ export function normViews(o, def) {
       date:
         dc && isDate(dc)
           ? {
-              table: dt.name,
+              table: (dt as AppTable).name,
               column: dc.name,
             }
           : null,
@@ -233,7 +257,7 @@ export function normViews(o, def) {
     dropped: all.length - widgets.length,
   };
 }
-export function mendViews(o, def) {
+export function mendViews(o: Untrusted, def: BackedDef) {
   // last attempt: keep what fits from the advisor's answer and fill the gaps by rule, instead of failing the build
   const vw = normViews(o, def),
     sug = normViews(suggestViews(def), def);
@@ -245,10 +269,10 @@ export function mendViews(o, def) {
     vw.dash = sug.dash;
   return vw;
 }
-export function checkViews(def, vw) {
-  const out = [],
+export function checkViews(def: AppDef, vw: ViewsDraft) {
+  const out: Check[] = [],
     thin = def.tables.filter((t) => vw.views[t.name].length < 2).map((t) => t.label),
-    misfit = [];
+    misfit: string[] = [];
   def.tables.forEach((t) =>
     vw.views[t.name].forEach((v) => {
       const why = viewFit(def, t, v.type);
@@ -280,10 +304,10 @@ export function checkViews(def, vw) {
   );
   return out;
 }
-export function suggestViews(def) {
+export function suggestViews(def: BackedDef) {
   // the rule-based plan: used when the advisor cannot pass, and for tables added later
   const P = def.process,
-    pt = tableOf(def, P.table),
+    pt = tableOf(def, P.table) as AppTable,
     views = def.tables.map((t) => ({
       table: t.name,
       use: DATA_VIEWS.filter((v) => !viewFit(def, t, v)).map((v) => ({
@@ -292,7 +316,7 @@ export function suggestViews(def) {
     }));
   const cat = pt.columns.find((c) => isCat(c) && c.name !== P.column),
     date = pt.columns.find(isDate),
-    w = [
+    w: Dict<unknown>[] = [
       {
         kind: 'kpi',
         label: pt.label,
@@ -326,7 +350,7 @@ export function suggestViews(def) {
   if (cat)
     w.push({
       kind: 'stack',
-      label: pt.label + ' by ' + cat.label.toLowerCase(),
+      label: pt.label + ' by ' + String(cat.label).toLowerCase(),
       table: pt.name,
       x: cat.name,
       split: P.column,
@@ -350,18 +374,18 @@ export function suggestViews(def) {
     },
   };
 }
-export function refreshViews(app) {
+export function refreshViews(app: AppRecord & { def: BackedDef }) {
   // after a change to the tables: keep the advisor's plan where it still fits, and fill the gaps by rule
   const def = app.def,
     sug = suggestViews(def),
-    ruleFor = (t) =>
+    ruleFor = (t: AppTable) =>
       (
         sug.views.find((v) => v.table === t.name) || {
           use: [],
         }
       ).use;
-  const use = (t) => {
-    const kept = ((def.views || {})[t.name] || []).filter((v) => !viewFit(def, t, v.type));
+  const use = (t: AppTable): { type: string }[] => {
+    const kept: { type: string }[] = ((def.views || {})[t.name] || []).filter((v) => !viewFit(def, t, v.type));
     return kept.length >= 2 ? kept : kept.concat(ruleFor(t).filter((v) => !kept.some((k) => k.type === v.type)));
   };
   let vw = normViews(
@@ -389,13 +413,13 @@ export function refreshViews(app) {
   def.dash = vw.dash;
   return vw;
 }
-export function migrateApp(app) {
+export function migrateApp(app: AppRecord) {
   // apps saved by an earlier version of this page get what the View advisor would have written
   app.flow = normFlow(app.flow);
   if (!app.reviews) app.reviews = {}; // and the standard workflow, which is theirs to change
   Object.keys(app.reviews).forEach((k) => {
     const R = app.reviews[k];
-    if (!REVIEWERS[k] || !R || R.status !== 'ok' || !app.flow.reviewers.includes(k)) delete app.reviews[k];
+    if (!(REVIEWERS as Dict<unknown>)[k] || !R || R.status !== 'ok' || !app.flow.reviewers.includes(k)) delete app.reviews[k];
     else
       arr(R.findings).forEach((f) => {
         if (f.state === 'applying') f.state = 'open';
@@ -412,9 +436,9 @@ export function migrateApp(app) {
   if (!def.theme.density) def.theme.density = 'comfortable';
   if (!def.views) def.views = {};
   if (def.screens.length && def.screens[0].type !== 'dashboard' && def.screens.some((s) => s.type === 'dashboard'))
-    def.screens.sort((a, b) => (b.type === 'dashboard') - (a.type === 'dashboard')); // the overview comes first
+    def.screens.sort((a, b) => Number(b.type === 'dashboard') - Number(a.type === 'dashboard')); // the overview comes first
   if (!def.process || !def.tables.length || !def.brief || (def.dash && Object.keys(def.views).length)) return;
-  const vw = refreshViews(app),
+  const vw = refreshViews(app as AppRecord & { def: BackedDef }),
     L = app.line.views,
     roleIds = def.brief.roles.map((r) => r.id);
   let dash = def.screens.find((s) => s.type === 'dashboard');
@@ -453,7 +477,7 @@ export function migrateApp(app) {
   }
   app.rev = (app.rev || 0) + 1;
 }
-export function viewsOf(def, t) {
+export function viewsOf(def: AppDef, t: AppTable): ViewSpec[] {
   const v = (def.views && def.views[t.name]) || [];
   return v.length
     ? v
@@ -464,12 +488,12 @@ export function viewsOf(def, t) {
         },
       ];
 }
-export function renderViewsTest(app) {
+export function renderViewsTest(app: AppRecord) {
   // mount every recommended view of every table, and the dashboard, with the real data
   const def = app.def,
     users = appUsers(app),
     host = document.createElement('div'),
-    fails = [];
+    fails: string[] = [];
   let n = 0;
   def.tables.forEach((t) => {
     const u = users.find((x) => accOf(def, x.role, t.name).list !== 'none');
@@ -493,7 +517,7 @@ export function renderViewsTest(app) {
         );
         if (!host.querySelector('.vx-body')) throw new Error('nothing drawn');
       } catch (e) {
-        fails.push(label(v.type) + ' on ' + t.name + ': ' + ((e && e.message) || e));
+        fails.push(label(v.type) + ' on ' + t.name + ': ' + errText(e));
       }
     });
   });
@@ -519,12 +543,12 @@ export function renderViewsTest(app) {
       );
       if (!host.querySelector('.dash')) throw new Error('nothing drawn');
     } catch (e) {
-      fails.push('Dashboard: ' + ((e && e.message) || e));
+      fails.push('Dashboard: ' + errText(e));
     }
   }
   try {
     render(null, host);
-  } catch (e) {}
+  } catch {}
   return chk(
     'Every view and the dashboard draw with the real data',
     !fails.length,
@@ -533,7 +557,7 @@ export function renderViewsTest(app) {
 }
 
 /* ---------- screens: which pages each role gets, and the layout ---------- */
-export const mayOpen = (def, r, type, tn) =>
+export const mayOpen = (def: AppDef, r: string, type: string, tn: string) =>
   type === 'dashboard'
     ? true
     : type === 'agents'
@@ -541,13 +565,20 @@ export const mayOpen = (def, r, type, tn) =>
       : type === 'form'
         ? accOf(def, r, tn).create
         : accOf(def, r, tn).list !== 'none';
-export function normUI(o, def) {
+/** The UI agent's answer, once normalised. */
+export interface UIDraft {
+  theme: AppDef['theme'];
+  screens: Screen[];
+  tour: TourStep[];
+  actions: AppDef['actions'];
+}
+export function normUI(o: Untrusted, def: BackedDef): UIDraft {
   o = o || {};
   const roleIds = def.brief.roles.map((r) => r.id),
     th = o.theme || {};
   let n = 0;
-  const screens = arr(o.screens)
-    .map((s) => {
+  const screens: Screen[] = arr(o.screens)
+    .map((s: Untrusted): Screen | null => {
       s = s || {};
       let type = String(s.type || 'table').toLowerCase();
       type = VIEW_ALIAS[type] || type;
@@ -555,9 +586,13 @@ export function normUI(o, def) {
       if (type === 'agents' && !def.team) return null;
       const t =
         tableOf(def, snake(s.table)) ||
-        (type === 'dashboard' ? tableOf(def, def.process.table) : type === 'agents' ? tableOf(def, def.team.input.table) : null);
+        (type === 'dashboard'
+          ? tableOf(def, def.process.table)
+          : type === 'agents' && def.team
+            ? tableOf(def, def.team.input.table)
+            : null);
       if (t && DATA_VIEWS.includes(type) && viewFit(def, t, type)) type = 'table';
-      const scr = {
+      const scr: Screen = {
         id: 's' + ++n,
         name: str(s.name) || (t ? t.label : 'Screen ' + n),
         type,
@@ -570,10 +605,10 @@ export function normUI(o, def) {
               .map(snake)
               .filter((c) => colOf(t, c))
           : [],
-        icon: ICONS[s.icon] ? s.icon : VIEW_ICON[type],
+        icon: (ICONS as Dict<string>)[s.icon] ? s.icon : VIEW_ICON[type],
       };
       if (t) scr.roles = (scr.roles.length ? scr.roles : roleIds).filter((r) => mayOpen(def, r, type, t.name));
-      if (t && !scr.columns.length)
+      if (t && !(scr.columns || []).length)
         scr.columns = t.columns
           .filter((c) => c.type !== 'longtext')
           .slice(0, 6)
@@ -597,14 +632,15 @@ export function normUI(o, def) {
       }
       return scr;
     })
-    .filter(Boolean)
+    .filter((s): s is Screen => !!s)
     .slice(0, LIMITS.screens);
-  if (def.team && !screens.some((s) => s.type === 'agents'))
+  const team = def.team;
+  if (team && !screens.some((s) => s.type === 'agents'))
     screens.unshift({
       id: 's' + ++n,
       name: 'Agents',
       type: 'agents',
-      table: def.team.input.table,
+      table: team.input.table,
       roles: roleIds.filter((r) => canRunTeam(def, r)),
       columns: [],
       icon: 'bot',
@@ -625,11 +661,11 @@ export function normUI(o, def) {
     screens.push(dash);
   }
   roleIds.forEach((r) => {
-    if (!screens.some((s) => s.type === 'dashboard' && s.roles.includes(r))) dash.roles.push(r);
+    if (!screens.some((s) => s.type === 'dashboard' && s.roles.includes(r))) (dash as Screen).roles.push(r);
   });
-  screens.sort((a, b) => (b.type === 'dashboard') - (a.type === 'dashboard')); // the overview comes first, for everyone
-  const tour = arr(o.tour)
-    .map((x) => {
+  screens.sort((a, b) => Number(b.type === 'dashboard') - Number(a.type === 'dashboard')); // the overview comes first, for everyone
+  const tour: TourStep[] = arr(o.tour)
+    .map((x: Untrusted) => {
       x = x || {};
       return {
         role: snake(x.role),
@@ -646,7 +682,7 @@ export function normUI(o, def) {
     .filter((x) => roleIds.includes(x.role))
     .slice(0, 10);
   const actions = arr(o.actions)
-    .map((a) => ({
+    .map((a: Untrusted) => ({
       id: snake(a.id || a.label),
       label: str(a.label),
       table: snake(a.table),
@@ -659,7 +695,7 @@ export function normUI(o, def) {
     theme: {
       accent: ACCENTS.includes(th.accent) ? th.accent : 'blue',
       nav: ['top', 'rail', 'side'].includes(th.nav) ? th.nav : 'side',
-      icon: ICONS[th.icon] ? th.icon : 'apps',
+      icon: (ICONS as Dict<string>)[th.icon] ? th.icon : 'apps',
       density: th.density === 'compact' ? 'compact' : 'comfortable',
     },
     screens,
@@ -667,8 +703,8 @@ export function normUI(o, def) {
     actions,
   };
 }
-export function checkScreensShape(def, ui) {
-  const out = [],
+export function checkScreensShape(def: BriefedDef, ui: Pick<UIDraft, 'screens'>) {
+  const out: Check[] = [],
     S0 = ui.screens,
     roles = def.brief.roles;
   const ghost = S0.filter((s) => !tableOf(def, s.table)).map((s) => s.name);
@@ -681,9 +717,9 @@ export function checkScreensShape(def, ui) {
   );
   const lone = roles.filter((r) => !S0.some((s) => s.type !== 'dashboard' && s.roles.includes(r.id))).map((r) => r.name);
   out.push(chk('Every role has at least one working screen', !lone.length, lone.length ? 'no screen for ' + lone.join(', ') : ''));
-  const misfit = S0.filter((s) => DATA_VIEWS.includes(s.type) && tableOf(def, s.table) && viewFit(def, tableOf(def, s.table), s.type)).map(
-    (s) => s.name + ' (' + s.type + ')',
-  );
+  const misfit = S0.filter(
+    (s) => DATA_VIEWS.includes(s.type) && tableOf(def, s.table) && viewFit(def, tableOf(def, s.table) as AppTable, s.type),
+  ).map((s) => s.name + ' (' + s.type + ')');
   out.push(
     chk(
       'Each screen opens a view its table supports',
@@ -695,7 +731,7 @@ export function checkScreensShape(def, ui) {
             .join(', '),
     ),
   );
-  const leak = [];
+  const leak: string[] = [];
   S0.forEach((s) => {
     if (!tableOf(def, s.table) || s.type === 'dashboard') return;
     s.roles.forEach((r) => {

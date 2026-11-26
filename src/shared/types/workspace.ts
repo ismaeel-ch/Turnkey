@@ -7,7 +7,7 @@
  * The workspace modules are typed one at a time. Fields that only untyped modules read stay loose (`Loose`) until the
  * module that owns them is typed and can say what they hold.
  */
-import type { AppDef } from './app';
+import type { AppDef, Check, Row } from './app';
 
 /** A value whose shape is not described yet. Narrow it where you read it. */
 export type Loose = unknown;
@@ -65,11 +65,69 @@ export interface AppRecord {
   updated: number;
   shared?: { key: string } | null;
   def: AppDef;
+  /** the state of each station of the build line, by station id */
+  line: Dict<StationLine>;
+  /** the owner's build workflow for this app (src/workspace/custom.tsx) */
+  flow: AppFlow;
+  /** reviewer agents' last reviews, by reviewer id */
+  reviews: Dict<Review>;
+  /** goes up by one with every change to the definition */
+  rev: number;
   /** the seed rows by table, kept so "Reset data" can put them back */
-  seed?: { rows: Dict<Loose[]> } | null;
+  seed?: { rows: Dict<Row[]> } | null;
   /** the last permission matrix the Backend check ran */
   matrix?: { at: number; calls: number; refused: number; failed: string[] };
+  /** the last ten runs of the build line, oldest first */
+  runs: Run[];
+  /** the conversation with the agents, newest last */
+  chat: ChatMessage[];
   [field: string]: Loose;
+}
+
+/** One step of a run, as the timeline shows it. */
+export interface RunStep {
+  station: string;
+  agent: string;
+  label: string;
+  kind: string;
+  t0: number;
+  t1: number | null;
+  ok: boolean | null;
+  [field: string]: Loose;
+}
+
+/** One run of the build line: a full build, a change or a re-run. */
+export interface Run {
+  id: string;
+  n: number;
+  kind: string;
+  label: string;
+  mode: string;
+  t0: number;
+  t1: number | null;
+  status: string;
+  steps: RunStep[];
+  calls: number;
+  replayed: number;
+  tokIn: number;
+  tokOut: number;
+  retries: number;
+  [field: string]: Loose;
+}
+
+/** A card under a chat message: an approval, a list of changes, an error and so on. `type` says which. */
+export interface ChatCard {
+  type: string;
+  [field: string]: Loose;
+}
+
+export interface ChatMessage {
+  id: string;
+  t: number;
+  /** `user` or an agent id */
+  from: string;
+  text: string;
+  card: ChatCard | null;
 }
 
 export interface State {
@@ -301,4 +359,30 @@ export interface AccessRule {
   create: boolean;
   update: string;
   delete: boolean;
+}
+
+/** Where one station of the build line is: its status, its attempts and the checks its last output got. */
+export interface StationLine {
+  status: string;
+  attempt: number;
+  attempts: Loose[];
+  checks: Check[];
+  facts: string[];
+  note: string | null;
+  /** the walkthrough's result for each tour step */
+  results: { ok?: boolean; detail?: string; [field: string]: Loose }[];
+  [field: string]: Loose;
+}
+
+/** An app's build workflow: stations, approvals, added agents and reviewers. */
+export interface AppFlow {
+  reviewers: string[];
+  [field: string]: Loose;
+}
+
+/** A reviewer agent's review of an app, with its findings. */
+export interface Review {
+  status: string;
+  findings: { state: string; [field: string]: Loose }[];
+  [field: string]: Loose;
 }

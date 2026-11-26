@@ -35,7 +35,8 @@ import { rowTitle } from './runtime';
    The Backend agent writes the team as data: who the agents are, which table each one writes, and which
    workflow actions open and close a run. This engine runs any such team. Every write goes through the app's
    own API as the person who pressed Run, so the access rules apply to the agents as well. */
-export const TEAMS = {}; // app id -> the run in progress, or the last one
+/** App id -> the run in progress, or the last one. */
+export const TEAMS: Record<string, { status: string; [field: string]: unknown }> = {};
 export class TeamStop extends Error {}
 export function normTeam(o, def, P) {
   if (!o || typeof o !== 'object') return null;
