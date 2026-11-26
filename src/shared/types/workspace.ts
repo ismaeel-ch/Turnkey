@@ -432,7 +432,7 @@ export interface ViewState {
   /** the app whose chat message the orchestrator is reading */
   busy: string | null;
   /** the last connector tool tried on the Connections page */
-  connOut: { id: string; tool: string; r: { ok: boolean; result: Loose } } | null;
+  connOut: { id: string; tool: string; r: { ok: boolean; result: Loose }; real?: boolean; busy?: boolean } | null;
   /** the first-run onboarding form, while it is open */
   ob: OnboardingForm | null;
   /** the sign-in form, while it is open */
