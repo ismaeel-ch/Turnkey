@@ -79,7 +79,7 @@ export function keyLabel(name: string, apple: boolean): string[] {
   return name.split(' ').map((part) =>
     part
       .split('+')
-      .map((p) => (p === 'mod' ? (apple ? '⌘' : 'Ctrl') : p === 'shift' ? 'Shift' : p.length === 1 ? p.toUpperCase() : p))
+      .map((p) => (p === 'mod' ? (apple ? '⌘' : 'Ctrl') : p === 'shift' ? (apple ? '⇧' : 'Shift') : p.length === 1 ? p.toUpperCase() : p))
       .join(apple ? '' : '+'),
   );
 }

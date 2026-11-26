@@ -27,6 +27,8 @@ import { RUNS, stopRun } from './line';
 import { toggleAgentsPanel } from './activity';
 import { DETAILS, VIEWS, rebuildAsk } from './shell-a';
 import { openShare } from './share';
+import { redo, redoable, undo, undoable } from './history';
+import { openHistory } from './history-ui';
 import { startTour } from './shell-c';
 
 export interface Command extends Rankable {
@@ -134,6 +136,37 @@ export function commandsNow(): Command[] {
       run: () => openDialog('workflow', { app: app.id }),
     });
 
+  if (app && ready) {
+    if (undoable(app))
+      add({
+        id: 'undo',
+        group: 'Changes',
+        title: 'Undo the last change',
+        icon: 'undo',
+        keys: 'mod+z',
+        keywords: 'revert back',
+        run: () => undo(app),
+      });
+    if (redoable(app))
+      add({
+        id: 'redo',
+        group: 'Changes',
+        title: 'Redo',
+        icon: 'undo',
+        keys: 'mod+shift+z',
+        keywords: 'again forward',
+        run: () => redo(app),
+      });
+    add({
+      id: 'history',
+      group: 'Changes',
+      title: 'Version history',
+      icon: 'history',
+      keywords: 'versions restore undo',
+      run: () => openHistory(app),
+    });
+  }
+
   if (online())
     add({
       id: 'live',
@@ -220,6 +253,8 @@ export function commandsNow(): Command[] {
 /** The shortcuts the "?" dialog lists. Single keys can be switched off in Settings (WCAG 2.1.4). */
 export const SHORTCUTS: { keys: string; text: string; single: boolean }[] = [
   { keys: 'mod+k', text: 'Open the command palette', single: false },
+  { keys: 'mod+z', text: 'Undo the last change to the app', single: false },
+  { keys: 'mod+shift+z', text: 'Redo it', single: false },
   { keys: '?', text: 'Show these shortcuts', single: true },
   { keys: 'g h', text: 'Go home', single: true },
   { keys: 'g b', text: 'Go to the Build view', single: true },

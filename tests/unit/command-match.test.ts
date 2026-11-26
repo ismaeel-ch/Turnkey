@@ -71,3 +71,10 @@ describe('keyLabel', () => {
     expect(keyLabel('?', true)).toEqual(['?']);
   });
 });
+
+describe('keyLabel with Shift', () => {
+  it('uses the Shift symbol on Apple keyboards', () => {
+    expect(keyLabel('mod+shift+z', true)).toEqual(['⌘⇧Z']);
+    expect(keyLabel('mod+shift+z', false)).toEqual(['Ctrl+Shift+Z']);
+  });
+});
