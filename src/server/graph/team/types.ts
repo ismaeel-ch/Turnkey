@@ -1,7 +1,7 @@
 /**
  * What goes in and what comes out of a team run. Server only.
  *
- * The team definition is the one the workspace saves in `def.team` (see src/legacy/team.js, `normTeam`). The browser
+ * The team definition is the one the workspace saves in `def.team` (see src/workspace/team.tsx, `normTeam`). The browser
  * owns the app's database, so the server never writes rows itself: each agent's answer comes back as events and as
  * an output object, and the workspace applies it through the app's own API exactly as the prototype does.
  */

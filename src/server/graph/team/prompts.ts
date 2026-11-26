@@ -1,4 +1,4 @@
-/** The words each agent and the checker are given. Server only. A port of `teamPrompt` in src/legacy/team.js. */
+/** The words each agent and the checker are given. Server only. A port of `teamPrompt` in src/workspace/team.tsx. */
 import type { AgentOutput, AgentSpec, Note, TableSpec, TeamRequest } from './types';
 import type { ToolInfo } from './tools';
 
