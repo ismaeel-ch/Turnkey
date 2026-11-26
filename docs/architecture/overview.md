@@ -3,25 +3,26 @@
 This page shows how Turnkey is put together and how its agents work with each other. Every diagram is written in
 Mermaid, so GitHub draws it from the text in this file.
 
-**Status words used below.** _Built_ means it is in `main` and covered by the browser checks. _Planned_ means another
-work package is building it and it is not merged yet; the work package number (WP-nn) points to its issue. When one
-merges, this page is updated in a follow-up pull request. In the diagrams, planned parts have a dashed outline.
+**Status words used below.** _Built_ means it is in `main` and covered by tests. Everything on this page is built
+unless it says _planned_. Updated 26 Nov 2026, after release v0.3.2.
 
-Two facts to keep in mind while reading:
+Three facts to keep in mind while reading:
 
-- The agents' orchestration (stations, checks, send-backs, approvals, the Tester, app agent teams, changes from chat)
-  is built, and runs in the browser from `src/workspace`. Each agent's model call goes to the server.
-- On the server, `main` has the model gateway with five providers, the guard rails, the AG-UI agent registry inside
-  the CopilotKit runtime, and connectors to five public sources. The build workflow as a LangGraph graph is built in
-  `src/platform/orchestrator` but not yet wired in. The server-side agent graphs (WP-05, WP-06) and the wiring (WP-16)
-  are planned.
-- Code, not a model, decides whether an agent's answer is good enough. The Orchestrator is code.
+- The build is driven from the browser. The owner's workflow is compiled into a LangGraph graph
+  (`src/platform/orchestrator`) that decides the order: stations, checks, send-backs, approvals, added steps, the
+  Tester. The app's database lives in the browser too, so code there applies and checks each answer.
+- In Live, every agent's turn runs on the server: the browser asks agent `step` in the CopilotKit runtime over AG-UI,
+  and the server runs one small LangGraph graph (draft, validate against the role's schema, repair). An app's own
+  agent team runs on the server as a LangGraph graph of its own, with lookups in public sources. In Demo, saved answers
+  are replayed through the same path and no model is called.
+- Code, not a model, decides whether an agent's answer is good enough.
 
 Contents: [1 System context](#1-system-context) · [2 Containers](#2-containers) ·
 [3 The build workflow](#3-the-build-workflow) · [4 One agent step](#4-one-agent-step) ·
 [5 A team run: the fact-check app](#5-a-team-run-the-fact-check-app) · [6 A change from chat](#6-a-change-from-chat) ·
 [7 Deployment pipeline](#7-deployment-pipeline) · [8 The agents at a glance](#8-the-agents-at-a-glance) ·
-[9 The workflow as a graph](#9-the-workflow-as-a-graph)
+[9 The workflow as a graph](#9-the-workflow-as-a-graph) ·
+[10 Guard rails on every model call](#10-guard-rails-on-every-model-call)
 
 ## 1. System context
 
@@ -34,14 +35,14 @@ flowchart LR
   subgraph turnkey["Turnkey (one Next.js project on Vercel)"]
     ws["Workspace in the browser<br/>and its server routes"]
   end
-  gw["LiteLLM gateway<br/>Claude models, key kept on the server"]
+  gw["Claude models<br/>through a Claude API key (live site)<br/>or the LiteLLM gateway; key kept on the server"]
   pub["Public sources<br/>Wikipedia, World Bank, OpenAlex,<br/>arXiv, PatentsView"]
   gh["GitHub<br/>repository and CI"]
   vc["Vercel<br/>builds and hosts"]
   owner --> ws
   user --> ws
   ws -->|"one agent step per request"| gw
-  ws -->|"server-side connectors"| pub
+  ws -->|"team lookups, from the server"| pub
   gh -->|"published release"| vc
   vc -->|"deploys"| turnkey
 ```
@@ -49,10 +50,12 @@ flowchart LR
 Notes:
 
 - With no model configured, saved builds and every screen still work (Demo mode). Live mode needs the gateway.
-- The public-source connectors are built on the server (`src/server/connectors`, `GET /api/connectors/<name>`), but
-  the quest apps in the workspace do not call them yet (planned, workstream "agent teams on the server"). Today the
-  quest apps show saved sample evidence in Demo, and in Live their agents work from what the model knows. The app says so on its About page ("What is real in this
-  prototype", `src/workspace/shell-c.tsx`).
+- In Live, an app's team agents look up public sources from the server (`src/server/graph/team/connector-tools.ts`
+  over `src/server/connectors`). In Demo, the quest apps replay saved runs whose evidence is marked as sample data.
+  The app says so on its About page ("What is real in this prototype").
+- On the live site the model is reached with a Claude API key. The hackathon's LiteLLM gateway is supported by the
+  same gateway code and switched on by environment variables (`src/server/llm/README.md`); the owner chose the API key
+  on 26 Nov.
 
 ## 2. Containers
 
@@ -63,59 +66,68 @@ enforces limits.
 flowchart TB
   subgraph browser["Browser"]
     direction TB
-    ws["Workspace<br/>src/workspace: workflow canvas, six agents,<br/>checks, Tester, teams, rooms, 14 view types"]
-    orch["Workflow graph<br/>src/platform/orchestrator: LangGraph (web)<br/>built, not yet wired in"]
-    agc["AG-UI client<br/>src/platform/agui: runs an agent by id"]
-    mc["Model client<br/>src/platform/model-client.ts"]
+    ws["Workspace<br/>src/workspace: canvas, chat, Agents panel,<br/>runtime for built apps, Tester, rooms"]
+    orch["Workflow graph<br/>src/platform/orchestrator<br/>LangGraph (web): runs every build"]
+    mc["Model client<br/>src/platform/model-client.ts<br/>runs agent step over AG-UI"]
+    ts["Team stream<br/>src/workspace/team-stream.ts"]
+    act["Activity bus<br/>src/platform/agui/activity.ts"]
     sqlite[("SQLite (sql.js, WebAssembly)<br/>one database per app")]
-    store[("Browser storage<br/>app definitions, settings, releases")]
+    store[("IndexedDB<br/>src/platform/storage: workspace,<br/>databases, backups")]
+    ws --> orch
+    orch --> mc
+    ws --> ts
+    mc --> act
+    ts --> act
     ws --> sqlite
     ws --> store
-    ws --> mc
-    ws -.-> orch
-    ws -.-> agc
   end
   subgraph server["Server: Next.js route handlers on Vercel (stateless)"]
     direction TB
-    llm["POST /api/llm<br/>one guarded model call, streamed"]
-    health["GET /api/health<br/>up, model configured, probes"]
     ck["/api/copilotkit<br/>CopilotKit runtime"]
-    reg["AG-UI agent registry<br/>src/server/agui: default (Architect),<br/>echo (mock only); step and team slots"]
-    conr["GET /api/connectors/name"]
-    guard["Guard rails<br/>src/server/guard: rate limits,<br/>daily cap, prompt size, LIVE_MODE switch"]
-    gateway["Model gateway<br/>src/server/llm: LiteLLM, OpenAI-compatible,<br/>Anthropic, Claude Code CLI (local), mock"]
+    reg["AG-UI agent registry<br/>src/server/agui"]
+    step["Agent step graph<br/>src/server/graph/step<br/>guard, draft, validate, repair"]
+    team["Team graph<br/>src/server/graph/team<br/>agent, tools, check, pause"]
+    tr["POST /api/agent/team<br/>AG-UI events over SSE"]
+    schemas["Role schemas<br/>src/server/agents"]
     conn["Connectors<br/>src/server/connectors: Wikipedia, World Bank,<br/>OpenAlex, arXiv, PatentsView"]
-    graphs["LangGraph agent graphs<br/>agent step, app team (planned, WP-05, WP-06)"]
-    llm --> guard --> gateway
+    guard["Guard rails<br/>src/server/guard: prompt policy, rate limits,<br/>daily call and dollar caps, LIVE_MODE"]
+    gateway["Model gateway<br/>src/server/llm: Claude API key, LiteLLM,<br/>OpenAI-compatible, Claude Code CLI (local), mock<br/>effort per tier, prompt caching, cost per call"]
+    share["/api/share<br/>short links, src/server/share"]
+    health["/api/health<br/>backend, commit, calls, spend"]
     ck --> guard
-    ck --> reg --> gateway
+    tr --> guard
+    ck --> reg --> step
+    reg --> team
+    tr --> team
+    step --> schemas
+    step --> gateway
+    team --> gateway
+    team --> conn
     health --> gateway
-    conr --> conn
-    reg -.-> graphs
-    graphs -.-> conn
-    graphs -.-> gateway
   end
-  ext["LiteLLM gateway"]
-  mc -->|"newline-delimited JSON"| llm
-  agc -.->|"AG-UI events (SSE)"| ck
+  blob[("Vercel Blob<br/>shared apps only")]
+  ext["Claude models"]
+  mc -->|"AG-UI events (SSE)"| ck
+  ts -->|"team run, resume after a pause"| tr
+  ws -->|"share by short link"| share
+  share --> blob
   gateway --> ext
-  classDef planned stroke-dasharray: 5 5
-  class graphs,orch,agc planned
 ```
 
 Rules the layout enforces (also in `CLAUDE.md`): the browser never calls a model provider; nothing in `src/server` is
-imported from `src/platform` or `src/workspace`; keys are read only in server code. Dashed parts exist but are not
-on the path a build takes today (the workflow graph, the AG-UI client) or are not merged yet (the agent graphs).
+imported from `src/platform` or `src/workspace`; keys are read only in server code. `/api/llm` (one guarded model call)
+and `/api/agent/step` (the step graph over plain HTTP) still exist beside the AG-UI route; the workspace uses the AG-UI
+route.
 
-Also planned: a storage adapter with IndexedDB (WP-10), an installable app with offline support (WP-11), and the
-workflow graph driving builds (wiring, WP-16). Until then the classic orchestrator in `src/workspace/line.ts` runs
-every build. Section 9 shows the graph that will replace it.
+The data model, storage and export are described in [`data.md`](data.md); the AG-UI events in [`ag-ui.md`](ag-ui.md).
 
 ## 3. The build workflow
 
 One build, from one sentence to a working app. There are five builder agents (Researcher, Database, Backend, View
-advisor, UI) and the Tester, which makes six agents with distinct jobs. The Orchestrator is code that runs the
-stations in order and checks each handoff (`src/workspace/line.ts`, `runBuild` and `runStation`).
+advisor, UI) and the Tester, which makes six agents with distinct jobs. The Orchestrator is code: `runBuild` in
+`src/workspace/line.ts` compiles the owner's workflow into a LangGraph graph (`createRun`, `workflowFromFlow` from
+`src/platform/orchestrator`) and gives it ports that run each station, ask the owner and run the Tester. Section 9
+shows the graph.
 
 The stations, in order: Research, Database, Backend, Views, Screens, Walkthrough, then the Tests step.
 The UI agent owns two stations (Screens and Walkthrough). The diagram shows the owner's own steps that the screenshot
@@ -192,101 +204,115 @@ What each step really does, with where to read it:
 | If a run that keeps the database fails | The app goes back exactly as it was.                                                                                                                                                                                                      | `line.ts`, `runBuild`                  |
 
 Demo and Live use the same line. In Demo each agent's answer is replayed from a saved build and no model is called. In
-Live each agent makes its own model call. The run header shows "N model calls" or "N replayed, 0 model calls".
+Live each agent's turn runs on the server step graph (section 4). The run header shows "N model calls" or "N replayed, 0 model calls".
 
 ## 4. One agent step
 
-What one station does for one agent. Today this runs in the browser; the server version as a small LangGraph graph is
-planned (WP-05) and is drawn as the dashed part.
+What one station does for one agent in Live. The browser builds the prompt and owns the checks that need the app's
+database; the server runs the model and checks the shape of the answer against the role's schema before it comes back.
 
 ```mermaid
-flowchart TD
-  start(["Station starts<br/>STEP_STARTED"]) --> mode{"Demo or Live?"}
-  mode -->|"Demo"| replay["Replay the saved answer<br/>for this attempt"]
-  mode -->|"Live"| prompt["Build the prompt:<br/>the task, the earlier agents' output,<br/>the owner's standing instruction,<br/>failed checks from the last try"]
-  prompt --> mcall["One model call<br/>POST /api/llm, streamed"]
-  mcall --> parse{"Valid JSON?"}
-  parse -->|"no"| fb["Feedback: answer was not usable"]
-  parse -->|"yes"| apply["Normalise and apply the output<br/>(for example CREATE TABLE)"]
-  replay --> apply
-  apply --> checks{"All checks pass?"}
-  checks -->|"yes"| done["Station ok: facts, card in chat,<br/>STATE_DELTA, STEP_FINISHED,<br/>handoff to the next station"]
-  checks -->|"no"| tries{"Attempts left?<br/>(at most 3)"}
-  fb --> tries
-  tries -->|"yes"| sent["Sent back: card in chat shows<br/>the failed checks"]
-  sent --> prompt
-  tries -->|"no"| safe{"Safe default<br/>exists and passes?"}
-  safe -->|"yes"| done
-  safe -->|"no"| fail["Station failed:<br/>the build stops and says why"]
-  subgraph planned_graph["Planned: the same loop as a server graph, WP-05"]
-    g1["draft"] --> g2["validate against a schema"] --> g3["repair"] --> g2
+sequenceDiagram
+  autonumber
+  participant L as Station (browser, line.ts)
+  participant MC as Model client (AG-UI)
+  participant CK as /api/copilotkit, agent step
+  participant G as Step graph (server)
+  participant M as Claude model
+  L->>MC: prompt for this agent, failed checks from the last try
+  MC->>CK: RunAgentInput (prompt, role, tier)
+  CK->>CK: guard rails: prompt policy, limits, caps
+  CK->>G: run
+  G->>G: guard: input and provider
+  loop at most 3 model calls
+    G->>M: draft
+    M-->>G: text (streamed to the browser as TEXT_MESSAGE events)
+    G->>G: validate: find the JSON, check it against the role's schema
+    opt the shape is wrong
+      G->>G: repair: add the exact failures to the conversation
+    end
   end
-  classDef planned stroke-dasharray: 5 5
-  class g1,g2,g3 planned
-  style planned_graph stroke-dasharray: 5 5
+  G-->>MC: STEP events for draft, validate, repair, then the result
+  MC-->>L: JSON text
+  L->>L: apply it to the app (CREATE TABLE, call endpoints as every role, draw views)
+  alt all checks pass
+    L->>L: station ok, hand-off to the next station
+  else checks fail and attempts are left
+    L->>MC: send back with the failures (a new step)
+  else no attempts left
+    L->>L: safe default if it passes, or the build stops and says why
+  end
 ```
 
-Each step emits AG-UI style events (`RUN_STARTED`, `STEP_STARTED`, `TEXT_MESSAGE_*`, `STATE_DELTA`, `STEP_FINISHED`,
-`RUN_FINISHED`, and `CUSTOM` for `checks`, `sent_back`, `interrupt`, `resume`). Today they feed the workspace's own
-event log and the Debug drawer (Settings, Debug mode). The server side of the same protocol is built: the agent
-registry at `/api/copilotkit` and a `GraphAgent` class that turns a LangGraph run into AG-UI events
-(`src/server/agui`, see [`ag-ui.md`](ag-ui.md)). Running the builder agents through it is planned (WP-05, WP-16).
+So an answer is checked twice: once on the server for its shape (`src/server/graph/step/graph.ts`, schemas in
+`src/server/agents/schemas.ts`), once in the browser for what it does to the real app (`APPLY` in `line.ts`). Each
+model call on the server goes through the gateway, which sets the effort for the tier (Sonnet at medium for building
+roles, Haiku at low for quick ones), marks the stable prompt for caching and logs tokens and cost.
+
+Every step is an AG-UI event (`RUN_STARTED`, `STEP_STARTED`, `TEXT_MESSAGE_*`, `STATE_DELTA`, `STEP_FINISHED`,
+`RUN_FINISHED`, and `CUSTOM` for `checks`, `sent_back`, `interrupt`, `resume`). The canvas, the timeline, the log, the
+Agents panel (`src/workspace/activity.tsx`) and debug mode all read them. Details: [`ag-ui.md`](ag-ui.md).
 
 ## 5. A team run: the fact-check app
 
 The apps Turnkey builds can have agents of their own. The Fact-check desk has three: Extractor, Researchers and
-Verifier (`src/workspace/quests.ts`, `src/workspace/team.tsx`). The Backend agent writes the team as data. A fixed engine
-runs it. Every write goes through the app's own API as the person who pressed Run, so the access rules apply to the
-agents too.
+Verifier (`src/workspace/quests.ts`). The Backend agent writes the team as data. In Live the server compiles it into a
+LangGraph graph (`src/server/graph/team`) and streams AG-UI events back; the browser owns the app's database, so each
+accepted answer is written there through the app's own API as the person who pressed Run, and the access rules apply
+to the agents too (`src/workspace/team.tsx`).
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor Editor
-  participant Room as Check room (screen)
-  participant E as Engine (code)
+  participant Room as Check room (browser)
+  participant TR as /api/agent/team
   participant X as Extractor
   participant S as Researchers
   participant Src as Wikipedia / World Bank
+  participant C as Check (rules, then a reviewer model)
   participant V as Verifier
-  participant API as App API and SQLite
-  actor Senior as Senior editor
+  participant API as App API and SQLite (browser)
 
   Editor->>Room: pastes text, presses Run
-  Room->>E: runTeam(check)
-  E->>API: start_check (workflow action, role-checked)
-  E->>X: split the text into factual claims
-  X-->>E: claims
-  E->>API: write claims, one row at a time, as the Editor
-  E->>S: find evidence for each claim
-  S->>Src: page_summary / get_indicator
-  Src-->>S: sample response today (server connectors built, wiring planned)
-  S-->>E: evidence rows with a stance and a link
-  E->>API: write evidence, as the Editor
-  E->>V: weigh the evidence
-  V-->>E: verdict and confidence per claim, summary of the text
-  E->>API: update claims, fill the check's summary and accuracy
-  Note over E,API: a write the access rules refuse is reported as a failed step
-  E->>API: finish_check (workflow action)
-  Room-->>Editor: claims, evidence, verdicts fill in live
-  Senior->>API: reviews and corrects verdicts, publishes the check
+  Room->>API: start_check (workflow action, role-checked)
+  Room->>TR: the team, the text, the tables its answers must fit
+  TR->>X: split the text into factual claims
+  X-->>TR: claims
+  TR->>C: check the claims
+  C-->>TR: ok (or send back once, with the reason)
+  TR-->>Room: claims (AG-UI events)
+  Room->>API: write claims, as the Editor
+  TR->>S: find evidence for each claim
+  S->>TR: lookup request (page_summary, get_indicator)
+  TR->>Src: connector call, validated and time-limited
+  Src-->>TR: public data
+  TR->>S: the lookup result
+  S-->>TR: evidence with a stance and a link
+  TR->>C: check the evidence
+  TR-->>Room: evidence
+  Room->>API: write evidence, as the Editor
+  TR->>V: weigh the evidence
+  V-->>TR: verdict and confidence per claim, summary
+  TR-->>Room: verdicts, RUN_FINISHED
+  Room->>API: update claims, finish_check
+  Note over Room,API: a write the access rules refuse is reported as a failed step
 ```
 
-The same engine runs the other apps:
+The same graph runs the other teams:
 
-| App                | Agents, in order                 | Pause for a person                               | Tools                        |
-| ------------------ | -------------------------------- | ------------------------------------------------ | ---------------------------- |
-| Fact-check desk    | Extractor, Researchers, Verifier | none                                             | Wikipedia, World Bank        |
-| Prior-art scout    | Search, Analyst, Critic          | none                                             | PatentsView, OpenAlex, arXiv |
-| Debate partner     | For, Against, Moderator          | before the Moderator: add a point from the floor | none                         |
-| Sales bidding desk | Qualifier, Pricing, Red team     | before the Red team: add a risk or a condition   | none                         |
+| App                | Agents, in order                         | Pause for a person                               | Tools                        |
+| ------------------ | ---------------------------------------- | ------------------------------------------------ | ---------------------------- |
+| Fact-check desk    | Extractor, Researchers, Verifier         | none                                             | Wikipedia, World Bank        |
+| Prior-art scout    | Search, Analyst, Critic                  | none                                             | PatentsView, OpenAlex, arXiv |
+| Debate partner     | For, Against, Moderator                  | before the Moderator: add a point from the floor | none                         |
+| Sales bidding desk | Qualifier, Pricing, Red team             | before the Red team: add a risk or a condition   | none                         |
+| Grant review desk  | Assessor, Budget reviewer, Due diligence | before Due diligence: add a condition            | none                         |
 
-Each agent answers one JSON object. Each is limited to what the team definition lets it write. A run can be stopped. In
-Demo the run replays a saved script, and the tool calls are recorded samples; in Live every agent makes its own model
-call (`teamLive`, one retry if the answer is not usable).
-
-The planned server version (WP-06) compiles the same team definition to a LangGraph graph with a checking agent that
-can send work back once.
+Each agent answers one JSON object and may write only what the team definition lets it. A pause ends the request with
+a snapshot; the person's note and the snapshot start a second request that resumes the run. Caps are part of the
+graph's state (model calls, tool calls, one send-back per agent), and every run passes through a `finish` node, whether
+it completed or hit a cap. In Demo the run replays a saved script and its lookups are recorded samples.
 
 ## 6. A change from chat
 
@@ -341,7 +367,7 @@ flowchart LR
   lbl --> ci
   subgraph ci["CI: .github/workflows/ci.yml"]
     direction TB
-    chk["check: secrets scan, lint,<br/>typecheck, unit tests, build"] --> e2e["e2e: 9 flows in parallel<br/>demo, live, misc, views, quests,<br/>new, custom, round6, react<br/>(297 browser checks)"]
+    chk["check: secrets scan, lint,<br/>typecheck, unit tests, build"] --> e2e["e2e: 12 browser flows in parallel<br/>demo, live, misc, views, quests, new,<br/>custom, round6, react, sizes, offline, a11y"]
   end
   ci --> gate{"CI green?"}
   gate -->|"no"| pr
@@ -349,6 +375,7 @@ flowchart LR
   merge --> bump["Pull request that raises<br/>the version in package.json"]
   bump --> rel["release.yml: tag, GitHub release,<br/>Vercel CLI deploy to production"]
   rel --> live["Live URL<br/>/api/health shows<br/>the deployed commit"]
+  live --> smoke["smoke job: scripts/smoke-live.mjs<br/>page, version, a short link"]
 ```
 
 Secrets: the model key lives only in Vercel's environment variables (and `.env.local` locally,
@@ -381,10 +408,12 @@ flowchart LR
 ## 9. The workflow as a graph
 
 The workflow the owner edits on the canvas compiles into a LangGraph graph that runs in the browser
-(`@langchain/langgraph/web`, `src/platform/orchestrator`, `compileWorkflow` and `createRun`). It reproduces the
-classic loop event for event; its README lists that order. It is built and tested as a library, and is not yet the
-one that runs builds (wiring is planned). Below is the shape for one station. Every station repeats it; Research
-adds the question to the owner, and stations that have a safe default add a fallback node.
+(`@langchain/langgraph/web`, `src/platform/orchestrator`, `compileWorkflow` and `createRun`), and every build runs
+through it. Approvals and the Researcher's question are LangGraph interrupts; the owner's answer resumes the run.
+When the owner edits the workflow of a built app, only the stations the edit touches run again, after a short pause
+that gathers a burst of edits into one run; a re-run that would rebuild the database asks first
+(`src/workspace/rerun.tsx`). Below is the shape for one station. Every station repeats it; Research adds the question
+to the owner, and stations that have a safe default add a fallback node.
 
 ```mermaid
 flowchart TD
@@ -406,3 +435,26 @@ flowchart TD
 The full generated graph for the default workflow, with every node, is in
 [`src/platform/orchestrator/default-workflow.mmd`](../../src/platform/orchestrator/default-workflow.mmd)
 (`node src/platform/orchestrator/scripts/print-mermaid.mjs` prints it again).
+
+## 10. Guard rails on every model call
+
+The app is public, has no login, and the model budget is small. Every route that can spend it passes the same checks
+first (`src/server/guard`), and the workspace adds its own per-session cap.
+
+```mermaid
+flowchart LR
+  req["Request from the browser<br/>/api/copilotkit, /api/agent/team,<br/>/api/agent/step, /api/llm"] --> site{"same site?"}
+  site -->|"no"| r1["refused"]
+  site -->|"yes"| body{"body size and<br/>shape valid?"}
+  body -->|"no"| r2["bad_request"]
+  body -->|"yes"| pol{"prompt policy: one of Turnkey's<br/>own agent prompts? (team runs:<br/>no injected instructions)"}
+  pol -->|"no"| r3["refused: not a free chat"]
+  pol -->|"yes"| lim{"per-visitor and global rate,<br/>daily calls, daily dollars,<br/>LIVE_MODE"}
+  lim -->|"over"| r4["rate_limited or budget:<br/>Live says so in plain words"]
+  lim -->|"ok"| gw["model gateway<br/>logs tokens and cost"]
+```
+
+Defaults: 20 calls per visitor and 50 for everyone per minute, 600 calls and 5 dollars a day, prompts up to 120,000
+characters, answers up to 8,000 tokens (`src/server/guard/limits.ts`). The workspace stops a Live session after 40
+model calls (`CAP` in `src/workspace/core.ts`). Counters live in each server instance's memory, so they are a brake;
+the provider's own budget is the hard stop.
