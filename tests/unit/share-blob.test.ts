@@ -163,7 +163,7 @@ describe('the share routes on the Blob store', () => {
 
   it('report that short links are on', async () => {
     const { GET } = await import('@/app/api/share/route');
-    const res = GET(new Request('http://localhost/api/share'));
+    const res = await GET(new Request('http://localhost/api/share'));
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.json()).toEqual({ enabled: true });
   });
