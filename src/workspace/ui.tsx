@@ -8,7 +8,6 @@ import {
   type CSSProperties,
   type ChangeEvent,
   type InputHTMLAttributes,
-  type ReactElement,
   type ReactNode,
   type Ref,
   type SelectHTMLAttributes,
@@ -126,9 +125,8 @@ export const Btn = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProps
       className={className}
       appearance={appearance}
       size={has('sm') ? 'small' : has('lg') ? 'large' : 'medium'}
-      icon={iconOnly ? (children as ReactElement) : undefined}
-      // ButtonProps is a union (button or link), which a rest spread cannot narrow
-      {...(rest as object)}
+      icon={iconOnly ? children : undefined}
+      {...rest}
     >
       {iconOnly ? undefined : children}
     </Button>
@@ -199,7 +197,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(pro
       size={fieldSize(className)}
       appearance={(appearance || 'outline') as FluentInputProps['appearance']}
       onChange={onChange ? (e) => onChange(e) : undefined}
-      // the slot's render function is typed narrowly by Fluent; it gets Fluent's props and adds ours
+      // the slot's render function gets Fluent's props and adds ours
       input={
         {
           children: (_t: unknown, p: SlotProps) => renderField('input', props, className, native, ref, p),
@@ -219,12 +217,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
       size={fieldSize(className)}
       appearance={(appearance || 'outline') as FluentSelectProps['appearance']}
       onChange={onChange ? (e) => onChange(e) : undefined}
-      // the slot's render function is typed narrowly by Fluent; it gets Fluent's props and adds ours
-      select={
-        {
-          children: (_t: unknown, p: SlotProps) => renderField('select', props, className, native, ref, p),
-        } as unknown as FluentSelectProps['select']
-      }
+      // the slot's render function gets Fluent's props and adds ours
+      select={{
+        children: (_t: unknown, p: SlotProps) => renderField('select', props, className, native, ref, p),
+      }}
       // the native props go on to the field slot; Fluent's props types each field's value narrowly
       {...(rest as object)}
     />
@@ -240,12 +236,10 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       appearance={(appearance || 'outline') as FluentTextareaProps['appearance']}
       resize="vertical"
       onChange={onChange ? (e) => onChange(e) : undefined}
-      // the slot's render function is typed narrowly by Fluent; it gets Fluent's props and adds ours
-      textarea={
-        {
-          children: (_t: unknown, p: SlotProps) => renderField('textarea', props, className, native, ref, p),
-        } as unknown as FluentTextareaProps['textarea']
-      }
+      // the slot's render function gets Fluent's props and adds ours
+      textarea={{
+        children: (_t: unknown, p: SlotProps) => renderField('textarea', props, className, native, ref, p),
+      }}
       // the native props go on to the field slot; Fluent's props types each field's value narrowly
       {...(rest as object)}
     />

@@ -116,7 +116,7 @@ export function NativeField({ as: tag, children, ...fwd }: Props & { as: 'input'
   }, []);
 
   const props: Props = { ...rest, ref: setRef };
-  if (hasValue) props.defaultValue = value == null ? '' : (value as string);
+  if (hasValue) props.defaultValue = value == null ? '' : value;
   if (hasChecked) props.defaultChecked = !!checked;
   return children === undefined ? createElement(tag, props) : createElement(tag, props, ...Children.toArray(children));
 }

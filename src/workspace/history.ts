@@ -16,7 +16,7 @@
  */
 import type { AppDef } from '@/shared/types/app';
 import type { AppFlow, AppRecord, Dict, StationLine, Touch } from '@/shared/types/workspace';
-import type { SqlDatabase, SqlValue } from '@/shared/types/sqljs';
+import type { SqlDatabase } from '@/shared/types/sqljs';
 import {
   canRedo,
   canUndo,
@@ -156,7 +156,7 @@ async function load(appId: string) {
   loading.add(appId);
   let h: History<AppSnap> | null = null;
   try {
-    h = readHistory((await (await db()).get(appId)) as unknown, isSnap);
+    h = readHistory(await (await db()).get(appId), isSnap);
   } catch {
     h = null;
   }
@@ -236,7 +236,7 @@ function carryRows(next: SqlDatabase, cur: SqlDatabase | null, tables: string[])
         rows = cur.exec('SELECT ' + list + ' FROM ' + qi(t)),
         ins = next.prepare('INSERT INTO ' + qi(t) + ' (' + list + ') VALUES (' + common.map(() => '?').join(', ') + ')');
       try {
-        for (const r of rows.length ? rows[0].values : []) ins.run(r as SqlValue[]);
+        for (const r of rows.length ? rows[0].values : []) ins.run(r);
       } finally {
         ins.free();
       }

@@ -553,7 +553,7 @@ export function buildSuites(app: TestApp) {
     viewsOf(def, t).forEach((v) =>
       vT.push({
         id: 'view:' + t.name + ':' + v.type,
-        name: t.label + ' opens as ' + VIEW_LABEL[v.type as keyof typeof VIEW_LABEL].toLowerCase(),
+        name: t.label + ' opens as ' + VIEW_LABEL[v.type].toLowerCase(),
         expect: 'fits the columns and draws',
         t,
         v,
@@ -673,7 +673,7 @@ export function buildSuites(app: TestApp) {
       });
       lT.forEach((x) => {
         const bad = def.screens
-          .filter((s) => s.roles.includes(x.role.id) && tableOf(def, s.table) && !mayOpen(def, x.role.id, s.type, s.table as string))
+          .filter((s) => s.roles.includes(x.role.id) && tableOf(def, s.table) && !mayOpen(def, x.role.id, s.type, s.table))
           .map((s) => s.name);
         r[x.id] = tOk(
           !bad.length,
