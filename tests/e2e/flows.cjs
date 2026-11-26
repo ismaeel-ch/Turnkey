@@ -832,7 +832,7 @@ async function flowCustom(browser, url) {
   check('default: a new app starts with the saved workflow and is built under it', JSON.stringify(a.flow) === JSON.stringify(mine) && a.status === 'ready' && a.line.screens.rules && a.reviews.security && a.reviews.insight && a.tests.failed === 0, [a.flow, mine, a.status, a.line.screens, Object.keys(a.reviews)]);
   await say(page, 'Reset the workflow'); await sleep(300); a = await appFull(page);
   check('reset: back to the standard workflow, review steps gone from the canvas', JSON.stringify(a.flow) === JSON.stringify({ attempts: 3, approve: {}, notes: {}, by: {}, reviewers: [], agents: [], at: {}, auto: {} }) && Object.keys(a.reviews).length === 0 && await page.locator('.fl-review').count() === 0, a.flow);
-  const saved = await st(page, () => { const raw = JSON.parse(localStorage.getItem('formwork:v1:state') || '{}'); return { flows: Object.keys(raw.flows || {}).length, apps: Object.values(raw.apps || {}).map((x) => !!x.flow) }; });
+  const saved = await st(page, () => { const raw = JSON.parse(window.__turnkeyStorage.get('state') || '{}'); return { flows: Object.keys(raw.flows || {}).length, apps: Object.values(raw.apps || {}).map((x) => !!x.flow) }; });
   // an approval can be answered by typing, and anything else typed there gets directions instead of being taken for a change
   await say(page, 'Add a security review'); await waitFree(page); await say(page, 'Ask me after research'); await sleep(200);
   await page.locator('.build-bar .btn', { hasText: 'Run again' }).click(); await confirmYes(page);
@@ -843,7 +843,7 @@ async function flowCustom(browser, url) {
   check('approval: typing something else gets directions, typing an approval continues the build', /Approve to continue, or stop here/.test(hint) && still === 'gate' && a.status === 'ready' && a.line.research.approved && a.reviews.security && a.reviews.security.status === 'ok', [hint, still, a.status, a.line.research]);
   await sleep(600); await page.reload(); await page.waitForSelector('.work-head'); await view(page, 'Build'); await page.waitForSelector('.react-flow .fl-review', { timeout: 20000 }); await sleep(400); a = await appFull(page);
   check('after a reload the app still has its workflow, its review and the review step on the canvas', a.flow.reviewers.join() === 'security' && a.flow.approve.research === true && a.reviews.security.status === 'ok' && a.reviews.security.f.length >= 1 && await page.locator('.fl-review').count() === 1 && /The build waits here|You approved this/.test(await page.locator('.fl-approval').first().innerText()), [a.flow, a.reviews]);
-  await sleep(500); check('the workflow and the default are saved with the workspace', (await st(page, () => { const raw = JSON.parse(localStorage.getItem('formwork:v1:state') || '{}'); return Object.keys(raw.flows || {}).length === 1 && Object.values(raw.apps || {}).every((x) => x.flow && Array.isArray(x.flow.reviewers)); })), saved);
+  await sleep(500); check('the workflow and the default are saved with the workspace', (await st(page, () => { const raw = JSON.parse(window.__turnkeyStorage.get('state') || '{}'); return Object.keys(raw.flows || {}).length === 1 && Object.values(raw.apps || {}).every((x) => x.flow && Array.isArray(x.flow.reviewers)); })), saved);
   await ctx.close();
 
   // ----- G. without the canvas library the plain line still leads to the settings -----
