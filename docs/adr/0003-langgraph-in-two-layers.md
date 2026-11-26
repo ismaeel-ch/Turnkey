@@ -1,10 +1,10 @@
 # ADR 3: LangGraph in two layers
 
-Status: accepted. Implementation: Planned (WP-05, WP-06, WP-09). The classic orchestrator is built and is the default.
+Status: accepted. Implementation: Partly built. The browser layer (the workflow graph, WP-09) is built and tested as a library in `src/platform/orchestrator` but does not run builds yet. The server layer (WP-05, WP-06) is planned. The classic orchestrator runs every build.
 
 ## Context
 
-The deck lists LangGraph as an optional toolkit. Turnkey has two kinds of orchestration. One is the build workflow, which the owner can edit on the canvas (stations, approvals, send-backs, added steps). The other is an app's agent team, which is a definition written by the Backend agent. Both are plain async code in `src/legacy` today.
+The deck lists LangGraph as an optional toolkit. Turnkey has two kinds of orchestration. One is the build workflow, which the owner can edit on the canvas (stations, approvals, send-backs, added steps). The other is an app's agent team, which is a definition written by the Backend agent. Both started as plain async code in `src/workspace`.
 
 ## Decision
 
@@ -15,6 +15,7 @@ Use LangGraph at two levels. On the server, each agent step is a small graph (dr
 - Handoffs, interrupts for approvals and retries become named, testable graph pieces instead of hand-written loops.
 - Risk: a second orchestrator next to a tested one. So the graph ships behind a switch (`window.__turnkeyOptions`) and the classic orchestrator stays the default until the graph passes every browser flow.
 - If time runs out, the product still works: the classic orchestrator is complete. This is stated in the plan's cut order.
-- Until these merge, this repository's documents describe the classic orchestrator as what exists.
+- The workflow graph reproduces the classic loop event for event; its README lists that order, and its tests check it.
+- Until the wiring merges, this repository's documents describe the classic orchestrator as what runs.
 
-Where to look: `docs/PLAN.md` decision 3 and section 7; work packages 05, 06, 09, 16.
+Where to look: `docs/PLAN.md` decision 3 and section 7; `src/platform/orchestrator/README.md`; work packages 05, 06, 09, 16.

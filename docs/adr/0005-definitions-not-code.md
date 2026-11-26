@@ -8,7 +8,7 @@ Agents write the app. If an agent's output were run as code, a wrong or hostile 
 
 ## Decision
 
-Agents return JSON definitions: tables, columns, a status workflow, access rules, views, screens, a tour, a team. A fixed runtime turns them into SQLite tables, role-guarded endpoints and screens. Every definition is normalised and checked before it is applied (`normBrief`, `normSchema`, `normBackend`, `normViews`, `normUI` in `src/legacy`). A share link carries definitions and rows, and its definition passes every check again when opened (`src/legacy/share.js`).
+Agents return JSON definitions: tables, columns, a status workflow, access rules, views, screens, a tour, a team. A fixed runtime turns them into SQLite tables, role-guarded endpoints and screens. Every definition is normalised and checked before it is applied (`normBrief`, `normSchema`, `normBackend`, `normViews`, `normUI` in `src/workspace`). A share link carries definitions and rows, and its definition passes every check again when opened (`src/workspace/share.tsx`).
 
 ## Consequences
 
@@ -17,4 +17,4 @@ Agents return JSON definitions: tables, columns, a status workflow, access rules
 - New capabilities mean extending the runtime, then the catalog.
 - Checks are real: they create the tables, call every endpoint as every role, draw every view and screen, and replay the tour.
 
-Where to look: `src/legacy/line.js`, `engine.js`, `runtime.js`, `share.js`.
+Where to look: `src/workspace/line.ts`, `engine.tsx`, `runtime.tsx`, `share.tsx`.

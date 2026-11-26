@@ -7,7 +7,7 @@ or a client could use it. Claims are kept to what can be checked in the reposito
 Turnkey is the "bring your own idea" entry: an agent team that builds business apps. The quest apps below are not
 separate programs. Each one is built by Turnkey's builder agents from one sentence, and each has an agent team of its
 own that works inside the finished app. The sentence, the roles, the tables and the team for each are saved builds in
-`src/legacy/quests.js` and `src/legacy/builds.js`, so an evaluator can open them in Demo mode with no model.
+`src/workspace/quests.ts` and `src/workspace/builds.ts`, so an evaluator can open them in Demo mode with no model.
 
 ## What every built app has
 
@@ -23,8 +23,7 @@ own that works inside the finished app. The sentence, the roles, the tables and 
 In all three, the app's agents write to the app's own tables through its own API, as the person who pressed Run. The
 access rules therefore apply to them. In Demo the run replays a saved script; in Live each agent makes its own model
 call. Evidence and prior work in Demo are saved samples, not real citations: the apps and the About dialog say so.
-Public-source lookups from the server are planned (WP-07). Until they merge, Live agents in these apps work from what
-the model knows.
+The connectors to these public sources are built on the server (`src/server/connectors`, `GET /api/connectors/<name>`); the apps do not call them yet (planned). Until then, Live agents in these apps work from what the model knows.
 
 ### 1. Fact-check desk
 
@@ -84,16 +83,16 @@ Clients, tenders and prices in this app are made up.
 These are places where the pattern fits, not claims about any existing deployment. Turnkey's output is a prototype with
 browser-side data. Each item says what would have to be true.
 
-| Situation                                                                                             | What Turnkey gives them                                                                                        | What must be true first                                                                                                |
-| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| A team wants to try an internal tool (a register, tracker or approval flow) before asking for a build | Describe it, watch the agents build it, click through it as each role, change it from chat, share it by link   | It is a prototype to learn from. Production data needs a server-side store, which Turnkey does not provide yet (ADR 1) |
-| A pre-sales conversation where a client's process is described but not yet scoped                     | A working draft of the client's workflow and access rules in minutes, with test cases that state the rules     | The draft is made from the description only; real requirements still need a conversation                               |
-| Checking who may do what in a workflow                                                                | The access matrix is tested for every role and shown in Details, API                                           | The rules are those the description gave; someone must read them                                                       |
-| Bid or tender review in a sales team                                                                  | The bidding desk pattern: scoring, three price options, a red team, a director's approval                      | The scoring criteria and price rules are placeholders to replace with the team's own                                   |
-| Reviewing drafts before they are published                                                            | The fact-check pattern: claims, evidence, verdicts, a senior editor's sign-off                                 | Real evidence needs the public-source connectors (planned, WP-07) or the team's own sources                            |
-| Early idea screening                                                                                  | The prior-art pattern: close work, overlap, risks, a novelty rating                                            | It is a first screen, not a legal opinion; real patent search needs the connectors (planned) and a person's review     |
-| Stress-testing a decision                                                                             | The debate pattern: the case for, the case against, a moderator's recommendation, a point added from the floor | The agents argue from what the model knows                                                                             |
-| Teaching how agents are orchestrated                                                                  | Every handoff, check, send-back and approval is visible and replayable in Demo with no model                   | None                                                                                                                   |
+| Situation                                                                                             | What Turnkey gives them                                                                                        | What must be true first                                                                                                              |
+| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| A team wants to try an internal tool (a register, tracker or approval flow) before asking for a build | Describe it, watch the agents build it, click through it as each role, change it from chat, share it by link   | It is a prototype to learn from. Production data needs a server-side store, which Turnkey does not provide yet (ADR 1)               |
+| A pre-sales conversation where a client's process is described but not yet scoped                     | A working draft of the client's workflow and access rules in minutes, with test cases that state the rules     | The draft is made from the description only; real requirements still need a conversation                                             |
+| Checking who may do what in a workflow                                                                | The access matrix is tested for every role and shown in Details, API                                           | The rules are those the description gave; someone must read them                                                                     |
+| Bid or tender review in a sales team                                                                  | The bidding desk pattern: scoring, three price options, a red team, a director's approval                      | The scoring criteria and price rules are placeholders to replace with the team's own                                                 |
+| Reviewing drafts before they are published                                                            | The fact-check pattern: claims, evidence, verdicts, a senior editor's sign-off                                 | Real evidence needs the apps wired to the public-source connectors (built on the server, wiring planned) or the team's own sources   |
+| Early idea screening                                                                                  | The prior-art pattern: close work, overlap, risks, a novelty rating                                            | It is a first screen, not a legal opinion; real patent search needs the apps wired to the connectors (planned) and a person's review |
+| Stress-testing a decision                                                                             | The debate pattern: the case for, the case against, a moderator's recommendation, a point added from the floor | The agents argue from what the model knows                                                                                           |
+| Teaching how agents are orchestrated                                                                  | Every handoff, check, send-back and approval is visible and replayable in Demo with no model                   | None                                                                                                                                 |
 
 ## How to see all of this in two minutes
 

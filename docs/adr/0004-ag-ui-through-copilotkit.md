@@ -1,6 +1,6 @@
 # ADR 4: AG-UI through CopilotKit's runtime
 
-Status: accepted. Implementation: Partly built: the spike's agent runs in the runtime. The registry and client are planned (WP-08).
+Status: accepted. Implementation: Partly built. The runtime, the agent registry, the `GraphAgent` class that turns a LangGraph run into AG-UI events, and the browser client are built (WP-08). The builder agents do not run through them yet (WP-05, WP-16).
 
 ## Context
 
@@ -15,6 +15,7 @@ Wrap each LangGraph graph as an AG-UI agent (an `AbstractAgent` subclass that ru
 - One event protocol from the server to the Debug drawer, the timeline and the chat.
 - No separate Python server. Everything deploys as one Next.js project.
 - The libraries change often, so each agent working on it must read the installed version first (rule in `CLAUDE.md`).
-- Today the events are produced in the browser by the classic orchestrator.
+- Today the workspace's events are produced in the browser by the classic orchestrator. The registry serves the spike's `default` agent, and an `echo` agent when `LLM_PROVIDER=mock`.
+- The runtime route goes through the same rate limits as `/api/llm`, because every run spends budget.
 
-Where to look: `src/app/api/copilotkit/`, `src/app/(spike)`, `docs/PLAN.md` decision 4.
+Where to look: `src/app/api/copilotkit/`, `src/server/agui/`, `src/platform/agui/`, [`docs/architecture/ag-ui.md`](../architecture/ag-ui.md), `docs/PLAN.md` decision 4.

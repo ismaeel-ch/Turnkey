@@ -1,6 +1,6 @@
 # ADR 7: JSON first, tool calling where it exists
 
-Status: accepted. Implementation: Built for JSON; the tool-calling probe is built, native tool use in agents is planned.
+Status: accepted. Implementation: Built. The builder agents use JSON. The gateway's tool support (`src/server/llm/tools.ts`) uses native tool calls where the probe says they work and the JSON protocol otherwise; agents that use tools natively arrive with the server graphs (WP-05, WP-06).
 
 ## Context
 
@@ -8,7 +8,7 @@ The hackathon guide warns that tool calling works only on some gateway models. A
 
 ## Decision
 
-Every agent works by returning one JSON object that code acts on. Code, not the model, performs the actions: creating tables, calling endpoints, writing rows. Native tool calls are to be used only after a probe shows they work. `/api/health?probe=tools` makes one tool call to check; `LLM_TOOL_MODE` (`auto`, `native`, `json`) is the planned switch.
+Every agent works by returning one JSON object that code acts on. Code, not the model, performs the actions: creating tables, calling endpoints, writing rows. Native tool calls are to be used only after a probe shows they work. `/api/health?probe=tools` makes one tool call to check; `LLM_TOOL_MODE` (`auto`, `native`, `json`) picks the way; `auto` probes once per provider and model and remembers.
 
 ## Consequences
 
@@ -17,4 +17,4 @@ Every agent works by returning one JSON object that code acts on. Code, not the 
 - Less flexible than free tool use: an agent cannot decide on its own to call a tool the definition did not give it.
 - The spike proves a streamed native tool call works through CopilotKit and the gateway where the model allows it.
 
-Where to look: `src/legacy/line.js` (`PROMPTS`, `toolCall`), `src/app/api/health/route.ts`, `src/app/(spike)`.
+Where to look: `src/workspace/line.ts` (`PROMPTS`, `toolCall`), `src/server/llm/tools.ts`, `src/app/api/health/route.ts`, `src/app/(spike)`.

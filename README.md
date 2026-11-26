@@ -49,17 +49,37 @@ where a team could use them: [`docs/hackathon/use-cases.md`](docs/hackathon/use-
 
 _The Bid room of the built BidDesk app, with the three agents' results for one tender. All data is made up._
 
+## Try it in five minutes
+
+1. Open the live app. Leave **Live** off: Demo replays saved builds and calls no model.
+2. On the home screen pick the saved build **Sales bidding desk** and press build. Watch the **Build** tab: each agent
+   is a node, a check gate sits under each one, and the Backend agent's slip is caught by the Tester and repaired.
+   Switch between **Workflow**, **Timeline** and **Log** to see the same run three ways.
+3. Open the **App** tab and use the app it built: sign in as different roles and see the access rules hold. Open the
+   **Bid room** and run its three agents on a tender.
+4. In the chat sidebar, ask for a change ("add a notes field to tenders"). Only the stations it touches run again,
+   and it rolls back if a check fails.
+5. **Release** a version (its tests must pass) and **Share** it by link. Turn on **Debug mode** (bug icon in the title
+   bar) to see events, tool calls and model usage.
+
 ## What is built and what is planned
 
-Built and covered by 286 browser checks in CI: the whole workspace, the six agents with checks and send-backs,
+Built and covered by 297 browser checks in 9 flows: the whole workspace, the six agents with checks and send-backs,
 approvals, the owner's own steps, the Tester and its repair loop, app agent teams with rooms, changes from chat,
-releases, share links, saved builds that need no model, and a server route for model calls with limits.
+releases, share links, and saved builds that need no model. On the server: a model route with limits, a gateway with
+five providers (LiteLLM, OpenAI-compatible, Anthropic, the Claude Code CLI for local use, a stand-in), and the health
+route with model probes.
 
-Planned, in other work packages and not merged at the time of writing: the agent graphs on the server (LangGraph),
-the AG-UI agent registry, connectors to public sources (Wikipedia, World Bank, OpenAlex, arXiv, PatentsView), the
-workflow as a graph, a storage adapter, and install with offline support. Until the connectors merge, the saved runs
-of the quest apps show sample evidence and Live agents work from what the model knows. The app's About dialog lists
-what is real and what is simulated.
+Built and tested but not yet on the path a build takes: the build workflow as a LangGraph graph compiled from the
+owner's canvas (`src/platform/orchestrator`), the AG-UI agent registry in the CopilotKit runtime with a browser client
+(`src/server/agui`, `src/platform/agui`), and connectors to Wikipedia, World Bank, OpenAlex, arXiv and PatentsView
+(`src/server/connectors`).
+
+Planned, in work packages not merged at the time of writing: each agent step and each app team as a LangGraph graph
+on the server, wiring Live builds and quest apps through them, a storage adapter with backup and export, install with
+offline support, and Fluent 2 controls throughout. Until the quest apps are wired to the connectors, their saved runs
+show sample evidence and Live agents work from what the model knows. The app's About dialog lists what is real and
+what is simulated.
 
 ## Submission summary
 
@@ -70,7 +90,9 @@ what is real and what is simulated.
 ## More documents
 
 - [`docs/architecture/overview.md`](docs/architecture/overview.md): diagrams of how it is built
-- [`docs/adr/`](docs/adr/README.md): the eight design decisions and why
+- [`docs/adr/`](docs/adr/README.md): the ten design decisions and why
+- [`docs/architecture/ag-ui.md`](docs/architecture/ag-ui.md): how agents stream their steps over AG-UI
+- [`docs/hackathon/submission.md`](docs/hackathon/submission.md): what goes into the submission form
 - [`docs/hackathon/criteria.md`](docs/hackathon/criteria.md) and [`use-cases.md`](docs/hackathon/use-cases.md)
 - [`docs/PLAN.md`](docs/PLAN.md): the build plan and who owns which folders
 - [`docs/RUNBOOK.md`](docs/RUNBOOK.md): how agents work on this repository in parallel
@@ -88,6 +110,7 @@ what is real and what is simulated.
 npm ci
 npm run dev                      # http://localhost:3000, saved builds only
 LLM_PROVIDER=mock npm run dev    # a stand-in model: no key, no network, no cost
+LLM_PROVIDER=claude-code npm run dev  # your local Claude Code login (development only)
 ```
 
 To use a real model, copy `.env.example` to `.env.local` and fill in the names below. On Vercel, set the same names
@@ -100,7 +123,8 @@ under Settings → Environment Variables for Production and Preview, then redepl
 | `LITELLM_MODEL`      | a model your key can use, for careful work      |
 | `LITELLM_MODEL_FAST` | optional: a cheaper model for the Quick setting |
 
-Keys are read only by server code. Never commit one, never put one in a `NEXT_PUBLIC_` variable.
+Anthropic (`ANTHROPIC_*`) and any OpenAI-compatible service (`OPENAI_*`) work too; see
+[`src/server/llm/README.md`](src/server/llm/README.md). Keys are read only by server code. Never commit one, never put one in a `NEXT_PUBLIC_` variable.
 
 Check a deployment:
 
@@ -114,7 +138,7 @@ Check a deployment:
 
 ```bash
 npm run check                 # secrets scan, lint, typecheck, unit tests
-npm run test:e2e -- demo      # one of the eight browser flows; all 286 checks run in CI
+npm run test:e2e -- demo      # one of the nine browser flows; all 297 checks run in CI
 ```
 
 ## The spike
@@ -131,8 +155,14 @@ One streamed tool call from the model updates shared canvas state:
 ## Layout
 
 ```
-src/app/(workspace)   the workspace page          src/server    model gateway, guard rails (server only)
-src/app/(spike)       the spike page              src/platform  browser helpers, sql.js loader, model client
-src/app/api           health, llm, copilotkit     src/workspace the workspace UI: ES modules with JSX
-tests/unit, tests/e2e                             .claude       agents, skills, rules, hooks for Claude Code
+src/app/(workspace)  the workspace page
+src/app/(spike)      the spike page
+src/app/api          routes: health, llm, copilotkit (AG-UI), connectors
+src/workspace        the workspace UI: ES modules with JSX
+src/platform         browser helpers: sql.js loader, model client, AG-UI client, workflow graph (orchestrator)
+src/server           server only: model gateway, guard rails, AG-UI registry, connectors
+tests/unit           vitest
+tests/e2e            the browser flows
+docs                 plan, architecture, decisions, hackathon evidence
+.claude              agents, skills, rules and hooks for Claude Code
 ```

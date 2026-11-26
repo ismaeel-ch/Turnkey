@@ -10,14 +10,18 @@ merges, this page is updated in a follow-up pull request. In the diagrams, plann
 Two facts to keep in mind while reading:
 
 - The agents' orchestration (stations, checks, send-backs, approvals, the Tester, app agent teams, changes from chat)
-  is built, and runs in the browser from `src/legacy`. The server today holds the model route, the guard rails and
-  the health route. The server-side graphs are planned (WP-05, WP-06, WP-08, WP-16).
+  is built, and runs in the browser from `src/workspace`. Each agent's model call goes to the server.
+- On the server, `main` has the model gateway with five providers, the guard rails, the AG-UI agent registry inside
+  the CopilotKit runtime, and connectors to five public sources. The build workflow as a LangGraph graph is built in
+  `src/platform/orchestrator` but not yet wired in. The server-side agent graphs (WP-05, WP-06) and the wiring (WP-16)
+  are planned.
 - Code, not a model, decides whether an agent's answer is good enough. The Orchestrator is code.
 
 Contents: [1 System context](#1-system-context) · [2 Containers](#2-containers) ·
 [3 The build workflow](#3-the-build-workflow) · [4 One agent step](#4-one-agent-step) ·
 [5 A team run: the fact-check app](#5-a-team-run-the-fact-check-app) · [6 A change from chat](#6-a-change-from-chat) ·
-[7 Deployment pipeline](#7-deployment-pipeline) · [8 The agents at a glance](#8-the-agents-at-a-glance)
+[7 Deployment pipeline](#7-deployment-pipeline) · [8 The agents at a glance](#8-the-agents-at-a-glance) ·
+[9 The workflow as a graph](#9-the-workflow-as-a-graph)
 
 ## 1. System context
 
@@ -37,19 +41,18 @@ flowchart LR
   owner --> ws
   user --> ws
   ws -->|"one agent step per request"| gw
-  ws -.->|"planned, WP-07"| pub
-  gh -->|"merge to main"| vc
+  ws -->|"server-side connectors"| pub
+  gh -->|"published release"| vc
   vc -->|"deploys"| turnkey
-  classDef planned stroke-dasharray: 5 5
-  class pub planned
 ```
 
 Notes:
 
 - With no model configured, saved builds and every screen still work (Demo mode). Live mode needs the gateway.
-- The public-source connectors are planned (WP-07). Today, the three quest apps show saved sample evidence in Demo,
-  and in Live their agents work from what the model knows. The app says so on its About page ("What is real in this
-  prototype", `src/legacy/shell-c.js`).
+- The public-source connectors are built on the server (`src/server/connectors`, `GET /api/connectors/<name>`), but
+  the quest apps in the workspace do not call them yet (planned, workstream "agent teams on the server"). Today the
+  quest apps show saved sample evidence in Demo, and in Live their agents work from what the model knows. The app says so on its About page ("What is real in this
+  prototype", `src/workspace/shell-c.tsx`).
 
 ## 2. Containers
 
@@ -60,52 +63,59 @@ enforces limits.
 flowchart TB
   subgraph browser["Browser"]
     direction TB
-    legacy["Workspace<br/>src/legacy: workflow canvas, six agents,<br/>checks, Tester, teams, rooms, 8 data views"]
-    compat["Compatibility layer<br/>src/platform/compat: React 19 behind<br/>the names the modules already use"]
+    ws["Workspace<br/>src/workspace: workflow canvas, six agents,<br/>checks, Tester, teams, rooms, 14 view types"]
+    orch["Workflow graph<br/>src/platform/orchestrator: LangGraph (web)<br/>built, not yet wired in"]
+    agc["AG-UI client<br/>src/platform/agui: runs an agent by id"]
     mc["Model client<br/>src/platform/model-client.ts"]
     sqlite[("SQLite (sql.js, WebAssembly)<br/>one database per app")]
     store[("Browser storage<br/>app definitions, settings, releases")]
-    legacy --> compat
-    legacy --> sqlite
-    legacy --> store
-    legacy --> mc
+    ws --> sqlite
+    ws --> store
+    ws --> mc
+    ws -.-> orch
+    ws -.-> agc
   end
   subgraph server["Server: Next.js route handlers on Vercel (stateless)"]
     direction TB
     llm["POST /api/llm<br/>one guarded model call, streamed"]
     health["GET /api/health<br/>up, model configured, probes"]
-    ck["/api/copilotkit<br/>CopilotKit runtime; the spike's agent today"]
+    ck["/api/copilotkit<br/>CopilotKit runtime"]
+    reg["AG-UI agent registry<br/>src/server/agui: default (Architect),<br/>echo (mock only); step and team slots"]
+    conr["GET /api/connectors/name"]
     guard["Guard rails<br/>src/server/guard: rate limits,<br/>daily cap, prompt size, LIVE_MODE switch"]
-    gateway["Model gateway<br/>src/server/llm: LiteLLM / OpenAI-compatible,<br/>mock provider"]
-    llm --> guard --> gateway
-    ck --> gateway
-    health --> gateway
+    gateway["Model gateway<br/>src/server/llm: LiteLLM, OpenAI-compatible,<br/>Anthropic, Claude Code CLI (local), mock"]
+    conn["Connectors<br/>src/server/connectors: Wikipedia, World Bank,<br/>OpenAlex, arXiv, PatentsView"]
     graphs["LangGraph agent graphs<br/>agent step, app team (planned, WP-05, WP-06)"]
-    agui["AG-UI agent registry<br/>(planned, WP-08)"]
-    conn["Connectors to public sources<br/>(planned, WP-07)"]
-    ck -.-> agui -.-> graphs
+    llm --> guard --> gateway
+    ck --> guard
+    ck --> reg --> gateway
+    health --> gateway
+    conr --> conn
+    reg -.-> graphs
     graphs -.-> conn
     graphs -.-> gateway
   end
   ext["LiteLLM gateway"]
   mc -->|"newline-delimited JSON"| llm
+  agc -.->|"AG-UI events (SSE)"| ck
   gateway --> ext
   classDef planned stroke-dasharray: 5 5
-  class graphs,agui,conn planned
+  class graphs,orch,agc planned
 ```
 
 Rules the layout enforces (also in `CLAUDE.md`): the browser never calls a model provider; nothing in `src/server` is
-imported from `src/platform` or `src/legacy`; keys are read only in server code.
+imported from `src/platform` or `src/workspace`; keys are read only in server code. Dashed parts exist but are not
+on the path a build takes today (the workflow graph, the AG-UI client) or are not merged yet (the agent graphs).
 
-Also planned: a storage adapter with IndexedDB (WP-10), an installable app with offline support (WP-11), and the build
-workflow compiled to a graph behind a switch (WP-09, wired by WP-16). Until then the classic orchestrator in
-`src/legacy/line.js` is the only one.
+Also planned: a storage adapter with IndexedDB (WP-10), an installable app with offline support (WP-11), and the
+workflow graph driving builds (wiring, WP-16). Until then the classic orchestrator in `src/workspace/line.ts` runs
+every build. Section 9 shows the graph that will replace it.
 
 ## 3. The build workflow
 
 One build, from one sentence to a working app. There are five builder agents (Researcher, Database, Backend, View
 advisor, UI) and the Tester, which makes six agents with distinct jobs. The Orchestrator is code that runs the
-stations in order and checks each handoff (`src/legacy/line.js`, `runBuild` and `runStation`).
+stations in order and checks each handoff (`src/workspace/line.ts`, `runBuild` and `runStation`).
 
 The stations, in order: Research, Database, Backend, Views, Screens, Walkthrough, then the Tests step.
 The UI agent owns two stations (Screens and Walkthrough). The diagram shows the owner's own steps that the screenshot
@@ -170,16 +180,16 @@ sequenceDiagram
 
 What each step really does, with where to read it:
 
-| Step                                   | What happens                                                                                                                                                                                                                              | Code                                  |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Agents answer in JSON                  | Each agent returns one JSON object. Code validates and normalises it. Nothing a model writes is run as code.                                                                                                                              | `line.js` (`PROMPTS`, `APPLY`)        |
-| Check after each station               | `APPLY[station]` returns a list of checks. Examples: the tables were created in SQLite, every endpoint was called as every role, every view and screen drew with real data, the tour passes against the endpoints.                        | `line.js`, `engine.js`, `runtime.js`  |
-| Send-back                              | A failed check puts the station in "sent back", posts a card in chat, and runs the agent again with the failed checks in its prompt. At most three attempts (the owner can lower it).                                                     | `line.js`, `runStation`               |
-| Safe default                           | After the last attempt, Backend, Views, Screens and Walkthrough fall back to rule-built output that must also pass its checks. Research and Database have no default; if they fail, the build stops and says why.                         | `line.js`, `FALLBACK`                 |
-| Approval                               | The owner can ask for a stop after any station. The line waits on an approval card (or the chat words "approve" or "stop").                                                                                                               | `custom.js`, `askGate`                |
-| The owner's own steps                  | Four review agents (Data, Security, Insight, Wording), two that apply their own changes (Normaliser, UI stylist), and up to eight added steps in all. Reviewers never stop the line.                                                      | `custom.js`, `REVIEWERS`, `runReview` |
-| Tester and repair                      | The Tester writes test cases as data. Code plays them in a savepoint. Failures go to the Backend agent for a repair, which is applied only if it passes the checks. At most three runs. A version can only be released if all tests pass. | `tester.js`, `runTester`              |
-| If a run that keeps the database fails | The app goes back exactly as it was.                                                                                                                                                                                                      | `line.js`, `runBuild`                 |
+| Step                                   | What happens                                                                                                                                                                                                                              | Code                                   |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Agents answer in JSON                  | Each agent returns one JSON object. Code validates and normalises it. Nothing a model writes is run as code.                                                                                                                              | `line.ts` (`PROMPTS`, `APPLY`)         |
+| Check after each station               | `APPLY[station]` returns a list of checks. Examples: the tables were created in SQLite, every endpoint was called as every role, every view and screen drew with real data, the tour passes against the endpoints.                        | `line.ts`, `engine.tsx`, `runtime.tsx` |
+| Send-back                              | A failed check puts the station in "sent back", posts a card in chat, and runs the agent again with the failed checks in its prompt. At most three attempts (the owner can lower it).                                                     | `line.ts`, `runStation`                |
+| Safe default                           | After the last attempt, Backend, Views, Screens and Walkthrough fall back to rule-built output that must also pass its checks. Research and Database have no default; if they fail, the build stops and says why.                         | `line.ts`, `FALLBACK`                  |
+| Approval                               | The owner can ask for a stop after any station. The line waits on an approval card (or the chat words "approve" or "stop").                                                                                                               | `custom.tsx`, `askGate`                |
+| The owner's own steps                  | Four review agents (Data, Security, Insight, Wording), two that apply their own changes (Normaliser, UI stylist), and up to eight added steps in all. Reviewers never stop the line.                                                      | `custom.tsx`, `REVIEWERS`, `runReview` |
+| Tester and repair                      | The Tester writes test cases as data. Code plays them in a savepoint. Failures go to the Backend agent for a repair, which is applied only if it passes the checks. At most three runs. A version can only be released if all tests pass. | `tester.tsx`, `runTester`              |
+| If a run that keeps the database fails | The app goes back exactly as it was.                                                                                                                                                                                                      | `line.ts`, `runBuild`                  |
 
 Demo and Live use the same line. In Demo each agent's answer is replayed from a saved build and no model is called. In
 Live each agent makes its own model call. The run header shows "N model calls" or "N replayed, 0 model calls".
@@ -218,13 +228,14 @@ flowchart TD
 
 Each step emits AG-UI style events (`RUN_STARTED`, `STEP_STARTED`, `TEXT_MESSAGE_*`, `STATE_DELTA`, `STEP_FINISHED`,
 `RUN_FINISHED`, and `CUSTOM` for `checks`, `sent_back`, `interrupt`, `resume`). Today they feed the workspace's own
-event log and the Debug drawer (Settings, Debug mode). Sending them from the server through the CopilotKit runtime is
-planned (WP-08, WP-16).
+event log and the Debug drawer (Settings, Debug mode). The server side of the same protocol is built: the agent
+registry at `/api/copilotkit` and a `GraphAgent` class that turns a LangGraph run into AG-UI events
+(`src/server/agui`, see [`ag-ui.md`](ag-ui.md)). Running the builder agents through it is planned (WP-05, WP-16).
 
 ## 5. A team run: the fact-check app
 
 The apps Turnkey builds can have agents of their own. The Fact-check desk has three: Extractor, Researchers and
-Verifier (`src/legacy/quests.js`, `src/legacy/team.js`). The Backend agent writes the team as data. A fixed engine
+Verifier (`src/workspace/quests.ts`, `src/workspace/team.tsx`). The Backend agent writes the team as data. A fixed engine
 runs it. Every write goes through the app's own API as the person who pressed Run, so the access rules apply to the
 agents too.
 
@@ -249,7 +260,7 @@ sequenceDiagram
   E->>API: write claims, one row at a time, as the Editor
   E->>S: find evidence for each claim
   S->>Src: page_summary / get_indicator
-  Src-->>S: sample response today, public data once WP-07 merges
+  Src-->>S: sample response today (server connectors built, wiring planned)
   S-->>E: evidence rows with a stance and a link
   E->>API: write evidence, as the Editor
   E->>V: weigh the evidence
@@ -279,7 +290,7 @@ can send work back once.
 
 ## 6. A change from chat
 
-The owner types a change into the chat sidebar. Only the stations the change touches run again (`src/legacy/changes.js`,
+The owner types a change into the chat sidebar. Only the stations the change touches run again (`src/workspace/changes.ts`,
 `handleChat`, `runChange`, `applyChangeSync`).
 
 ```mermaid
@@ -319,22 +330,25 @@ checks.
 
 ## 7. Deployment pipeline
 
-Only `main` deploys. Other branches do not (`vercel.json`), because the free plan allows a limited number of
-deployments a day and several agents push at once.
+Merging does not deploy. Vercel's Git integration is off (`vercel.json`), and production is deployed only by a release
+(`.github/workflows/release.yml`). CI runs only on a pull request that is out of draft and labelled `ready-to-merge`,
+to save Actions minutes while many agents push at once. Details: [`docs/process/deploy.md`](../process/deploy.md).
 
 ```mermaid
 flowchart LR
-  br["Branch<br/>feat/, fix/, docs/..."] --> pr["Pull request<br/>names its issue"]
-  pr --> ci
+  br["Branch<br/>feat/, fix/, docs/..."] --> pr["Draft pull request<br/>names its issue"]
+  pr --> lbl["Out of draft,<br/>label ready-to-merge"]
+  lbl --> ci
   subgraph ci["CI: .github/workflows/ci.yml"]
     direction TB
-    chk["check: secrets scan, lint,<br/>typecheck, unit tests, build"] --> e2e["e2e: 8 flows in parallel<br/>demo, live, misc, views,<br/>quests, new, custom, round6<br/>(286 browser checks)"]
+    chk["check: secrets scan, lint,<br/>typecheck, unit tests, build"] --> e2e["e2e: 9 flows in parallel<br/>demo, live, misc, views, quests,<br/>new, custom, round6, react<br/>(297 browser checks)"]
   end
   ci --> gate{"CI green?"}
   gate -->|"no"| pr
-  gate -->|"yes"| merge["Squash merge to main<br/>(by the supervisor)"]
-  merge --> vercel["Vercel Git integration<br/>builds and deploys main"]
-  vercel --> live["Live URL<br/>/api/health shows<br/>the deployed commit"]
+  gate -->|"yes"| merge["Squash merge to main<br/>(nothing deploys)"]
+  merge --> bump["Pull request that raises<br/>the version in package.json"]
+  bump --> rel["release.yml: tag, GitHub release,<br/>Vercel CLI deploy to production"]
+  rel --> live["Live URL<br/>/api/health shows<br/>the deployed commit"]
 ```
 
 Secrets: the model key lives only in Vercel's environment variables (and `.env.local` locally,
@@ -363,3 +377,32 @@ flowchart LR
   end
   build ==>|"builds"| team
 ```
+
+## 9. The workflow as a graph
+
+The workflow the owner edits on the canvas compiles into a LangGraph graph that runs in the browser
+(`@langchain/langgraph/web`, `src/platform/orchestrator`, `compileWorkflow` and `createRun`). It reproduces the
+classic loop event for event; its README lists that order. It is built and tested as a library, and is not yet the
+one that runs builds (wiring is planned). Below is the shape for one station. Every station repeats it; Research
+adds the question to the owner, and stations that have a safe default add a fallback node.
+
+```mermaid
+flowchart TD
+  start([start]) --> st["station: the agent answers<br/>(model call or replay)"]
+  st --> gate{"gate: code checks the answer"}
+  gate -->|"pass"| done["done: card, STATE_DELTA"]
+  gate -->|"fail, attempts left"| sb["send back with the failures"] --> st
+  gate -->|"fail, last attempt"| fbk{"safe default<br/>exists and passes?"}
+  fbk -->|"yes"| done
+  fbk -->|"no"| fail(["fail: the run stops and says why"])
+  done --> steps["added steps after this station<br/>(reviewers, the owner's agents)"]
+  steps --> appr{"owner asked for<br/>approval here?"}
+  appr -->|"yes"| wait["interrupt: wait for the owner"] --> next
+  appr -->|"no"| next["handoff to the next station"]
+  next -.-> tests["after the last station:<br/>tests_write, tests_run, tests_repair (at most 3 runs)"]
+  tests -.-> fin([ready])
+```
+
+The full generated graph for the default workflow, with every node, is in
+[`src/platform/orchestrator/default-workflow.mmd`](../../src/platform/orchestrator/default-workflow.mmd)
+(`node src/platform/orchestrator/scripts/print-mermaid.mjs` prints it again).
