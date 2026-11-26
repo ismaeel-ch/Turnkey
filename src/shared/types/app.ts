@@ -139,7 +139,10 @@ export interface AppTeam {
   done: string | null;
   /** human in the loop: the run waits before this agent */
   pause: { before: string; text: string } | null;
-  [field: string]: Loose;
+  /** a person may add a row of their own to a run: where it goes, what is filled in, and the button's words */
+  jump: { table: string; column: string; set: Dict<Loose>; label: string } | null;
+  /** sample inputs offered in the room */
+  samples: { label: string; values: Dict<Loose> }[];
 }
 
 /* ---------- station 4: views and the dashboard ---------- */

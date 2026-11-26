@@ -133,7 +133,7 @@ export const RUNS: Dict<RunCtl> = {},
   };
 /** Thrown wherever a run is when the owner stops it. The workflow graph knows it as a stop, not a failure. */
 export class Stopped extends StoppedError {}
-export const fatal = (msg) => {
+export const fatal = (msg: string): Error & { fatal: true } => {
   const e = new Error(msg);
   e.fatal = true;
   return e;

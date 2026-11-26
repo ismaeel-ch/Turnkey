@@ -1,4 +1,17 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
+import type {
+  AppDef,
+  AppTable,
+  AppTeam,
+  AppUser,
+  BackedDef,
+  BriefedDef,
+  ColumnDef,
+  Process,
+  Row,
+  TeamAgent,
+  Untrusted,
+} from '@/shared/types/app';
+import type { AppRecord, Dict, Loose } from '@/shared/types/workspace';
 import { ICONS } from './icons';
 import {
   ACC_PICK,
@@ -11,6 +24,7 @@ import {
   commit,
   cx,
   emit,
+  errText,
   label,
   modeNow,
   notify,
@@ -24,8 +38,9 @@ import {
   uid,
 } from './core';
 import { ACCENTS, accOf, apiCall, appUsers, chk, colOf, seedValue, tableOf } from './engine';
+import type { ApiResult } from './engine';
 import { REC, allConnectors, callConnector, connOn } from './builds';
-import { RUNS, SPEED, Stopped } from './line';
+import { RUNS, SPEED, Stopped, fatal } from './line';
 import { TeamStreamError, jsonObject, splitToolName, streamTeam } from './team-stream';
 import { Icon } from './ui';
 import { rowTitle } from './runtime';
@@ -35,26 +50,82 @@ import { rowTitle } from './runtime';
    The Backend agent writes the team as data: who the agents are, which table each one writes, and which
    workflow actions open and close a run. This engine runs any such team. Every write goes through the app's
    own API as the person who pressed Run, so the access rules apply to the agents as well. */
+/** One agent's part of a team run, as the room shows it. */
+export interface TeamStep {
+  id: string;
+  status: string;
+  say: string;
+  tools: { name: string; tool: string; args: unknown; ok: boolean; real?: boolean }[];
+  rows: { table: string; id: number; title: string }[];
+  updated: number;
+  problems: string[];
+  checks: string[];
+  t0?: number;
+  t1?: number;
+}
+/** A note a person added to a run. */
+export interface TeamNote {
+  who: string;
+  text: string;
+  table?: string;
+  id?: number;
+}
+/** One run of an app's own agent team. */
+export interface TeamRun {
+  id: string;
+  n: number;
+  /** the row the team works on */
+  table: string;
+  row: number;
+  by: number;
+  live: boolean;
+  /** the agent working now */
+  i: number;
+  steps: TeamStep[];
+  /** ids of the rows this run added, by table, in order */
+  made: Dict<number[]>;
+  notes: TeamNote[];
+  status: string;
+  stop: boolean;
+  wait: { text: string } | null;
+  calls: number;
+  tokIn: number;
+  tokOut: number;
+  t0: number;
+  t1: number | null;
+  error: string;
+  ctrl?: AbortController | null;
+  resume?: (() => void) | null;
+  abort?: (() => void) | null;
+}
+/** An app with an agent team. */
+type TeamApp = AppRecord & { def: BackedDef & { team: AppTeam } };
+/** The writes the app's API made for one agent. */
+interface TeamDid {
+  rows: TeamStep['rows'];
+  updated: number;
+  problems: string[];
+}
 /** App id -> the run in progress, or the last one. */
-export const TEAMS: Record<string, { status: string; [field: string]: unknown }> = {};
+export const TEAMS: Dict<TeamRun> = {};
 export class TeamStop extends Error {}
-export function normTeam(o, def, P) {
+export function normTeam(o: Untrusted, def: AppDef, P: Process | null): AppTeam | null {
   if (!o || typeof o !== 'object') return null;
   const inp = o.input || {},
     it = tableOf(def, snake(inp.table));
   if (!it || !P || P.table !== it.name) return null;
   const ic = colOf(it, snake(inp.column)) || it.columns.find((c) => c.type === 'longtext') || colOf(it, it.title);
-  const trans = (id) => (P.transitions.some((x) => x.id === snake(id)) ? snake(id) : null),
-    fix = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
-  const agents = arr(o.agents)
-    .map((a, i) => {
+  const trans = (id: unknown) => (P.transitions.some((x) => x.id === snake(id)) ? snake(id) : null),
+    fix = (v: unknown): Dict<Loose> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Dict<Loose>) : {});
+  const agents: TeamAgent[] = arr(o.agents)
+    .map((a: Untrusted, i) => {
       a = a || {};
       const w = tableOf(def, snake(a.writes)),
         u = tableOf(def, snake(a.updates));
       return {
         id: snake(a.id || a.name) || 'agent_' + (i + 1),
         name: str(a.name) || label(a.id) || 'Agent ' + (i + 1),
-        icon: ICONS[a.icon] ? a.icon : 'bot',
+        icon: (ICONS as Dict<string>)[a.icon] ? a.icon : 'bot',
         acc: ACCENTS.includes(a.acc) ? a.acc : ACC_PICK[i % ACC_PICK.length],
         job: str(a.job),
         hint: str(a.hint),
@@ -65,7 +136,7 @@ export function normTeam(o, def, P) {
           .filter((c) => colOf(it, c) && c !== P.column),
         fixed: fix(a.fixed),
         tools: arr(a.tools)
-          .map((x) => ({
+          .map((x: Untrusted) => ({
             connector: str(x && x.connector),
             tool: str(x && x.tool),
           }))
@@ -82,7 +153,7 @@ export function normTeam(o, def, P) {
     about: str(o.about),
     input: {
       table: it.name,
-      column: ic.name,
+      column: (ic as ColumnDef).name,
     },
     agents,
     start: trans(o.start),
@@ -103,7 +174,7 @@ export function normTeam(o, def, P) {
         }
       : null,
     samples: arr(o.samples)
-      .map((s) => ({
+      .map((s: Untrusted) => ({
         label: str(s && s.label),
         values: fix(s && s.values),
       }))
@@ -111,7 +182,7 @@ export function normTeam(o, def, P) {
       .slice(0, 4),
   };
 }
-export function canRunTeam(def, role) {
+export function canRunTeam(def: AppDef, role: string) {
   // may this role start a run and write everything the agents write?
   const tm = def.team,
     P = def.process;
@@ -123,20 +194,14 @@ export function canRunTeam(def, role) {
     tm.agents.every(
       (a) => (!a.writes || accOf(def, role, a.writes).create) && (!a.updates || accOf(def, role, a.updates).update !== 'none'),
     ) &&
-    [tm.start, tm.done].filter(Boolean).every((id) =>
-      (
-        P.transitions.find((x) => x.id === id) || {
-          roles: [],
-        }
-      ).roles.includes(role),
-    ) &&
+    [tm.start, tm.done].filter(Boolean).every((id) => (P.transitions.find((x) => x.id === id)?.roles || []).includes(role)) &&
     (!tm.jump || accOf(def, role, tm.jump.table).create)
   );
 }
-export function checkTeam(def, team) {
-  const it = tableOf(def, team.input.table),
-    bad = [],
-    linked = (t) =>
+export function checkTeam(def: BriefedDef, team: AppTeam) {
+  const it = tableOf(def, team.input.table) as AppTable,
+    bad: string[] = [],
+    linked = (t: AppTable) =>
       t.name === it.name ||
       t.columns.some(
         (c) =>
@@ -146,7 +211,7 @@ export function checkTeam(def, team) {
       );
   team.agents.forEach((a) =>
     [a.writes, a.updates].filter(Boolean).forEach((tn) => {
-      if (!linked(tableOf(def, tn))) bad.push(a.name + ' writes ' + tn + ', which has no link back to ' + it.name);
+      if (!linked(tableOf(def, tn) as AppTable)) bad.push(a.name + ' writes ' + tn + ', which has no link back to ' + it.name);
     }),
   );
   if (!team.start || !team.done) bad.push('the team needs one workflow action that opens a run and one that closes it');
@@ -158,8 +223,8 @@ export function checkTeam(def, team) {
     bad.length ? bad.join('; ') : team.agents.map((a) => a.name).join(' → ') + ', started by ' + able.join(' or '),
   );
 }
-export const teamNeeds = (team) => {
-  const out = [];
+export const teamNeeds = (team: AppTeam) => {
+  const out: string[] = [];
   team.agents.forEach((a) =>
     a.tools.forEach((x) => {
       if (!out.includes(x.connector)) out.push(x.connector);
@@ -167,21 +232,21 @@ export const teamNeeds = (team) => {
   );
   return out;
 };
-export const teamAgentOf = (appId, id) => {
+export const teamAgentOf = (appId: string, id: string) => {
   const a = S.apps[appId],
     tm = a && a.def && a.def.team;
   return tm ? tm.agents.find((x) => x.id === id) || null : null;
 };
-export const sameText = (a, b) => str(a).replace(/\s+/g, ' ') === str(b).replace(/\s+/g, ' ');
-export function teamCase(app, text) {
-  const rec = REC[app.tpl],
+export const sameText = (a: unknown, b: unknown) => str(a).replace(/\s+/g, ' ') === str(b).replace(/\s+/g, ' ');
+export function teamCase(app: TeamApp, text: string) {
+  const rec = app.tpl ? REC[app.tpl] : undefined,
     col = app.def.team.input.column;
   return ((rec && rec.cases) || []).find((c) => sameText(c.values[col], text)) || null;
 } // a saved run for exactly this input, if there is one
 
 /* ---------- running a team ---------- */
-export async function tpace(T, ms) {
-  const end = Date.now() + Math.max(0, ms * (SPEED[S.settings.speed] || 1));
+export async function tpace(T: TeamRun, ms: number) {
+  const end = Date.now() + Math.max(0, ms * ((SPEED as Dict<number>)[S.settings.speed] || 1));
   for (;;) {
     if (T.stop) throw new TeamStop();
     const left = end - Date.now();
@@ -189,12 +254,12 @@ export async function tpace(T, ms) {
     await sleep(Math.min(120, left));
   }
 }
-export function teamVals(app, T, t, row, fixed) {
+export function teamVals(app: AppRecord, T: TeamRun, t: AppTable, row: Untrusted, fixed: Dict<Loose> | undefined): Row {
   // an agent names other rows by their position in this run; code turns that into real ids
-  const out = {},
+  const out: Row = {},
     src = Object.assign({}, row, fixed),
     look = {
-      user: (name) =>
+      user: (name: unknown) =>
         (
           appUsers(app).find((u) => sameText(u.name.toLowerCase(), String(name).toLowerCase())) || {
             id: 0,
@@ -208,7 +273,7 @@ export function teamVals(app, T, t, row, fixed) {
         out[c.name] = T.row;
         return;
       }
-      const made = T.made[c.ref],
+      const made = c.ref ? T.made[c.ref] : undefined,
         n = parseInt(src[c.name], 10);
       if (made && n > 0 && made[n - 1]) out[c.name] = made[n - 1];
       return;
@@ -220,31 +285,31 @@ export function teamVals(app, T, t, row, fixed) {
   });
   return out;
 }
-export function teamApply(app, user, T, a, out) {
+export function teamApply(app: TeamApp, user: AppUser, T: TeamRun, a: TeamAgent, out: Untrusted): TeamDid {
   // put one agent's output into the app through its API
   const def = app.def,
-    did = {
+    did: TeamDid = {
       rows: [],
       updated: 0,
       problems: [],
     },
-    api = (m, p, b) => apiCall(app, user, m, p, b || {}, 'team'),
-    err = (r) =>
-      r.status +
+    api = (m: string, p: string, b?: Row) => apiCall(app, user, m, p, b || {}, 'team'),
+    err = ({ status, error, fields }: ApiResult) =>
+      status +
       ' ' +
-      r.error +
-      (r.fields
+      error +
+      (fields
         ? ' (' +
-          Object.keys(r.fields)
-            .map((k) => k + ' ' + r.fields[k])
+          Object.keys(fields)
+            .map((k) => k + ' ' + fields[k])
             .join(', ') +
           ')'
         : '');
   if (a.writes) {
-    const t = tableOf(def, a.writes);
+    const t = tableOf(def, a.writes) as AppTable;
     arr(out.rows)
       .slice(0, 12)
-      .forEach((row) => {
+      .forEach((row: Untrusted) => {
         const r = api('POST', '/api/' + t.name, teamVals(app, T, t, row || {}, a.fixed));
         if (r.status === 201) {
           (T.made[t.name] = T.made[t.name] || []).push(r.data.id);
@@ -257,9 +322,9 @@ export function teamApply(app, user, T, a, out) {
       });
   }
   if (a.updates) {
-    const t = tableOf(def, a.updates),
+    const t = tableOf(def, a.updates) as AppTable,
       made = T.made[t.name] || [];
-    arr(out.update).forEach((u) => {
+    arr(out.update).forEach((u: Untrusted) => {
       const id = made[parseInt(u && u.row, 10) - 1];
       if (!id) return;
       const body = teamVals(app, T, t, u, {});
@@ -273,8 +338,8 @@ export function teamApply(app, user, T, a, out) {
     });
   }
   if (a.sets.length && out.summary && typeof out.summary === 'object') {
-    const it = tableOf(def, T.table),
-      pick = {};
+    const it = tableOf(def, T.table) as AppTable,
+      pick: Row = {};
     a.sets.forEach((k) => {
       if (out.summary[k] != null) pick[k] = out.summary[k];
     });
@@ -292,10 +357,10 @@ export function teamApply(app, user, T, a, out) {
    each agent's work and can send it back once. The browser owns the app's database, so each accepted answer comes
    back as an event and is written here through the app's own API, as the person who pressed Run. */
 const TEAM_COL_TYPES = ['text', 'longtext', 'number', 'money', 'date', 'datetime', 'bool', 'select', 'ref', 'user'];
-const cut = (v, n) => str(v).slice(0, n);
-function teamColumn(c) {
+const cut = (v: unknown, n: number) => str(v).slice(0, n);
+function teamColumn(c: ColumnDef) {
   const type = TEAM_COL_TYPES.includes(c.type) ? c.type : 'text',
-    o = { name: cut(c.name, 60), type };
+    o: { name: string; type: string; options?: string[]; ref?: string } = { name: cut(c.name, 60), type };
   if (type === 'select')
     o.options = arr(c.options)
       .map((x) => cut(x, 80))
@@ -303,20 +368,20 @@ function teamColumn(c) {
   if (type === 'ref' && c.ref) o.ref = cut(c.ref, 60);
   return o;
 }
-export function teamRequest(app, user, T) {
+export function teamRequest(app: TeamApp, user: AppUser, T: TeamRun) {
   // what the server needs to run the team: the team, the row it works on, and the tables its answers are checked against
   const def = app.def,
     team = def.team,
     P = def.process,
-    it = tableOf(def, T.table),
+    it = tableOf(def, T.table) as AppTable,
     names = [it.name];
   team.agents.forEach((a) =>
     [a.writes, a.updates].forEach((n) => {
       if (n && !names.includes(n)) names.push(n);
     }),
   );
-  const row = apiCall(app, user, 'GET', '/api/' + it.name + '/' + T.row, {}, 'team').data || {},
-    clean = {};
+  const row: Row = apiCall(app, user, 'GET', '/api/' + it.name + '/' + T.row, {}, 'team').data || {},
+    clean: Row = {};
   it.columns.forEach((c) => {
     const v = row[c.name];
     if (v == null || v === '' || c.type === 'user' || c.type === 'ref' || (P && P.table === it.name && c.name === P.column)) return;
@@ -344,13 +409,13 @@ export function teamRequest(app, user, T) {
     input: { table: it.name, column: team.input.column, text: cut(row[team.input.column], 8000), row: clean },
     tables: names
       .map((n) => tableOf(def, n))
-      .filter(Boolean)
+      .filter((t): t is AppTable => !!t)
       .slice(0, 12)
       .map((t) => ({ name: t.name, one: cut(t.one, 60) || undefined, columns: t.columns.slice(0, 40).map(teamColumn) })),
     notes: T.notes.slice(-10).map((n) => ({ who: cut(n.who, 60), text: cut(n.text, 1500) })),
   };
 }
-export function teamServerTool(app, T, i, name, argText, content) {
+export function teamServerTool(app: TeamApp, T: TeamRun, i: number, name: unknown, argText: unknown, content: unknown) {
   // a lookup the server made: logged like any connector call, and shown on the agent's step
   const { connector, tool } = splitToolName(str(name)),
     c = allConnectors().find((x) => x.id === connector) || { name: connector },
@@ -373,20 +438,22 @@ export function teamServerTool(app, T, i, name, argText, content) {
     notify();
   }
 }
-async function teamServer(app, user, T, finishStep) {
+async function teamServer(app: TeamApp, user: AppUser, T: TeamRun, finishStep: (i: number, out: Untrusted) => Promise<void>) {
   const team = app.def.team,
-    at = (id) => team.agents.findIndex((a) => a.id === id);
-  let resume = null;
+    at = (id: unknown) => team.agents.findIndex((a) => a.id === id);
+  let resume: Untrusted = null;
   for (let leg = 0; leg < 2; leg++) {
     // one request, and one more after the pause if the team has one
-    const body = teamRequest(app, user, T);
+    const body: ReturnType<typeof teamRequest> & { resume?: Untrusted } = teamRequest(app, user, T);
     if (resume) body.resume = resume;
     T.ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const calls = {};
-    let snapshot = null,
-      result = null;
+    const calls: Dict<{ name: string; args: string }> = {};
+    let snapshot: Untrusted = null,
+      result: Untrusted = null;
     try {
-      for await (const e of streamTeam(body, T.ctrl ? T.ctrl.signal : undefined)) {
+      for await (const ev of streamTeam(body, T.ctrl ? T.ctrl.signal : undefined)) {
+        // the server's events, read field by field below
+        const e: Untrusted = ev;
         if (T.stop) throw new TeamStop();
         if (e.type === 'STEP_STARTED') {
           const i = at(e.stepName);
@@ -428,17 +495,14 @@ async function teamServer(app, user, T, finishStep) {
           }
         } else if (e.type === 'RUN_FINISHED') result = e.result || {};
         else if (e.type === 'RUN_ERROR') {
-          const err = new Error(str(e.message) || 'The team could not finish this run.');
-          if (e.code === 'not_configured' || e.code === 'rate_limited' || e.code === 'spend_cap') err.fatal = true;
-          throw err;
+          const msg = str(e.message) || 'The team could not finish this run.';
+          throw e.code === 'not_configured' || e.code === 'rate_limited' || e.code === 'spend_cap' ? fatal(msg) : new Error(msg);
         }
       }
     } catch (e) {
       if (T.stop || (e instanceof TeamStreamError && e.code === 'aborted')) throw new TeamStop();
       if (e instanceof TeamStreamError) {
-        const err = new Error(e.message);
-        err.fatal = true;
-        throw err;
+        throw fatal(e.message);
       }
       throw e;
     }
@@ -459,10 +523,10 @@ async function teamServer(app, user, T, finishStep) {
   }
   throw new Error('The team paused a second time, which this app does not expect.');
 }
-export function teamWait(app, T) {
+export function teamWait(app: TeamApp, T: TeamRun): Promise<void> {
   // human in the loop: the run pauses so the person can jump in
   T.wait = {
-    text: app.def.team.pause.text,
+    text: app.def.team.pause ? app.def.team.pause.text : '',
   };
   emit('CUSTOM', {
     name: 'interrupt',
@@ -493,12 +557,12 @@ export function teamWait(app, T) {
     T.abort = () => rej(new TeamStop());
   });
 }
-export function teamJump(app, user, text) {
+export function teamJump(app: TeamApp, user: AppUser, text: string) {
   // the person adds a row of their own to the run
   const T = TEAMS[app.id],
     j = app.def.team.jump,
-    t = tableOf(app.def, j.table);
-  if (!T || !str(text)) return false;
+    t = j && tableOf(app.def, j.table);
+  if (!T || !j || !t || !str(text)) return false;
   const r = apiCall(
     app,
     user,
@@ -528,7 +592,7 @@ export function teamJump(app, user, text) {
   commit();
   return true; // kept apart from the agents' rows, so their row numbers do not shift
 }
-export function stopTeam(app) {
+export function stopTeam(app: AppRecord) {
   const T = TEAMS[app.id];
   if (!T || T.status !== 'running') return;
   T.stop = true;
@@ -536,16 +600,16 @@ export function stopTeam(app) {
   if (T.ctrl) {
     try {
       T.ctrl.abort();
-    } catch (e) {}
+    } catch {}
   }
 }
-export async function runTeam(app, user, rowId, script) {
+export async function runTeam(app: TeamApp, user: AppUser, rowId: number, script?: Untrusted[] | null) {
   // script: a saved run (Demo). Without one, the team runs on the server with a real model and real lookups (Live).
   const def = app.def,
     team = def.team,
-    it = tableOf(def, team.input.table),
-    api = (m, p) => apiCall(app, user, m, p, {}, 'team');
-  const T = (TEAMS[app.id] = {
+    it = tableOf(def, team.input.table) as AppTable,
+    api = (m: string, p: string) => apiCall(app, user, m, p, {}, 'team');
+  const T: TeamRun = (TEAMS[app.id] = {
     id: uid('team'),
     n: 0,
     table: it.name,
@@ -575,7 +639,7 @@ export async function runTeam(app, user, rowId, script) {
     t1: null,
     error: '',
   });
-  const ev = (type, d) =>
+  const ev = (type: string, d: Dict<unknown>) =>
       emit(
         type,
         Object.assign(
@@ -586,7 +650,7 @@ export async function runTeam(app, user, rowId, script) {
           d,
         ),
       ),
-    fill = (v) => (typeof v === 'string' ? v.replace('{{jump}}', T.notes.length ? T.notes[T.notes.length - 1].text : '') : v);
+    fill = (v: unknown) => (typeof v === 'string' ? v.replace('{{jump}}', T.notes.length ? T.notes[T.notes.length - 1].text : '') : v);
   ev('RUN_STARTED', {
     threadId: app.id,
     team: team.title,
@@ -597,7 +661,7 @@ export async function runTeam(app, user, rowId, script) {
       const r = api('POST', '/api/' + it.name + '/' + rowId + '/' + team.start);
       if (r.status !== 200) throw new Error('The run could not start. ' + r.status + ' ' + r.error);
     }
-    const finishStep = async (i, out) => {
+    const finishStep = async (i: number, out: Untrusted) => {
       // one agent's accepted work goes into the app, a row at a time so the room fills in as people watch
       const a = team.agents[i],
         st = T.steps[i];
@@ -617,12 +681,12 @@ export async function runTeam(app, user, rowId, script) {
         messageId: mid,
         agent: a.id,
       });
-      const did = {
+      const did: TeamDid = {
           rows: [],
           updated: 0,
           problems: [],
         },
-        part = (o) => {
+        part = (o: Untrusted) => {
           const d = teamApply(app, user, T, a, o);
           did.rows = did.rows.concat(d.rows);
           did.updated += d.updated;
@@ -696,8 +760,8 @@ export async function runTeam(app, user, rowId, script) {
             ? Object.assign({}, sc, {
                 say: str(sc.say) + ' ' + str(sc.jumped.say),
                 rows: arr(sc.rows).concat(
-                  arr(sc.jumped.rows).map((r) => {
-                    const o = {};
+                  arr(sc.jumped.rows).map((r: Untrusted) => {
+                    const o: Row = {};
                     Object.keys(r).forEach((k) => {
                       o[k] = fill(r[k]);
                     });
@@ -736,13 +800,13 @@ export async function runTeam(app, user, rowId, script) {
   } catch (e) {
     const stopped = e instanceof TeamStop || e instanceof Stopped;
     T.status = stopped ? 'stopped' : 'failed';
-    T.error = stopped ? '' : String((e && e.message) || e);
+    T.error = stopped ? '' : errText(e);
     T.wait = null;
     T.steps.forEach((s) => {
       if (s.status === 'working') s.status = stopped ? 'idle' : 'failed';
     });
     if (!stopped) {
-      if (!e.fatal) console.warn(e);
+      if (!(e as { fatal?: boolean }).fatal) console.warn(e);
       ev('RUN_ERROR', {
         message: T.error,
       });
@@ -757,14 +821,14 @@ export async function runTeam(app, user, rowId, script) {
     commit();
   }
 }
-export function teamBlock(app, user, text) {
+export function teamBlock(app: TeamApp, user: AppUser | null, text: string): { text: string; fix?: string[] } | null {
   // why a run cannot start right now, or null
   const team = app.def.team,
     T = TEAMS[app.id],
     mode = modeNow(),
     needs = teamNeeds(team),
     off = needs.filter((id) => !connOn(id)),
-    names = (ids) =>
+    names = (ids: string[]) =>
       ids
         .map(
           (id) =>
@@ -814,7 +878,7 @@ export function teamBlock(app, user, text) {
 }
 
 /* ---------- the room itself (the screen where people start a run and watch the agents) is in room.js ---------- */
-export function TeamAv({ a, size }) {
+export function TeamAv({ a, size }: { a: { acc: string; name: string; icon: string }; size?: string }) {
   return (
     <span className={cx('av sq', size && 'av-' + size, 'acc-' + a.acc)} title={a.name + ' agent'}>
       <Icon n={a.icon} s={size === 'lg' ? '24' : '16'} />
