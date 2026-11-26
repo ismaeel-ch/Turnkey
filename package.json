@@ -8,14 +8,14 @@
     "node": ">=20"
   },
   "scripts": {
-    "build:legacy": "node scripts/build-legacy.mjs && node scripts/build-pwa.mjs",
-    "predev": "node scripts/build-legacy.mjs && node scripts/build-pwa.mjs",
+    "build:legacy": "node scripts/build-legacy.mjs",
+    "predev": "node scripts/build-legacy.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/build-legacy.mjs && node scripts/build-pwa.mjs",
+    "prebuild": "node scripts/build-legacy.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "node scripts/build-legacy.mjs --quiet && node scripts/build-pwa.mjs --quiet && next typegen && tsc --noEmit",
+    "typecheck": "node scripts/build-legacy.mjs --quiet && next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node tests/e2e/run.mjs",
@@ -24,7 +24,6 @@
     "check:secrets": "node scripts/check-secrets.mjs",
     "check": "npm run check:secrets && npm run lint && npm run typecheck && npm run test",
     "icons": "node scripts/gen-icons.cjs",
-    "pretest": "node scripts/build-legacy.mjs --quiet && node scripts/build-pwa.mjs --quiet",
     "icons:pwa": "node scripts/gen-pwa-icons.mjs"
   },
   "dependencies": {

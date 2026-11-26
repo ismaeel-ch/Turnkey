@@ -1,17 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
-import { registerWorker } from './register';
+import { registerWorker, removeWorkers } from './register';
 
-/** Starts the service worker once the page has loaded. Renders nothing. A failure here is never allowed to show. */
+/** Starts the service worker once the page has loaded (and removes it in development). Renders nothing, and a
+ *  failure here is never allowed to show: the app works without the worker. */
 export default function PwaRegister() {
   useEffect(() => {
-    try {
-      if (process.env.NODE_ENV !== 'production') return;
-      registerWorker().catch(() => {});
-    } catch {
-      /* the page works without the worker */
-    }
+    const run = process.env.NODE_ENV === 'production' ? registerWorker : removeWorkers;
+    run().catch(() => {});
   }, []);
   return null;
 }

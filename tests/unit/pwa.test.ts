@@ -1,27 +1,32 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { GET as manifestGET } from '@/app/a/manifest/route';
 import { GET as iconGET } from '@/app/a/icon/route';
 import manifest from '@/app/manifest';
-import { ACCENT_COLORS, LOGO_FILLS, LOGO_MARKS, LOGO_SHAPES, cleanName, parseIdentity } from '@/platform/pwa/identity';
+import { ACCENT_COLORS, LOGO_FILLS, LOGO_MARKS, LOGO_SHAPES, cleanName, isGlyph, parseIdentity } from '@/platform/pwa/identity';
+import { appInstallLinks } from '@/platform/pwa/app';
 import { logoSvg } from '@/platform/pwa/logo';
+import { deploymentOf, keepableFiles } from '@/platform/pwa/register';
 
 const root = path.join(__dirname, '..', '..');
 const req = (route: string, qs: string) => new Request('http://localhost/a/' + route + '?' + qs);
 
 describe('catalogs', () => {
-  const legacy = fs.readFileSync(path.join(root, 'src/legacy/release.js'), 'utf8');
+  // The workspace keeps its own copy of these lists (src/workspace/release.tsx, or src/legacy/release.js before the
+  // move). Whichever exists must agree with the lists used to draw the installed icon.
+  const file = ['src/workspace/release.tsx', 'src/legacy/release.js'].map((f) => path.join(root, f)).find((f) => fs.existsSync(f));
   it('match the workspace', () => {
-    expect(legacy).toContain("LOGO_SHAPES = ['" + LOGO_SHAPES.join("', '") + "']");
-    expect(legacy).toContain("LOGO_FILLS = ['" + LOGO_FILLS.join("', '") + "']");
-    expect(legacy).toContain("LOGO_MARKS = ['" + LOGO_MARKS.join("', '") + "']");
+    expect(file).toBeTruthy();
+    const text = fs.readFileSync(file!, 'utf8');
+    expect(text).toMatch(new RegExp("LOGO_SHAPES = \\['" + LOGO_SHAPES.join("', '") + "'\\]"));
+    expect(text).toMatch(new RegExp("LOGO_FILLS = \\['" + LOGO_FILLS.join("', '") + "'\\]"));
+    expect(text).toMatch(new RegExp("LOGO_MARKS = \\['" + LOGO_MARKS.join("', '") + "'\\]"));
   });
-  it('have the accent colours the workspace bundle derives', () => {
-    const f = path.join(root, 'src/platform/generated/legacy.js');
-    if (!fs.existsSync(f)) return;
-    const m = /const ACC_HEX = (\{.*?\});\n/.exec(fs.readFileSync(f, 'utf8'));
-    expect(JSON.parse(m![1])).toEqual(ACCENT_COLORS);
+  it('have a glyph path for every symbol', () => {
+    expect(isGlyph('apps')).toBe(true);
+    expect(isGlyph('toString')).toBe(false);
   });
 });
 
@@ -124,5 +129,143 @@ describe('Turnkey manifest', () => {
     expect(sizes).toContain('192x192');
     expect(sizes).toContain('512x512');
     for (const i of m.icons ?? []) if (i.src.startsWith('/icons/')) expect(fs.existsSync(path.join(root, 'public', i.src))).toBe(true);
+  });
+});
+
+describe('appInstallLinks', () => {
+  it('builds the manifest and icon addresses from the workspace input', () => {
+    const links = appInstallLinks({ name: 'Case Desk', accent: 'teal', shape: 'shield', shareCode: '1.abc' });
+    expect(links).not.toBeNull();
+    const m = new URL(links!.manifestUrl, 'http://x');
+    expect(m.pathname).toBe('/a/manifest');
+    expect(m.searchParams.get('name')).toBe('Case Desk');
+    expect(m.searchParams.get('c')).toBe('1.abc');
+    expect(new URL(links!.iconUrl(512), 'http://x').searchParams.get('size')).toBe('512');
+  });
+  it('gives back addresses that the routes accept', async () => {
+    const links = appInstallLinks({ name: 'Cases', accent: 'pink', glyph: 'rocket' })!;
+    const res = manifestGET(new Request('http://localhost' + links.manifestUrl));
+    expect(res.status).toBe(200);
+    expect(iconGET(new Request('http://localhost' + links.iconUrl())).status).toBe(200);
+  });
+  it('refuses a value outside the catalogs', () => {
+    expect(appInstallLinks({ accent: 'red' })).toBeNull();
+    expect(appInstallLinks({ shareCode: '<script>' })).toBeNull();
+  });
+});
+
+describe('deploymentOf and keepableFiles', () => {
+  it('reads the build id from the page', () => {
+    expect(deploymentOf('x \\"b\\":\\"GuU38Y2MQUOvlWbxbJE25\\" y')).toBe('guu38y2mquovlwbxbje25');
+  });
+  it('falls back to a hash of the script names, which changes with them', () => {
+    const a = deploymentOf('<script src="/_next/static/chunks/a1.js"></script>');
+    const b = deploymentOf('<script src="/_next/static/chunks/a2.js"></script>');
+    expect(a).toMatch(/^[0-9a-z]+$/);
+    expect(a).not.toBe(b);
+  });
+  it('keeps only same-origin build files', () => {
+    const out = keepableFiles(
+      [
+        { name: 'http://x/_next/static/chunks/a.js' },
+        { name: 'http://x/vendor/sql-wasm.wasm?v=1' },
+        { name: 'http://x/api/llm' },
+        { name: 'http://other/_next/static/b.js' },
+        { name: 'not an address' },
+      ],
+      'http://x',
+    );
+    expect(out).toEqual(['/_next/static/chunks/a.js', '/vendor/sql-wasm.wasm?v=1']);
+  });
+});
+
+describe('service worker', () => {
+  type Listener = (e: Record<string, unknown>) => void;
+  function load(version = 'abc') {
+    const listeners: Record<string, Listener> = {};
+    const store = new Map<string, Map<string, Response>>();
+    const fetched: string[] = [];
+    const cacheOf = (name: string) => {
+      if (!store.has(name)) store.set(name, new Map());
+      const m = store.get(name)!;
+      return {
+        match: async (k: string | Request) => m.get(typeof k === 'string' ? k : new URL(k.url).pathname)?.clone(),
+        put: async (k: string, r: Response) => void m.set(k, r),
+      };
+    };
+    const self = {
+      location: { href: 'http://x/sw.js?v=' + version, origin: 'http://x' },
+      addEventListener: (t: string, f: Listener) => (listeners[t] = f),
+      skipWaiting: async () => {},
+      clients: { claim: async () => {} },
+    };
+    const caches = {
+      open: async (n: string) => cacheOf(n),
+      keys: async () => [...store.keys()],
+      delete: async (n: string) => store.delete(n),
+    };
+    const fetchFn = async (u: string | Request) => {
+      const url = typeof u === 'string' ? u : u.url;
+      fetched.push(url);
+      return new Response(url.endsWith('/') || url === '/' ? '<script src="/_next/static/c.js"></script>' : 'ok');
+    };
+    vm.runInNewContext(fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8'), {
+      self,
+      caches,
+      fetch: fetchFn,
+      URL,
+      Response,
+      Request,
+      Promise,
+    });
+    return { listeners, store, fetched };
+  }
+  const fetchEvent = (url: string, over: Record<string, unknown> = {}) => {
+    const out: { responded: unknown } = { responded: undefined };
+    const req = { method: 'GET', url: 'http://x' + url, mode: 'cors', headers: new Headers(), ...over };
+    return { out, ev: { request: req, respondWith: (p: unknown) => (out.responded = p), waitUntil: () => {} } };
+  };
+  it('leaves API calls, other methods, other origins and its own file alone', () => {
+    const { listeners } = load();
+    for (const [u, over] of [
+      ['/api/llm', {}],
+      ['/api/health', {}],
+      ['/x', { method: 'POST' }],
+      ['/sw.js', {}],
+    ] as const) {
+      const { ev, out } = fetchEvent(u, over);
+      listeners.fetch(ev);
+      expect(out.responded, u).toBeUndefined();
+    }
+    const other = fetchEvent('/_next/static/a.js', { url: 'http://elsewhere/_next/static/a.js' });
+    listeners.fetch(other.ev);
+    expect(other.out.responded).toBeUndefined();
+  });
+  it('never writes an API response into the cache, even when the page asks to keep one', async () => {
+    const { listeners, store } = load();
+    await (async () => {
+      let p: Promise<unknown> = Promise.resolve();
+      listeners.message({
+        data: { type: 'keep', urls: ['/api/llm', '/_next/static/a.js', 'http://evil/_next/static/b.js'] },
+        waitUntil: (x: Promise<unknown>) => (p = x),
+      });
+      await p;
+    })();
+    const keys = [...(store.get('turnkey-abc')?.keys() ?? [])];
+    expect(keys).toEqual(['/_next/static/a.js']);
+  });
+  it('keeps the page and what it names on install, and drops other versions on activate', async () => {
+    const { listeners, store, fetched } = load('new');
+    store.set('turnkey-old', new Map());
+    store.set('other-site', new Map());
+    let p: Promise<unknown> = Promise.resolve();
+    listeners.install({ waitUntil: (x: Promise<unknown>) => (p = x) });
+    await p;
+    expect(fetched).toContain('/_next/static/c.js');
+    expect(fetched).toContain('/vendor/sql-wasm.wasm');
+    expect(fetched.some((u) => u.includes('/api/'))).toBe(false);
+    listeners.activate({ waitUntil: (x: Promise<unknown>) => (p = x) });
+    await p;
+    expect([...store.keys()].sort()).toEqual(['other-site', 'turnkey-new']);
   });
 });

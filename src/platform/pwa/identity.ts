@@ -1,7 +1,7 @@
 // An app's identity as it arrives in a request: untrusted. Everything here either matches a fixed catalog or is
-// reduced to safe characters. The catalogs mirror src/legacy/release.js (LOGO_SHAPES, LOGO_FILLS, LOGO_MARKS) and
-// src/legacy/engine.js (ACCENTS); tests/unit/pwa.test.ts compares them with the generated workspace bundle.
-import glyphs from '@/platform/generated/pwa-glyphs.json';
+// reduced to safe characters. The catalogs mirror src/workspace/release.tsx (LOGO_SHAPES, LOGO_FILLS, LOGO_MARKS) and
+// the workspace theme (ACCENTS); tests/unit/pwa.test.ts compares the logo lists with the workspace source.
+import glyphs from './glyphs.json';
 
 export const LOGO_SHAPES = ['squircle', 'circle', 'hexagon', 'shield', 'tile'] as const;
 export const LOGO_FILLS = ['gradient', 'solid', 'split', 'ring'] as const;
