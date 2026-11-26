@@ -1,6 +1,6 @@
 # ADR 3: LangGraph in two layers
 
-Status: accepted. Implementation: Partly built. The browser layer (the workflow graph, WP-09) is built and tested as a library in `src/platform/orchestrator` but does not run builds yet. The server layer (WP-05, WP-06) is planned. The classic orchestrator runs every build.
+Status: accepted. Implementation: Built. Every build runs through the workflow graph in the browser (`src/platform/orchestrator`); each Live agent step runs as a graph on the server (`src/server/graph/step`), and each app team as a graph compiled from its definition (`src/server/graph/team`).
 
 ## Context
 
@@ -16,6 +16,6 @@ Use LangGraph at two levels. On the server, each agent step is a small graph (dr
 - Risk: a second orchestrator next to a tested one. So the graph ships behind a switch (`window.__turnkeyOptions`) and the classic orchestrator stays the default until the graph passes every browser flow.
 - If time runs out, the product still works: the classic orchestrator is complete. This is stated in the plan's cut order.
 - The workflow graph reproduces the classic loop event for event; its README lists that order, and its tests check it.
-- Until the wiring merges, this repository's documents describe the classic orchestrator as what runs.
+- The browser flows that passed on the classic loop pass on the graph.
 
 Where to look: `docs/PLAN.md` decision 3 and section 7; `src/platform/orchestrator/README.md`; work packages 05, 06, 09, 16.

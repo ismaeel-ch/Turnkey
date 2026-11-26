@@ -407,7 +407,7 @@ export function useStore() {
 
 /* ---------- AG-UI event log and telemetry (Debug mode reads these) ---------- */
 export const EV: LoggedEvent[] = [];
-export let evSeq = 0,
+let evSeq = 0,
   toolSeq = 0;
 export const TOOLCALLS: ToolCallRecord[] = [],
   MODELCALLS: ModelCallRecord[] = [],
@@ -534,7 +534,39 @@ export function confirmBox(o: Dict<unknown>) {
   });
 }
 export const deviceOnline = () => typeof navigator === 'undefined' || navigator.onLine !== false; // what the browser reports about this device's connection
-export const online = () => deviceOnline() && !S.settings.offline; // the connection, or the offline test switch standing in for a lost one
+/* A browser can report "online" on a network that reaches nothing (a captive portal, a dead router). So the page also asks its own server
+   route whether it can be reached: at start, whenever the browser reports the connection came back, and when the page is shown again.
+   While the route cannot be reached the page counts as offline, and it asks again every 20 seconds until it can. */
+let reachable = true;
+let reachTimer: ReturnType<typeof setTimeout> | null = null;
+let reachBusy = false;
+export const serverReachable = () => reachable;
+export async function checkReach(): Promise<boolean> {
+  if (typeof fetch === 'undefined' || !deviceOnline() || reachBusy) return reachable;
+  reachBusy = true;
+  if (reachTimer) clearTimeout(reachTimer);
+  reachTimer = null;
+  let ok = true;
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 8000);
+    try {
+      await fetch('/api/health', { cache: 'no-store', signal: ctl.signal }); // any answer, even a refusal, means the server was reached
+    } finally {
+      clearTimeout(t);
+    }
+  } catch {
+    ok = deviceOnline() ? false : reachable; // a failure because the device itself went offline is reported by the browser instead
+  }
+  reachBusy = false;
+  if (ok !== reachable) {
+    reachable = ok;
+    netChanged();
+  }
+  if (!reachable) reachTimer = setTimeout(() => void checkReach(), 20000);
+  return reachable;
+}
+export const online = () => deviceOnline() && reachable && !S.settings.offline; // the connection, or the offline test switch standing in for a lost one
 export function needNet(what: string) {
   if (online()) return true;
   toast('You are offline. ' + what + ' needs internet.', 'warning');
@@ -543,7 +575,7 @@ export function needNet(what: string) {
 /* Live follows the internet connection and nothing else. It is on when this device is connected (unless Demo was chosen), it pauses by itself
    when the connection goes, and it comes back by itself when the connection does. Where the page runs plays no part. Whether a model can be
    reached from this copy of the page is a separate fact (U.live); when none can, saved builds and built-in changes stand in and say so. */
-export const NO_MODEL = 'No model is connected to this copy of the prototype.';
+export const NO_MODEL = 'No model is connected to this copy of Turnkey.';
 export function modeNow() {
   // one answer for every badge and every decision: what the agents will do right now, and why
   if (S.settings.demo)
@@ -591,7 +623,6 @@ export function modeNow() {
     cls: 'b-info',
   };
 }
-export const liveOn = () => modeNow().on; // the Live switch as it shows: wanted, and connected
 export const liveModelOn = () => modeNow().live; // Live, with a model to call
 interface NetworkInfo {
   effectiveType?: string;

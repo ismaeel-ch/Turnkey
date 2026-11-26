@@ -14,11 +14,12 @@ import { limiter, limitsFrom } from '@/server/guard/limits';
 import { checkPrompt } from '@/server/guard/prompt';
 import { resolveProvider } from '@/server/llm';
 import { parseStepInput } from '@/shared/agent-contract';
+import { withRequestLog } from '@/server/log';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   const foreign = refuseCrossSite(request);
   if (foreign) return foreign;
   const provider = resolveProvider();
@@ -79,3 +80,5 @@ export async function POST(request: Request) {
     },
   });
 }
+
+export const POST = withRequestLog('agent.step', post);

@@ -10,7 +10,7 @@ today; then how the graph reproduces it.
 ## 1. Specification: the order of events in a build
 
 Sources: `src/workspace/line.ts` (`runBuild`, `runStation`, `askQuestion`), `src/workspace/custom.tsx` (`flowOf`, `stepsAt`,
-`stepAfter`, `stepAuto`, `askGate`, `runReview`, `applyAuto`), `src/workspace/tester.tsx` (`runTester`, `QA_ROUNDS`).
+`stepAfter`, `stepAuto`, `askGate`, `runReview`, `applyAuto`), `src/workspace/tester.tsx` (`runTester`).
 
 ### 1.1 The workflow as data
 
@@ -67,7 +67,7 @@ backend, views, ui (Screens and Walkthrough).
    steps set to apply push their proposed changes through the checked change pipeline.
 5. **Tester**, `runTester`:
    1. `STEP_STARTED tests`. Step "Write test cases" (model or rules).
-   2. **Rounds**, `n = 1..QA_ROUNDS` (3: one run and at most two repair rounds):
+   2. **Rounds**, `n = 1..testerMax` (the step's rounds setting, 1 to 3, default 3: one run and at most two repair rounds):
       - Step "Run every test" (first) or "Run every test again". Count the failures.
       - No failures, or `n` is the last round: stop looping.
       - Otherwise send the failures back: `retries++`, step "Repair". The Backend agent (model) or the rules propose

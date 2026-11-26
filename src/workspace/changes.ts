@@ -82,7 +82,8 @@ import {
   stepEnd,
   stepStart,
 } from './line';
-import { FLOW_HELP, LEVELS, NOTE_FOR, REVIEWERS, agentThe, answerGate, flowChat, flowList, flowOf, parseFlow } from './custom';
+import { FLOW_HELP, LEVELS, NOTE_FOR, agentThe, answerGate, flowChat, flowList, flowOf, parseFlow } from './custom';
+import { REVIEWERS } from './reviewers';
 import { logChange } from './release';
 import { recordTouches, snapshotDef } from './provenance';
 

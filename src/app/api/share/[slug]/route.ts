@@ -6,10 +6,11 @@ import { lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
 import { refuse, refuseVerdict, visitorKey } from '@/server/guard/http';
 import { readShare } from '@/server/share/service';
 import { resolveShareStore } from '@/server/share/store';
+import { withRequestLog } from '@/server/log';
 
 export const runtime = 'nodejs';
 
-export async function GET(request: Request, ctx: { params: Promise<{ slug: string }> }) {
+async function get(request: Request, ctx: { params: Promise<{ slug: string }> }) {
   const light = lightLimiter.take(visitorKey(request), lightLimitsFrom());
   if (!light.ok) return refuseVerdict(light);
   const store = resolveShareStore();
@@ -27,3 +28,5 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
     return refuse(503, 'not_configured', 'The shared app could not be read just now.');
   }
 }
+
+export const GET = withRequestLog('share.read', get);
