@@ -5,7 +5,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runTeamGraph } from '@/server/graph/team';
 import { queryFrom, toolBoxFromConnectors, type ConnectorLike } from '@/server/graph/team/connector-tools';
-import { KNOWN_TOOLS, noTools, toolBoxFrom } from '@/server/graph/team/tools';
+import { KNOWN_TOOLS, toolBoxFrom, type ToolBox } from '@/server/graph/team/tools';
+
+// A tool box with nothing in it. It lived in tools.ts until #100 removed it as unused outside tests.
+const noTools: ToolBox = {
+  info: () => null,
+  run: async () => ({ ok: false, text: 'No tools are available.' }),
+};
 import type { Provider } from '@/server/llm';
 import { collect, factRequest, fixtureTools } from './fixtures';
 
