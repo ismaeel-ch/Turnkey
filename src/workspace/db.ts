@@ -1,6 +1,32 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
 import { loadSqlite } from '@/platform/sqlite';
-import { BRAND, LS, SQLLOG, notify, nowStamp, ring, toast } from './core';
+import { fileBytes, pickFile } from '@/platform/files';
+import {
+  DataFileError,
+  backupFileName,
+  backupToText,
+  decodeBase64,
+  encodeBase64,
+  importAppSqlite,
+  parseBackup,
+  restoreBackup,
+  workspaceStorage,
+} from '@/platform/storage';
+import {
+  BRAND,
+  LS,
+  SQLLOG,
+  attachStorage,
+  confirmBox,
+  notify,
+  nowStamp,
+  ring,
+  saveFile,
+  saveNow,
+  saveTimer,
+  setSaveTimer,
+  toast,
+} from './core';
 
 /* ===== Turnkey prototype · SQLite in the browser (sql.js), saved into browser storage ===== */
 export const DBX = {
@@ -16,20 +42,7 @@ export const DBX = {
 export async function initSqlite() {
   DBX.SQL = await loadSqlite();
 }
-export const b64 = {
-  enc(u8) {
-    let s = '';
-    const n = 0x8000;
-    for (let i = 0; i < u8.length; i += n) s += String.fromCharCode.apply(null, u8.subarray(i, i + n));
-    return btoa(s);
-  },
-  dec(text) {
-    const bin = atob(text);
-    const u8 = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    return u8;
-  },
-};
+export const b64 = { enc: encodeBase64, dec: decodeBase64 };
 export const dbBump = (appId) => {
   DBX.ver[appId] = (DBX.ver[appId] || 0) + 1;
 };
@@ -297,4 +310,119 @@ export function topoOrder(tables) {
     names.add(t.name);
   }
   return out;
+}
+
+/* ---------- files: one app's database in and out, the whole workspace as a backup ---------- */
+const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+const errText = (e) => (e instanceof DataFileError ? e.message : 'That did not work: ' + String((e && e.message) || e));
+
+/** Writes everything still waiting in a timer (the state and each open database) into storage now. */
+export function flushAll() {
+  saveNow();
+  Object.keys(DBX.open).forEach((id) => {
+    if (!DBX.hold[id]) dbFlush(id);
+  });
+}
+
+/** Closes an app's open database without deleting the stored file, so the next read opens what storage holds. */
+function dbClose(appId) {
+  clearTimeout(DBX.timers[appId]);
+  DBX.timers[appId] = null;
+  const db = DBX.open[appId];
+  if (db) {
+    try {
+      db.close();
+    } catch (e) {}
+  }
+  delete DBX.open[appId];
+}
+
+/** Picks a .sqlite file and puts it in as the app's database, after checking it holds the app's tables. */
+export async function importAppDb(app) {
+  if (DBX.hold[app.id]) return toast('Wait until the current change to ' + app.name + ' has finished.', 'warning');
+  const f = await pickFile('.sqlite,.sqlite3,.db,application/vnd.sqlite3,application/x-sqlite3');
+  if (!f) return;
+  let bytes;
+  try {
+    bytes = await fileBytes(f);
+  } catch (e) {
+    return toast('That file could not be read.', 'danger');
+  }
+  const ok = await confirmBox({
+    title: 'Replace the data in ' + app.name + '?',
+    body: 'Every row in the app is replaced by what ' + f.name + ' holds. Tables and screens stay. Export .sqlite first to keep a copy.',
+    yes: 'Import',
+    danger: true,
+  });
+  if (!ok) return;
+  const mustHave = app.def.tables.map((t) => t.name).concat(['users', 'activity']);
+  if (DBX.open[app.id]) dbFlush(app.id); // keep the current file safe in storage until the new one is accepted
+  dbClose(app.id);
+  try {
+    const info = importAppSqlite(LS, app.id, bytes, { SQL: DBX.SQL, mustHave });
+    DBX.size[app.id] = bytes.length;
+    DBX.savedAt[app.id] = Date.now();
+    toast('Imported ' + plural(info.rows, 'row') + ' in ' + plural(info.tables.length, 'table') + ' into ' + app.name + '.', 'success');
+  } catch (e) {
+    toast(errText(e), 'danger', 8000);
+  }
+  dbBump(app.id);
+  notify();
+}
+
+/** Downloads the whole workspace (state and every app's database) as one JSON file. */
+export async function backupWorkspace() {
+  flushAll();
+  const now = new Date();
+  if (await saveFile(backupFileName(now), backupToText(LS, now), 'application/json'))
+    toast('Backup saved. Restore it here or in another browser.', 'success');
+}
+
+/**
+ * Picks a backup file and makes this browser hold exactly what it holds, then reloads. Nothing is changed when the file
+ * is not a backup or storage is full. Saving is stopped first, so nothing in memory writes over the restored data.
+ */
+export async function restoreWorkspace() {
+  const f = await pickFile('.json,application/json');
+  if (!f) return;
+  let b;
+  try {
+    b = parseBackup(await f.text());
+  } catch (e) {
+    return toast(errText(e), 'danger', 8000);
+  }
+  let apps = 0,
+    people = 0;
+  try {
+    const st = b.items.state ? JSON.parse(b.items.state) : null;
+    apps = st ? Object.keys(st.apps || {}).length : 0;
+    people = st ? (st.accounts || []).length : 0;
+  } catch (e) {}
+  const ok = await confirmBox({
+    title: 'Restore this backup?',
+    body:
+      'It replaces everything in this browser with the backup from ' +
+      new Date(b.at).toLocaleString() +
+      ': ' +
+      plural(people, 'account') +
+      ' and ' +
+      plural(apps, 'app') +
+      '. What is here now and not in the backup is removed. The page reloads afterwards.',
+    yes: 'Restore',
+    danger: true,
+  });
+  if (!ok) return;
+  clearTimeout(saveTimer);
+  setSaveTimer(null);
+  Object.keys(DBX.open).forEach(dbClose);
+  try {
+    restoreBackup(LS, b, 'replace');
+  } catch (e) {
+    return toast(errText(e), 'danger', 8000);
+  }
+  const s = workspaceStorage();
+  if (s) await s.flush();
+  // from here on nothing writes: runs and timers still alive until the reload must not undo the restore
+  attachStorage({ set: () => true, del: () => {} });
+  location.reload();
 }

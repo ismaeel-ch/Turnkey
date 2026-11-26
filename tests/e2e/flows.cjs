@@ -232,7 +232,7 @@ async function flowDemo(browser, url) {
 
   // erase everything
   await page.locator('.titlebar .acct').click(); await page.locator('.menu .mi', { hasText: 'Reset data' }).click(); await page.locator('.dialog .btn.danger').click(); await page.waitForSelector('.ob-card');
-  const keys = await st(page, () => Object.keys(localStorage).filter((k) => k.indexOf('formwork:') === 0).length);
+  const keys = await st(page, () => window.__turnkeyStorage.keys().length + Object.keys(localStorage).filter((k) => k.indexOf('formwork:') === 0).length);
   check('erase everything clears storage and returns to onboarding', keys === 0, keys);
   await ctx.close();
 }
@@ -437,6 +437,27 @@ async function flowMisc(browser, url) {
   check('API view can create a patient', (await page.locator('.api-grid .badge').first().innerText()).trim() === '201', await page.locator('.api-grid .badge').first().innerText());
   await view(page, 'Data'); await page.getByRole('tab', { name: 'Columns' }).click(); await sleep(50); await page.getByRole('tab', { name: 'CREATE TABLE' }).click(); await sleep(50);
   check('CREATE TABLE is shown from sqlite_master', (await page.locator('.main-body .code').innerText()).includes('CREATE TABLE'));
+  // files: export the app's database, import it back, back up the workspace and restore it
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'tk-files-')), acts = () => st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return window.__formwork.dbCount(t.app, 'activity'); });
+  const n0 = await acts(); const [sq] = await Promise.all([page.waitForEvent('download'), page.locator('.side-foot .btn', { hasText: 'Export .sqlite' }).click()]); const sqPath = path.join(tmp, sq.suggestedFilename()); await sq.saveAs(sqPath);
+  check('Export .sqlite downloads the app as a SQLite file', /\.sqlite$/.test(sqPath) && fs.readFileSync(sqPath).subarray(0, 15).toString() === 'SQLite format 3', sq.suggestedFilename());
+  await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); window.__formwork.sql(t.app, "INSERT INTO \"activity\" (\"at\", \"table_name\", \"action\") VALUES ('2026-11-26', 'patients', 'test')"); });
+  const fc1 = page.waitForEvent('filechooser'); await page.locator('.side-foot .btn', { hasText: 'Import .sqlite' }).click(); await (await fc1).setFiles(sqPath); await page.locator('.dialog .dfoot .btn.danger', { hasText: 'Import' }).click(); await sleep(200);
+  check('Import .sqlite puts the exported file back', await acts() === n0 && (await page.locator('.toast').allInnerTexts()).join(' ').includes('Imported'), [n0, await acts()]);
+  const fc2 = page.waitForEvent('filechooser'); await page.locator('.side-foot .btn', { hasText: 'Import .sqlite' }).click(); await (await fc2).setFiles({ name: 'notes.sqlite', mimeType: 'application/octet-stream', buffer: Buffer.from('not a database at all') }); await page.locator('.dialog .dfoot .btn.danger', { hasText: 'Import' }).click(); await sleep(200);
+  check('a file that is not a database is refused and the data stays', await acts() === n0 && (await page.locator('.toast').allInnerTexts()).join(' ').includes('not a SQLite database'), await page.locator('.toast').allInnerTexts());
+  await page.locator('.titlebar .acct').click(); await page.locator('.menu .mi', { hasText: 'Reset data' }).click(); await page.waitForSelector('.dialog .set-list');
+  const [bk] = await Promise.all([page.waitForEvent('download'), page.locator('.dialog .set-row .btn', { hasText: 'Back up' }).click()]); const bkPath = path.join(tmp, bk.suggestedFilename()); await bk.saveAs(bkPath);
+  const bkj = JSON.parse(fs.readFileSync(bkPath, 'utf8'));
+  check('Back up workspace saves state and every database as JSON', bkj.f === 'turnkey-backup' && !!bkj.items.state && Object.keys(bkj.items).some((k) => k.indexOf('db:') === 0), Object.keys(bkj.items));
+  await page.locator('.dialog .set-row .btn', { hasText: 'Delete apps' }).click(); await page.waitForSelector('.home');
+  await page.locator('.titlebar .acct').click(); await page.locator('.menu .mi', { hasText: 'Reset data' }).click(); await page.waitForSelector('.dialog .set-list');
+  const fc3 = page.waitForEvent('filechooser'); await page.locator('.dialog .set-row .btn', { hasText: 'Restore' }).first().click(); await (await fc3).setFiles(bkPath);
+  await Promise.all([page.waitForEvent('load'), page.locator('.dialog .dfoot .btn.danger', { hasText: 'Restore' }).click()]); await page.waitForSelector('.work-head', { timeout: 20000 }); await view(page, 'Data'); await sleep(200);
+  const rs = await st(page, () => ({ apps: Object.values(window.__formwork.state().apps).map((x) => x.name), mode: window.__turnkeyStorage && window.__turnkeyStorage.mode }));
+  check('Restore brings back the apps and their data after a reload', rs.apps.includes('North Clinic') && await acts() === n0 && rs.mode === 'indexeddb', [rs, n0]);
+  await page.reload(); await page.waitForSelector('.work-head', { timeout: 20000 }); await view(page, 'Data');
+  check('a reload keeps everything (IndexedDB)', (await appState(page)).name === 'North Clinic' && await acts() === n0);
   // stop and run again, then a reload in the middle of a build
   await setSpeed(page, 'normal'); await page.locator('.newtab').click(); await page.waitForSelector('.home'); await page.locator('[data-tpl="leave"] .tpl-build').click(); await sleep(1500);
   await page.locator('.build-bar .btn', { hasText: 'Stop' }).click(); await sleep(400); let b = await appState(page);
@@ -445,11 +466,11 @@ async function flowMisc(browser, url) {
   check('run again finishes the build', b.status === 'ready' && b.name === 'TimeOff', [b.status, b.name]);
   await setSpeed(page, 'normal'); await page.locator('.newtab').click(); await page.waitForSelector('.home'); await page.locator('[data-tpl="helpdesk"] .tpl-build').click(); await sleep(1500); await page.reload(); await page.waitForSelector('.work-head', { timeout: 20000 }); b = await appState(page);
   check('a reload during a build leaves a clear, restartable state', b.status === 'stopped' && /reloaded/.test(b.last.text), [b.status, b.last && b.last.text]);
-  const sizes = await st(page, () => { let n = 0, per = {}; Object.keys(localStorage).forEach((k) => { const v = localStorage.getItem(k).length; n += v; per[k.replace('formwork:v1:', '')] = v; }); return { total: n, per }; });
+  const sizes = await st(page, () => { let n = 0, per = {}; const all = window.__turnkeyStorage.entries(); Object.keys(all).forEach((k) => { n += all[k].length; per[k] = all[k].length; }); return { total: n, per }; });
   console.log('STORAGE:', JSON.stringify(sizes.total));
   await ctx.close();
   // a view where browser storage is blocked (like an embedded preview): everything still works, in memory
-  const blocked = await newPage(browser, { init: "Storage.prototype.setItem = function () { throw new Error('storage disabled'); };" });
+  const blocked = await newPage(browser, { init: "Storage.prototype.setItem = function () { throw new Error('storage disabled'); }; Object.defineProperty(window, 'indexedDB', { get() { return undefined; } });" });
   const p2 = blocked.page; await p2.goto(url); await p2.waitForSelector('.ob-card');
   await p2.getByRole('button', { name: 'Get started' }).click(); await p2.getByRole('button', { name: /Skip and use the demo account/ }).click(); await p2.getByRole('button', { name: 'Continue' }).click(); await p2.getByRole('button', { name: 'Continue' }).click();
   await setSpeed(p2, 'instant'); await p2.locator('.ob-body .switch').click(); await p2.getByRole('button', { name: 'Open my workspace' }).click();
@@ -540,7 +561,7 @@ async function flowViews(browser, url) {
   check('chat switches the layout to an icon rail', a.nav === 'rail' && await page.locator('.app-nav.rail .nav-i').count() >= 4, a.nav); await shot(page, '77-rail');
   // an app saved by the earlier version: no view plan, no dashboard for everyone
   await sleep(800);
-  await st(page, () => { const k = 'formwork:v1:state', s = JSON.parse(localStorage.getItem(k)); Object.values(s.apps).forEach((x) => { delete x.def.views; delete x.def.dash; delete x.def.team; delete x.line.views; delete x.def.theme.density; x.def.screens = x.def.screens.filter((y) => y.type !== 'dashboard'); }); localStorage.setItem(k, JSON.stringify(s)); });
+  await st(page, async () => { const T = window.__turnkeyStorage, s = JSON.parse(T.get('state')); Object.values(s.apps).forEach((x) => { delete x.def.views; delete x.def.dash; delete x.def.team; delete x.line.views; delete x.def.theme.density; x.def.screens = x.def.screens.filter((y) => y.type !== 'dashboard'); }); T.set('state', JSON.stringify(s)); await T.flush(); });
   await page.reload(); await page.waitForSelector('.work-head', { timeout: 20000 }); a = await appState(page);
   check('an app saved by the earlier version gets views and a dashboard on load', a.line.views === 'ok' && a.views.appointments.length >= 5 && a.widgets >= 4 && a.dashRoles === 3, [a.line, a.views, a.widgets, a.dashRoles]);
   await view(page, 'App'); await page.selectOption('.stage-bar select', { index: 1 }); await sleep(100); await nav(page, 'Dashboard'); await page.waitForSelector('.kpis'); check('the migrated dashboard draws', await page.locator('.kpi').count() >= 3);
@@ -870,7 +891,7 @@ async function flowCustom(browser, url) {
   check('default: a new app starts with the saved workflow and is built under it', JSON.stringify(a.flow) === JSON.stringify(mine) && a.status === 'ready' && a.line.screens.rules && a.reviews.security && a.reviews.insight && a.tests.failed === 0, [a.flow, mine, a.status, a.line.screens, Object.keys(a.reviews)]);
   await say(page, 'Reset the workflow'); await sleep(300); a = await appFull(page);
   check('reset: back to the standard workflow, review steps gone from the canvas', JSON.stringify(a.flow) === JSON.stringify({ attempts: 3, approve: {}, notes: {}, by: {}, reviewers: [], agents: [], at: {}, auto: {} }) && Object.keys(a.reviews).length === 0 && await page.locator('.fl-review').count() === 0, a.flow);
-  const saved = await st(page, () => { const raw = JSON.parse(localStorage.getItem('formwork:v1:state') || '{}'); return { flows: Object.keys(raw.flows || {}).length, apps: Object.values(raw.apps || {}).map((x) => !!x.flow) }; });
+  const saved = await st(page, () => { const raw = JSON.parse(window.__turnkeyStorage.get('state') || '{}'); return { flows: Object.keys(raw.flows || {}).length, apps: Object.values(raw.apps || {}).map((x) => !!x.flow) }; });
   // an approval can be answered by typing, and anything else typed there gets directions instead of being taken for a change
   await say(page, 'Add a security review'); await waitFree(page); await say(page, 'Ask me after research'); await sleep(200);
   await page.locator('.build-bar .btn', { hasText: 'Run again' }).click(); await confirmYes(page);
@@ -881,7 +902,7 @@ async function flowCustom(browser, url) {
   check('approval: typing something else gets directions, typing an approval continues the build', /Approve to continue, or stop here/.test(hint) && still === 'gate' && a.status === 'ready' && a.line.research.approved && a.reviews.security && a.reviews.security.status === 'ok', [hint, still, a.status, a.line.research]);
   await sleep(600); await page.reload(); await page.waitForSelector('.work-head'); await view(page, 'Build'); await page.waitForSelector('.react-flow .fl-review', { timeout: 20000 }); await sleep(400); a = await appFull(page);
   check('after a reload the app still has its workflow, its review and the review step on the canvas', a.flow.reviewers.join() === 'security' && a.flow.approve.research === true && a.reviews.security.status === 'ok' && a.reviews.security.f.length >= 1 && await page.locator('.fl-review').count() === 1 && /The build waits here|You approved this/.test(await page.locator('.fl-approval').first().innerText()), [a.flow, a.reviews]);
-  await sleep(500); check('the workflow and the default are saved with the workspace', (await st(page, () => { const raw = JSON.parse(localStorage.getItem('formwork:v1:state') || '{}'); return Object.keys(raw.flows || {}).length === 1 && Object.values(raw.apps || {}).every((x) => x.flow && Array.isArray(x.flow.reviewers)); })), saved);
+  await sleep(500); check('the workflow and the default are saved with the workspace', (await st(page, () => { const raw = JSON.parse(window.__turnkeyStorage.get('state') || '{}'); return Object.keys(raw.flows || {}).length === 1 && Object.values(raw.apps || {}).every((x) => x.flow && Array.isArray(x.flow.reviewers)); })), saved);
   await ctx.close();
 
   // ----- G. without the canvas library the plain line still leads to the settings -----

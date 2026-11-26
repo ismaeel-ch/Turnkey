@@ -37,7 +37,21 @@ import {
   str,
   toast,
 } from './core';
-import { DBX, dbBytes, dbCount, dbDump, dbExists, dbTables, qi, sqlPeek, sqlRun } from './db';
+import {
+  DBX,
+  backupWorkspace,
+  dbBytes,
+  dbCount,
+  dbDump,
+  dbExists,
+  dbTables,
+  importAppDb,
+  qi,
+  restoreWorkspace,
+  sqlPeek,
+  sqlRun,
+} from './db';
+import { sqliteFileName, workspaceStorage } from '@/platform/storage';
 import {
   TYPE_LABEL,
   VIEW_ICON,
@@ -98,6 +112,24 @@ export function Grid({ rows, mask }) {
       </table>
     </div>
   );
+}
+/** Where the workspace keeps its data, in one sentence for the storage panel. */
+export function storageText(total) {
+  const st = workspaceStorage()?.status();
+  const what = 'the workspace state as JSON, and one SQLite file per app, base64-encoded. ' + fmtBytes(total) + ' used';
+  if (!LS.ok)
+    return (
+      'Browser storage is not available in this view (' + LS.why + '), so everything lives in memory and is lost when the page closes.'
+    );
+  if (st && st.mode === 'indexeddb')
+    return (
+      "Everything is kept in this browser's IndexedDB: " +
+      what +
+      (st.unsaved ? ', ' + st.unsaved + ' change' + (st.unsaved === 1 ? '' : 's') + ' still being saved' : '') +
+      '. Browsers allow hundreds of megabytes here.' +
+      (st.full ? ' The last save was refused because the disk is full: ' + st.why : '')
+    );
+  return "Everything is kept in this browser's localStorage: " + what + '; browsers usually allow about 5 MB.';
 }
 export function DataView({ app }) {
   if (!dbExists(app.id) || !app.def.tables.length)
@@ -187,12 +219,14 @@ export function DataView({ app }) {
               ? 'Saved in this browser' + (DBX.savedAt[app.id] ? ', ' + ago(DBX.savedAt[app.id]) : '')
               : 'Not saved: storage is unavailable here'}
           </span>
-          {U.dl && (
-            <Btn className="btn sm" onClick={() => saveFile(snake(app.name) + '.sqlite', dbBytes(app.id), 'application/x-sqlite3')}>
-              <Icon n="download" s="16" />
-              Export .sqlite
-            </Btn>
-          )}
+          <Btn className="btn sm" onClick={() => saveFile(sqliteFileName(app.name), dbBytes(app.id), 'application/vnd.sqlite3')}>
+            <Icon n="download" s="16" />
+            Export .sqlite
+          </Btn>
+          <Btn className="btn sm" onClick={() => importAppDb(app)}>
+            <Icon n="open" s="16" />
+            Import .sqlite
+          </Btn>
           <Btn className="btn sm" onClick={() => copyText(dbDump(app.id), 'SQL dump')}>
             <Icon n="copy" s="16" />
             Copy as SQL
@@ -1617,15 +1651,17 @@ export function DebugDrawer({ app }) {
       total = keys.reduce((n, k) => n + LS.size(k), 0);
     body = (
       <div className="pad-s col gap12">
-        <p className="muted t-cap">
-          {LS.ok
-            ? "Everything is kept in this browser's localStorage: the workspace state as JSON, and one SQLite file per app, base64-encoded. " +
-              fmtBytes(total) +
-              ' used; browsers usually allow about 5 MB.'
-            : 'localStorage is not available in this view (' +
-              LS.why +
-              '), so everything lives in memory and is lost when the page closes.'}
-        </p>
+        <p className="muted t-cap">{storageText(total)}</p>
+        <div className="row">
+          <Btn className="btn sm" onClick={backupWorkspace}>
+            <Icon n="download" s="16" />
+            Back up workspace
+          </Btn>
+          <Btn className="btn sm" onClick={restoreWorkspace}>
+            <Icon n="open" s="16" />
+            Restore
+          </Btn>
+        </div>
         <table className="tbl dense dbg-t">
           <thead>
             <tr>
