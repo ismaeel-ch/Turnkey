@@ -129,7 +129,6 @@ export function buildTeamGraph(req: TeamRequest, ctx: TeamContext, budget: Budge
         { role: 'user', content: user },
       ],
       tier,
-      temperature: 0.2,
       maxTokens: 3000,
       signal: ctx.signal,
     })) {

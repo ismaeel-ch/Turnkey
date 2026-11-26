@@ -24,6 +24,7 @@ describe('POST /api/agent/team', () => {
   });
 
   it('says plainly that no model is connected', async () => {
+    vi.stubEnv('NODE_ENV', 'production'); // in development the stand-in or the Claude Code command answers
     vi.stubEnv('LLM_PROVIDER', '');
     vi.stubEnv('LITELLM_API_KEY', '');
     vi.stubEnv('OPENAI_API_KEY', '');

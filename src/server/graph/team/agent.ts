@@ -3,12 +3,14 @@
  *
  * The stream layer (agui-stream) turns the events a run emits into the AG-UI response. Until that is joined, this
  * returns an object with one method that takes a request and an event sink, and `src/app/api/agent/team/route.ts`
- * streams the events itself.
+ * streams the events itself. Tools default to the public-data connectors (src/server/connectors).
  */
+import { getConnector } from '../../connectors';
 import { resolveProvider, type Provider } from '../../llm';
+import { toolBoxFromConnectors } from './connector-tools';
 import type { TeamContext } from './graph';
 import { runTeamGraph, type TeamResult } from './run';
-import { noTools, type ToolBox } from './tools';
+import type { ToolBox } from './tools';
 import type { EventSink } from './types';
 
 export type TeamAgentOptions = { provider?: Provider | null; tools?: ToolBox; beforeModelCall?: () => void; now?: () => number };
@@ -31,7 +33,7 @@ export function createTeamAgent(options: TeamAgentOptions = {}): TeamAgent {
       }
       const ctx: TeamContext = {
         provider,
-        tools: options.tools ?? noTools,
+        tools: options.tools ?? toolBoxFromConnectors(getConnector),
         sink,
         signal,
         beforeModelCall: options.beforeModelCall,
