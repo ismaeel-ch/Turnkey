@@ -67,8 +67,8 @@ ul.dots{list-style:disc;padding-left:18px}
 button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStroke1Hover)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}.chip{display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:2px 10px;border-radius:12px;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);font-size:12px;line-height:16px;text-align:left}
 .chip:hover{background:var(--colorNeutralBackground1Hover);border-color:var(--colorNeutralStroke1Hover)}.chip:active{background:var(--colorNeutralBackground1Pressed)}.chip:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:1px}.chip.on{background:var(--colorBrandBackground2);border-color:var(--colorBrandStroke1);color:var(--colorBrandForeground2);font-weight:600}.chip-n{color:var(--colorNeutralForeground3);font-weight:400}
-.tabs{min-width:0;overflow-x:auto;scrollbar-width:none;flex-wrap:nowrap}.tab{white-space:nowrap}
-.tab-n{font-size:11px;line-height:14px;padding:0 5px;margin-left:6px;border-radius:8px;background:var(--colorNeutralBackground5);color:var(--colorNeutralForeground2);font-weight:400}
+.tabs{min-width:0;overflow-x:auto;scrollbar-width:none;flex-wrap:nowrap}.tab{white-space:nowrap}.tab .fui-Tab__content{display:inline-flex;align-items:center;gap:6px}
+.tab-n{font-size:11px;line-height:14px;padding:0 5px;border-radius:8px;background:var(--colorNeutralBackground5);color:var(--colorNeutralForeground2);font-weight:400}
 .seg{display:inline-flex;border:1px solid var(--colorNeutralStroke1);border-radius:4px;overflow:hidden;background:var(--colorNeutralBackground1);flex:none}
 .seg button{border:0;border-right:1px solid var(--colorNeutralStroke1);border-radius:0;min-width:0;height:30px;gap:6px;white-space:nowrap}.seg button:last-child{border-right:0}
 .seg button.on{background:var(--colorBrandBackground2);color:var(--colorBrandForeground2);font-weight:600}

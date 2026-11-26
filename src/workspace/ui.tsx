@@ -25,6 +25,7 @@ import {
   Spinner as FluentSpinner,
   ToggleButton,
 } from '@fluentui/react-components';
+import { NativeField } from '@/platform/dom';
 import { ICONS } from './icons';
 import { accFor, cx, initials } from './core';
 import { AGENTS } from './line';
@@ -98,11 +99,18 @@ export const Btn = forwardRef(function Btn({ className, children, ...rest }, ref
 });
 /**
  * Fluent's Switch inside a `label.switch`, so a click on the text toggles it too and tests can find it by class.
+ * Its input is a NativeField, like every other field here: one native `change` per toggle.
  */
 export function Switch({ on, onChange, text, id, disabled, title }) {
   return (
     <label className={cx('switch', disabled && 'is-off')} title={title}>
-      <FluentSwitch id={id} checked={!!on} disabled={disabled} onChange={(e, d) => onChange(d.checked)} />
+      <FluentSwitch
+        id={id}
+        checked={!!on}
+        disabled={disabled}
+        onChange={(e, d) => onChange(d.checked)}
+        input={{ children: (_tag, props) => <NativeField as="input" {...props} /> }}
+      />
       {text && <span className="switch-t">{text}</span>}
     </label>
   );
@@ -129,7 +137,7 @@ export function Tabs({ items, value, onChange, cls, label: aria }) {
           title={it.title}
           icon={it.icon ? <Icon n={it.icon} /> : undefined}
         >
-          {it.label}
+          <span className="tab-t">{it.label}</span>
           {it.count != null && <span className="tab-n">{it.count}</span>}
         </Tab>
       ))}
