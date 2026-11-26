@@ -9,7 +9,7 @@ the final release.
 | Field             | Value                                   |
 | ----------------- | --------------------------------------- |
 | GitHub repository | https://github.com/ismaeel-ch/Turnkey   |
-| Live URL          | https://ssi-ai-hackathon.vercel.app/    |
+| Live URL          | https://turnkey-bay.vercel.app/         |
 | Summary           | the text below (at most 600 characters) |
 
 ## Summary

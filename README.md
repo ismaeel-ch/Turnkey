@@ -3,7 +3,7 @@
 Describe the app your work needs. A team of agents builds its database, backend rules, views, pages and tests on a
 workflow you can watch and change, and hands it over as a working app. Built for the SSI Agent-A-Thon 2026.
 
-**Live app:** https://ssi-ai-hackathon.vercel.app/ (no login; turn the Live switch off to replay saved builds with no model)
+**Live app:** https://turnkey-bay.vercel.app/ (no login; turn the Live switch off to replay saved builds with no model)
 
 ![The BidDesk build on the workflow canvas: six agents, a check after each, an approval gate, the Tester](docs/images/workflow.png)
 

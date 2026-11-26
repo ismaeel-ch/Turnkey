@@ -2,7 +2,7 @@
 
 This page says what Turnkey builds for the three suggested quests, for a sales bidding desk, and where a team at SSI
 or a client could use it. Claims are kept to what can be checked in the repository or in the live app
-(https://ssi-ai-hackathon.vercel.app/). Anything that depends on work that has not merged is marked planned.
+(https://turnkey-bay.vercel.app/). Anything that depends on work that has not merged is marked planned.
 
 Turnkey is the "bring your own idea" entry: an agent team that builds business apps. The quest apps below are not
 separate programs. Each one is built by Turnkey's builder agents from one sentence, and each has an agent team of its
@@ -96,7 +96,7 @@ browser-side data. Each item says what would have to be true.
 
 ## How to see all of this in two minutes
 
-1. Open https://ssi-ai-hackathon.vercel.app/ with Live off (Demo).
+1. Open https://turnkey-bay.vercel.app/ with Live off (Demo).
 2. Pick "Sales bidding desk". Watch Build, Workflow: each agent, the check after it, the approval the owner placed.
    Open **Tests** to see the Tester's failing case and the Backend's repair.
 3. Open the **App** tab, sign in as a Bid manager, open the Bid room, pick a saved case and press Run. Watch the three
