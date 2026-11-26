@@ -244,6 +244,8 @@ async function shortcuts(page) {
   check('Enter runs the command: the Release view opens', /Release/.test(await viewNow()), await viewNow());
   await page.keyboard.press('Control+k');
   await page.waitForSelector('.dialog.palette');
+  // wait until the search box has focus and a command is selected, or the first arrow key can land before the list is ready
+  await page.waitForFunction(() => { const a = document.activeElement; return !!a && a.getAttribute('role') === 'combobox' && !!a.getAttribute('aria-activedescendant') && document.querySelectorAll('.palette-opt').length > 2; }, null, { timeout: 5000 }).catch(() => {});
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('ArrowUp');
