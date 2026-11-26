@@ -143,20 +143,35 @@ const appNow = (page) =>
     return a ? { status: a.status, name: a.name, mode: a.mode, tests: a.tests || null } : null;
   });
 
-/** Waits for the open app to finish building, answering any question the agents ask with its first option. */
+/** Waits for the open app to finish building and for its agents to go quiet, answering any question they ask with
+ *  its first option (a Live build can pause for the owner after the build, for example on a review finding). */
 async function waitBuilt(page, ms) {
   const until = Date.now() + ms;
+  let last = null;
   while (Date.now() < until) {
-    const a = await appNow(page);
-    if (a && (a.status === 'ready' || a.status === 'failed')) {
-      await page.waitForFunction(() => !document.querySelector('.work-head .spin'), null, { timeout: 30000 });
-      return appNow(page);
-    }
+    last = await appNow(page);
+    const busy = await page.locator('.work-head .spin').count();
+    if (last && (last.status === 'ready' || last.status === 'failed') && !busy) return last;
     const ask = page.locator('.gcard.ask .opt:not([disabled])');
     if (await ask.count()) await ask.first().click().catch(() => {});
     await sleep(250);
   }
-  throw new Error(`the build did not finish within ${Math.round(ms / 1000)} s`);
+  const head = await page
+    .locator('.work-head')
+    .innerText()
+    .catch(() => '');
+  const lastChat = await page
+    .evaluate(() => {
+      const s = window.__formwork.state();
+      const t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]);
+      const a = t && t.app ? s.apps[t.app] : null;
+      const m = a && a.chat && a.chat[a.chat.length - 1];
+      return m ? String(m.text || (m.card && (m.card.type || m.card)) || '') : '';
+    })
+    .catch(() => '');
+  throw new Error(
+    `not finished after ${Math.round(ms / 1000)} s: status ${last && last.status}; header "${head.replace(/\s+/g, ' ').slice(0, 120)}"; last message "${lastChat.slice(0, 160)}"`,
+  );
 }
 
 async function checkBrowser(health) {
