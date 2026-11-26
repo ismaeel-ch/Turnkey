@@ -21,6 +21,33 @@ Merged after v0.3.2; goes out with the next release.
 - Stricter lint rules for typed code, and store actions in the workspace shell. ([#108](https://github.com/ismaeel-ch/Turnkey/pull/108)) ([#112](https://github.com/ismaeel-ch/Turnkey/pull/112))
 - README, architecture, decision records, criteria evidence and the submission text match what is built.
 
+## [0.4.0] - 2026-11-26
+
+Agent attribution on the canvas, one deliverable document per app, targeted re-runs after a workflow edit, and
+spending caps.
+
+### Added
+
+- Export a built app as one deliverable document. ([#122](https://github.com/ismaeel-ch/Turnkey/pull/122))
+- The canvas shows which agent made or last changed each table, field and screen. ([#114](https://github.com/ismaeel-ch/Turnkey/pull/114))
+- After a workflow edit, only the affected stations re-run, debounced. ([#109](https://github.com/ismaeel-ch/Turnkey/pull/109))
+- A daily dollar cap on model calls and daily limits on short-link saves. ([#110](https://github.com/ismaeel-ch/Turnkey/pull/110)) ([#113](https://github.com/ismaeel-ch/Turnkey/pull/113))
+- Every API request is logged as structured JSON with its model cost. ([#94](https://github.com/ismaeel-ch/Turnkey/pull/94))
+- Live also checks that Turnkey's own server answers. ([#124](https://github.com/ismaeel-ch/Turnkey/pull/124))
+
+### Changed
+
+- LangGraph and the AG-UI client load on first use, with a bundle-size budget in CI. ([#81](https://github.com/ismaeel-ch/Turnkey/pull/81))
+- Review steps move into their own module; store actions in the shell modules; stricter lint rules for typed code.
+  ([#108](https://github.com/ismaeel-ch/Turnkey/pull/108)) ([#112](https://github.com/ismaeel-ch/Turnkey/pull/112)) ([#119](https://github.com/ismaeel-ch/Turnkey/pull/119))
+- Unused workspace exports removed. ([#115](https://github.com/ismaeel-ch/Turnkey/pull/115))
+- README, architecture and submission text refreshed; a pre-submission audit, an up-to-date SECURITY.md and a lint
+  rule for server imports. ([#116](https://github.com/ismaeel-ch/Turnkey/pull/116)) ([#120](https://github.com/ismaeel-ch/Turnkey/pull/120))
+
+### Tests
+
+- The production smoke test also runs as a browser flow, with a manual live-site check. ([#118](https://github.com/ismaeel-ch/Turnkey/pull/118))
+
 ## [0.3.2] - 2026-11-26
 
 Short links work with Vercel's new Blob connection, the agent route has more guard rails, and each release is
