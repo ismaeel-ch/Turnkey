@@ -1,7 +1,7 @@
 // Runs the browser checks against a production build of the app.
 //
 //   npm run test:e2e                 every flow (about 20 minutes)
-//   npm run test:e2e -- demo         one flow: demo, live, misc, views, quests, new, custom, round6
+//   npm run test:e2e -- demo         one flow: demo, live, misc, views, quests, new, custom, round6, react, sizes
 //   npm run test:e2e -- demo,live    several
 //   npm run test:e2e -- offline      install and offline (tests/e2e/offline.cjs, a fresh browser with a service worker)
 //   npm run test:e2e -- a11y         accessibility: axe on every main screen, light and dark, plus keyboard checks (tests/e2e/a11y.cjs)
