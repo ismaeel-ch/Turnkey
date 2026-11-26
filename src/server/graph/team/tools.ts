@@ -4,7 +4,8 @@
  * The connectors package (src/server/connectors) will provide the real calls. Until it is joined, the graph codes
  * against this small interface: a list of what each tool takes, and one function that runs a tool.
  */
-export type ToolResult = { ok: boolean; text: string; url?: string };
+/** `unavailable`: the source itself is down (timeout, no connection, server error), as opposed to a bad question. */
+export type ToolResult = { ok: boolean; text: string; url?: string; unavailable?: boolean };
 
 export type ToolInfo = { connector: string; tool: string; description: string; args: Record<string, string> };
 
