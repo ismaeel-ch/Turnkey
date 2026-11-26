@@ -295,6 +295,7 @@ export function Switch({
   id,
   disabled,
   title,
+  label,
 }: {
   on?: boolean;
   onChange: (on: boolean) => void;
@@ -302,11 +303,14 @@ export function Switch({
   id?: string;
   disabled?: boolean;
   title?: string;
+  /** the switch's name when it shows no text of its own */
+  label?: string;
 }) {
   return (
     <label className={cx('switch', disabled && 'is-off')} title={title}>
       <FluentSwitch
         id={id}
+        aria-label={text ? undefined : label}
         checked={!!on}
         disabled={disabled}
         onChange={(e, d) => onChange(d.checked)}
@@ -481,7 +485,7 @@ export function Menu({
         positioning={{ position: 'below', align: align === 'left' ? 'start' : 'end', offset: 4 }}
       >
         <MenuTrigger disableButtonEnhancement>
-          <Btn className={btn.cls || 'btn subtle'} title={title} aria-label={btn.label} data-tour={tour}>
+          <Btn className={btn.cls || 'btn subtle'} title={title} aria-label={btn.label || undefined} data-tour={tour}>
             {btn.body}
           </Btn>
         </MenuTrigger>
@@ -554,6 +558,19 @@ function useRestorePage() {
     [],
   );
 }
+/**
+ * A ref for a box that may scroll: while its content overflows, it is a Tab stop, so keyboard users can scroll it
+ * (WCAG 2.1.1). It stops being one when everything fits.
+ */
+export function scrollStop(el: HTMLElement | null) {
+  if (!el || typeof ResizeObserver === 'undefined') return;
+  const fit = () => {
+    if (el.scrollHeight > el.clientHeight + 1) el.tabIndex = 0;
+    else el.removeAttribute('tabindex');
+  };
+  fit();
+  new ResizeObserver(fit).observe(el);
+}
 export function Dialog({
   title,
   children,
@@ -590,7 +607,9 @@ export function Dialog({
               </Btn>
             )}
           </div>
-          <DialogContent className="dbody">{children}</DialogContent>
+          <DialogContent className="dbody" ref={scrollStop} role="region" aria-label="Dialog content">
+            {children}
+          </DialogContent>
           {foot && <DialogActions className="dfoot">{foot}</DialogActions>}
         </DialogBody>
         <FocusOnOpen />

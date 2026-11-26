@@ -1,7 +1,7 @@
 import { NativeField } from '@/platform/dom';
 import type { AppTable, BackedDef, BriefedDef, ColumnDef, Untrusted } from '@/shared/types/app';
 import type { FormEvent, ReactNode } from 'react';
-import type { AppFlow, AppRecord, ChatMessage, Dict, AddedAgent, Review, ReviewFinding, ReviewerInfo, Run } from '@/shared/types/workspace';
+import type { AppFlow, AppRecord, ChatMessage, Dict, AddedAgent, Review, ReviewFinding, Run } from '@/shared/types/workspace';
 import type { Station } from './line';
 import {
   NARROW,
@@ -62,6 +62,8 @@ import type { ParsedChange } from './changes';
 import { keepFix } from './tester';
 import { Btn, AgentAv, Dialog, Field, Icon, MBar, Seg, Spinner, Switch } from './ui';
 import { rebuildAsk } from './shell-a';
+import { REVIEWERS, regStep } from './reviewers';
+import type { Reviewer } from './reviewers';
 import { RerunBar, queueRerun, queuedRerun } from './rerun';
 
 /* ===== Turnkey prototype · the workflow is yours: approvals, review steps, instructions, attempts =====
@@ -82,79 +84,6 @@ export const NOTE_HINT: Dict<string> = {
   views: 'Example: always include a calendar when there is a date',
   ui: 'Example: keep page names to two words',
 };
-/** A reviewer agent from the library, or one the owner described. */
-export type Reviewer = ReviewerInfo;
-export const REVIEWERS: Record<string, Reviewer> = {
-  data: {
-    name: 'Data reviewer',
-    short: 'Data review',
-    after: 'database',
-    icon: 'dbSearch',
-    acc: 'forest',
-    reads: 'the tables',
-    job: 'Reads the tables for gaps: nowhere to write notes, no date to plan by, thin sample data.',
-  },
-  security: {
-    name: 'Security reviewer',
-    short: 'Security review',
-    after: 'backend',
-    icon: 'shieldKey',
-    acc: 'cranberry',
-    reads: 'the access rules',
-    job: 'Reads the access rules for rights that are wider than the user stories need.',
-  },
-  insight: {
-    name: 'Insight reviewer',
-    short: 'Insight review',
-    after: 'views',
-    icon: 'lightbulb',
-    acc: 'lavender',
-    reads: 'the views and the dashboard',
-    job: 'Looks for questions the dashboard cannot answer yet.',
-  },
-  wording: {
-    name: 'Wording reviewer',
-    short: 'Wording review',
-    after: 'screens',
-    icon: 'textEdit',
-    acc: 'steel',
-    reads: 'the pages',
-    job: 'Reads the pages the way a new user would: crowded menus, wide tables, raw labels.',
-  },
-};
-REVIEWERS.normalize = {
-  name: 'Normaliser',
-  short: 'Normalise tables',
-  after: 'database',
-  icon: 'layer',
-  acc: 'teal',
-  reads: 'the tables and their rows',
-  job: 'Tidies the tables: free text that repeats becomes a choice, and a fact kept in two places is kept in one.',
-  auto: true,
-};
-REVIEWERS.style = {
-  name: 'UI stylist',
-  short: 'Style the UI',
-  after: 'screens',
-  icon: 'color',
-  acc: 'pink',
-  reads: 'the pages and the layout',
-  job: 'Fits the layout to the app: compact rows for wide tables, navigation that suits the number of pages.',
-  auto: true,
-};
-export const regStep = (id: string, r: Reviewer) => {
-  r.id = id;
-  REVIEWERS[id] = r;
-  AGENTS['rv_' + id] = {
-    name: r.name,
-    icon: r.icon,
-    acc: r.acc,
-    role: r.job,
-    reviewer: id,
-  };
-  return r;
-};
-Object.keys(REVIEWERS).forEach((id) => regStep(id, REVIEWERS[id]));
 export const STEP_AT = ['database', 'backend', 'views', 'screens', 'walkthrough'],
   STEP_MAX = 8,
   STEP_ICONS = ['bot', 'wand', 'sparkle', 'puzzle', 'target', 'glasses', 'tag', 'wrench'],

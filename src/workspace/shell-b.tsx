@@ -1817,7 +1817,9 @@ export function DebugDrawer({ app }: { app: AppRecord | null }) {
         {k('Session cap', U.calls + ' of ' + CAP)}
         {k('Network', online() ? 'online' : 'offline')}
       </div>
-      <div className="dbg-body scroll">{body}</div>
+      <div className="dbg-body scroll" tabIndex={0} role="region" aria-label="Debug details">
+        {body}
+      </div>
     </section>
   );
 }
