@@ -123,7 +123,8 @@ export function mountCheck(vnode, sel) {
   } catch (e) {}
   return out;
 }
-export const SUITES = {}; // built once per revision of an app
+/** Built once per revision of an app. */
+export const SUITES: Record<string, { app: unknown; def: unknown; rev: number; suites: Suite[] }> = {};
 /** One suite of tests: the station it checks, and its tests. */
 export interface Suite {
   id: string;
@@ -713,7 +714,15 @@ export function buildSuites(app) {
   return out;
 }
 export const testable = (app) => app.status === 'ready' && !!app.def.brief && !!app.def.process;
-export function testStats(app) {
+/** Counts for badges: what the last run found, or what there is to run. */
+export interface TestStats {
+  total: number;
+  passed: number;
+  failed: number;
+  at: number;
+  fresh: boolean;
+}
+export function testStats(app): TestStats | null {
   // counts for badges: what the last run found, or what there is to run
   const R = TESTS[app.id],
     fresh = R && R.rev === app.rev,

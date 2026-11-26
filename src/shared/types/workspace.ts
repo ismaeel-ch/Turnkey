@@ -63,7 +63,7 @@ export interface AppRecord {
   status: string;
   created: number;
   updated: number;
-  shared?: { key: string } | null;
+  shared?: { key: string; uid?: string; ver?: string } | null;
   def: AppDef;
   /** the state of each station of the build line, by station id */
   line: Dict<StationLine>;
@@ -76,7 +76,21 @@ export interface AppRecord {
   /** the seed rows by table, kept so "Reset data" can put them back */
   seed?: { rows: Dict<Row[]> } | null;
   /** the last permission matrix the Backend check ran */
-  matrix?: { at: number; calls: number; refused: number; failed: string[] };
+  matrix?: { at: number; calls: number; refused: number; failed: string[] } | null;
+  /** the owner's answers to the build's questions; `q` is the Researcher's question */
+  answers: { q?: number | null; [field: string]: Loose };
+  /** what the Researcher looked up, shown as the brief's sources */
+  lookups?: Loose[];
+  /** released versions, newest first */
+  releases?: Release[];
+  /** changes since the first build, for the next release's notes */
+  log?: { at: number; text: string; station: string }[];
+  /** stays the same across versions and copies, so an installed app finds its newest copy */
+  uid?: string;
+  /** when the app was installed on its own in this browser */
+  installed?: number;
+  /** the last test run's counts, kept with the app */
+  tests?: { total: number; passed: number; failed: number; at: number; rev: number } | null;
   /** the last ten runs of the build line, oldest first */
   runs: Run[];
   /** the conversation with the agents, newest last */
@@ -112,6 +126,22 @@ export interface QaState {
   t1: number | null;
   /** cases withdrawn because they did not match the brief */
   dropped: { id: string; why: string }[];
+}
+
+/** One released version of an app. */
+export interface Release {
+  v: string;
+  at: number;
+  by: string;
+  kind: string;
+  notes: string[];
+  /** the definition's fingerprint when it was released */
+  sig: string | number;
+  tests: { passed: number; total: number };
+  /** the packed snapshot, let go for older versions to save room */
+  pack: string | null;
+  size: number;
+  inside: { tables: number; pages: number };
 }
 
 /** One step of a run, as the timeline shows it. */
@@ -253,9 +283,11 @@ export interface ViewState {
   /** the open bottom sheet of the phone layout */
   sheet: PhoneSheet | null;
   told: Dict<Loose>;
-  noteDraft: Dict<Loose>;
+  /** unsaved instructions and step jobs the owner is typing, by key */
+  noteDraft: Dict<string>;
   /** release form, per app */
-  rel: Dict<Loose>;
+  /** the Release view's form, by app id */
+  rel: Dict<{ kind: string | null; text: string | null; busy: boolean }>;
   /** last Details tab, per app */
   detail: Dict<Loose>;
   /** the chat peek on narrow screens */
@@ -300,6 +332,8 @@ export interface AgentInfo {
   /** accent colour name */
   acc: string;
   role: string;
+  /** set for a review step: its id */
+  reviewer?: string;
 }
 
 /** What a saved build's station function is given. `answer` is the owner's answer to the Researcher's question. */
@@ -468,7 +502,26 @@ export interface ReviewerInfo {
 
 /** A reviewer agent's review of an app, with its findings. */
 export interface Review {
-  status: string;
-  findings: { state: string; [field: string]: Loose }[];
-  [field: string]: Loose;
+  status: 'working' | 'ok' | 'failed';
+  at: number;
+  /** the app's revision this review read */
+  rev: number;
+  findings: ReviewFinding[];
+  by: 'model' | 'rules';
+  note: string;
+}
+
+/** One finding of a review, with the fix it proposes and whether that fix was tried out. */
+export interface ReviewFinding {
+  id: string;
+  level: 'high' | 'medium' | 'low';
+  text: string;
+  why: string;
+  fix: string | null;
+  /** open, applying or applied */
+  state: string;
+  /** pass, fail or unknown once the fix was tried out; null before */
+  test: string | null;
+  /** why the fix would not pass, or a note on approval */
+  block: string;
 }
