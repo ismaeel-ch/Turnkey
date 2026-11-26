@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHost, health, ModelError, sample } from '@/platform/model-client';
-import { streamResponse } from './helpers/fakes';
 
 /** Replaces the global fetch for one test. Each call gets the url and init, and answers with `answer`. */
 function fakeFetch(answer: (url: string, init: RequestInit) => Response | Promise<Response>) {
@@ -13,68 +12,23 @@ function fakeFetch(answer: (url: string, init: RequestInit) => Response | Promis
   return calls;
 }
 
-const encoder = new TextEncoder();
-
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('sample: reading the stream', () => {
-  it('joins deltas that arrive split across chunk boundaries, including a split line', async () => {
-    fakeFetch(() =>
-      streamResponse(['{"type":"del', 'ta","text":"Hel"}\n{"type":"delta","te', 'xt":"lo"}\n{"type":"done","truncated":false}\n']),
-    );
-    await expect(sample('say hello')).resolves.toEqual({ text: 'Hello', truncated: false });
-  });
-
-  it('does not split a multi-byte character that arrives across two chunks', async () => {
-    const line = encoder.encode('{"type":"delta","text":"naïve €"}\n{"type":"done","truncated":false}\n');
-    const cut = line.indexOf(0xe2) + 1; // inside the three bytes of the euro sign
-    fakeFetch(() => streamResponse([line.slice(0, cut), line.slice(cut)]));
-    await expect(sample('x')).resolves.toEqual({ text: 'naïve €', truncated: false });
-  });
-
-  it('reads a last line that has no newline after it', async () => {
-    fakeFetch(() => streamResponse(['{"type":"delta","text":"ok"}\n{"type":"done","truncated":true}']));
-    await expect(sample('x')).resolves.toEqual({ text: 'ok', truncated: true });
-  });
-
-  it('skips blank lines and reports truncated only when the server says so', async () => {
-    fakeFetch(() => streamResponse(['\n{"type":"delta","text":"a"}\n\n{"type":"done"}\n']));
-    await expect(sample('x')).resolves.toEqual({ text: 'a', truncated: false });
-  });
-
-  it('calls onText with the growing text after each delta, and ignores empty deltas', async () => {
-    fakeFetch(() =>
-      streamResponse([
-        '{"type":"delta","text":"H"}\n{"type":"delta","text":""}\n{"type":"delta","text":"i"}\n{"type":"done","truncated":false}\n',
-      ]),
-    );
-    const seen: string[] = [];
-    await sample('x', { onText: ({ text }) => seen.push(text) });
-    expect(seen).toEqual(['H', 'Hi']);
-  });
-
-  it('sends the prompt and the tier, and defaults to the careful tier', async () => {
-    const calls = fakeFetch(() => streamResponse(['{"type":"done","truncated":false}\n']));
-    await sample('build it', { modelTier: 'quick' });
-    await sample('build it');
-    expect(calls[0].url).toBe('/api/llm');
+// The answer stream itself (drafts, checks, repairs, errors in the stream) is covered in live-step.test.ts, through the
+// real route and on scripted AG-UI streams. Here: what sample() sends.
+describe('sample: the request', () => {
+  it('runs the step agent with the prompt, the tier (careful by default) and one attempt', async () => {
+    const calls = fakeFetch(() => new Response('', { status: 500 }));
+    await sample('build it', { modelTier: 'quick' }).catch(() => undefined);
+    await sample('build it').catch(() => undefined);
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+    const bodies = calls.map((c) => JSON.parse(String(c.init.body)) as { forwardedProps?: Record<string, unknown> });
+    expect(calls[0].url).toContain('/api/copilotkit');
     expect(calls[0].init.method).toBe('POST');
-    expect(JSON.parse(String(calls[0].init.body))).toEqual({ prompt: 'build it', tier: 'quick' });
-    expect(JSON.parse(String(calls[1].init.body))).toEqual({ prompt: 'build it', tier: 'default' });
-  });
-
-  it('turns an error event in the stream into a ModelError with its code', async () => {
-    fakeFetch(() => streamResponse(['{"type":"delta","text":"par"}\n{"type":"error","code":"budget","message":"Out of budget"}\n']));
-    const error = await sample('x').catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ModelError);
-    expect(error).toMatchObject({ code: 'budget', message: 'Out of budget' });
-  });
-
-  it('maps a not_configured error in the stream to not_granted', async () => {
-    fakeFetch(() => streamResponse(['{"type":"error","code":"not_configured","message":"No model"}\n']));
-    await expect(sample('x')).rejects.toMatchObject({ code: 'not_granted' });
+    expect(bodies[0].forwardedProps).toMatchObject({ prompt: 'build it', tier: 'quick', maxAttempts: 1 });
+    expect(bodies[bodies.length - 1].forwardedProps).toMatchObject({ prompt: 'build it', tier: 'default', maxAttempts: 1 });
   });
 });
 
@@ -132,7 +86,7 @@ describe('sample: refusals before the stream', () => {
       }),
     );
     const error = await sample('x', { signal: controller.signal }).catch((e: unknown) => e);
-    expect(error).toBe(abort);
+    expect(error).toMatchObject({ name: 'AbortError' });
     expect(error).not.toBeInstanceOf(ModelError);
   });
 });
