@@ -63,7 +63,7 @@ export interface AppRecord {
   status: string;
   created: number;
   updated: number;
-  shared?: { key: string } | null;
+  shared?: SharedInfo | null;
   def: AppDef;
   /** the state of each station of the build line, by station id */
   line: Dict<StationLine>;
@@ -112,6 +112,21 @@ export interface QaState {
   t1: number | null;
   /** cases withdrawn because they did not match the brief */
   dropped: { id: string; why: string }[];
+}
+
+/** Where an app opened from a share link came from. */
+export interface SharedInfo {
+  key: string;
+  /** who shared it, and the name they gave the person they sent it to */
+  by?: string;
+  as?: string;
+  /** when it was opened here */
+  at?: number;
+  data?: string;
+  preview?: boolean;
+  ver?: string;
+  uid?: string;
+  notes?: string[];
 }
 
 /** One step of a run, as the timeline shows it. */
@@ -212,19 +227,33 @@ export interface DebugPanel {
   all: boolean;
 }
 
+/** The App view of one app: one or two panes, and the walkthrough when one is playing. */
+export interface Stage {
+  split: boolean;
+  panes: Loose[];
+  tour: Loose;
+  [field: string]: Loose;
+}
+
 export interface ViewState {
   boot: 'loading' | 'ready' | 'error' | (string & {});
   bootErr: string;
   toasts: Toast[];
   dialog: Dialog | null;
   tour: Loose;
-  view: Dict<Loose>;
-  bview: Dict<Loose>;
-  sel: Dict<Loose>;
-  itab: Dict<Loose>;
-  runSel: Dict<Loose>;
-  follow: Dict<Loose>;
-  stage: Dict<Loose>;
+  /** the workspace view (build, app, release or a Details page), per app */
+  view: Dict<string>;
+  /** how the Build view shows the agents: line, timeline or log, per app */
+  bview: Dict<string>;
+  /** the selected station, per app */
+  sel: Dict<string>;
+  /** the inspector's tab, per app */
+  itab: Dict<string>;
+  /** the run picked in the timeline and log, per app */
+  runSel: Dict<string | null>;
+  /** whether the selection follows the working station, per app */
+  follow: Dict<boolean>;
+  stage: Dict<Stage>;
   data: Dict<Loose>;
   api: Dict<Loose>;
   conn: Loose;
@@ -235,10 +264,12 @@ export interface ViewState {
   calls: number;
   savedAt: number;
   home: { text: string; note: string };
-  handoff: Dict<Loose>;
+  /** the handoff being animated between stations, per app */
+  handoff: Dict<number | null>;
   chatDraft: Dict<Loose>;
-  stream: Dict<Loose>;
-  showSql: Dict<Loose>;
+  /** characters received so far from the model, per app */
+  stream: Dict<number>;
+  showSql: Dict<boolean>;
   busy: Loose;
   connOut: Loose;
   ob: Loose;
@@ -254,7 +285,7 @@ export interface ViewState {
   /** release form, per app */
   rel: Dict<Loose>;
   /** last Details tab, per app */
-  detail: Dict<Loose>;
+  detail: Dict<string>;
   /** the chat peek on narrow screens */
   peek?: boolean;
   share?: Loose;
@@ -399,13 +430,24 @@ export interface AccessRule {
 export interface StationLine {
   status: string;
   attempt: number;
-  attempts: Loose[];
+  attempts: StationAttempt[];
   checks: Check[];
   facts: string[];
   note: string | null;
+  /** why the station is holding: the Researcher's question, or an approval the owner asked for */
+  hold?: string | null;
+  /** the agent failed every attempt and the orchestrator used the safe default */
+  fellBack?: boolean;
   /** the walkthrough's result for each tour step */
   results: { ok?: boolean; detail?: string; [field: string]: Loose }[];
   [field: string]: Loose;
+}
+
+/** One attempt at a station: whether it passed its checks, and the issues it was sent back with. */
+export interface StationAttempt {
+  n: number;
+  ok: boolean;
+  issues: string[];
 }
 
 /** An app's build workflow: stations, approvals, added agents and reviewers. */

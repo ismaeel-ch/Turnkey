@@ -1,4 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
+import type { AppRecord } from '@/shared/types/workspace';
 import { useState, useSyncExternalStore } from 'react';
 import { ACC_HEX } from '@/styles/theme.generated';
 import { toStyle } from '@/platform/dom';
@@ -171,7 +172,7 @@ export function logoSvg(lg, size) {
     '</svg>'
   );
 }
-export function AppLogo({ app, size, cls }) {
+export function AppLogo({ app, size, cls }: { app: AppRecord; size?: number; cls?: string }) {
   const s = size || 32;
   return (
     <span

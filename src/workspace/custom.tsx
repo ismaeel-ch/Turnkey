@@ -1,4 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
+import type { AppRecord } from '@/shared/types/workspace';
 import { NativeField } from '@/platform/dom';
 import {
   NARROW,
@@ -2445,7 +2446,7 @@ export function CustomTab({ app, st }) {
     </div>
   );
 }
-export function FlowChips({ app, empty }) {
+export function FlowChips({ app, empty }: { app: AppRecord; empty?: boolean }) {
   const list = flowList(flowOf(app));
   return list.length ? (
     <div className="flow-chips">

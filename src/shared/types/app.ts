@@ -51,15 +51,29 @@ export interface Brief {
   question: BriefQuestion | null;
   /** the owner's answer to the brief's question */
   decision: { text: string; answer: string } | null;
-  sources: Loose[];
+  sources: BriefSource[];
+}
+/** A connector lookup the Researcher made for the brief, with the titles it found. */
+export interface BriefSource {
+  connector: string;
+  tool?: string;
+  query: string;
+  note?: string;
+  titles: string[];
 }
 
 /* ---------- station 2: tables and seed users ---------- */
 /** A table of a built app: the Database agent always gives it a label and a name for one record. */
-export type AppTable = TableDef & {
+export type AppTable = Omit<TableDef, 'columns'> & {
+  columns: AppColumn[];
   label: string;
   one: string;
   /** the agent that added it, and the change run that did */
+  by?: string;
+  run?: number;
+};
+/** A column of a built app; a change run that added it says so. */
+export type AppColumn = ColumnDef & {
   by?: string;
   run?: number;
 };

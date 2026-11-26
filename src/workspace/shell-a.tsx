@@ -1,4 +1,3 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
 import {
   BRAND,
   LS,
@@ -34,6 +33,9 @@ import {
   toast,
   uid,
 } from './core';
+import type { BackedDef, BriefedDef } from '@/shared/types/app';
+import type { AppRecord, Run, StationLine, Tab } from '@/shared/types/workspace';
+import type { MenuEntry, TabItem } from './ui';
 import { DBX, createTableSQL, dbCount, dbTables } from './db';
 import { TYPE_LABEL, VIEW_ICON, VIEW_LABEL, accOf, colOf, deriveEndpoints, roleName, tableOf } from './engine';
 import { DATA_VIEWS, VIEW_WHAT, viewFit, viewsOf } from './viewspec';
@@ -42,7 +44,7 @@ import { QUESTS } from './quests';
 import { TeamAv } from './team';
 import { StationTests, TestsView, suiteOf, testable } from './tests';
 import { BuildSummary, FlowView } from './flow';
-import { AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp, rebuild, startBuild, stopRun } from './line';
+import { type Station, AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp, rebuild, startBuild, stopRun } from './line';
 import { CustomTab, FlowChips, REVIEWERS, ReviewPanel, answerGate, flowList, flowOf, reviewerAt } from './custom';
 import { TesterPanel } from './tester';
 import {
@@ -73,19 +75,19 @@ import { ApiView, ChatPanel, ConnView, DataView } from './shell-b';
 import { startTour } from './shell-c';
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
-export function Titlebar({ tabs, tab }) {
+export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
   const acct = me(),
     s = S.settings,
     on = online(),
     mode = modeNow(),
     net = netInfo();
   const addTab = () => {
-    const t = {
+    const t: Tab = {
       id: uid('tab'),
       app: null,
     };
     tabsNow().push(t);
-    S.active[S.session] = t.id;
+    S.active[String(S.session)] = t.id;
     commit();
   };
   const flipNet = () => setOffline(!s.offline);
@@ -106,7 +108,7 @@ export function Titlebar({ tabs, tab }) {
               className={cx('wtab', cur && 'on')}
               role="tab"
               aria-selected={cur}
-              tabIndex="0"
+              tabIndex={0}
               title={app ? app.name : 'New tab'}
               onClick={() => selectTab(t.id)}
               onKeyDown={(e) => {
@@ -241,12 +243,12 @@ export function Titlebar({ tabs, tab }) {
           btn={{
             cls: 'acct',
             label: 'Account menu',
-            body: <Avatar name={acct.name} size="sm" acc="blue" />,
+            body: <Avatar name={acct?.name || ''} size="sm" acc="blue" />,
           }}
           items={[
             {
               head: true,
-              label: acct.name + ' · ' + acct.username,
+              label: (acct?.name || '') + ' · ' + (acct?.username || ''),
             },
             {
               label: 'Settings',
@@ -292,7 +294,7 @@ export function Home() {
     if (demo) {
       // no model to call right now: Demo was chosen, the connection is gone, or this copy has no model. A saved build stands in.
       const tpl = matchTemplate(text),
-        why = {
+        why: Record<string, string> = {
           demo: 'Demo replays saved builds, and none of them matches that sentence. Pick one below, or switch Live on in the title bar to build from your own words.',
           offline:
             'You are offline, so Live is paused and only saved builds can run. None of them matches that sentence. Pick one below, or try again when you are back online.',
@@ -330,7 +332,7 @@ export function Home() {
       h.note = '';
     }
   };
-  const del = async (a) => {
+  const del = async (a: AppRecord) => {
     if (
       await confirmBox({
         title: 'Delete ' + a.name + '?',
@@ -343,8 +345,8 @@ export function Home() {
       toast(a.name + ' deleted', 'success');
     }
   };
-  const builtOf = (id) => apps.find((a) => a.tpl === id && a.status !== 'failed'),
-    build = (id) =>
+  const builtOf = (id: string) => apps.find((a) => a.tpl === id && a.status !== 'failed'),
+    build = (id: string) =>
       startBuild({
         request: REC[id].sentence,
         tpl: id,
@@ -354,11 +356,11 @@ export function Home() {
     if (!todo.length) return toast('All three quest apps are already in your library.', 'info');
     todo.forEach(build);
   };
-  const dup = (a) => {
+  const dup = (a: AppRecord) => {
     const c = duplicateApp(a);
     if (c) toast(c.name + ' was added to your library', 'success');
   };
-  const card = (id) => {
+  const card = (id: string) => {
     const r = REC[id],
       has = builtOf(id);
     return (
@@ -523,7 +525,7 @@ export function Home() {
         <h1 className="t-title2">
           {hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening'}
           {', '}
-          {acct.name.split(' ')[0]}. What do you want to build?
+          {(acct?.name || '').split(' ')[0]}. What do you want to build?
         </h1>
         <p className="lead muted">
           Say what the work is in one sentence. A team of agents builds the whole app, tests it and hands it over ready to use.
@@ -533,14 +535,14 @@ export function Home() {
             native
             className="textarea"
             id="home-prompt"
-            rows="2"
+            rows={2}
             aria-label="Describe the app"
             placeholder={
               demo ? 'Try: a clinic that books patient appointments' : 'Example: a gym tracks members, class bookings and trainer schedules'
             }
             value={h.text}
             onInput={(e) => {
-              h.text = e.target.value;
+              h.text = e.currentTarget.value;
               h.note = '';
               notify();
             }}
@@ -628,7 +630,7 @@ export function Home() {
                     onClick={() =>
                       enterSolo(a, {
                         from: 'link',
-                        as: a.shared.as,
+                        as: a.shared?.as,
                       })
                     }
                   >
@@ -638,12 +640,12 @@ export function Home() {
                     <span className="col gap0 grow">
                       <strong>{a.name}</strong>
                       <span className="t-cap muted ellipsis">
-                        {a.shared.by ? 'Shared by ' + a.shared.by + ' · ' : ''}
+                        {a.shared?.by ? 'Shared by ' + a.shared.by + ' · ' : ''}
                         {a.def.tables.length}
                         {' tables · '}
                         {a.def.screens.length}
                         {' pages · opened '}
-                        {ago(a.shared.at)}
+                        {ago(a.shared?.at || a.created)}
                       </span>
                     </span>
                   </button>
@@ -663,7 +665,7 @@ export function Home() {
     </div>
   );
 }
-export const VIEWS = [
+export const VIEWS: TabItem[] = [
   {
     id: 'build',
     label: 'Build',
@@ -689,7 +691,7 @@ export const VIEWS = [
     title: 'For the curious: tests, data, API and connections',
   },
 ];
-export const DETAILS = [
+export const DETAILS: TabItem[] = [
   {
     id: 'tests',
     label: 'Tests',
@@ -715,17 +717,17 @@ export const DETAILS = [
     title: 'Third-party systems',
   },
 ];
-export const isDetail = (v) => DETAILS.some((d) => d.id === v);
-export const viewOf = (app) => U.view[app.id] || (app.status === 'ready' && !RUNS[app.id] ? 'app' : 'build'); // a finished app opens on the app itself, an unfinished one on its build
-export const viewTitle = (v) => (VIEWS.concat(DETAILS).find((x) => x.id === v) || VIEWS[0]).title;
-export const RUN_KIND = {
+export const isDetail = (v: string) => DETAILS.some((d) => d.id === v);
+export const viewOf = (app: AppRecord): string => U.view[app.id] || (app.status === 'ready' && !RUNS[app.id] ? 'app' : 'build'); // a finished app opens on the app itself, an unfinished one on its build
+export const viewTitle = (v: string) => (VIEWS.concat(DETAILS).find((x) => x.id === v) || VIEWS[0]).title;
+export const RUN_KIND: Record<string, string> = {
   build: 'Build',
   change: 'Change',
   rerun: 'Re-run',
   review: 'Review',
   step: 'Step',
 };
-export async function rebuildAsk(app) {
+export async function rebuildAsk(app: AppRecord) {
   if (RUNS[app.id]) return;
   if (
     app.status === 'ready' &&
@@ -738,9 +740,9 @@ export async function rebuildAsk(app) {
     return;
   rebuild(app);
 }
-export function DetailsView({ app, view }) {
+export function DetailsView({ app, view }: { app: AppRecord; view: string }) {
   // everything a developer would ask for, kept one step away from everyone else
-  const pick = (v) => {
+  const pick = (v: string) => {
     U.view[app.id] = v;
     U.detail[app.id] = v;
     notify();
@@ -766,7 +768,7 @@ export function DetailsView({ app, view }) {
     </div>
   );
 }
-export function Workspace({ app }) {
+export function Workspace({ app }: { app: AppRecord }) {
   const view = viewOf(app),
     busy = !!RUNS[app.id],
     rel = relOf(app),
@@ -795,12 +797,12 @@ export function Workspace({ app }) {
     )
       deleteApp(app);
   };
-  const go = (v) => {
+  const go = (v: string) => {
     U.view[app.id] = v === 'details' ? U.detail[app.id] || 'tests' : v;
     notify();
   };
   const phone = PHONE(),
-    more = [
+    more: (MenuEntry | '-')[] = [
       {
         label: 'Share by link',
         icon: 'share',
@@ -848,7 +850,7 @@ export function Workspace({ app }) {
         on: del,
       },
     ];
-  const tabs = VIEWS.map((v) =>
+  const tabs = VIEWS.map((v): TabItem =>
     v.id === 'release' && app.status === 'ready'
       ? Object.assign({}, v, {
           count: rel ? (dirty ? 'draft' : rel.v) : 'new',
@@ -955,7 +957,7 @@ export function Workspace({ app }) {
     </div>
   );
 }
-export function BuildView({ app }) {
+export function BuildView({ app }: { app: AppRecord }) {
   const mode = U.bview[app.id] || 'line',
     busy = !!RUNS[app.id],
     sel = U.sel[app.id] || 'research';
@@ -1003,6 +1005,7 @@ export function BuildView({ app }) {
           <span className="t-cap muted hide-sm">
             {RUN_KIND[run.kind] || 'Run'} {run.n}
             {' · '}
+            {/* eslint-disable-next-line react-hooks/purity -- a run's elapsed time; the store re-renders while it runs */}
             {run.status === 'running' ? 'running' : fmtMs((run.t1 || Date.now()) - run.t0)}
             {' · '}
             {run.mode === 'live' && (run.kind === 'build' || run.kind === 'rerun')
@@ -1048,8 +1051,8 @@ export function BuildView({ app }) {
           }
         >
           {'The line is waiting for your approval after '}
-          {(STATIONS.find((s) => app.line[s.id].hold === 'approval') || {}).name || 'this station'}, as you set it. Select the station to
-          see what was made.
+          {STATIONS.find((s) => app.line[s.id].hold === 'approval')?.name || 'this station'}, as you set it. Select the station to see what
+          was made.
         </MBar>
       )}
       {PENDING[app.id] && (
@@ -1087,7 +1090,7 @@ export function BuildView({ app }) {
     </div>
   );
 }
-export function LineView({ app, sel }) {
+export function LineView({ app, sel }: { app: AppRecord; sel: string }) {
   const hand = U.handoff[app.id];
   return (
     <div className="line-wrap" data-tour="line">
@@ -1136,7 +1139,7 @@ export function LineView({ app, sel }) {
     </div>
   );
 }
-export function StationCard({ app, st, i, on }) {
+export function StationCard({ app, st, i, on }: { app: AppRecord; st: Station; i: number; on: boolean }) {
   const L = app.line[st.id],
     a = AGENTS[st.agent],
     meta = STATUS_META[L.status] || STATUS_META.idle,
@@ -1201,7 +1204,7 @@ export function StationCard({ app, st, i, on }) {
     </button>
   );
 }
-export function RunChips({ app, run }) {
+export function RunChips({ app, run }: { app: AppRecord; run: Run }) {
   return app.runs.length > 1 ? (
     <div className="chips">
       {app.runs.map((r) => (
@@ -1220,7 +1223,7 @@ export function RunChips({ app, run }) {
     </div>
   ) : null;
 }
-export function TimelineView({ app, run }) {
+export function TimelineView({ app, run }: { app: AppRecord; run: Run | undefined }) {
   if (!run || !run.steps.length)
     return (
       <div className="line-wrap" data-tour="line">
@@ -1228,12 +1231,13 @@ export function TimelineView({ app, run }) {
       </div>
     );
   const t0 = run.t0,
+    // eslint-disable-next-line react-hooks/purity -- a running run's bars grow to now; the store re-renders while it runs
     t1 = run.t1 || Date.now(),
     span = Math.max(1, t1 - t0),
     lanes = ['orchestrator', 'researcher', 'database', 'backend', 'views', 'ui'].concat(
       run.steps.map((s) => s.agent).filter((id, i, a) => String(id).indexOf('rv_') === 0 && AGENTS[id] && a.indexOf(id) === i),
     ),
-    name = (id) => (STATIONS.find((s) => s.id === id) || {}).name;
+    name = (id: string) => STATIONS.find((s) => s.id === id)?.name;
   return (
     <div className="line-wrap tl" data-tour="line">
       <RunChips app={app} run={run} />
@@ -1289,7 +1293,7 @@ export function TimelineView({ app, run }) {
     </div>
   );
 }
-export function LogView({ app, run }) {
+export function LogView({ app, run }: { app: AppRecord; run: Run | undefined }) {
   if (!run)
     return (
       <div className="line-wrap" data-tour="line">
@@ -1315,7 +1319,7 @@ export function LogView({ app, run }) {
             {run.steps.map((s, i) => (
               <tr key={i}>
                 <td className="mono">+{fmtMs(s.t0 - run.t0)}</td>
-                <td>{(STATIONS.find((x) => x.id === s.station) || {}).name}</td>
+                <td>{STATIONS.find((x) => x.id === s.station)?.name}</td>
                 <td>
                   <span className="who">
                     <AgentAv id={s.agent} size="xs" />
@@ -1339,10 +1343,11 @@ export function LogView({ app, run }) {
     </div>
   );
 }
-export function Inspector({ app, sid, bare }) {
-  if (sid === 'qa') return <TesterPanel app={app} bare={bare} />;
+export function Inspector({ app, sid, bare }: { app: AppRecord; sid: string; bare?: boolean }) {
+  // the Tester's station is reached only after the Backend agent wrote the workflow
+  if (sid === 'qa') return <TesterPanel app={app as AppRecord & { def: BackedDef }} />;
   const rid = String(sid || '').indexOf('rv_') === 0 ? String(sid).slice(3) : null;
-  if (rid && REVIEWERS[rid] && flowOf(app).reviewers.includes(rid)) return <ReviewPanel app={app} id={rid} bare={bare} />;
+  if (rid && rid in REVIEWERS && flowOf(app).reviewers.includes(rid)) return <ReviewPanel app={app} id={rid} bare={bare} />;
   const st = STATIONS.find((s) => s.id === sid) || STATIONS[0],
     L = app.line[st.id],
     tab = U.itab[app.id] || 'out',
@@ -1421,7 +1426,7 @@ export function Inspector({ app, sid, bare }) {
     </section>
   );
 }
-export function Attempts({ L }) {
+export function Attempts({ L }: { L: StationLine }) {
   if (!L.attempts.length) return <p className="muted">Nothing has run at this station yet.</p>;
   return (
     <>
@@ -1450,9 +1455,9 @@ export function Attempts({ L }) {
     </>
   );
 }
-export function AccessMatrix({ app }) {
+export function AccessMatrix({ app }: { app: AppRecord }) {
   const def = app.def,
-    roles = def.brief.roles;
+    roles = def.brief?.roles || [];
   return (
     <div className="tbl-wrap">
       <table className="tbl dense">
@@ -1477,7 +1482,7 @@ export function AccessMatrix({ app }) {
                     a.create && 'create',
                     a.update !== 'none' && 'edit ' + a.update,
                     a.delete && 'delete',
-                  ].filter(Boolean);
+                  ].filter((b): b is string => !!b);
                 return (
                   <td key={r.id}>
                     {bits.length ? (
@@ -1501,7 +1506,7 @@ export function AccessMatrix({ app }) {
     </div>
   );
 }
-export function StationOut({ app, st }) {
+export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
   const def = app.def,
     pending = (
       <p className="muted">
@@ -1589,7 +1594,8 @@ export function StationOut({ app, st }) {
               <h4>Looked up</h4>
               {b.sources.map((s, i) => (
                 <p key={i} className="t-cap">
-                  {s.connector}, "{s.query}
+                  {s.connector}, {'"'}
+                  {s.query}
                   {'": '}
                   {s.titles.join(', ')}
                   {'. '}
@@ -1656,8 +1662,8 @@ export function StationOut({ app, st }) {
                             c.required && 'required',
                             t.title === c.name && 'title',
                             t.owner === c.name && 'owner',
-                            c.type === 'select' && c.options.length + ' options',
-                            c.run > 1 && 'added by change ' + c.run,
+                            c.type === 'select' && (c.options || []).length + ' options',
+                            (c.run || 0) > 1 && 'added by change ' + c.run,
                           ]
                             .filter(Boolean)
                             .join(' · ')}
@@ -1693,7 +1699,7 @@ export function StationOut({ app, st }) {
     const P = def.process;
     if (!P) return pending;
     const sc = colOf(tableOf(def, P.table), P.column),
-      pill = (s) => (
+      pill = (s: string) => (
         <span className={'badge b-' + stateTone(def, tableOf(def, P.table), sc, s)}>{stateLabel(def, tableOf(def, P.table), sc, s)}</span>
       );
     return (
@@ -1733,7 +1739,8 @@ export function StationOut({ app, st }) {
           <AccessMatrix app={app} />
           <p className="muted t-cap">
             {'"own" means only rows whose owner is the signed-in user. '}
-            {deriveEndpoints(def).length}
+            {/* a workflow is written only after the brief, so the definition has one here */}
+            {deriveEndpoints(def as BriefedDef).length}
             {' endpoints are derived from these rules; the API view lists and tests them.'}
           </p>
         </div>
@@ -1746,9 +1753,10 @@ export function StationOut({ app, st }) {
             <p className="muted t-cap">
               {def.team.about}
               {' A run opens with "'}
-              {(P.transitions.find((x) => x.id === def.team.start) || {}).label}" and closes with "
-              {(P.transitions.find((x) => x.id === def.team.done) || {}).label}". The agents write through the endpoints above, as the
-              person who started the run.
+              {P.transitions.find((x) => x.id === def.team?.start)?.label}
+              {'" and closes with "'}
+              {P.transitions.find((x) => x.id === def.team?.done)?.label}
+              {'". The agents'} write through the endpoints above, as the person who started the run.
             </p>
             <div className="tbl-wrap">
               <table className="tbl dense">
@@ -1786,7 +1794,7 @@ export function StationOut({ app, st }) {
             {def.team.pause && (
               <p className="muted t-cap">
                 {'Human in the loop: the run pauses before '}
-                {(def.team.agents.find((a) => a.id === def.team.pause.before) || {}).name}
+                {def.team.agents.find((a) => a.id === def.team?.pause?.before)?.name}
                 {' so a person can add a point.'}
               </p>
             )}
@@ -1797,7 +1805,7 @@ export function StationOut({ app, st }) {
   }
   if (st.id === 'views') {
     if (!def.dash || !Object.keys(def.views || {}).length) return pending;
-    const KIND = {
+    const KIND: Record<string, string> = {
       kpi: 'Number',
       bar: 'Bars',
       stack: 'Stacked bars',
