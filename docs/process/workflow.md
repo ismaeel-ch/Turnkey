@@ -52,13 +52,12 @@ Update dependencies by hand in their own pull request.
 
 ## Release
 
-A release is a GitHub release on a commit that is already on `main`, tagged `v` and a semantic version (for example
-`v0.2.0`). Publishing it is what deploys to production.
+A release is a version on `main`, tagged `v` and a semantic version (for example `v0.2.0`). Making one is what deploys
+to production.
 
-1. Update `CHANGELOG.md` with the merged pull requests of the milestone, and merge that change through a pull request.
-2. Publish the release: `gh release create v0.2.0 --target main --generate-notes`, or on the website under
-   **Releases**, **Draft a new release**.
-3. `.github/workflows/release.yml` runs. It stops if the tag is not on `main`. Otherwise it runs the checks, builds
-   the commit with the Vercel CLI and deploys it to production, then checks `/api/health`. deploy.md has the details,
-   the secrets it needs, and how to redeploy or roll back.
-4. Check the release page lists the expected pull requests and the run's summary shows the live URL.
+1. Open a pull request `Release v0.2.0` that raises `"version"` in `package.json` and adds the `CHANGELOG.md` section
+   listing the merged pull requests. Merge it when CI is green.
+2. `.github/workflows/release.yml` runs on that merge. It runs the checks, builds the commit with the Vercel CLI,
+   deploys it to production and checks `/api/health`, then creates the tag and the GitHub release with generated
+   notes. deploy.md has the details, the secrets it needs, and how to redeploy or roll back.
+3. Check the release page lists the expected pull requests and the run's summary shows the live URL.
