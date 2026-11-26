@@ -91,3 +91,20 @@ It never throws: a refused request, a dropped connection, `RUN_ERROR` and an abo
 - `tests/unit/agui-client.test.ts`: the browser client against fake streams.
 - `tests/unit/agui-route.test.ts`: the route handler called with a `Request` for the `echo` agent, and the client
   through that route.
+
+## Joining step and team, and the guard checks
+
+`step` and `team` are added in `src/server/agui/registry.ts` once their graph factories are on `main`:
+
+```ts
+registerAgent("step", async () => wrapStepAgent((await import("@/server/graph/step/agent")).createStepAgent()));
+registerAgent("team", async () => (await import("@/server/graph/team/agent")).createTeamAgent());
+```
+
+The guard checks (`checkPrompt` from `@/server/guard/prompt`, and `limiter.take(visitorOf(request), limitsFrom())`) belong in the route's
+`guarded` function and in the first lines of each graph agent's `work`, before the model is called.
+
+## A real run
+
+With `LLM_PROVIDER=claude-code`, `POST /api/copilotkit/agent/default/run` streamed: RUN_STARTED, TOOL_CALL_START, TOOL_CALL_ARGS,
+TOOL_CALL_END, TOOL_CALL_RESULT, STATE_SNAPSHOT, TEXT_MESSAGE_START, TEXT_MESSAGE_CONTENT, TEXT_MESSAGE_END, RUN_FINISHED (one model call, 7.5 s).
