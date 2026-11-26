@@ -33,6 +33,7 @@ import type { BuildApp, Station } from './line';
 import { normCases } from './tester';
 import { Btn, Dialog, Field, Icon, Input, MBar, Seg, Select, Spinner, Textarea } from './ui';
 import { AppPane, newPane } from './runtime';
+import type { SoloItem } from './mobile';
 import {
   AppLogo,
   carryData,
@@ -495,7 +496,7 @@ export async function openShared(input: unknown, o: OpenOpts = {}): Promise<AppR
   return app;
 }
 export function enterSolo(app: AppRecord, o: { from?: SoloView['from']; as?: string | null; back?: string | null } = {}) {
-  const pane = newPane(7) as SoloView['pane'],
+  const pane = newPane(7),
     u = o.as ? appUsers(app).find((x) => x.username === o.as) : null;
   if (u) pane.uid = u.id;
   U.solo = {
@@ -879,7 +880,8 @@ export function ShareDialog({ p }: { p: { app: string } }) {
           <li>
             <Icon n="info" s="16" />
             <span>
-              Inside this prototype viewer a link cannot open a new page, so use Preview, or paste the link under Open a shared app.
+              This page is shown inside a frame, where a link cannot open a new page. Use Preview, or paste the link under Open a shared
+              app.
             </span>
           </li>
         )}
@@ -1056,7 +1058,7 @@ export function SoloShell() {
     )
       resetAppData(app);
   };
-  const extra = [
+  const extra: (SoloItem | null)[] = [
     {
       label: app.installed ? 'Installed on this device' : 'Install this app',
       icon: 'install',
@@ -1091,7 +1093,7 @@ export function SoloShell() {
       icon: 'arrowLeft',
       on: exitSolo,
     },
-  ].filter(Boolean);
+  ];
   return (
     <div className="solo" data-solo={so.from}>
       {so.from === 'preview' && (

@@ -1,5 +1,8 @@
+import { AreaBoundary } from '@/platform/area-boundary';
+import { engineProblem, storageProblem } from './errors';
 import { modelHost } from '@/platform/model-client';
-import { type ReactNode, useState, useLayoutEffect } from 'react';
+import { type ReactNode, Suspense, lazy, useState, useLayoutEffect, useSyncExternalStore } from 'react';
+import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 import type { BackedDef } from '@/shared/types/app';
 import type { SqlValue } from '@/shared/types/sqljs';
 import type { AppRecord, Dict, Downloader, OnboardingForm, ProductTourStep, Settings, SignInForm } from '@/shared/types/workspace';
@@ -65,11 +68,12 @@ import { TEAMS } from './team';
 import { TESTS, runTestsSync, suiteOf } from './tests';
 import { FLOW, isDark } from './flow';
 import { LIVE, RUNS, STATIONS, deleteApp, pushChat, resumeInterrupted, runBuild, startBuild, stopRun } from './line';
+import { cancelRerun, queuedRerun } from './rerun';
 import { buildPack, parseChange, planOps, runChange } from './changes';
 import { AddStepDialog, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
 import { REVIEWERS } from './reviewers';
 import { keepFix, suggestCases } from './tester';
-import { AgentAv, Btn, Dialog, Field, Icon, Input, Logo, MBar, Proto, Seg, Select, Spinner, Switch, TONE_ICON } from './ui';
+import { AgentAv, Btn, Dialog, Field, Icon, Input, Logo, MBar, Seg, Select, Spinner, Switch, TONE_ICON } from './ui';
 import { PhoneSheets } from './mobile';
 import { AgentActivity, activityNow } from './activity';
 import { APICACHE, stageOf } from './runtime';
@@ -86,11 +90,19 @@ import {
   shareLink,
   squeeze,
   unsqueeze,
+  framed,
 } from './share';
 import { InstallAppDialog, isDirty, logoOf, relOf, releaseApp } from './release';
 import { GUIDE, GuideDialog } from './guide';
+import { HistoryDialog } from './history-ui';
+import { historyHooks } from './history';
 import { Home, Titlebar, Workspace, lineApp } from './shell-a';
 import { DebugDrawer } from './shell-b';
+import { installShortcuts, setSingleKeys } from './commands';
+
+// The command palette and the shortcuts dialog load the first time one opens (Ctrl/Cmd+K or "?").
+const PaletteDialog = lazy(() => import('./palette').then((m) => ({ default: m.PaletteDialog })));
+const ShortcutsDialog = lazy(() => import('./palette').then((m) => ({ default: m.ShortcutsDialog })));
 
 /* ===== Turnkey prototype · shell: first-run onboarding, sign-in, dialogs, guided tour, boot ===== */
 /* The forms below keep their state in the view store (U), so it outlives a re-render. Components read it through a
@@ -667,7 +679,7 @@ export function SettingsDialog() {
                 : 'Off: Demo is on. Saved builds and made-up data, no model calls.'
           }
         >
-          <Switch id="set-live" on={mode.on} disabled={!on} onChange={setLive} />
+          <Switch id="set-live" label="Live" on={mode.on} disabled={!on} onChange={setLive} />
         </SetRow>
         <SetRow title="Replay speed" text="How fast saved builds and changes play.">
           <Seg
@@ -708,13 +720,19 @@ export function SettingsDialog() {
           />
         </SetRow>
         <SetRow title="Debug mode" text="AG-UI events, tool calls, model usage, SQL, API calls, state, storage.">
-          <Switch id="set-debug" on={s.debug} onChange={(v) => set('debug', v)} />
+          <Switch id="set-debug" label="Debug mode" on={s.debug} onChange={(v) => set('debug', v)} />
         </SetRow>
         <SetRow title="Simulate offline" text="Pretend the connection is gone, to see Live pause and what keeps working.">
-          <Switch id="set-off" on={s.offline} onChange={setOffline} />
+          <Switch id="set-off" label="Simulate offline" on={s.offline} onChange={setOffline} />
+        </SetRow>
+        <SetRow
+          title="Single-key shortcuts"
+          text="Letters such as G then B, and ? for the list. Ctrl or Cmd with K always opens the commands."
+        >
+          <Switch id="set-keys" label="Single-key shortcuts" on={s.keys !== false} onChange={setSingleKeys} />
         </SetRow>
         <SetRow title="Agents panel" text="Show the chat beside the canvas.">
-          <Switch id="set-chat" on={s.chat} onChange={(v) => set('chat', v)} />
+          <Switch id="set-chat" label="Agents panel" on={s.chat} onChange={(v) => set('chat', v)} />
         </SetRow>
       </div>
       <p className="muted t-cap" id="set-net">
@@ -726,13 +744,32 @@ export function SettingsDialog() {
           : U.live === 'unknown'
             ? 'connecting.'
             : 'none connected to this copy, so saved builds and built-in changes stand in.'}
-        {' The hackathon build reaches the model through its own server route, so there Live needs the connection and nothing else.'}
+        {' Live reaches the model through Turnkey’s own server route, so it needs the connection and nothing else.'}
       </p>
     </Dialog>
   );
 }
 export function InstallDialog() {
   const s = S.settings;
+  const offered = useSyncExternalStore(onInstallPrompt, canPromptInstall, noInstallOffer);
+  const [asked, setAsked] = useState(false);
+  const inFrame = framed(),
+    real = offered && !inFrame; // the browser made an offer for Turnkey's manifest: its own Install dialog does the work
+  const mark = (v: boolean) => {
+    s.installed = v;
+    commit();
+    closeDialog();
+    toast(
+      v ? 'Installed. It opens in its own window and starts without internet.' : 'Removed. Your apps and data are untouched.',
+      v ? 'success' : 'info',
+    );
+  };
+  const install = async () => {
+    setAsked(true);
+    const out = await promptInstall();
+    if (out === 'accepted') mark(true);
+    else if (out === 'dismissed') closeDialog();
+  };
   return (
     <Dialog
       title={s.installed ? BRAND.name + ' is installed' : 'Install ' + BRAND.name}
@@ -740,15 +777,7 @@ export function InstallDialog() {
       foot={
         s.installed ? (
           <>
-            <Btn
-              className="btn"
-              onClick={() => {
-                s.installed = false;
-                commit();
-                closeDialog();
-                toast('Removed. Your apps and data are untouched.', 'info');
-              }}
-            >
+            <Btn className="btn" onClick={() => mark(false)}>
               Uninstall
             </Btn>
             <Btn className="btn primary" onClick={closeDialog}>
@@ -760,18 +789,15 @@ export function InstallDialog() {
             <Btn className="btn" onClick={closeDialog}>
               Not now
             </Btn>
-            <Btn
-              className="btn primary"
-              data-autofocus
-              onClick={() => {
-                s.installed = true;
-                commit();
-                closeDialog();
-                toast('Installed. It opens in its own window and starts without internet.', 'success');
-              }}
-            >
-              Install
-            </Btn>
+            {real ? (
+              <Btn className="btn primary" data-autofocus data-install="browser" onClick={install}>
+                Install
+              </Btn>
+            ) : (
+              <Btn className="btn primary" data-autofocus data-install="menu" onClick={() => mark(true)}>
+                {inFrame ? 'Install' : 'I have installed it'}
+              </Btn>
+            )}
           </>
         )
       }
@@ -804,16 +830,25 @@ export function InstallDialog() {
             </span>
           </li>
         </ul>
-        <MBar tone="info">
-          <Proto>Simulated here</Proto>
-          {
-            ' A page inside Claude cannot register a service worker, so this dialog only shows the flow. The real build ships a web manifest and a service worker, and the browser shows its own install prompt.'
-          }
-        </MBar>
+        {s.installed ? null : inFrame ? (
+          <MBar tone="info">
+            {'This page is shown inside a frame, which cannot install anything. Open ' +
+              BRAND.name +
+              ' in its own browser tab to install it.'}
+          </MBar>
+        ) : real ? (
+          <MBar tone="info">Your browser asks you to confirm.</MBar>
+        ) : (
+          <MBar tone="info">
+            {asked ? 'The browser did not open its install dialog. ' : 'Your browser installs ' + BRAND.name + ' from its own menu. '}
+            {installHint(navigator.userAgent)}
+          </MBar>
+        )}
       </div>
     </Dialog>
   );
 }
+const noInstallOffer = () => false;
 export function ResetDialog() {
   const apps = S.session ? myApps() : [],
     out = !S.session;
@@ -1006,7 +1041,7 @@ export function AddConnDialog({ p }: { p: AddConnForm }) {
       tools: [
         {
           name: f.kind === 'MCP server' ? 'tools/list' : 'GET /',
-          desc: 'Placeholder. The real build discovers the tools from the server.',
+          desc: 'Placeholder until the server lists this source’s tools.',
           args: {},
         },
       ],
@@ -1104,7 +1139,7 @@ export function AboutDialog() {
   return (
     <Dialog
       wide
-      title="What is real in this prototype"
+      title="What is real in Turnkey"
       onClose={closeDialog}
       foot={
         <Btn className="btn primary" onClick={closeDialog}>
@@ -1116,55 +1151,36 @@ export function AboutDialog() {
         <div>
           <h4>
             <Icon n="checkCircle" s="16" />
-            Real here
+            Real
           </h4>
           {li([
             "SQLite runs in this page. Tables are created with CREATE TABLE from the agents' definitions and changed with ALTER TABLE.",
-            "Each database is saved into this browser's storage and is still there after you sign out and back in.",
-            'Every station check runs for real: links, seed rows, the permission matrix, screen mounting, the tour as an acceptance test.',
-            'The built app is drawn from the definition by a generic runtime, and every read or write goes through the role-guarded endpoints.',
-            'Every view (table, board, calendar, timeline, chart, pivot, tree, cards) and the dashboard are computed from the rows the endpoints return for the signed-in role.',
-            "In the three quest apps the app's own agents write their claims, findings and arguments through those same endpoints.",
+            "Each database is saved in this browser's storage and is still there after you sign out and back in.",
+            'Every station check runs for real: links, seed rows, the permission matrix, screen mounting, the walkthrough as an acceptance test.',
+            'The built app is drawn from its definition by one runtime, and every read or write goes through the role-guarded endpoints.',
+            'Every view and the dashboard are computed from the rows the endpoints return for the signed-in role.',
+            "The test suite is generated from each app's definition and runs for real. Anything a test writes is rolled back.",
             'Changes from chat run real migrations inside a savepoint and roll back if any check fails.',
-            "The test suite is generated from each app's definition and runs for real: SQL against the SQLite file, calls against the endpoints as each role, views and pages drawn off screen. Anything a test writes is rolled back.",
-            'The workflow canvas is React Flow, the same library the hackathon build uses.',
-            'The workflow can be customised for real: approvals pause the run, review steps read the definition and try out their own fixes in a savepoint, attempts and rules change how a station runs, and a run from a later station keeps the earlier ones.',
-            'A share link really carries the app: it is compressed in this page, rebuilt in the page that opens it, and has to pass every station check again there.',
-            'The phone layouts are real. A built app switches to them by the width it is given.',
-            "Live follows the internet connection: the page listens to the browser's online and offline signals, pauses Live when the connection goes and switches it back on when it returns.",
-            'In Live, each agent makes its own model call when a model is connected to this copy of the page (inside Claude, the viewer provides one).',
+            'In Live, each agent is its own model call on the server, streamed to this page as AG-UI events. The model key stays on the server.',
+            "In the quest apps, Live runs the app's own agent team on the server, with real calls to Wikipedia, World Bank, OpenAlex, arXiv and PatentsView.",
+            'Test on the Connections page calls those five sources for real through the server.',
+            'A share link carries the app. The page that opens it rebuilds the app, and it has to pass every station check again there.',
+            'Install is a real progressive web app, for Turnkey and for each released app with its own name and icon. A service worker keeps it working offline.',
+            "Live follows the connection: the browser's online and offline signals, and whether Turnkey's own server answers.",
           ])}
         </div>
         <div>
           <h4>
             <Icon n="info" s="16" />
-            Simulated here
+            Recorded or limited
           </h4>
           {li([
-            "Demo mode replays recorded agent output, for builds and for the quest apps' agent runs. Its token figures are samples.",
-            "In Demo the four review steps are rules written in code, and a standing instruction has nothing to act on, because recorded work is replayed. In Live each reviewer is one model call and instructions are added to the agents' requests.",
-            'In the quest apps, evidence and prior-work records in Demo are saved samples. In Live the agents work from what the model knows, because this page cannot call Wikipedia, World Bank, PatentsView, OpenAlex or arXiv.',
-            'Install: a page inside Claude cannot register a service worker, so installing is imitated. Going offline is real when your device loses its connection, and the title bar button lets you imitate it.',
-            'A copy of this page opened outside Claude has no model behind it. Live still follows the connection there, and saved builds and built-in changes stand in for the model.',
-            'Connections: this page cannot reach other hosts, so every response is a labelled sample.',
-            'Share links give every person who opens one their own copy of the data in their own browser. One database shared by everyone needs a store on the server.',
-            'Inside the Claude viewer a share link cannot be opened as its own page, so Preview and Open a shared app stand in for that.',
-            'Sign-in is demo-grade and local to this browser.',
-          ])}
-        </div>
-        <div>
-          <h4>
-            <Icon n="rocket" s="16" />
-            In the hackathon build
-          </h4>
-          {li([
-            'Next.js on Vercel. The agents run in the CopilotKit route and speak AG-UI to the page; the model sits behind the LiteLLM key on the server.',
-            'The workflow is part of the shared AG-UI state. The orchestrator changes it through frontend tools (set approval, add review, set instruction, set attempts), and your edits on the canvas reach it as state updates.',
-            'Live there needs the internet connection and nothing else, because the server route is part of every deployment. Before a run the page also pings the route, since a browser can report a connection that does not reach the internet.',
-            'The same definitions, checks and runtime. SQLite stays in the browser because the free plan keeps nothing on disk.',
-            'A web manifest and a service worker make it installable and keep the shell, the SQLite engine and saved builds available offline.',
-            'Connections call public REST APIs from the server route and MCP servers through the MCP client.',
-            'A share link is an address on the deployed site, such as your-app.vercel.app/#app=…, and opens the app-only view directly.',
+            "Demo replays recorded agent output, for builds and for the quest apps' agent runs. It makes no model calls, and its token figures are samples.",
+            'In Demo the four review steps are rules written in code, and a standing instruction has nothing to act on, because recorded work is replayed.',
+            'Connections without a server client (Microsoft Learn, MCP servers you add) show a labelled sample.',
+            'Everyone who opens a share link works in their own copy, in their own browser. One database shared by everyone would need a store on the server, which the free hosting plan does not keep.',
+            'Sign-in to a built app is local to this browser. It shows roles and permissions; it is not an account system.',
+            'Live calls are capped per session and per day, to protect the model budget.',
           ])}
         </div>
       </div>
@@ -1235,6 +1251,20 @@ export function DialogHost() {
       return <AddStepDialog p={p} />;
     case 'guide':
       return <GuideDialog p={p} />;
+    case 'palette':
+      return (
+        <Suspense fallback={null}>
+          <PaletteDialog />
+        </Suspense>
+      );
+    case 'keys':
+      return (
+        <Suspense fallback={null}>
+          <ShortcutsDialog />
+        </Suspense>
+      );
+    case 'history':
+      return <HistoryDialog p={p} />;
     default:
       return null;
   }
@@ -1582,11 +1612,18 @@ export function Shell() {
       <a className="skip-link" href="#main">
         Skip to main content
       </a>
-      <Titlebar tabs={tabs} tab={tab} />
+      <AreaBoundary name="The title bar">
+        <Titlebar tabs={tabs} tab={tab} />
+      </AreaBoundary>
       {!LS.ok && (
         <MBar tone="warning" cls="bar">
           Browser storage is not available in this view, so nothing will be kept after you close it. Open the page in its own tab to keep
           your work.
+        </MBar>
+      )}
+      {LS.ok && storageProblem() && (
+        <MBar tone={storageProblem()!.kind === 'write' ? 'warning' : 'danger'} cls="bar storage-problem">
+          {storageProblem()!.text}
         </MBar>
       )}
       {!online() && (
@@ -1606,11 +1643,23 @@ export function Shell() {
         </MBar>
       )}
       <main className="shell-body" id="main" tabIndex={-1}>
-        {app ? <Workspace key={app.id} app={app} /> : <Home />}
+        <AreaBoundary name={app ? 'This app' : 'The home page'} resetKey={app ? app.id : 'home'}>
+          {app ? <Workspace key={app.id} app={app} /> : <Home />}
+        </AreaBoundary>
       </main>
-      {S.settings.debug && <DebugDrawer app={app} />}
-      {PHONE() && <PhoneSheets app={app} />}
-      <AgentActivity app={app} />
+      {S.settings.debug && (
+        <AreaBoundary name="The debug drawer">
+          <DebugDrawer app={app} />
+        </AreaBoundary>
+      )}
+      {PHONE() && (
+        <AreaBoundary name="The phone menu">
+          <PhoneSheets app={app} />
+        </AreaBoundary>
+      )}
+      <AreaBoundary name="The agent panel" resetKey={app ? app.id : 'home'}>
+        <AgentActivity app={app} />
+      </AreaBoundary>
     </div>
   );
 }
@@ -1629,23 +1678,27 @@ function RootInner() {
     );
   if (U.boot === 'error')
     return (
-      <div className="splash">
+      <div className="splash" role="alert">
         <Logo size={44} />
         <strong className="t-sub1">
           {BRAND.name}
           {' could not start'}
         </strong>
-        <p className="muted">
-          {U.bootErr}
-          {' Reload the page. If it keeps happening, the SQLite engine could not be loaded in this view.'}
-        </p>
+        <p className="muted">{engineProblem(U.bootErr)}</p>
+        <Btn className="btn primary" onClick={() => window.location.reload()}>
+          Reload the page
+        </Btn>
       </div>
     );
   if (U.solo && S.apps[U.solo.app]) return [<SoloShell key="solo" />, <DialogHost key="dlg" />, <Toasts key="toasts" />];
   return [
     !S.onboarded ? <Onboarding key="ob" /> : !S.session || !me() ? <SignIn key="si" /> : <Shell key="shell" />,
-    <DialogHost key="dlg" />,
-    <TourLayer key="tour" />,
+    <AreaBoundary key="dlg" name="This dialog">
+      <DialogHost />
+    </AreaBoundary>,
+    <AreaBoundary key="tour" name="The guided tour">
+      <TourLayer />
+    </AreaBoundary>,
     <Toasts key="toasts" />,
   ];
 }
@@ -1689,6 +1742,7 @@ export function probeClaude(tries: number) {
   }
 }
 export function boot() {
+  installShortcuts();
   LS.probe();
   loadState();
   applyTheme();
@@ -1799,6 +1853,8 @@ export function boot() {
       mode: modeNow,
       reach: checkReach,
       runs: () => RUNS,
+      queued: queuedRerun,
+      cancelRerun,
       dirty: isDirty,
       relOf,
       release: releaseApp,
@@ -1807,6 +1863,7 @@ export function boot() {
       keepFix,
     },
     activity: (appId: string) => activityNow(appId),
+    history: historyHooks,
     runTests: (app: AppRecord) => runTestsSync(app),
     suite: (id: string) =>
       suiteOf(S.apps[id]).map((x) => ({

@@ -1,5 +1,4 @@
 import * as React from 'react';
-import * as ReactFlow from '@xyflow/react';
 import { createEagerRoot } from '@/platform/dom';
 import { createElement, useEffect, useRef } from 'react';
 import { toStyle } from '@/platform/dom';
@@ -17,6 +16,7 @@ import { useWidth } from './views-b';
 import { isDirty, relOf } from './release';
 import { LineView } from './shell-a';
 import type { ComponentType, CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
+import type * as XYFlow from '@xyflow/react';
 import type { Edge, EdgeProps, Node, NodeChange, ReactFlowInstance, Viewport, XYPosition } from '@xyflow/react';
 import type { Root } from 'react-dom/client';
 import type { AppRecord, Dict } from '@/shared/types/workspace';
@@ -162,11 +162,24 @@ export const FLOW: { state: 'loading' | 'ready' | 'none'; inst: FlowInstance | n
   inst: null,
   kit: null,
 };
+/** React Flow, loaded with `setFlowAvailable(true)` rather than with the page; the plain line shows until then. */
+let ReactFlow: typeof XYFlow | null = null;
 export const setFlowAvailable = (ok: boolean) => {
-  FLOW.state = ok ? 'ready' : 'none';
-  try {
-    notify();
-  } catch {}
+  const done = (state: 'ready' | 'none') => {
+    FLOW.state = state;
+    try {
+      notify();
+    } catch {}
+  };
+  if (!ok) return done('none');
+  if (ReactFlow) return done('ready');
+  void import('@xyflow/react').then(
+    (m) => {
+      ReactFlow = m;
+      done('ready');
+    },
+    () => done('none'),
+  );
 };
 export const isDark = () => {
   const r = document.documentElement,
@@ -288,7 +301,7 @@ export function flowGraph(app: AppRecord, v: boolean): FlowGraph {
             strokeDasharray: kind === 'back' ? '6 4' : undefined,
           },
           markerEnd: {
-            type: ReactFlow.MarkerType.ArrowClosed,
+            type: 'arrowclosed' as XYFlow.MarkerType, // MarkerType.ArrowClosed, without loading React Flow
             color: C[kind],
             width: 14,
             height: 14,
@@ -670,10 +683,11 @@ export function flowGraph(app: AppRecord, v: boolean): FlowGraph {
 export function flowKit(): FlowKit {
   // the React pieces, made once the libraries have loaded
   if (FLOW.kit) return FLOW.kit;
+  if (!ReactFlow) throw new Error('React Flow is not loaded yet'); // only called once FLOW.state is 'ready'
   const R = React,
     RF = ReactFlow,
     e = R.createElement,
-    POS: Record<'left' | 'right' | 'top' | 'bottom', ReactFlow.Position> = {
+    POS: Record<'left' | 'right' | 'top' | 'bottom', XYFlow.Position> = {
       left: RF.Position.Left,
       right: RF.Position.Right,
       top: RF.Position.Top,

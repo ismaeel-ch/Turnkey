@@ -31,6 +31,8 @@ export interface Settings {
   /** the docked chat is open (wide screens) */
   chat: boolean;
   tourDone: boolean;
+  /** single-key shortcuts such as "g b" and "?" (Ctrl/Cmd+K always works); off lets every key reach the page */
+  keys: boolean;
 }
 
 export interface Account {
@@ -188,7 +190,25 @@ export interface Run {
   tokIn: number;
   tokOut: number;
   retries: number;
+  /** Live runs: what the server reported for every model call of the run (tokens, cache hits, cost). */
+  usage?: UsageSum;
+  /** The same, by agent id. */
+  agentUsage?: Dict<UsageSum>;
   [field: string]: Loose;
+}
+
+/** Model calls added up: tokens (fresh prompt, output, cache read and write) and dollars. */
+export interface UsageSum {
+  calls: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  costUsd: number;
+  /** Calls the server could not price (left out of `costUsd`). */
+  unpriced: number;
+  /** Calls whose tokens are estimates. */
+  estimated: number;
 }
 
 /** A card under a chat message: an approval, a list of changes, an error and so on. `type` says which. */
@@ -358,16 +378,6 @@ export interface DebugPanel {
   all: boolean;
 }
 
-/** One pane of the App view: who is signed in, and the open screen and record. */
-export interface Pane {
-  n: number;
-  /** the built app's user id signed in here */
-  uid: number | null;
-  screen: string | null;
-  rec: Loose;
-  [field: string]: Loose;
-}
-
 /** One step of the product tour: the element it points at (`data-tour`), and what to do before showing it. */
 export interface ProductTourStep {
   target: string;
@@ -381,14 +391,6 @@ export interface ProductTour {
   id: string;
   i: number;
   steps: ProductTourStep[];
-}
-
-/** The App view of one app: one or two panes, and the walkthrough when one is playing. */
-export interface Stage {
-  split: boolean;
-  panes: Pane[];
-  tour: Loose;
-  [field: string]: Loose;
 }
 
 export interface ViewState {
@@ -432,7 +434,7 @@ export interface ViewState {
   /** the app whose chat message the orchestrator is reading */
   busy: string | null;
   /** the last connector tool tried on the Connections page */
-  connOut: { id: string; tool: string; r: { ok: boolean; result: Loose } } | null;
+  connOut: { id: string; tool: string; r: { ok: boolean; result: Loose }; real?: boolean; busy?: boolean } | null;
   /** the first-run onboarding form, while it is open */
   ob: OnboardingForm | null;
   /** the sign-in form, while it is open */
@@ -488,7 +490,7 @@ export interface SharedInfo {
 export interface SoloView {
   app: string;
   /** the runtime's pane: who is signed in and what they look at */
-  pane: { uid: number | null; [field: string]: Loose };
+  pane: Pane;
   /** a link, the owner's share preview, or the owner opening their own app */
   from: 'link' | 'preview' | 'own';
   /** the app tab to go back to */
@@ -573,6 +575,9 @@ export interface ModelCallRecord {
   est?: boolean;
   ms: number;
   attempt: number;
+  /** Live calls the server reported: prompt tokens read from the cache, and the cost in dollars (null: not priced). */
+  cacheRead?: number;
+  costUsd?: number | null;
 }
 
 /** One SQL statement in the Debug log. */
@@ -844,4 +849,130 @@ export interface ReviewFinding {
   test: string | null;
   /** why the fix would not pass, or a note on approval */
   block: string;
+}
+
+/* ---------- a built app on screen (src/workspace/runtime.tsx, views-a.tsx, views-b.tsx, room.tsx) ---------- */
+/** One record of a table: what the record drawer opens. */
+export interface RecordRef {
+  table: string;
+  id: number;
+}
+
+/** A record form being filled in: a new record (`id` null) or an edit. */
+export interface PaneForm {
+  table: string;
+  id: number | null;
+  vals: Dict<Loose>;
+  errs: Dict<string>;
+  err?: string;
+  /** form screens: the id of the record just created */
+  done?: number | null;
+}
+
+/** One filter of a data view: a column, a condition (`is`, `has`, `range`, `between` ...) and its value. */
+export interface ViewFilter {
+  col: string;
+  op: string;
+  /** a value of the column; a range name for `range`; `[from, to]` dates for `between`; null for `empty` */
+  val: Loose;
+}
+
+/** What a person chose for one view: the View advisor's plan is merged under it. Every field names a column. */
+export interface ViewOptions {
+  by?: string | null;
+  lane?: string | null;
+  date?: string | null;
+  start?: string | null;
+  end?: string | null;
+  x?: string | null;
+  split?: string | null;
+  measure?: string | null;
+  bucket?: string | null;
+  kind?: string | null;
+  rows?: string | null;
+  cols?: string | null;
+  parent?: string | null;
+  levels?: string[];
+  mode?: string | null;
+  zoom?: string | null;
+  /** chart: show the data table under it */
+  table?: boolean;
+}
+
+/** How a person left one page of a built app: view, search, filters, sorting and each view's options. */
+export interface ExplorerState {
+  view: string;
+  q: string;
+  filters: ViewFilter[];
+  sort: { col: string; dir: number } | null;
+  group: string;
+  /** column name to hidden, once the table view has drawn */
+  hidden: Dict<boolean> | null;
+  page: number;
+  /** closed groups (table) and open branches (tree) */
+  closed: Dict<boolean>;
+  open: Dict<boolean>;
+  cfg: Dict<ViewOptions>;
+  /** the filter being written in the filter box */
+  fd: { col: string; op: string; val: Loose } | null;
+  /** calendar: months or weeks from today, and the day showing all its records */
+  month?: number;
+  calOpen?: string | null;
+  /** timeline: days from the default window */
+  tlOff?: number;
+}
+
+/** A dashboard filter set by selecting a bar. */
+export interface DashFilter {
+  table: string;
+  col: string;
+  val: Loose;
+}
+
+/** A connector call made from a record's action button, and its answer. */
+export interface PaneCall {
+  row: number;
+  name: string;
+  label: string;
+  res: { ok: boolean; result: Loose };
+}
+
+/** One copy of a built app on screen: who is signed in, which page, and what is open. */
+export interface Pane {
+  n: number;
+  /** the signed-in user's id */
+  uid: number | null;
+  screen: string | null;
+  rec: RecordRef | null;
+  form: PaneForm | null;
+  /** form screens' drafts, by screen id */
+  forms: Dict<PaneForm>;
+  /** each page's state, by screen id */
+  vs: Dict<ExplorerState>;
+  /** the dashboard's date range and bar filters */
+  ds: { range: string; f: DashFilter[] } | null;
+  /** the agent room's start form */
+  tf: PaneForm | null;
+  login: { u: string; p: string; err: string } | null;
+  conn: PaneCall | null;
+  /** phone layout: the open sheet */
+  sheet?: string | null;
+  /** the agent room: the case on show */
+  caseId?: number | null;
+  /** drawn by a check, not by a person: nothing is remembered */
+  test?: boolean;
+}
+
+/** The walkthrough player: the step on show, each step's result, and what the tour remembers. */
+export interface Walk {
+  i: number;
+  res: ({ ok?: boolean; detail?: string } | undefined)[];
+  state: { rows: Dict<number>; last: RecordRef | null };
+}
+
+/** The built app's preview: one or two panes, and the walkthrough when it plays. */
+export interface Stage {
+  split: boolean;
+  panes: Pane[];
+  tour: Walk | null;
 }

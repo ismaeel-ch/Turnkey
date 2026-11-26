@@ -72,6 +72,9 @@ async function flowDemo(browser, url) {
   check('acceptance test passed', a.tour.length === 7 && a.tour.every(Boolean), a.tour);
   // the agent activity panel: who worked, the hand-offs, the send-back, and the workflow they ran on
   await page.locator('.act-launch').click(); await page.waitForSelector('.act-panel .act-agent');
+  await page.waitForSelector('.act-panel .act-usage'); await sleep(300);
+  const spend = await st(page, () => { const u = document.querySelector('.act-panel .act-usage'); return { calls: u.dataset.calls, text: u.textContent }; });
+  check('agent panel shows spend: today on the server, and nothing for a saved build', spend.calls === '0' && /Spent today/.test(spend.text) && /No model connected|of \$/.test(spend.text), spend);
   const act = await st(page, (aid) => ({ agents: [...document.querySelectorAll('.act-panel .act-agent')].map((x) => x.dataset.agent + ':' + x.dataset.state), kinds: [...document.querySelectorAll('.act-panel .act-item')].map((x) => x.dataset.kind), model: (({ items, agents }) => ({ handoffs: items.filter((i) => i.kind === 'handoff').map((i) => i.from + '>' + i.agent), back: agents.database.sentBack }))(window.__formwork.activity(aid)) }), a.id);
   check('agent panel lists every builder agent as done', act.agents.join(',') === 'researcher:done,database:done,backend:done,views:done,ui:done,tester:done', act.agents);
   check('agent panel shows the hand-offs in order and the send-back to the Database agent', act.model.handoffs.join(',') === 'researcher>database,database>backend,backend>views,views>ui,ui>tester' && act.model.back === 1 && act.kinds.includes('sent_back') && act.kinds.includes('tool_call') && act.kinds.includes('checks'), act.model);
@@ -86,6 +89,7 @@ async function flowDemo(browser, url) {
   await sleep(300); await shot(page, '07-built-line');
   await page.locator('.station').nth(1).click(); await page.getByRole('tab', { name: /^Attempts/ }).click(); await sleep(150); await shot(page, '08-attempts');
   await page.getByRole('button', { name: 'Timeline' }).click(); await sleep(150); await shot(page, '09-timeline');
+  check('the timeline says a saved build replayed with no model calls and nothing spent', /no model calls, nothing spent/.test(await page.locator('.tl-usage').innerText()));
   await page.getByRole('button', { name: 'Workflow', exact: true }).click();
 
   // the built app
@@ -132,8 +136,13 @@ async function flowDemo(browser, url) {
   await shot(page, '20-api');
   await page.getByRole('tab', { name: 'Permission matrix' }).click(); await sleep(100); await shot(page, '21-api-matrix');
   await view(page, 'Connections'); await page.waitForSelector('.conn-card');
-  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await sleep(100);
-  check('connection test shows a sample response', await page.locator('.conn-detail .json').count() === 1);
+  await page.route('**/api/connectors/**', (route) => route.fulfill({ json: { ok: true, items: [{ title: 'Appointment (scheduling)', url: 'https://en.wikipedia.org/wiki/Appointment', text: 'A made-up answer from the server route.', source: 'Wikipedia' }] } }));
+  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await page.waitForSelector('.conn-detail .badge.b-success');
+  check('connection test calls the source through the server route and shows its live answer', await page.locator('.conn-detail .json').count() === 1 && /Live response/.test(await page.locator('.conn-detail').innerText()) && /items \[1\]/.test(await page.locator('.conn-detail .json').innerText()), await page.locator('.conn-detail').innerText());
+  await page.route('**/api/connectors/**', (route) => route.fulfill({ json: { ok: false, code: 'upstream', message: 'Wikipedia did not answer.' } }));
+  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await page.waitForFunction(() => /did not answer/.test((document.querySelector('.conn-detail .json') || {}).innerText || ''));
+  check('when the source fails, the test says why and shows the labelled sample beside it', /Sample response/.test(await page.locator('.conn-detail').innerText()), await page.locator('.conn-detail').innerText());
+  await page.unroute('**/api/connectors/**');
   await shot(page, '22-connections');
   await page.locator('.titlebar .net').click(); await sleep(200);
   check('offline disables connection tests', await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().isDisabled());
@@ -271,9 +280,12 @@ async function flowLive(browser, url) {
       const fn = async function (input, opts) {
         const tm = /^You are (\\w+), one of/.exec(input); if (tm) { window.__calls.push('team:' + tm[1]); if (opts && opts.onText) opts.onText({ text: '{' }); await new Promise((r) => setTimeout(r, 60)); return { text: JSON.stringify(window.__TEAM[tm[1]] || { say: 'Nothing to add.' }), truncated: false }; }
         const who = /You are the ([\\w ]+?) agent/.exec(input)[1]; window.__calls.push(who); const G = window.__GYM; let out;
+        if (opts && opts.onUsage) opts.onUsage({ model: 'claude-haiku-5-5', tier: 'quick', input: 400, output: 100, cacheRead: 1500, cacheWrite: 0, costUsd: 0.001, ms: 100, estimated: false });
         if (/STANDING INSTRUCTION FROM THE OWNER/.test(input)) (window.__noted = window.__noted || []).push(who + ': ' + input.split('STANDING INSTRUCTION FROM THE OWNER')[1].split('\\n')[1]);
         if (/reviewer$/.test(who)) { await new Promise((r) => setTimeout(r, 60)); return { text: JSON.stringify({ findings: window.__findings || [] }), truncated: false }; }
         if (window.__mode === 'deny') { const e = new Error('not granted'); e.code = 'not_granted'; throw e; }
+        if (window.__mode === 'drop') { const e = new Error('the connection to the server was lost'); e.code = 'network'; throw e; }
+        if (window.__mode === 'budget') { const e = new Error('used up'); e.code = 'budget'; throw e; }
         if (window.__mode === 'badjson' && who === 'Researcher') return { text: 'Sorry, I would rather chat about it.', truncated: false };
         if (who === 'Tester') { const sc = G.screens.screens.find((s) => s.roles && s.roles.length); return { text: JSON.stringify({ cases: [{ name: 'The first page opens for its role', why: 'Every role needs a way in.', steps: [{ role: sc.roles[0], do: 'open', screen: sc.name, say: 'Opens the page.' }] }, { name: 'Opening a page twice is safe', why: 'Reading changes nothing.', steps: [{ role: sc.roles[0], do: 'open', screen: sc.name }, { role: sc.roles[0], do: 'open', screen: sc.name }] }] }), truncated: false }; }
         if (who === 'Researcher') out = G.research;
@@ -304,6 +316,10 @@ async function flowLive(browser, url) {
   check('live: one model call per agent plus one retry', calls.join(',') === 'Researcher,Database,Database,Backend,View advisor,UI,Tester', calls);
   const qaL = await appFull(page); check('live: the Tester\'s cases come from the model, are run with the generated tests, and all pass', qaL.qa && qaL.qa.by === 'model' && qaL.cases === 2 && JSON.stringify(qaL.qa.rounds) === '[[0,0]]' && qaL.tests.failed === 0, [qaL.qa, qaL.cases, qaL.tests]);
   check('live: the View advisor\'s plan was normalised (aliases mapped, broken widget left out, dashboard for every role)', a.views.bookings.includes('board') && a.views.bookings.includes('chart') && a.views.classes.includes('timeline') && a.widgets === 6 && a.dashRoles === 3, [a.views, a.widgets, a.dashRoles, a.attempts]);
+  await page.getByRole('button', { name: 'Timeline' }).click(); await page.waitForSelector('.tl-usage');
+  const tlu = await st(page, () => { const u = document.querySelector('.tl-usage'); return { calls: u.dataset.calls, cost: u.dataset.cost, text: u.textContent, db: [...document.querySelectorAll('.tl-row')].map((r) => r.querySelector('.tl-cost')?.textContent || '').join('|') }; });
+  check('live: the timeline shows the cost, tokens and cache hits the server reported for every model call, and each agent\'s cost', tlu.calls === '7' && tlu.cost === '0.007000' && /7 model calls · 14k tokens · 79% from cache · \$0\.007/.test(tlu.text) && tlu.db.split('|')[2] === '$0.002', tlu);
+  await page.getByRole('button', { name: 'Workflow', exact: true }).click();
   await sleep(200); await shot(page, '50-live-built');
   await view(page, 'App'); await page.locator('.persona-btn').first().click(); await land(page); await page.waitForSelector('.kb-col'); await shot(page, '51-live-app');
   await view(page, 'Build'); await say(page, 'Members need an emergency contact'); await waitIdle(page); const b = await appState(page);
@@ -361,8 +377,13 @@ async function flowLive(browser, url) {
   check('live team: the agent could not set the status itself, the workflow did', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Checked', await page.locator('.team-log .badge').first().innerText());
   await shot(page, '54-live-team');
   await st(page, () => { window.__formwork.view().calls = 0; }); // this flow now makes more model calls than one session's cap allows, so start the count again for the last case
+  c = await build('drop', 'A gym whose connection drops halfway');
+  check('live: a connection lost during a call fails the run and says what to do', c.status === 'failed' && JSON.stringify(c.last || '').includes('could not reach its server'), [c.status, c.last]);
+  c = await build('budget', 'A gym built after the allowance ran out');
+  check("live: a spent daily allowance says so, and that saved builds still work", c.status === 'failed' && JSON.stringify(c.last || '').includes('allowance') && JSON.stringify(c.last || '').includes('Saved builds'), [c.status, c.last]);
   c = await build('deny', 'A gym nobody granted access to');
   check('live: a refused permission stops the run and switches Live off', c.status === 'failed' && (await st(page, () => window.__formwork.view().live)) === 'none', [c.status, c.last]);
+  check('live: the failed run says plainly that no model is connected', JSON.stringify(c.last || '').includes('No model is connected'), c.last);
   await ctx.close();
   await liveOnStepAgent(browser, url);
 }
@@ -498,6 +519,25 @@ async function flowMisc(browser, url) {
   await p2.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 20000 }); await p2.locator('.gcard.ask .opt').first().click(); await waitReady(p2); const m = await appState(p2);
   check('without browser storage the app still builds and says nothing will be kept', m.status === 'ready' && (await p2.locator('.mbar.bar').first().innerText()).includes('not available'), m.status);
   await blocked.ctx.close();
+  // storage that fills up: the next save is refused, a banner and a toast say so plainly, and both go once saving works again
+  const full = await newPage(browser, { init: "window.__turnkeyOptions = { storage: 'localstorage' };" });
+  const p3 = full.page; await enter(p3, url);
+  await st(p3, () => { window.__realSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); }; });
+  await p3.locator('.newtab').click();
+  const fullBar = await p3.waitForSelector('.storage-problem', { timeout: 10000 }).then(() => true, () => false);
+  check('a full browser storage shows a plain banner and a toast with a way forward', fullBar && (await p3.locator('.storage-problem').innerText()).includes('storage is full') && (await p3.locator('.toasts').innerText()).includes('Delete an app'), fullBar);
+  await st(p3, () => { Storage.prototype.setItem = window.__realSetItem; });
+  await p3.locator('.newtab').click();
+  check('the storage banner goes once saving works again', await p3.waitForSelector('.storage-problem', { state: 'detached', timeout: 10000 }).then(() => true, () => false));
+  await full.ctx.close();
+  // the SQLite engine cannot be downloaded: the start screen says why and offers a reload, never a blank page
+  const noSql = await newPage(browser);
+  await noSql.ctx.route('**/vendor/sql-wasm.js*', (route) => route.abort());
+  await noSql.page.goto(url);
+  const sqlMsg = await noSql.page.waitForSelector('.splash[role=alert]', { timeout: 20000 }).then((el) => el.innerText(), () => '');
+  check('when the SQLite engine does not load, the page says so and offers a reload', /could not start/.test(sqlMsg) && /check the connection/.test(sqlMsg) && (await noSql.page.getByRole('button', { name: 'Reload the page' }).count()) === 1, sqlMsg);
+  errors.splice(0, errors.length, ...errors.filter((e) => !/sql-wasm|SQLite engine|Failed to load resource|ERR_FAILED/i.test(e)));
+  await noSql.ctx.close();
 }
 
 async function flowViews(browser, url) {
@@ -1049,7 +1089,19 @@ async function flowRound6(browser, url) {
   const rooms = await st(page, () => Object.values(window.__formwork.state().apps).filter((x) => x.def.board).map((x) => x.tpl + ':' + x.def.board.by + ':' + x.def.board.panels.map((p) => p.layout + (p.children ? '+' + p.children.table : '')).join('|') + ':' + x.def.screens.find((sc) => sc.type === 'agents').name).sort());
   check('each quest gets a room laid out for what its agents produce', rooms.join(' ; ') === 'biddesk:views:scores|options|groups:Bid room ; debate:views:versus|groups:Debate room ; factcheck:views:list+evidence:Check room ; priorart:views:list+findings|groups:Scout room', rooms);
   await page.locator('.wtab', { hasText: 'Second Opinion' }).click(); await page.waitForSelector('.work-head'); await view(page, 'App'); await sleep(150); if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click(); await land(page); await page.waitForSelector('.team.room');
-  await page.locator('.team-start .chip', { hasText: 'A free tier' }).click(); await sleep(60); await page.locator('.team-start button[type=submit]').click(); await page.waitForSelector('.team-log .gcard.ask', { timeout: 20000 }); await page.locator('.team-log .gcard.ask .btn.primary').click(); await waitTeam(page); await sleep(300);
+  await page.locator('.team-start .chip', { hasText: 'A free tier' }).click(); await sleep(60); await page.locator('.team-start button[type=submit]').click(); await page.waitForSelector('.team-log .gcard.ask', { timeout: 20000 });
+  // the team waits for the person here, so it is still running: a workflow edit now must not re-run the line under it
+  const worker = (by) => st(page, (b) => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); window.__formwork.wf.edit(s.apps[t.app], [{ tool: 'set_worker', args: { station: 'screens', by: b } }]); }, by);
+  const runN = (await appFull(page)).run.n; await worker('rules'); await sleep(6500);
+  const held = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return { runs: Object.keys(window.__formwork.wf.runs()), queued: !!window.__formwork.wf.queued(t.app), team: window.__formwork.teams()[t.app].status }; });
+  check('a re-run after a workflow edit waits while the app\'s own agents are running, instead of rebuilding under them', held.runs.length === 0 && held.queued && held.team === 'running' && (await appFull(page)).run.n === runN, held);
+  // nor may an undo swap the definition and database out from under the team
+  await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); window.__formwork.wf.cancelRerun(t.app); }); await sleep(1500);
+  await page.evaluate(() => document.activeElement && document.activeElement.blur()); await page.keyboard.press('Control+z'); await sleep(400);
+  const undone = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return { by: s.apps[t.app].flow.by.screens || null, team: window.__formwork.teams()[t.app].status }; });
+  check('undo waits while the app\'s own agents are running', undone.by === 'rules' && undone.team === 'running', undone);
+  await worker('agent'); await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); window.__formwork.wf.cancelRerun(t.app); });
+  await page.locator('.team-log .gcard.ask .btn.primary').click(); await waitTeam(page); await sleep(300);
   const deb = (await page.locator('.team-log').innerText()).replace(/\s+/g, ' ');
   check('debate room: two sides face to face with the weight of each, answers linked to the points they answer, the Moderator\'s notes in groups, the leaning on top', await page.locator('.bd-versus .bd-side').count() === 2 && await page.locator('.bd-balance .bd-bal').count() === 2 && /For 7/.test(await page.locator('.bd-balance').innerText()) && await page.locator('.bd-reply').count() === 3 && await page.locator('.bdp-groups .bd-group').count() === 4 && /Leaning For/.test((await page.locator('.verdict').innerText()).replace(/\s+/g, ' ')), deb.slice(0, 400)); await shot(page, 'r6-05-debate-room');
   await page.reload(); await page.waitForSelector('.work-head'); await sleep(300);
@@ -1225,7 +1277,66 @@ async function flowSizes(browser, url) {
   }
   check('the share dialog gave a short link to try', !!short, short);
 }
-const FLOWS = { demo: flowDemo, live: flowLive, misc: flowMisc, views: flowViews, quests: flowQuests, new: flowNew, custom: flowCustom, round6: flowRound6, react: flowReact, sizes: flowSizes };
+// ----- undo, redo and version history (src/workspace/history.ts) -----
+async function flowHistory(browser, url) {
+  const { ctx, page } = await newPage(browser);
+  await enter(page, url); await buildTpl(page, 'clinic'); await waitIdle(page);
+  const id = (await appState(page)).id;
+  const hist = () => st(page, (x) => window.__formwork.history.of(x), id);
+  const waitVersions = (n) => page.waitForFunction(([x, k]) => { const h = window.__formwork.history.of(x); return h && h.versions.length >= k; }, [id, n], { timeout: 20000 });
+  const cols = () => st(page, (x) => window.__formwork.sql(x, 'PRAGMA table_info("patients")').map((r) => r.name), id);
+  const phone = () => st(page, (x) => window.__formwork.sql(x, 'SELECT phone FROM patients ORDER BY id LIMIT 1')[0].phone, id);
+  const key = async (combo) => { await page.evaluate(() => document.activeElement && document.activeElement.blur()); await page.keyboard.press(combo); await sleep(300); await waitIdle(page); };
+  await waitVersions(1);
+  let h = await hist();
+  check('history: a built app starts its history with one version', h.versions.length === 1 && h.versions[0].kind === 'start' && h.at === 0, h);
+  check('history: Undo is off while there is nothing to undo', await page.getByRole('button', { name: 'Undo', exact: true }).isDisabled());
+
+  await view(page, 'Build');
+  await say(page, 'Add an insurance provider field to patients'); await waitIdle(page); await waitVersions(2);
+  h = await hist();
+  check('history: a change from chat is saved as a version, made by the Database agent', h.versions.length === 2 && h.versions[1].by.includes('database') && /insurance/i.test(h.versions[1].what), h.versions[1]);
+  await st(page, (x) => window.__formwork.sql(x, "UPDATE patients SET phone = '555-0199' WHERE id = (SELECT MIN(id) FROM patients)"), id);
+
+  await st(page, () => { const F = window.__formwork, s = F.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); F.wf.edit(s.apps[t.app], [{ tool: 'set_approval', args: { station: 'views', on: true } }]); });
+  await waitIdle(page); await waitVersions(3);
+  h = await hist();
+  check('history: a workflow edit is saved as a version, made by you', h.versions.length === 3 && h.versions[2].by.join() === 'you', h.versions[2]);
+
+  await key('Control+z');
+  let a = await st(page, (x) => window.__formwork.state().apps[x].flow.approve, id);
+  h = await hist();
+  check('undo (Ctrl+Z): the workflow edit is taken back', !a.views && h.at === 1 && h.versions.length === 3, [a, h.at]);
+  await key('Control+z');
+  a = await appState(page);
+  const c1 = await cols();
+  check('undo again: the new field leaves the app and its database table', !a.cols.patients.includes('insurance_provider') && !c1.includes('insurance_provider') && (await hist()).at === 0, [a.cols.patients, c1]);
+  check('undo keeps the records: a value typed in after the change is still there', (await phone()) === '555-0199');
+  await key('Control+Shift+z');
+  a = await appState(page);
+  check('redo (Ctrl+Shift+Z): the field comes back, in the definition and the table', a.cols.patients.includes('insurance_provider') && (await cols()).includes('insurance_provider') && (await hist()).at === 1, a.cols.patients);
+  check('history: undo and redo show in the event log', await st(page, () => window.__formwork.logs.EV.filter((e) => e.type === 'CUSTOM' && e.name === 'history').map((e) => e.value.op).join()) === 'undo,undo,redo');
+
+  await page.getByRole('button', { name: 'Version history' }).click(); await page.waitForSelector('.dialog.history .hist-row');
+  const rows = await page.locator('.hist-row').evaluateAll((l) => l.map((x) => [x.dataset.kind, x.classList.contains('now'), x.classList.contains('undone'), x.innerText.replace(/\s+/g, ' ')]));
+  check('version history lists every version newest first, with who made it, the current one and the undone one', rows.length === 3 && rows[2][0] === 'start' && rows[1][1] && rows[0][2] && /Database agent/.test(rows[1][3]) && /You/.test(rows[0][3]), rows);
+  await shot(page, 'history-dialog');
+  await page.locator('.hist-row[data-kind="start"] .btn').click(); await sleep(300); await waitIdle(page);
+  h = await hist(); a = await appState(page);
+  check('restoring the first version brings it back as a new version that can be undone', h.versions.length === 3 && h.versions[2].kind === 'restore' && h.at === 2 && !a.cols.patients.includes('insurance_provider'), [h, a.cols.patients]);
+  await page.locator('.dialog.history').getByRole('button', { name: 'Close' }).last().click();
+
+  await st(page, () => window.__formwork.save()); await sleep(800);
+  await page.reload(); await page.waitForSelector('.work-head', { timeout: 20000 }); await sleep(1500);
+  await waitVersions(3);
+  h = await hist();
+  check('history is kept in IndexedDB across a reload', h.versions.length === 3 && h.at === 2 && (await st(page, () => window.__formwork.history.durable())), h);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click(); await sleep(300); await waitIdle(page);
+  a = await appState(page);
+  check('the Undo button takes back the restore', a.cols.patients.includes('insurance_provider') && (await hist()).at === 1, a.cols.patients);
+  await ctx.close();
+}
+const FLOWS = { demo: flowDemo, live: flowLive, misc: flowMisc, views: flowViews, quests: flowQuests, new: flowNew, custom: flowCustom, round6: flowRound6, react: flowReact, sizes: flowSizes, history: flowHistory };
 (async () => {
   const url = (process.env.TK_URL || '').replace(/\/?$/, '/');
   if (!/^https?:/.test(url)) { console.error('TK_URL is not set. Run the checks with: npm run test:e2e'); process.exit(2); }

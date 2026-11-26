@@ -75,6 +75,20 @@ describe('streamTeam', () => {
     expect(err).toBeInstanceOf(TeamStreamError);
     expect((err as TeamStreamError).code).toBe('aborted');
   });
+
+  it('closes the request when the caller stops reading early, so the server stops the team', async () => {
+    const cancelled: unknown[] = [];
+    const enc = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(enc.encode(sse([{ type: 'RUN_STARTED' }, { type: 'RUN_ERROR', message: 'no' }])));
+      },
+      cancel: (reason) => void cancelled.push(reason),
+    });
+    vi.stubGlobal('fetch', async () => new Response(body, { status: 200 }));
+    for await (const e of streamTeam({})) if (e.type === 'RUN_ERROR') break;
+    expect(cancelled).toHaveLength(1);
+  });
 });
 
 describe('helpers', () => {
