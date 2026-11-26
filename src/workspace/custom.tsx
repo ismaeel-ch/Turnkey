@@ -61,7 +61,8 @@ import { applyChangeSync, handleChat, parseChange, planOps } from './changes';
 import type { ParsedChange } from './changes';
 import { keepFix } from './tester';
 import { Btn, AgentAv, Dialog, Field, Icon, MBar, Seg, Spinner, Switch } from './ui';
-import { rebuildAsk } from './shell-a';
+import { TEAM_BUSY, rebuildAsk } from './shell-a';
+import { TEAMS } from './team';
 import { REVIEWERS, regStep } from './reviewers';
 import type { Reviewer } from './reviewers';
 import { RerunBar, queueRerun, queuedRerun } from './rerun';
@@ -2030,6 +2031,7 @@ export async function reviewNow(app: AppRecord, id: string, viaChat?: boolean) {
     tell = (t: string) => (viaChat ? say(app, 'orchestrator', t) : toast(t, 'info'));
   if (!rv) return;
   if (RUNS[app.id] || PENDING[app.id]) return void tell('A run is in progress. I will take that when it has finished.');
+  if (TEAMS[app.id]?.status === 'running') return void tell(TEAM_BUSY);
   if (app.status !== 'ready') return void tell(rv.short + ' runs when the build passes ' + stName(stepAfter(flowOf(app), id)) + '.');
   const run = newRun(app, stepAuto(flowOf(app), id) ? 'step' : 'review', rv.short, liveModelOn() ? 'live' : 'demo'),
     ctl = (RUNS[app.id] = {

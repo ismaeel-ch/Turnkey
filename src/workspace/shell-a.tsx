@@ -44,7 +44,7 @@ import { TYPE_LABEL, VIEW_ICON, VIEW_LABEL, accOf, colOf, deriveEndpoints, roleN
 import { DATA_VIEWS, VIEW_WHAT, viewFit, viewsOf } from './viewspec';
 import { HOME_TEMPLATES, REC, matchTemplate } from './builds';
 import { QUESTS } from './quests';
-import { TeamAv } from './team';
+import { TEAMS, TeamAv } from './team';
 import { StationTests, TestsView, suiteOf, testable } from './tests';
 import { BuildSummary, FlowView } from './flow';
 import { type Station, AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp, rebuild, startBuild, stopRun } from './line';
@@ -743,8 +743,11 @@ export const RUN_KIND: Record<string, string> = {
 };
 /** The line's run functions are typed for a full definition; a run fills it in station by station, so any app may start one. */
 export const lineApp = (app: AppRecord) => app as Parameters<typeof rebuild>[0];
+/** The app's own agent team writes rows through the rules and screens a build replaces, so a build waits for it, as chat does. */
+export const TEAM_BUSY = "The app's own agents are in the middle of a run. Run the build again when they have finished.";
 export async function rebuildAsk(app: AppRecord) {
   if (RUNS[app.id]) return;
+  if (TEAMS[app.id]?.status === 'running') return void toast(TEAM_BUSY, 'info');
   if (
     app.status === 'ready' &&
     !(await confirmBox({
@@ -1112,7 +1115,7 @@ export function BuildView({ app }: { app: AppRecord }) {
         <MBar
           tone={app.status === 'failed' ? 'danger' : 'info'}
           action={
-            <Btn className="btn sm" onClick={() => rebuild(lineApp(app))}>
+            <Btn className="btn sm" onClick={() => rebuildAsk(app)}>
               Run again
             </Btn>
           }
