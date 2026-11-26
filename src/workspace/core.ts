@@ -427,7 +427,9 @@ export function emit(type: string, d?: Dict<unknown>): LoggedEvent {
   notify();
   return e;
 }
-export function toolCall<R>(ctx: ToolContext, name: string, args: unknown, fn: () => R, kind?: string) {
+/** What a tool call returns: the tool's result, or the error it threw. */
+export type ToolOutcome<R> = { ok: true; result: R } | { ok: false; result: { error: string } };
+export function toolCall<R>(ctx: ToolContext, name: string, args: unknown, fn: () => R, kind?: string): ToolOutcome<R> {
   const id = 'call_' + ++toolSeq;
   const t0 = performance.now();
   let result: R | { error: string },
@@ -484,7 +486,7 @@ export function toolCall<R>(ctx: ToolContext, name: string, args: unknown, fn: (
   return {
     ok,
     result,
-  };
+  } as ToolOutcome<R>;
 }
 
 /* ---------- toasts, dialogs, network, clipboard, files ---------- */

@@ -169,6 +169,9 @@ export function sqlRun(appId: string, text: string, params?: SqlValue[] | null, 
     }
   );
 }
+/** sqlRun for a statement that reads (SELECT, PRAGMA, WITH): the rows it returns. */
+export const sqlRows = (appId: string, text: string, params?: SqlValue[] | null, by?: string) =>
+  sqlRun(appId, text, params, by) as SqlRow[];
 export function sqlMany(appId: string, text: string, list: SqlParams[], by?: string) {
   // one prepared statement, many rows (seed data)
   const db = dbOpen(appId);
