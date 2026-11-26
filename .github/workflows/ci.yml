@@ -1,7 +1,8 @@
 name: CI
 
 # Every pull request and every push to main: secrets scan, lint, typecheck, unit tests, a production build,
-# and the 286 browser checks (one job per flow). The job named "ci" is the single result branch protection requires.
+# the 286 browser checks (one job per flow), and the legacy guard (src/legacy changes need WP-16 or [legacy] in the title).
+# The job named "ci" is the single result branch protection requires.
 
 on:
   pull_request:
@@ -16,6 +17,22 @@ permissions:
   contents: read
 
 jobs:
+  legacy-guard:
+    name: legacy-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Fail a pull request that changes src/legacy without WP-16 or [legacy] in its title
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/legacy-guard.mjs
+
   check:
     name: check
     runs-on: ubuntu-latest
@@ -59,9 +76,21 @@ jobs:
       - name: Production build
         run: npm run build
       - name: Browser checks
+        id: flow
         run: |
           export CHROME_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
           npm run test:e2e -- ${{ matrix.flow }}
+      - name: Summary of this browser flow
+        if: always()
+        env:
+          FLOW: ${{ matrix.flow }}
+          OUTCOME: ${{ steps.flow.outcome }}
+        run: |
+          {
+            echo "### Browser flow: $FLOW"
+            echo ""
+            echo "Result: $OUTCOME. Failure screenshots, if any, are in the artifact shots-$FLOW."
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Keep screenshots when a flow fails
         if: failure()
         uses: actions/upload-artifact@v7
@@ -74,12 +103,17 @@ jobs:
   ci:
     name: ci
     if: always()
-    needs: [check, e2e]
+    needs: [legacy-guard, check, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: All required jobs passed
+        env:
+          GUARD: ${{ needs.legacy-guard.result }}
+          CHECK: ${{ needs.check.result }}
+          E2E: ${{ needs.e2e.result }}
         run: |
-          echo "check: ${{ needs.check.result }}, e2e: ${{ needs.e2e.result }}"
-          test "${{ needs.check.result }}" = "success"
-          test "${{ needs.e2e.result }}" = "success"
+          echo "legacy-guard: $GUARD, check: $CHECK, e2e: $E2E"
+          test "$GUARD" = "success"
+          test "$CHECK" = "success"
+          test "$E2E" = "success"
