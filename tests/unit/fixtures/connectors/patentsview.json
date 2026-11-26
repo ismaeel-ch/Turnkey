@@ -1,0 +1,14 @@
+{
+  "_note": "Hand-written from the PatentsView Search API reference (POST /api/v1/patent/, response fields error, count, total_hits, and the patents array). The array name and the ids are unverified against a live response; the ids are made up.",
+  "error": false,
+  "count": 1,
+  "total_hits": 1,
+  "patents": [
+    {
+      "patent_id": "12000001",
+      "patent_title": "Low-power sensor housing",
+      "patent_abstract": "A housing for a low-power sensor that keeps the circuit board sealed and cool.",
+      "patent_date": "2026-10-14"
+    }
+  ]
+}
