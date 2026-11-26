@@ -5,6 +5,8 @@ A team of agents builds it on a workflow the owner can watch and change. It is M
 SSI Agent-A-Thon 2026. **Submissions close Mon 30 Nov 2026, 2:00 PM PKT.**
 
 Read `docs/PLAN.md` before starting work. It holds the architecture, the work packages and who owns which folders.
+If you are one of several agents working in parallel, `docs/RUNBOOK.md` says how: GitHub commands that work here,
+git rules, the shared machine, and the flow of one work package.
 
 ## Commands
 
