@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EventSchemas as EventSchema } from '@ag-ui/core/schemas';
 import { createTeamAgent, runTeamGraph, teamGraphMermaid } from '@/server/graph/team';
 import { LlmError } from '@/server/llm';
+import { KNOWN_TOOLS, toolBoxFrom } from '@/server/graph/team/tools';
 import { collect, debateRequest, factRequest, fixtureTools, priorRequest, scripted, type Script } from './fixtures';
 
 const claims = {
@@ -74,6 +75,20 @@ describe('fact-check team', () => {
     expect(finals(events)).toHaveLength(1);
     expect(t[t.length - 1]).toBe('RUN_FINISHED');
     expect(events.filter((e) => e.type === 'STATE_DELTA').length).toBeGreaterThanOrEqual(7);
+  });
+
+  it('a source that is down is reported to the agent and the workspace, and the run still finishes', async () => {
+    const { provider, prompts } = scripted(factScript());
+    const { sink, events } = collect();
+    const down = toolBoxFrom(
+      async () => ({ ok: false, unavailable: true, text: 'SOURCE UNAVAILABLE: Wikipedia cannot be used right now.' }),
+      KNOWN_TOOLS,
+    );
+    const r = await runTeamGraph(factRequest(), { provider, tools: down, sink });
+    expect(r.status).toBe('done');
+    expect(prompts.find((p) => p.prompt.includes('RESULTS OF YOUR LOOKUPS'))!.prompt).toContain('(failed) SOURCE UNAVAILABLE: Wikipedia');
+    const result = events.find((e) => e.type === 'TOOL_CALL_RESULT') as { content: string } | undefined;
+    expect(JSON.parse(result!.content)).toMatchObject({ ok: false, unavailable: true });
   });
 
   it('emits events that AG-UI accepts', async () => {

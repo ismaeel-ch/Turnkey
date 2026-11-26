@@ -60,7 +60,7 @@ ul.dots{list-style:disc;padding-left:18px}
 .field-err{font-size:12px;line-height:16px;color:var(--colorStatusDangerForeground1)}.field.has-err .input,.field.has-err .select,.field.has-err .textarea{border-color:var(--colorStatusDangerBorder2)}
 .switch{display:inline-flex;align-items:center;gap:4px;cursor:pointer}.switch .fui-Switch{flex:none}.switch.is-off{opacity:.55;cursor:not-allowed}
 .badge{display:inline-flex;align-items:center;gap:4px;min-height:20px;padding:0 7px;border-radius:10px;font-size:12px;line-height:16px;font-weight:600;white-space:nowrap;border:1px solid transparent;vertical-align:middle}
-.b-neutral{background:var(--colorNeutralBackground5);color:var(--colorNeutralForeground2)}.b-outline{border-color:var(--colorNeutralStroke1);color:var(--colorNeutralForeground2);font-weight:400}
+.b-neutral{background:var(--colorNeutralBackground1Selected);color:var(--colorNeutralForeground2)}.b-outline{border-color:var(--colorNeutralStroke1);color:var(--colorNeutralForeground2);font-weight:400}
 .b-info{background:var(--colorBrandBackground2);color:var(--colorBrandForeground2);border-color:var(--colorBrandStroke2)}
 .b-success{background:var(--colorStatusSuccessBackground1);color:var(--colorStatusSuccessForeground1);border-color:var(--colorStatusSuccessBorder1)}
 .b-warning{background:var(--colorStatusWarningBackground1);color:var(--colorStatusWarningForeground1);border-color:var(--colorStatusWarningBorder1)}
@@ -72,7 +72,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .chips{display:flex;flex-wrap:wrap;gap:6px}.chip{display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:2px 10px;border-radius:12px;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);font-size:12px;line-height:16px;text-align:left}
 .chip:hover{background:var(--colorNeutralBackground1Hover);border-color:var(--colorNeutralStroke1Hover)}.chip:active{background:var(--colorNeutralBackground1Pressed)}.chip:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:1px}.chip.on{background:var(--colorBrandBackground2);border-color:var(--colorBrandStroke1);color:var(--colorBrandForeground2);font-weight:600}
 .tabs{min-width:0;overflow-x:auto;scrollbar-width:none;flex-wrap:nowrap}.tab{white-space:nowrap}.tab .fui-Tab__content{display:inline-flex;align-items:center;gap:6px}
-.tab-n{font-size:11px;line-height:14px;padding:0 5px;border-radius:8px;background:var(--colorNeutralBackground5);color:var(--colorNeutralForeground2);font-weight:400}
+.tab-n{font-size:11px;line-height:14px;padding:0 5px;border-radius:8px;background:var(--colorNeutralBackground1Selected);color:var(--colorNeutralForeground2);font-weight:400}
 .seg{display:inline-flex;border:1px solid var(--colorNeutralStroke1);border-radius:4px;overflow:hidden;background:var(--colorNeutralBackground1);flex:none}
 .seg button{border:0;border-right:1px solid var(--colorNeutralStroke1);border-radius:0;min-width:0;height:30px;gap:6px;white-space:nowrap}.seg button:last-child{border-right:0}
 .seg button.on{background:var(--colorBrandBackground2);color:var(--colorBrandForeground2);font-weight:600}
@@ -158,7 +158,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .split>.main{flex:1;min-width:0;display:flex;flex-direction:column}.main-head{display:flex;align-items:center;gap:8px;padding:2px 12px;border-bottom:1px solid var(--colorNeutralStroke2);background:var(--colorNeutralBackground1);flex-wrap:wrap;min-height:44px}
 .main-body{flex:1;min-height:0;overflow:auto;background:var(--colorNeutralBackground1)}.console{display:flex;flex-direction:column;gap:10px}
 .api-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
-.connv{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:14px}.conn-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.connv{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:14px}.conn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
 .conn-card,.fui-Card.conn-card{padding:12px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}.conn-card>.row{width:100%}.conn-card.sel{border-color:var(--colorBrandStroke1);box-shadow:0 0 0 1px var(--colorBrandStroke1)}
 .conn-main{display:flex;align-items:center;gap:10px;flex:1;min-width:0;border:0;background:none;text-align:left;padding:2px;border-radius:4px}.conn-detail,.fui-Card.conn-detail{padding:16px;display:flex;flex-direction:column;gap:10px}
 
@@ -641,3 +641,29 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .hist-who{flex-wrap:wrap}
 .hist-time{white-space:nowrap}
 @media (max-width:640px){.hist-row{flex-wrap:wrap}.hist-time{order:3}}
+
+/* UI QA fixes (docs/ui-issues.md). Griffel's styles load after this file and win ties, so these restate a class with
+   the Fluent class it sits on. */
+/* 1: dialogs keep our flex layout, not DialogBody's three-column grid */
+.fui-DialogSurface.dialog{display:flex}
+.fui-DialogBody.dlg{display:flex;flex-direction:column;grid-template-columns:none}
+.fui-DialogActions.dfoot{display:flex;justify-content:flex-end;flex-wrap:wrap}
+/* 2: the account avatar is a round icon button, not a 96px outlined button */
+.fui-Button.acct{min-width:0;border:0;background:none;padding:2px;border-radius:50%}
+.fui-Button.acct:hover{background:var(--colorSubtleBackgroundHover)}
+/* 3: the Agents launcher's slot in the desktop title bar */
+.titlebar:not(.phone) .act-slot{display:inline-flex;align-items:center;margin-right:4px}
+.titlebar:not(.phone) .act-slot:empty{display:none}
+/* 6: short values (dates, phone numbers, ids) stay on one line in data grids */
+.tbl td.nw{white-space:nowrap}
+/* 1: Fluent paints its provider white, and its portal copies (dialogs, menus) take .fl-provider's full height, so an
+   open dialog hid the whole page behind a white sheet instead of dimming it. */
+.fui-FluentProvider.fl-provider{background:transparent}
+body>.fui-FluentProvider.fl-provider{height:auto}
+.fui-DialogSurface.dialog{padding:0}
+.fui-DialogContent.dbody{padding:8px 24px 16px}
+.fui-DialogActions.dfoot{padding:12px 24px 20px}
+@media (max-width:640px){.fui-DialogContent.dbody{padding:4px 16px 12px}.fui-DialogActions.dfoot{padding:10px 16px 14px}}
+/* 9: the onboarding "skip" action lines up with the form's left edge and reads as a link */
+.fui-Button.ob-skip{align-self:flex-start;min-width:0;padding-left:0;padding-right:0;color:var(--colorBrandForegroundLink)}
+.fui-Button.ob-skip:hover{background:none;text-decoration:underline;color:var(--colorBrandForegroundLink)}

@@ -157,6 +157,8 @@ interface IslandProps {
   start: Viewport;
   fitKey: string;
   fit: { padding: number; maxZoom: number };
+  /** True while the canvas has a size on the page. An animated move on a canvas 0 pixels wide is drawn at NaN. */
+  shown: () => boolean;
 }
 type FlowInstance = ReactFlowInstance<FlowNode, RouteEdge>;
 export interface FlowKit {
@@ -1402,7 +1404,6 @@ export function flowKit(): FlowKit {
       nodes = st[0],
       setNodes = st[1],
       inst = R.useRef<FlowInstance | null>(null);
-    const box = R.useRef<HTMLDivElement | null>(null); // the canvas element: no fit while it is hidden or has no size
     R.useEffect(() => {
       setNodes((prev) =>
         p.graph.nodes.map((n) => {
@@ -1419,9 +1420,9 @@ export function flowKit(): FlowKit {
       const go = (d: number) =>
           setTimeout(
             () => {
-              const el = box.current;
-              // fitting a canvas that is hidden (another tab is open) gives React Flow a NaN viewport
-              if (!inst.current || !el || !el.clientWidth || !el.clientHeight) return;
+              // hidden (another view, a dialog over it, the page going away): d3's animated zoom divides by the
+              // canvas size, and the background and the minimap would be drawn at NaN
+              if (!inst.current || !p.shown()) return;
               if (p.v)
                 void inst.current.setViewport(p.start, {
                   duration: 200,
@@ -1438,7 +1439,7 @@ export function flowKit(): FlowKit {
       };
     }, [p.fitKey]); /* fitted twice: nodes that were just added are measured a moment later */
     R.useEffect(() => {
-      if (!p.v || !p.focus || !inst.current) return;
+      if (!p.v || !p.focus || !inst.current || !p.shown()) return;
       const n = inst.current.getNode(p.focus);
       if (n)
         void inst.current.setCenter(n.position.x + 110, n.position.y + 170, {
@@ -1463,7 +1464,6 @@ export function flowKit(): FlowKit {
     };
     return (
       <RF.ReactFlow<IslandNode, RouteEdge>
-        ref={box}
         nodes={nodes}
         edges={p.graph.edges}
         nodeTypes={NODES}
@@ -1654,6 +1654,7 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
           padding: 0.06,
           maxZoom: 1.1,
         },
+        shown: () => !!ref.current && ref.current.clientWidth > 0 && ref.current.clientHeight > 0,
       }),
     );
   });

@@ -385,6 +385,8 @@ async function flowLive(browser, url) {
     for (const a of agents) {
       const out = Object.assign({ rows: [], update: [], summary: null }, TEAM_OUT[a.name] || { say: 'Nothing to add.' });
       ev.push({ type: 'STEP_STARTED', stepName: a.id }, { type: 'CUSTOM', name: 'check', value: { agent: a.id, ok: true, sentBack: false, by: 'rules' } });
+      // the researchers' lookup finds Wikipedia down: the server says so in the tool result, and the run carries on
+      if (a.id === 'researchers') ev.push({ type: 'TOOL_CALL_START', toolCallId: 'tc1', toolCallName: 'wikipedia.page_summary' }, { type: 'TOOL_CALL_ARGS', toolCallId: 'tc1', delta: '{"title":"Pacific Ocean"}' }, { type: 'TOOL_CALL_END', toolCallId: 'tc1' }, { type: 'TOOL_CALL_RESULT', messageId: 'mt1', toolCallId: 'tc1', role: 'tool', content: JSON.stringify({ agent: a.id, ok: false, unavailable: true, text: 'SOURCE UNAVAILABLE: Wikipedia cannot be used right now.' }) });
       ev.push({ type: 'TEXT_MESSAGE_START', messageId: 'm_' + a.id, role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'm_' + a.id, delta: out.say }, { type: 'TEXT_MESSAGE_END', messageId: 'm_' + a.id });
       ev.push({ type: 'STATE_DELTA', delta: [{ op: 'add', path: '/outputs/' + a.id, value: out }] }, { type: 'STEP_FINISHED', stepName: a.id });
     }
@@ -396,6 +398,7 @@ async function flowLive(browser, url) {
   await page.fill('#tm0_title', 'Launch note'); await page.fill('#tm0_text', 'The Pacific is the largest ocean. Our app has a million users.'); await page.locator('.team-start button[type=submit]').click(); await waitTeam(page);
   const tr = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), T = window.__formwork.teams()[t.app]; return { status: T.status, live: T.live, steps: T.steps.map((x) => [x.status, x.rows.length, x.updated, x.problems.length]), made: Object.keys(T.made).map((k) => k + ':' + T.made[k].length).join(','), error: T.error }; });
   check('live team: one server run of three agents, rows written through the API, a bad row refused without stopping the run', tr.status === 'done' && tr.live && JSON.stringify(tr.steps) === '[["ok",2,0,0],["ok",2,0,1],["ok",0,3,0]]' && tr.made === 'claims:2,evidence:2' && teamRuns.join('|') === 'team:Extractor,team:Researchers,team:Verifier' && !(await st(page, () => window.__calls)).some((x) => x.startsWith('team:')), [tr, teamRuns, await st(page, () => window.__calls)]);
+  check('live team: a public source that is down is said plainly, once, and the run still finishes', tr.status === 'done' && (await page.locator('.toasts').innerText()).split('Wikipedia is not answering right now').length === 2, await page.locator('.toasts').innerText());
   check('live team: the agent could not set the status itself, the workflow did', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Checked', await page.locator('.team-log .badge').first().innerText());
   await shot(page, '54-live-team');
   await st(page, () => { window.__formwork.view().calls = 0; }); // this flow now makes more model calls than one session's cap allows, so start the count again for the last case
@@ -458,6 +461,12 @@ async function flowMisc(browser, url) {
   await page.locator('[data-tpl="clinic"] .tpl-build').click(); await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').nth(1).click(); await waitReady(page);
   let a = await appState(page);
   check('second answer lets the front desk read visit notes', a.access.visit_notes.receptionist.list === 'all' && a.tour.every(Boolean), a.access.visit_notes);
+  // the canvas fits itself a moment after it changes; if it is hidden by then (0 pixels wide), it must not be drawn at NaN
+  const nan = []; const onNan = (m) => { if (/NaN/.test(m.text())) nan.push(m.text().slice(0, 120)); }; page.on('console', onNan);
+  await view(page, 'Build'); await page.waitForSelector('.flow-canvas .react-flow__node'); await sleep(800);
+  await page.evaluate(async () => { document.querySelector('button[title="Put every node back where it started"]').click(); await new Promise((r) => setTimeout(r, 20)); const el = document.createElement('style'); el.id = 'tk-hide-canvas'; el.textContent = '.flow-canvas{display:none !important}'; document.head.appendChild(el); });
+  await sleep(1200); await page.evaluate(() => document.getElementById('tk-hide-canvas').remove()); await sleep(600); page.off('console', onNan);
+  check('the workflow canvas hidden just after a change is not drawn at NaN, and shows its nodes again', nan.length === 0 && await page.locator('.flow-canvas .react-flow__node').first().isVisible(), nan.slice(0, 3));
   await page.getByRole('button', { name: 'Log', exact: true }).click(); await sleep(100); check('log view lists steps', await page.locator('.line-wrap .tbl tbody tr').count() > 8); await shot(page, '61-log');
   for (let i = 0; i < 4; i++) { await page.getByRole('button', { name: 'Workflow', exact: true }).click(); await page.locator('.station').nth(i).click(); await sleep(60); if (i === 1) { await page.locator('.insp-body .switch').click(); await sleep(60); await shot(page, '62-schema-sql'); } if (i === 2) await shot(page, '63-backend-out'); }
   // dialogs

@@ -5,6 +5,27 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-26
+
+Undo, redo and version history, a command palette, and the cost of each run and agent.
+
+### Added
+
+- Undo, redo and version history for an app. ([#150](https://github.com/ismaeel-ch/Turnkey/pull/150))
+- A command palette (Ctrl/Cmd+K) and keyboard shortcuts. ([#146](https://github.com/ismaeel-ch/Turnkey/pull/146))
+- Each run and each agent shows what it spent: tokens, cache hits and cost. ([#152](https://github.com/ismaeel-ch/Turnkey/pull/152))
+
+### Fixed
+
+- Undo, redo, new versions and automatic re-runs wait while the app's own agent team is running. ([#155](https://github.com/ismaeel-ch/Turnkey/pull/155)) ([#156](https://github.com/ismaeel-ch/Turnkey/pull/156))
+- A call whose provider reports no usage still counts toward the daily dollar cap. ([#153](https://github.com/ismaeel-ch/Turnkey/pull/153))
+- The server stops the upstream model stream when the reader leaves early. ([#144](https://github.com/ismaeel-ch/Turnkey/pull/144))
+- On-demand chunks are kept offline, so a Demo build runs with no connection. ([#148](https://github.com/ismaeel-ch/Turnkey/pull/148))
+
+### Changed
+
+- More workspace modules are typed (runtime, views, room), with typed store actions and strict lint. ([#85](https://github.com/ismaeel-ch/Turnkey/pull/85)) ([#154](https://github.com/ismaeel-ch/Turnkey/pull/154))
+
 ## [0.4.1] - 2026-11-26
 
 Live builds pass on a real model, each agent role uses the model that fits it, and the first page load is back under
