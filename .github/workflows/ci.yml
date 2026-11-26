@@ -1,17 +1,24 @@
 name: CI
 
-# Every pull request and every push to main: secrets scan, lint, typecheck, unit tests, a production build,
-# the 286 browser checks (one job per flow), and the legacy guard (src/legacy changes need WP-16 or [legacy] in the title).
-# The job named "ci" is the single result branch protection requires.
+# The full checks run only when a pull request into main is about to be merged, to save Actions minutes: on a
+# non-draft pull request that carries the label "ready-to-merge" (adding the label starts a run, and each later push
+# runs it again), or when started by hand from the Actions tab. Nothing runs on a push to main; the release workflow
+# checks the commit again before it deploys.
+#
+# The full checks: secrets scan, lint, typecheck, unit tests, a production build, the 286 browser checks (one job per
+# flow), and the legacy guard (src/legacy changes need WP-16 or [legacy] in the title). The job named "ci" is the single
+# result branch protection requires. Without the label the heavy jobs are skipped and only "ci" runs, for a few
+# seconds, failing on purpose so that an unchecked pull request never looks green.
 
 on:
   pull_request:
-  push:
     branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -19,6 +26,8 @@ permissions:
 jobs:
   legacy-guard:
     name: legacy-guard
+    # The full checks run on a manual run, or on a non-draft pull request labelled ready-to-merge.
+    if: github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -35,6 +44,7 @@ jobs:
 
   check:
     name: check
+    if: github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -113,6 +123,10 @@ jobs:
           CHECK: ${{ needs.check.result }}
           E2E: ${{ needs.e2e.result }}
         run: |
+          if [ "$CHECK" = "skipped" ]; then
+            echo "CI has not run on this commit. Add the label ready-to-merge (and mark the pull request ready) to run it."
+            exit 1
+          fi
           echo "legacy-guard: $GUARD, check: $CHECK, e2e: $E2E"
           test "$GUARD" = "success"
           test "$CHECK" = "success"
