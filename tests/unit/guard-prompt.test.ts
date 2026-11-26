@@ -11,9 +11,10 @@ const flat = (text: string) => text.replace(/\s+/g, ' ');
 
 /** HEAD() as written in src/workspace/line.ts, evaluated here so the test never keeps its own copy of the wording. */
 function workspaceHead(): (who: string) => string {
-  const m = /^export const HEAD = (\(who\) =>[\s\S]*?);\n/m.exec(read('line.ts'));
+  // the body is plain JavaScript; the parameter's type annotation, if any, is left out
+  const m = /^export const HEAD = \(who(?::\s*string)?\) =>([\s\S]*?);\n/m.exec(read('line.ts'));
   if (!m) throw new Error('HEAD() was not found in src/workspace/line.ts; update the prompt policy and this test');
-  return new Function('return ' + m[1])() as (who: string) => string;
+  return new Function('return (who) =>' + m[1])() as (who: string) => string;
 }
 
 /**
@@ -91,8 +92,8 @@ describe('prompt policy against the workspace sources', () => {
   it.each([
     ['changes.ts', /export function changePrompt\([^)]*\) \{[\s\S]*?\n\}/],
     ['custom.tsx', /export function reviewPrompt\([^)]*\) \{[\s\S]*?\n\}/],
-    ['tester.tsx', /export const testerPrompt = \(app\) =>\s*\S+/],
-    ['tester.tsx', /export const repairPrompt = \(app, fails\) =>\s*\S+/],
+    ['tester.tsx', /export const testerPrompt = \([^)]*\) =>\s*\S+/],
+    ['tester.tsx', /export const repairPrompt = \([^)]*\) =>\s*\S+/],
   ])('%s builder starts with HEAD()', (file, re) => {
     const src = re.exec(read(file));
     expect(src, String(re)).not.toBeNull();
@@ -103,7 +104,7 @@ describe('prompt policy against the workspace sources', () => {
   });
 
   it('every entry of PROMPTS in line.ts starts with HEAD()', () => {
-    const block = /^export const PROMPTS = \{\n([\s\S]*?)\n\};/m.exec(read('line.ts'));
+    const block = /^export const PROMPTS(?::[^\n]*?)? = \{\n([\s\S]*?)\n\};/m.exec(read('line.ts'));
     expect(block).not.toBeNull();
     const lines = block![1].split('\n');
     const keys = lines.filter((l) => /^ {2}\S/.test(l));

@@ -30,7 +30,13 @@ import { Dash } from './views-b';
    Every app gets a suite of tests, generated from what the agents wrote: each table, link, access rule,
    workflow action, view, page, tour step and saved agent run becomes a test. Tests run against the real
    SQLite file and the real endpoints. Anything that writes runs inside a savepoint and is rolled back. */
-export const TESTS = {}; // app id -> { rev, at, ms, res: { test id: { ok, actual } }, running }
+/** The result of one test. */
+export interface TestResult {
+  ok: boolean;
+  actual: string;
+}
+/** App id -> the last test run: the definition version it ran on, when, how long, and each test's result. */
+export const TESTS: Record<string, { rev: number; at: number; ms: number; res: Record<string, TestResult>; running?: boolean }> = {};
 export const SUITE_META = [
   {
     id: 'brief',
@@ -117,8 +123,17 @@ export function mountCheck(vnode, sel) {
   } catch (e) {}
   return out;
 }
-export const SUITES = {}; // built once per revision of an app
-export function suiteOf(app) {
+/** Built once per revision of an app. */
+export const SUITES: Record<string, { app: unknown; def: unknown; rev: number; suites: Suite[] }> = {};
+/** One suite of tests: the station it checks, and its tests. */
+export interface Suite {
+  id: string;
+  name: string;
+  station: string;
+  tests: { id: string; name: string; [field: string]: unknown }[];
+  [field: string]: unknown;
+}
+export function suiteOf(app): Suite[] {
   const c = SUITES[app.id];
   if (c && c.app === app && c.def === app.def && c.rev === app.rev) return c.suites;
   const suites = buildSuites(app);
@@ -699,7 +714,15 @@ export function buildSuites(app) {
   return out;
 }
 export const testable = (app) => app.status === 'ready' && !!app.def.brief && !!app.def.process;
-export function testStats(app) {
+/** Counts for badges: what the last run found, or what there is to run. */
+export interface TestStats {
+  total: number;
+  passed: number;
+  failed: number;
+  at: number;
+  fresh: boolean;
+}
+export function testStats(app): TestStats | null {
   // counts for badges: what the last run found, or what there is to run
   const R = TESTS[app.id],
     fresh = R && R.rev === app.rev,
@@ -724,7 +747,7 @@ export function testStats(app) {
       }
     : null;
 }
-export function runTestsSync(app, only) {
+export function runTestsSync(app, only?) {
   // run every suite (or one station's suites) now; returns the summary
   if (!testable(app)) return null;
   const t0 = performance.now(),
@@ -788,7 +811,7 @@ export function runTestsSync(app, only) {
     app.tests,
   );
 }
-export async function runTests(app, only) {
+export async function runTests(app, only?) {
   // the same, suite by suite, so the screen can show progress
   if (!testable(app) || RUNS[app.id] || (TESTS[app.id] && TESTS[app.id].running)) return;
   if (TEAMS[app.id] && TEAMS[app.id].status === 'running')
@@ -857,7 +880,7 @@ export function TestRows({ app, suite, only, q }) {
   const rows = suite.tests.filter((x) => (!only || (res[x.id] && !res[x.id].ok)) && (!q || x.name.toLowerCase().indexOf(q) >= 0));
   if (!rows.length) return null;
   return (
-    <ul className="tests">
+    <ul className="tests" tabIndex={0} aria-label={suite.name + ' tests'}>
       {rows.map((x) => {
         const r = res[x.id];
         return (

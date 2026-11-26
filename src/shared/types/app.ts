@@ -139,7 +139,10 @@ export interface AppTeam {
   done: string | null;
   /** human in the loop: the run waits before this agent */
   pause: { before: string; text: string } | null;
-  [field: string]: Loose;
+  /** a person may add a row of their own to a run: where it goes, what is filled in, and the button's words */
+  jump: { table: string; column: string; set: Dict<Loose>; label: string } | null;
+  /** sample inputs offered in the room */
+  samples: { label: string; values: Dict<Loose> }[];
 }
 
 /* ---------- station 4: views and the dashboard ---------- */
@@ -215,8 +218,28 @@ export interface TourStep {
   [field: string]: Loose;
 }
 /** A saved test: tour steps played against the app's API. */
+/** A test case the Tester wrote from the brief, in the tour's step vocabulary. */
 export interface TestCase {
+  id: string;
+  name: string;
+  /** the rule or user story it protects */
+  why: string;
   steps: TourStep[];
+}
+/** The app's own icon as data (src/workspace/release.tsx draws it). */
+export interface Logo {
+  glyph: string | null;
+  shape: string;
+  fill: string;
+  mark: string;
+  /** who chose it: ui, rules or you */
+  by: string;
+  /** how often the owner asked for another design */
+  turn?: number;
+}
+/** The agent room's layout (src/workspace/room.tsx), read as saved. */
+export interface Board {
+  panels: { layout: string; [field: string]: Loose }[];
   [field: string]: Loose;
 }
 export interface Theme {
@@ -224,6 +247,8 @@ export interface Theme {
   nav: string;
   icon: string;
   density?: string;
+  /** the app's own icon: shape, fill and mark */
+  logo?: Logo | null;
 }
 
 /** One schema change made after the first build. */
@@ -250,7 +275,7 @@ export interface AppDef {
   migrations: Migration[];
   cases?: TestCase[];
   /** the room layout of an app with a team (src/workspace/room.tsx) */
-  board?: Loose;
+  board?: Board | null;
 }
 /** A definition past station 1: it has a brief. */
 export type BriefedDef = AppDef & { brief: Brief };
