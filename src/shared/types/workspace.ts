@@ -63,7 +63,7 @@ export interface AppRecord {
   status: string;
   created: number;
   updated: number;
-  shared?: { key: string } | null;
+  shared?: { key: string; uid?: string; ver?: string } | null;
   def: AppDef;
   /** the state of each station of the build line, by station id */
   line: Dict<StationLine>;
@@ -81,6 +81,16 @@ export interface AppRecord {
   answers: { q?: number | null; [field: string]: Loose };
   /** what the Researcher looked up, shown as the brief's sources */
   lookups?: Loose[];
+  /** released versions, newest first */
+  releases?: Release[];
+  /** changes since the first build, for the next release's notes */
+  log?: { at: number; text: string; station: string }[];
+  /** stays the same across versions and copies, so an installed app finds its newest copy */
+  uid?: string;
+  /** when the app was installed on its own in this browser */
+  installed?: number;
+  /** the last test run's counts, kept with the app */
+  tests?: { total: number; passed: number; failed: number; at: number; rev: number } | null;
   /** the last ten runs of the build line, oldest first */
   runs: Run[];
   /** the conversation with the agents, newest last */
@@ -116,6 +126,22 @@ export interface QaState {
   t1: number | null;
   /** cases withdrawn because they did not match the brief */
   dropped: { id: string; why: string }[];
+}
+
+/** One released version of an app. */
+export interface Release {
+  v: string;
+  at: number;
+  by: string;
+  kind: string;
+  notes: string[];
+  /** the definition's fingerprint when it was released */
+  sig: string | number;
+  tests: { passed: number; total: number };
+  /** the packed snapshot, let go for older versions to save room */
+  pack: string | null;
+  size: number;
+  inside: { tables: number; pages: number };
 }
 
 /** One step of a run, as the timeline shows it. */
@@ -256,7 +282,8 @@ export interface ViewState {
   told: Dict<Loose>;
   noteDraft: Dict<Loose>;
   /** release form, per app */
-  rel: Dict<Loose>;
+  /** the Release view's form, by app id */
+  rel: Dict<{ kind: string | null; text: string | null; busy: boolean }>;
   /** last Details tab, per app */
   detail: Dict<Loose>;
   /** the chat peek on narrow screens */
