@@ -17,7 +17,7 @@ and a piece is missing. **Differs** means the product went another way on purpos
 | 4   | An owner edit re-runs only the affected agents                 | Partly  | The owner had to press "Run again from" and confirm. Closed: re-runs start on their own (A) |
 | 5   | Generative UI: agents render cards in chat                     | Met     |                                                                                             |
 | 6   | Human in the loop: agents pause for approval on big trade-offs | Met     | An automatic re-run that rebuilds the database asks first (A)                               |
-| 7   | Agent presence: the canvas shows which agent touched what      | Partly  | Tables always said "Created by the Database agent", even after a change. Open (B)           |
+| 7   | Agent presence: the canvas shows which agent touched what      | Partly  | Tables always said "Created by the Database agent", even after a change. Closed (B)         |
 | 8   | A run timeline                                                 | Met     |                                                                                             |
 | 9   | Export: one deliverable document from canvas state             | Met     |                                                                                             |
 | 10  | One Next.js App Router project on Vercel, agents in process    | Met     |                                                                                             |
@@ -31,7 +31,7 @@ and a piece is missing. **Differs** means the product went another way on purpos
 | 18  | Debounced re-runs to protect the spend cap                     | Partly  | Nothing was debounced. Closed (A)                                                           |
 
 Pull requests: **A** = re-runs after a workflow edit, debounced (this page ships with it). **B** = who touched
-what, per table, field and screen (next).
+what, per table, field and screen.
 
 ## Detail
 
@@ -79,14 +79,17 @@ put an approval after any station; the line waits at it. A change that deletes d
 (`changes.ts`, `askApproval`). A re-run that would rebuild the database, and so replace its records, is never started
 on its own: it asks first (A).
 
-### 7. Agent presence: Partly, B is open
+### 7. Agent presence: Partly, closed by B
 
 Met: each station on the canvas carries its agent's icon, colour and status (Working, Needs you, Sent back,
 Passed); the Agents panel (`activity.tsx`) shows who is working, on which step, with tool calls and hand-offs; the
 chat names the agent on every message. Missing: what each agent made is not marked on the result. The Data page says
 "Created by the Database agent from the definition" for every table, even one you changed by chat a minute ago, and
-fields, endpoints and screens say nothing. B records, for each table, field, endpoint and screen, which agent made
-it or last changed it, and whether you asked for it, and shows that where the item is listed.
+fields and screens said nothing. B (`src/workspace/provenance.ts`) compares the definition before and after every
+station and every change step, and records for each table, field, access rule set, view list, screen, dashboard and
+theme which agent made it or last changed it, and whether that was the build, a re-run or a change you asked for.
+The Data page shows who made the table and who changed it last, the Columns tab has a "made by" column, and each
+screen card on the Screens station says who made it. Browser checks in the `demo` flow.
 
 ### 8. Run timeline: Met
 

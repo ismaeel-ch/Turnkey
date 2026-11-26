@@ -84,6 +84,17 @@ import { FlowCards, flowOf, flowTips } from './custom';
 import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto, Select, Spinner, Switch, Tabs, Textarea } from './ui';
 import { isStatusCol, startWalk } from './runtime';
 import { ReleaseCard } from './release';
+import { latestTouchOfTable, touchOf, touchShort, touchText } from './provenance';
+
+/** Who made a table, and who changed it last if that was later. Apps saved before this was recorded say the Database agent. */
+function tableTouchText(app: AppRecord, table: string) {
+  const made = touchOf(app, 'table:' + table),
+    last = latestTouchOfTable(app, table),
+    first = touchText(made, 'Created by the Database agent from the definition');
+  return last && made && last.at > made.at && last !== made
+    ? first + '. Last change: ' + touchText(last).replace(/^./, (c) => c.toLowerCase())
+    : first;
+}
 
 /* ===== Turnkey prototype · shell: data, API and connections views, the agents chat, the debug drawer ===== */
 export function Grid({ rows, mask }: { rows: Dict<unknown>[]; mask?: boolean }) {
@@ -270,7 +281,7 @@ export function DataView({ app }: { app: AppRecord }) {
       <div className="main">
         <div className="main-head">
           <strong className="mono">{cur.name}</strong>
-          <span className="muted t-cap hide-sm">{tdef ? 'Created by the Database agent from the definition' : 'System table'}</span>
+          <span className="muted t-cap hide-sm touch-note">{tdef ? tableTouchText(app, cur.name) : 'System table'}</span>
           <span className="grow" />
           <Tabs
             cls="sm"
@@ -296,6 +307,7 @@ export function DataView({ app }: { app: AppRecord }) {
                   default: c.dflt_value,
                   key: c.pk ? 'primary key' : '',
                   meaning: col ? TYPE_LABEL[col.type] : '',
+                  'made by': col ? touchShort(touchOf(app, 'col:' + cur.name + '.' + String(c.name))) : '',
                 };
               })}
             />

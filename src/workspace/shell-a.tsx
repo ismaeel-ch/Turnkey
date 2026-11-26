@@ -76,6 +76,7 @@ import { AppLogo, ReleaseView, isDirty, relOf } from './release';
 import { ApiView, ChatPanel, ConnView, DataView } from './shell-b';
 import { startTour } from './shell-c';
 import { RerunBar } from './rerun';
+import { touchOf, touchText } from './provenance';
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
 export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
@@ -1914,7 +1915,7 @@ export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
     return (
       <div>
         <p className="muted t-cap">
-          {'Layout chosen by the UI agent: '}
+          {touchText(touchOf(app, 'theme'), 'Made by the UI agent').replace(/^Made by/, 'Layout chosen by') + ': '}
           <span className={'swatch acc-' + def.theme.accent} />
           {label(def.theme.accent)}
           {' accent, '}
@@ -1938,6 +1939,9 @@ export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
                   {s.date ? ', dated by ' + s.date : ''}
                   {s.range ? ', ' + s.range + ' only' : ''}
                 </span>
+                {touchOf(app, 'screen:' + s.id) && (
+                  <span className="t-cap muted touch-note">{touchText(touchOf(app, 'screen:' + s.id))}</span>
+                )}
                 <span className="row wrap gap4">
                   {s.roles.map((r) => (
                     <span key={r} className="badge b-outline">

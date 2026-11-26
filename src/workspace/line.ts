@@ -77,6 +77,7 @@ import { testerSteps } from './tester';
 import { StoppedError, createRun, workflowFromFlow } from '@/platform/orchestrator';
 import { SHARE } from './share';
 import { LOGO_FILLS, LOGO_MARKS, LOGO_SHAPES, logChange, normLogo } from './release';
+import { recordTouches, snapshotDef } from './provenance';
 
 /* ===== Turnkey prototype · the line: five agents, six stations, a code orchestrator ===== */
 export interface Station {
@@ -1236,7 +1237,9 @@ function linePorts(app: BuildApp, run: Run, ctl: RunCtl, o: LineOpts): Ports {
       const levels = max < 3 && attempt === max ? [Math.min(attempt, 2), 3] : [attempt];
       for (const lv of levels) {
         try {
+          const snap = snapshotDef(app.def);
           cur.res = APPLY[st.id](app, out, run, lv);
+          recordTouches(app, snap, byRules ? 'rules' : st.agent, run.kind === 'rerun' ? 'rerun' : 'build', run.n);
         } catch (e) {
           console.error(e);
           cur.res = {
@@ -1482,6 +1485,7 @@ export async function runBuild(app: BuildApp, from?: string) {
           reviews: app.reviews,
           renamed: app.renamed,
           tests: app.tests || null,
+          touched: app.touched || {},
         })
       : null;
   const again = STATIONS.slice(i0).map((s) => s.name),
@@ -1495,6 +1499,7 @@ export async function runBuild(app: BuildApp, from?: string) {
     app.matrix = null;
     app.seed = null;
     app.reviews = {};
+    app.touched = {};
   }
   STATIONS.forEach((s, i) => {
     if (i >= i0) app.line[s.id] = blankLine();
@@ -1598,6 +1603,7 @@ export async function runBuild(app: BuildApp, from?: string) {
       app.reviews = b.reviews;
       app.renamed = b.renamed;
       app.tests = b.tests;
+      app.touched = b.touched;
       app.rev++;
       app.status = 'ready';
       run.status = stopped ? 'stopped' : 'failed';
