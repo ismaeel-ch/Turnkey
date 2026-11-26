@@ -336,7 +336,6 @@ export function AgentActivity({ app }: { app: AppRecord | null }) {
         appearance={working ? 'primary' : 'secondary'}
         icon={<Icon n="team" s="16" />}
         aria-expanded={open}
-        aria-label={'Agent activity' + (working ? ', ' + plural(working, 'agent') + ' working' : '')}
         onClick={() => setOpen(!open)}
       >
         {working ? 'Agents · ' + working + ' working' : 'Agents'}
