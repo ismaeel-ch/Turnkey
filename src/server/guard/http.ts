@@ -2,12 +2,12 @@
  * Helpers shared by the API routes: read and validate a JSON body, answer with a uniform error, name the visitor.
  *
  * Every refusal is JSON `{ code, message }` with `cache-control: no-store`. Codes: not_configured, rate_limited,
- * budget, bad_request, too_large.
+ * budget, bad_request, too_large, forbidden.
  */
 import { z } from 'zod';
 import { visitorOf } from './limits';
 
-export type ErrorCode = 'not_configured' | 'rate_limited' | 'budget' | 'bad_request' | 'too_large';
+export type ErrorCode = 'not_configured' | 'rate_limited' | 'budget' | 'bad_request' | 'too_large' | 'forbidden';
 
 export function refuse(status: number, code: ErrorCode, message: string, headers?: Record<string, string>) {
   return Response.json({ code, message }, { status, headers: { 'cache-control': 'no-store', ...headers } });
@@ -47,6 +47,30 @@ export async function parseBody<T extends z.ZodType>(
 /** The key one visitor is counted under: their address, shortened so a forged header cannot grow the counters. */
 export function visitorKey(request: Request): string {
   return visitorOf(request).slice(0, 64);
+}
+
+/**
+ * True when a browser sent this request from another site. A page elsewhere could otherwise make its visitors'
+ * browsers call the model routes (a plain-text POST needs no preflight), spending the budget from many addresses at
+ * once. Browsers say where a request came from in `Sec-Fetch-Site`; older ones only in `Origin`. A request with
+ * neither header is not from a browser page and is left to the rate limits.
+ */
+export function isCrossSite(request: Request): boolean {
+  const site = request.headers.get('sec-fetch-site');
+  if (site) return site === 'cross-site';
+  const origin = request.headers.get('origin');
+  if (!origin || origin === 'null') return origin === 'null';
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
+  try {
+    return !host || new URL(origin).host !== host.split(',')[0].trim();
+  } catch {
+    return true;
+  }
+}
+
+/** The refusal for a request another site sent, or null when it may go on. */
+export function refuseCrossSite(request: Request): Response | null {
+  return isCrossSite(request) ? refuse(403, 'forbidden', 'This route only answers Turnkey itself.') : null;
 }
 
 /** The refusal for a limiter verdict that said no. */
