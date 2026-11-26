@@ -113,6 +113,41 @@ export interface AppTeam {
   [field: string]: Loose;
 }
 
+/* ---------- station 4: views and the dashboard ---------- */
+/** A view the View advisor recommends for a table, with the columns it needs (`by`, `date`, `x` and so on). */
+export interface ViewSpec {
+  type: string;
+  why: string;
+  [setting: string]: Loose;
+}
+export type DashWidgetKind = 'kpi' | 'bar' | 'stack' | 'line' | 'recent';
+export interface DashWidget {
+  kind: DashWidgetKind;
+  label: string;
+  table: string;
+  x: string | null;
+  split: string | null;
+  /** `count`, or `sum:column` / `avg:column` */
+  measure: string;
+  bucket: string;
+  where: Dict<Loose>;
+}
+export interface Dash {
+  title: string;
+  /** the date column the dashboard's date filter works on */
+  date: { table: string; column: string } | null;
+  widgets: DashWidget[];
+}
+/** A custom action that calls a connector from a record. */
+export interface AppAction {
+  id: string;
+  label: string;
+  table: string;
+  connector: string;
+  tool: string;
+  arg: string;
+}
+
 /* ---------- station 4 and 5: screens and the tour ---------- */
 export interface Screen {
   id: string;
@@ -152,14 +187,16 @@ export interface AppDef {
   process: Process | null;
   access: AccessMap;
   team: AppTeam | null;
-  views: Dict<Loose[]>;
-  dash: Loose;
+  views: Dict<ViewSpec[]>;
+  dash: Dash | null;
   screens: Screen[];
   theme: Theme;
   tour: TourStep[];
-  actions: Loose[];
+  actions: AppAction[];
   migrations: Loose[];
   cases?: Loose[];
+  /** the room layout of an app with a team (src/workspace/room.tsx) */
+  board?: Loose;
 }
 /** A definition past station 1: it has a brief. */
 export type BriefedDef = AppDef & { brief: Brief };

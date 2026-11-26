@@ -7,7 +7,7 @@
  * The workspace modules are typed one at a time. Fields that only untyped modules read stay loose (`Loose`) until the
  * module that owns them is typed and can say what they hold.
  */
-import type { AppDef } from './app';
+import type { AppDef, Check } from './app';
 
 /** A value whose shape is not described yet. Narrow it where you read it. */
 export type Loose = unknown;
@@ -65,6 +65,14 @@ export interface AppRecord {
   updated: number;
   shared?: { key: string } | null;
   def: AppDef;
+  /** the state of each station of the build line, by station id */
+  line: Dict<StationLine>;
+  /** the owner's build workflow for this app (src/workspace/custom.tsx) */
+  flow: AppFlow;
+  /** reviewer agents' last reviews, by reviewer id */
+  reviews: Dict<Review>;
+  /** goes up by one with every change to the definition */
+  rev: number;
   /** the seed rows by table, kept so "Reset data" can put them back */
   seed?: { rows: Dict<Loose[]> } | null;
   /** the last permission matrix the Backend check ran */
@@ -301,4 +309,29 @@ export interface AccessRule {
   create: boolean;
   update: string;
   delete: boolean;
+}
+
+/** Where one station of the build line is: its status, its attempts and the checks its last output got. */
+export interface StationLine {
+  status: string;
+  attempt: number;
+  attempts: Loose[];
+  checks: Check[];
+  facts: string[];
+  note: string | null;
+  results: Loose[];
+  [field: string]: Loose;
+}
+
+/** An app's build workflow: stations, approvals, added agents and reviewers. */
+export interface AppFlow {
+  reviewers: string[];
+  [field: string]: Loose;
+}
+
+/** A reviewer agent's review of an app, with its findings. */
+export interface Review {
+  status: string;
+  findings: { state: string; [field: string]: Loose }[];
+  [field: string]: Loose;
 }
