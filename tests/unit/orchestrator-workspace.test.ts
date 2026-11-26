@@ -19,7 +19,12 @@ function ports(over: Partial<Ports> = {}): { ports: Ports; events: string[] } {
     async runStep() {},
     owner: { question: async () => null, answered: async () => {}, decided: async () => {} },
     async ready() {},
-    tester: { write: async () => {}, run: async () => ({ total: 1, failed: 0 }), repair: async () => ({ progress: false }), done: async () => {} },
+    tester: {
+      write: async () => {},
+      run: async () => ({ total: 1, failed: 0 }),
+      repair: async () => ({ progress: false }),
+      done: async () => {},
+    },
     async wrapUp() {},
     ...over,
   };

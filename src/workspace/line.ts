@@ -1108,7 +1108,10 @@ function linePorts(app, run, ctl, o) {
         L.status = 'checking';
         commit();
         await pace(app, 420);
-        stepEnd(stepStart(run, st.id, 'orchestrator', 'Checks', 'check'), cur.res.checks.every((c) => c.ok));
+        stepEnd(
+          stepStart(run, st.id, 'orchestrator', 'Checks', 'check'),
+          cur.res.checks.every((c) => c.ok),
+        );
         return;
       }
       commit();
