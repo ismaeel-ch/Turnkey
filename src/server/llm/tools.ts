@@ -149,7 +149,8 @@ async function probeNative(inner: Provider, tier: Tier): Promise<ToolMode> {
     for await (const chunk of inner.stream({
       messages: [{ role: 'user', content: 'Call the report_ready tool with the word "ready". Do not answer in text.' }],
       tier,
-      maxTokens: 64,
+      maxTokens: 512, // room for a little thinking first: current Claude models always think
+      cache: false,
       tools: [PROBE_TOOL],
       toolChoice: 'required',
     })) {
