@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { answerMeter, limiter, limitsFrom } from '@/server/guard/limits';
 import { parseBody, refuse, refuseCrossSite, visitorKey } from '@/server/guard/http';
 import { checkPrompt } from '@/server/guard/prompt';
-import { LlmError, resolveProvider, type Tier } from '@/server/llm';
+import { LlmError, resolveProvider } from '@/server/llm';
 import { errorText, log, withRequestLog } from '@/server/log';
 
 export const runtime = 'nodejs';
@@ -37,7 +37,7 @@ async function post(request: Request) {
 
   const parsed = await parseBody(request, Body, limits.maxPromptChars * 4 + 1000);
   if (!parsed.ok) return parsed.response;
-  const { prompt, tier } = parsed.data as { prompt: string; tier: Tier };
+  const { prompt, tier } = parsed.data;
   if (!prompt.trim()) return refuse(400, 'bad_request', 'A prompt is required.');
   if (prompt.length > limits.maxPromptChars) return refuse(413, 'too_large', 'The prompt is too long.');
   // Only Turnkey's own agents may use the model: checked before anything is counted or sent.

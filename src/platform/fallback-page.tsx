@@ -1,65 +1,91 @@
-'use client';
+import type { CSSProperties, ReactNode } from 'react';
 
-import {
-  Button,
-  FluentProvider,
-  MessageBar,
-  MessageBarBody,
-  MessageBarTitle,
-  webDarkTheme,
-  webLightTheme,
-} from '@fluentui/react-components';
-import { useSyncExternalStore, type ReactNode } from 'react';
-
-const DARK = '(prefers-color-scheme: dark)';
-const subscribe = (on: () => void) => {
-  const q = window.matchMedia?.(DARK);
-  q?.addEventListener?.('change', on);
-  return () => q?.removeEventListener?.('change', on);
-};
-const isDark = () => !!window.matchMedia?.(DARK).matches;
+/*
+ * A whole-page message for Next's error and not-found screens, drawn like Fluent's message bar from the Fluent 2
+ * tokens in src/styles/fluent-theme.css (light and dark follow the system). It uses no component library on purpose:
+ * Next loads these screens with the page, before the workspace, so importing Fluent's components here would add
+ * about 100 KB to the first download (scripts/check-bundle.mjs guards it).
+ */
 
 type Action = { label: string; primary?: boolean } & ({ href: string } | { onClick: () => void });
 
-/**
- * A whole-page message for Next's error and not-found screens: Fluent's message bar in the page's colour scheme, a
- * plain explanation and one or two ways on. Used where the workspace itself is not running.
- */
+const TONE = {
+  error: {
+    bg: 'var(--colorStatusDangerBackground1)',
+    line: 'var(--colorStatusDangerBorder1)',
+    mark: 'var(--colorStatusDangerForeground1)',
+  },
+  info: { bg: 'var(--colorNeutralBackground3)', line: 'var(--colorNeutralStroke1)', mark: 'var(--colorBrandForeground1)' },
+} as const;
+
+const button = (primary?: boolean): CSSProperties => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: 32,
+  padding: '5px 12px',
+  borderRadius: 4,
+  font: 'inherit',
+  fontWeight: 600,
+  textDecoration: 'none',
+  cursor: 'pointer',
+  border: primary ? '1px solid transparent' : '1px solid var(--colorNeutralStroke1)',
+  background: primary ? 'var(--colorBrandBackground)' : 'var(--colorNeutralBackground1)',
+  color: primary ? 'var(--colorNeutralForegroundOnBrand)' : 'var(--colorNeutralForeground1)',
+});
+
 export function FallbackPage({
   intent,
   title,
   children,
   actions,
 }: {
-  intent: 'error' | 'warning' | 'info';
+  intent: 'error' | 'info';
   title: string;
   children: ReactNode;
   actions: Action[];
 }) {
-  const dark = useSyncExternalStore(subscribe, isDark, () => false);
+  const t = TONE[intent];
   return (
-    <FluentProvider theme={dark ? webDarkTheme : webLightTheme} style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center' }}>
-      <main role="main" style={{ maxWidth: 560, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <MessageBar intent={intent} layout="multiline" role={intent === 'error' ? 'alert' : 'status'}>
-          <MessageBarBody>
-            <MessageBarTitle>{title}</MessageBarTitle>
-            {children}
-          </MessageBarBody>
-        </MessageBar>
+    <div
+      style={{
+        minHeight: '100dvh',
+        display: 'grid',
+        placeItems: 'center',
+        background: 'var(--colorNeutralBackground2)',
+        color: 'var(--colorNeutralForeground1)',
+        fontFamily: 'var(--fontFamilyBase)',
+        fontSize: 14,
+        lineHeight: '20px',
+      }}
+    >
+      <main style={{ maxWidth: 560, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div
+          role={intent === 'error' ? 'alert' : 'status'}
+          style={{
+            background: t.bg,
+            border: '1px solid ' + t.line,
+            borderLeft: '4px solid ' + t.mark,
+            borderRadius: 4,
+            padding: '12px 16px',
+          }}
+        >
+          <h1 style={{ fontSize: 16, lineHeight: '22px', fontWeight: 600, margin: '0 0 4px' }}>{title}</h1>
+          <p style={{ margin: 0 }}>{children}</p>
+        </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {actions.map((a) =>
             'href' in a ? (
-              <Button key={a.label} as="a" href={a.href} appearance={a.primary ? 'primary' : 'secondary'}>
+              <a key={a.label} href={a.href} style={button(a.primary)}>
                 {a.label}
-              </Button>
+              </a>
             ) : (
-              <Button key={a.label} onClick={a.onClick} appearance={a.primary ? 'primary' : 'secondary'}>
+              <button key={a.label} type="button" onClick={a.onClick} style={button(a.primary)}>
                 {a.label}
-              </Button>
+              </button>
             ),
           )}
         </div>
       </main>
-    </FluentProvider>
+    </div>
   );
 }

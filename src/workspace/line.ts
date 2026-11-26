@@ -1,5 +1,5 @@
 import { modelProblem } from '@/shared/api-error';
-import type { AppDef, AppTable, BackedDef, Board, Brief, BriefedDef, Check, Untrusted } from '@/shared/types/app';
+import type { AppDef, AppTable, BackedDef, Brief, BriefedDef, Check, Untrusted } from '@/shared/types/app';
 import type {
   AppRecord,
   ChatCard,
@@ -8,7 +8,6 @@ import type {
   Loose,
   Run,
   RunStep,
-  SavedBuild,
   StationLine,
   StationRecording,
   UsageSum,
@@ -447,7 +446,7 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
     if (checks.every((c) => c.ok)) {
       app.def.views = vw.views;
       app.def.dash = vw.dash;
-      app.def.board = app.def.team ? (normBoard(out && out.board, app.def) as Board | null) : null;
+      app.def.board = app.def.team ? normBoard(out && out.board, app.def) : null;
       app.rev++;
       const r = toolCall(
         ctxOf(app, run, 'views'),
@@ -624,7 +623,7 @@ export async function produce(app: BuildApp, run: Run, st: Station, attempt: num
   return app.mode === 'live' ? produceLive(app, run, st, attempt, feedback) : produceDemo(app, run, st, attempt);
 }
 export async function produceDemo(app: BuildApp, run: Run, st: Station, attempt: number): Promise<Untrusted> {
-  const rec = REC[app.tpl as string] as SavedBuild,
+  const rec = REC[app.tpl as string],
     key = st.id === 'screens' ? 'ui' : st.id,
     ctx = {
       answer: app.answers.q == null ? 0 : app.answers.q,

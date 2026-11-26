@@ -149,6 +149,7 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
         </button>
       </nav>
       <div className="tb-right">
+        <span className="act-slot" />
         <span data-tour="mode" className={cx('tb-mode', mode.on && 'is-live')}>
           <Switch
             id="sw-live"

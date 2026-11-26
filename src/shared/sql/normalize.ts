@@ -57,7 +57,7 @@ export function normalizeTables(input: unknown, opts: { roleIds?: string[]; maxR
             col.options = arr(c.options).map(snake).filter(Boolean);
             if (c.labels && typeof c.labels === 'object') {
               col.labels = {};
-              for (const k of Object.keys(c.labels as Obj)) {
+              for (const k of Object.keys(c.labels)) {
                 const v = str((c.labels as Obj)[k]);
                 if (col.options.includes(snake(k)) && v) col.labels[snake(k)] = v;
               }

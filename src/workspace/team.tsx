@@ -247,7 +247,7 @@ export function teamCase(app: TeamApp, text: string) {
 
 /* ---------- running a team ---------- */
 export async function tpace(T: TeamRun, ms: number) {
-  const end = Date.now() + Math.max(0, ms * ((SPEED as Dict<number>)[S.settings.speed] || 1));
+  const end = Date.now() + Math.max(0, ms * (SPEED[S.settings.speed] || 1));
   for (;;) {
     if (T.stop) throw new TeamStop();
     const left = end - Date.now();
@@ -416,6 +416,8 @@ export function teamRequest(app: TeamApp, user: AppUser, T: TeamRun) {
     notes: T.notes.slice(-10).map((n) => ({ who: cut(n.who, 60), text: cut(n.text, 1500) })),
   };
 }
+/** Sources already reported as down, per run (`runId|connector`), so the toast is said once. */
+const SAID_DOWN = new Set<string>();
 export function teamServerTool(app: TeamApp, T: TeamRun, i: number, name: unknown, argText: unknown, content: unknown) {
   // a lookup the server made: logged like any connector call, and shown on the agent's step
   const { connector, tool } = splitToolName(str(name)),
@@ -423,17 +425,24 @@ export function teamServerTool(app: TeamApp, T: TeamRun, i: number, name: unknow
     args = jsonObject(argText),
     r = jsonObject(content),
     a = app.def.team.agents[i],
-    ok = r.ok !== false;
+    ok = r.ok !== false,
+    down = r.unavailable === true;
+  // a source that is down: said once per run in plain words; the agents were told to carry on without it
+  const downText = c.name + ' is not answering right now, so ' + (a ? a.name : 'the agent') + ' carried on without it.';
   toolCall(
     { agent: a ? a.id : str(r.agent), runId: T.id, appId: app.id },
     c.name + ' · ' + tool,
     args,
     () => {
-      if (!ok) throw new Error(str(r.text) || 'The lookup failed.');
+      if (!ok) throw new Error(down ? downText : str(r.text) || 'The lookup failed.');
       return { text: str(r.text) };
     },
     'connector',
   );
+  if (down && !SAID_DOWN.has(T.id + '|' + connector)) {
+    SAID_DOWN.add(T.id + '|' + connector);
+    toast(downText + ' Its answer may be less complete.', 'warning', 9000);
+  }
   if (T.steps[i]) {
     T.steps[i].tools.push({ name: c.name, tool, args: Object.values(args)[0], ok, real: true });
     notify();

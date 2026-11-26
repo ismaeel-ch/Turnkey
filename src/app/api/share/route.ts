@@ -35,17 +35,22 @@ async function post(request: Request) {
   const body = await parseBody(request, shareRequestSchema, MAX_CODE + 2000);
   if (!body.ok) return body.response;
   // A newer version under the owner's own name does not take a new name, but it still writes to the store.
-  const quota = shareQuota.take(visitorKey(request), body.data.code.length);
+  const who = visitorKey(request);
+  const size = body.data.code.length;
+  const quota = shareQuota.take(who, size);
   if (!quota.ok) return refuse(429, 'rate_limited', quota.message);
   try {
     const r = await saveShare(store, body.data);
-    if (!r.ok)
+    if (!r.ok) {
+      shareQuota.refund(who, size); // nothing was written, so it does not count toward the day's saves
       return Response.json({ code: 'bad_request', message: r.error }, { status: r.status, headers: { 'cache-control': 'no-store' } });
+    }
     return Response.json(
       { slug: r.slug, path: '/' + r.slug, ...(r.token ? { token: r.token } : {}) },
       { status: r.created ? 201 : 200, headers: { 'cache-control': 'no-store' } },
     );
   } catch {
+    shareQuota.refund(who, size);
     return refuse(503, 'not_configured', 'The short link could not be saved just now. The long link works.');
   }
 }

@@ -82,7 +82,7 @@ export class GatewayChatModel extends BaseChatModel<GatewayCallOptions> {
     return this.withConfig({
       ...kwargs,
       tools: tools.map((t) => convertToOpenAITool(t as Parameters<typeof convertToOpenAITool>[0])),
-    } as Partial<GatewayCallOptions>);
+    });
   }
 
   private request(messages: BaseMessage[], options: GatewayCallOptions): ChatRequest {

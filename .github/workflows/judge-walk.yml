@@ -1,0 +1,48 @@
+name: Judge walk
+
+# Walks the live site the way a judge would: the README's five-minute walk-through and the demo video's shot list,
+# step by step, with a screenshot after each step (tests/e2e/judge.cjs). Demo mode only, so it calls no model and
+# spends nothing. By hand only; it adds nothing to the CI on pull requests. The screenshots are kept as an artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Address to walk
+        required: true
+        default: https://turnkey-bay.vercel.app
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: judge-walk
+  cancel-in-progress: false
+
+jobs:
+  walk:
+    name: walk the demo path
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium
+      - name: Walk the demo path
+        env:
+          TK_URL: ${{ inputs.url }}
+          JUDGE_SHOTS: ${{ runner.temp }}/judge-shots
+        run: node tests/e2e/judge.cjs
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: judge-walk-screenshots
+          path: ${{ runner.temp }}/judge-shots
+          retention-days: 14

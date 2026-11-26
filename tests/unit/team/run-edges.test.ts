@@ -107,10 +107,9 @@ describe('team tool boxes', () => {
     const box = toolBoxFromConnectors((id) =>
       id in answers ? { id, search: async (q, o) => (searches.push([q, o]), answers[id]) } : undefined,
     );
-    expect(await box.run('patentsview', 'search_patents', { q: 'x' })).toEqual({
-      ok: false,
-      text: 'The source patentsview is not available.',
-    });
+    const missing = await box.run('patentsview', 'search_patents', { q: 'x' });
+    expect(missing).toMatchObject({ ok: false, unavailable: true });
+    expect(missing.text).toMatch(/^SOURCE UNAVAILABLE: patentsview cannot be used right now \(it is not set up on this server/);
     expect(await box.run('openalex', 'search_works', { search: 'x' })).toEqual({ ok: false, text: 'OpenAlex did not answer.' });
     expect(await box.run('arxiv', 'query', { search_query: 'x' })).toEqual({ ok: true, text: 'Nothing found.' });
     expect(await box.run('wikipedia', 'search_pages', { q: 'Lahore' })).toEqual({

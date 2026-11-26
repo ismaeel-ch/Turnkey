@@ -9,19 +9,7 @@ import { deriveEndpoints } from './engine';
 import { TEAMS } from './team';
 import { TESTS, runTests, suiteOf, testStats, testable } from './tests';
 import { AGENTS, RUNS, STATIONS } from './line';
-import {
-  APPROVE_AT,
-  FlowChips,
-  STEP_AT,
-  answerGate,
-  flowEdit,
-  flowList,
-  flowOf,
-  reviewNow,
-  stName,
-  stepAuto,
-  stepsAt,
-} from './custom';
+import { APPROVE_AT, FlowChips, STEP_AT, answerGate, flowEdit, flowList, flowOf, reviewNow, stName, stepAuto, stepsAt } from './custom';
 import { REVIEWERS } from './reviewers';
 import { Btn, AgentAv, Icon, STATUS_META } from './ui';
 import { useWidth } from './views-b';
@@ -157,6 +145,8 @@ interface IslandProps {
   start: Viewport;
   fitKey: string;
   fit: { padding: number; maxZoom: number };
+  /** True while the canvas has a size on the page. An animated move on a canvas 0 pixels wide is drawn at NaN. */
+  shown: () => boolean;
 }
 type FlowInstance = ReactFlowInstance<FlowNode, RouteEdge>;
 export interface FlowKit {
@@ -247,8 +237,7 @@ export function flowGraph(app: AppRecord, v: boolean): FlowGraph {
     suites = ok ? suiteOf(app) : [],
     T0 = TESTS[app.id],
     res: Dict<{ ok: boolean }> = T0 && T0.rev === app.rev ? T0.res : {},
-    // tests.tsx keeps the id of the suite that is running here, though its type says boolean
-    running = T0 ? (T0.running as unknown as string | null | undefined) : null;
+    running = T0 ? T0.running : null; // the id of the suite running now
   const css = getComputedStyle(document.documentElement),
     col = (n: string) => css.getPropertyValue('--' + n).trim() || '#888',
     C = {
@@ -1410,7 +1399,7 @@ export function flowKit(): FlowKit {
             sig = JSON.stringify([at, n.width, n.data]);
           return o && o.type === n.type && o.sig === sig && o.position.x === at.x && o.position.y === at.y
             ? o
-            : ({ ...(o && o.type === n.type ? o : null), ...n, position: at, sig } as IslandNode);
+            : ({ ...(o && o.type === n.type ? o : null), ...n, position: at, sig });
         }),
       );
     }, [p.sig]); // a node that did not change keeps its object, so React Flow leaves it alone
@@ -1418,7 +1407,9 @@ export function flowKit(): FlowKit {
       const go = (d: number) =>
           setTimeout(
             () => {
-              if (!inst.current) return;
+              // hidden (another view, a dialog over it, the page going away): d3's animated zoom divides by the
+              // canvas size, and the background and the minimap would be drawn at NaN
+              if (!inst.current || !p.shown()) return;
               if (p.v)
                 void inst.current.setViewport(p.start, {
                   duration: 200,
@@ -1435,7 +1426,7 @@ export function flowKit(): FlowKit {
       };
     }, [p.fitKey]); /* fitted twice: nodes that were just added are measured a moment later */
     R.useEffect(() => {
-      if (!p.v || !p.focus || !inst.current) return;
+      if (!p.v || !p.focus || !inst.current || !p.shown()) return;
       const n = inst.current.getNode(p.focus);
       if (n)
         void inst.current.setCenter(n.position.x + 110, n.position.y + 170, {
@@ -1505,6 +1496,22 @@ export function flowKit(): FlowKit {
 /** Where the owner dragged the nodes of one canvas; the object is kept, so drags write straight into it. */
 function flowPosFor(key: string): Dict<XYPosition> {
   return U.flowPos[key] || (U.flowPos[key] = {});
+}
+/**
+ * How tall the wide canvas should be so the whole workflow fits at the width it has. Sized to the viewport alone, the
+ * graph (about as tall as it is wide) was fitted by its height and shrank node text to 6 or 7 px, with half the
+ * canvas empty beside it. Never shorter than 460px, never taller than the graph needs at full size.
+ */
+function fitHeight(app: AppRecord, width: number, deep: number): number {
+  const g = flowGraph(app, false);
+  if (!g.nodes.length || !width) return Math.min(1040, 660 + 96 * deep);
+  const xs = g.nodes.map((n) => n.position.x),
+    ys = g.nodes.map((n) => n.position.y),
+    gw = Math.max(...g.nodes.map((n) => n.position.x + (n.width || FL.W))) - Math.min(...xs),
+    gh = Math.max(...ys) + FL.RH - Math.min(...ys),
+    pad = 0.06,
+    zoom = Math.min(1.1, (width * (1 - 2 * pad)) / gw);
+  return Math.round(Math.max(460, Math.min(1100, (gh * zoom) / (1 - 2 * pad))));
 }
 export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) {
   // the Preact side: keeps a React root alive and hands it fresh data on every render
@@ -1650,6 +1657,7 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
           padding: 0.06,
           maxZoom: 1.1,
         },
+        shown: () => !!ref.current && ref.current.clientWidth > 0 && ref.current.clientHeight > 0,
       }),
     );
   });
@@ -1666,7 +1674,7 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
     <div className="line-wrap flow-wrap" data-tour="line">
       <div
         className={cx('flow-canvas', v && 'narrow')}
-        style={toStyle(v ? null : 'height:clamp(460px,calc(100dvh - 330px),' + Math.min(1040, 660 + 96 * deepNow) + 'px)')}
+        style={toStyle(v ? null : 'height:' + fitHeight(app, w, deepNow) + 'px')}
         ref={ref}
         role="group"
         aria-label="The build workflow. Select a node to inspect it, or use its controls to change the workflow."
