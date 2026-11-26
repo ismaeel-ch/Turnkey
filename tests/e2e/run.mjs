@@ -3,6 +3,7 @@
 //   npm run test:e2e                 every flow (about 20 minutes)
 //   npm run test:e2e -- demo         one flow: demo, live, misc, views, quests, new, custom, round6
 //   npm run test:e2e -- demo,live    several
+//   npm run test:e2e -- offline      install and offline (tests/e2e/offline.cjs, a fresh browser with a service worker)
 //   TK_URL=https://… npm run test:e2e -- demo    against a server that is already running (no build, no start)
 //   PORT=3105 npm run test:e2e       pick the port (set a different one per worktree when several run at once)
 import { spawn } from 'node:child_process';
@@ -82,7 +83,13 @@ async function main() {
       return 1;
     }
   }
-  const code = await run('node', [path.join(root, 'tests', 'e2e', 'flows.cjs'), flows], { env: { ...process.env, TK_URL: url } });
+  // The offline check runs on its own: it needs a service worker and a browser that has never seen the app.
+  const names = flows === 'all' ? ['all', 'offline'] : flows.split(',');
+  const offline = names.includes('offline');
+  const rest = names.filter((n) => n !== 'offline');
+  let code = 0;
+  if (rest.length) code = await run('node', [path.join(root, 'tests', 'e2e', 'flows.cjs'), rest.join(',')], { env: { ...process.env, TK_URL: url } });
+  if (offline) code = (await run('node', [path.join(root, 'tests', 'e2e', 'offline.cjs')], { env: { ...process.env, TK_URL: url } })) || code;
   stop();
   return code;
 }

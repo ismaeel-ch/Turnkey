@@ -34,6 +34,7 @@ import {
   carryData,
   clearIdentity,
   draftNotes,
+  installInputOf,
   isDirty,
   relOf,
   releaseApp,
@@ -42,6 +43,8 @@ import {
   verCmp,
   verText,
 } from './release';
+import { appInstallLinks, holdInstallLinks, setInstallLinks } from '@/platform/pwa/app';
+import { lastInstalledAt, onInstallPrompt, runningInstalled } from '@/platform/pwa/prompt';
 
 /* ===== Turnkey prototype · share an app by link, and the app-only view =====
    A share link carries the app itself: the five definitions the agents wrote and the rows to start with, compressed into the part of
@@ -122,11 +125,26 @@ export const framed = () => {
     return true;
   }
 };
+/* A code is either a whole app ("0." or "1." and the packed app) or "i." and an app's lasting id: the start address
+   of an installed app, which reopens the copy already saved in this browser. */
 export const shareCode = (input) => {
   const s = str(input).trim(),
-    m = /#app=([01]\.[A-Za-z0-9_-]+)/.exec(s) || /^([01]\.[A-Za-z0-9_-]+)$/.exec(s);
+    m =
+      /#app=([01]\.[A-Za-z0-9_-]+|i\.[A-Za-z0-9_-]{1,40})(?![A-Za-z0-9_-])/.exec(s) ||
+      /^([01]\.[A-Za-z0-9_-]+|i\.[A-Za-z0-9_-]{1,40})$/.exec(s);
   return m ? m[1] : null;
 };
+/** The saved app an installed app's "i.<id>" start address points at: the newest guest copy with that id, else one
+ *  of the owner's own apps. */
+export function installedApp(key) {
+  const ready = (a) => a.status === 'ready' && dbExists(a.id);
+  const all = Object.values(S.apps);
+  return (
+    all.find((a) => a.shared && !a.shared.preview && a.shared.uid === key && ready(a)) ||
+    all.find((a) => !a.shared && (a.uid === key || a.id === key) && ready(a)) ||
+    null
+  );
+}
 export const shareLink = (code) => {
   let base = '';
   try {
@@ -349,6 +367,15 @@ export async function openShared(input, o) {
   const code = shareCode(input);
   if (!code) throw new Error('That is not a Turnkey app link. A link ends with #app= followed by a long code.');
   if (code.length > SHARE.maxCode) throw new Error('That link is too long to be an app.');
+  if (code.startsWith('i.')) {
+    // opened from the home screen, the dock or the Start menu: the app is already in this browser
+    const saved = installedApp(code.slice(2));
+    if (!saved) throw new Error('This app is no longer saved in this browser. Open its link again to get it back.');
+    if (runningInstalled() && !saved.installed) saved.installed = Date.now();
+    enterSolo(saved, { from: 'link', back: o.back || null });
+    commit();
+    return saved;
+  }
   if (!S.shared) S.shared = {};
   const key = 'k' + hashStr(code);
   let app = S.shared[key] ? S.apps[S.shared[key]] : null,
@@ -864,8 +891,24 @@ export function SoloShell() {
     up = app.shared && app.shared.updated && !app.shared.updated.seen ? app.shared.updated : null;
   useEffect(() => {
     setIdentity(app);
-    return clearIdentity;
+    // the browser installs whatever manifest the page links: while the app is open alone, that is the app's own
+    const stop = holdInstallLinks(document, appInstallLinks(installInputOf(app)), app.name);
+    return () => {
+      stop();
+      clearIdentity();
+      setInstallLinks(document, null);
+    };
   }, [app.id, app.name, app.rev]);
+  useEffect(() => {
+    // the browser reports an install it made while this app was open alone: mark the app
+    const since = Date.now();
+    return onInstallPrompt(() => {
+      if (lastInstalledAt() >= since && !app.installed) {
+        app.installed = lastInstalledAt();
+        commit();
+      }
+    });
+  }, [app.id]);
   const reset = async () => {
     if (
       await confirmBox({
