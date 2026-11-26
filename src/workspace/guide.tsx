@@ -1,12 +1,38 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
-import { NARROW, S, U, activeTab, chatShown, closeDialog, commit, cx, notify, openTab, setChat, str, toast } from './core';
+import { NARROW, S, U, activeTab, chatShown, closeDialog, commit, notify, openTab, setChat, str, toast } from './core';
 import { Btn, Chip, Dialog, Empty, Icon, Input } from './ui';
 import { openShare } from './share';
 import { startTour } from './shell-c';
+import type { AppRecord } from '@/shared/types/workspace';
+
+/** Where a guide entry's button takes you: a view of the open app, or one of a few workspace actions. */
+export interface GuideGo {
+  label: string;
+  view?: string;
+  act?: 'home' | 'tour' | 'debug' | 'chat' | 'share';
+}
+export interface GuideGroup {
+  id: string;
+  name: string;
+  icon?: string;
+}
+export interface GuideEntry {
+  /** the GuideGroup id */
+  g: string;
+  icon: string;
+  title: string;
+  what: string;
+  how: string[];
+  go?: GuideGo;
+}
+/** The guide dialog's props, kept on U.dialog.props so the search and section survive a re-render. */
+export interface GuideProps {
+  q?: string;
+  g?: string;
+}
 
 /* ===== Turnkey prototype · the feature guide =====
    Every feature in one place: what it is, how to try it, and a button that takes you there. */
-export const GUIDE_GROUPS = [
+export const GUIDE_GROUPS: GuideGroup[] = [
   {
     id: 'start',
     name: 'Getting started',
@@ -43,7 +69,7 @@ export const GUIDE_GROUPS = [
     icon: 'database',
   },
 ];
-export const GUIDE = [
+export const GUIDE: GuideEntry[] = [
   {
     g: 'start',
     icon: 'sparkle',
@@ -490,7 +516,7 @@ export const GUIDE = [
     how: ['Open the More menu of an app.', 'Choose Export build pack.'],
   },
 ];
-export function guideGo(go, app) {
+export function guideGo(go: GuideGo, app: AppRecord | null): void {
   const need = () => {
     toast('Open or build an app first.', 'info');
   };
@@ -501,32 +527,46 @@ export function guideGo(go, app) {
     if (U.solo) U.solo = null;
     U.view[app.id] = go.view;
     if (chatShown() && NARROW()) setChat(false);
-    return notify();
+    notify();
+    return;
   }
   if (go.act === 'home') {
     closeDialog();
-    return openTab(null);
+    openTab(null);
+    return;
   }
   if (go.act === 'tour') {
     closeDialog();
-    return startTour();
+    startTour();
+    return;
   }
   if (go.act === 'debug') {
     S.settings.debug = true;
     closeDialog();
-    return commit();
+    commit();
+    return;
   }
   if (go.act === 'chat') {
     if (!app) return need();
     closeDialog();
-    return setChat(true);
+    setChat(true);
+    return;
   }
   if (go.act === 'share') {
-    if (!app || app.status !== 'ready') return need();
-    return openShare(app);
+    if (!app || app.status !== 'ready') {
+      need();
+      return;
+    }
+    openShare(app);
+    return;
   }
 }
-export function GuideDialog({ p }) {
+/** Changes the open guide's search or section. The props live on U.dialog, so they outlast a re-render. */
+function setGuide(patch: GuideProps): void {
+  if (U.dialog && U.dialog.type === 'guide') Object.assign(U.dialog.props, patch);
+  notify();
+}
+export function GuideDialog({ p }: { p: GuideProps }) {
   const tab = S.session ? activeTab() : null,
     app = tab && tab.app ? S.apps[tab.app] : null,
     q = str(p.q).toLowerCase(),
@@ -547,34 +587,25 @@ export function GuideDialog({ p }) {
             placeholder={'Search ' + GUIDE.length + ' features'}
             value={p.q || ''}
             onInput={(e) => {
-              p.q = e.target.value;
-              notify();
+              setGuide({ q: e.currentTarget.value });
             }}
           />
         </div>
       </div>
       <div className="chips guide-groups" role="group" aria-label="Sections">
-        {[
-          {
-            id: 'all',
-            name: 'Everything',
-          },
-        ]
-          .concat(GUIDE_GROUPS)
-          .map((x) => (
-            <Chip
-              key={x.id}
-              on={!!(g === x.id)}
-              aria-pressed={g === x.id}
-              onClick={() => {
-                p.g = x.id;
-                notify();
-              }}
-            >
-              {x.icon && <Icon n={x.icon} s="16" />}
-              {x.name}
-            </Chip>
-          ))}
+        {[{ id: 'all', name: 'Everything' } as GuideGroup].concat(GUIDE_GROUPS).map((x) => (
+          <Chip
+            key={x.id}
+            on={!!(g === x.id)}
+            aria-pressed={g === x.id}
+            onClick={() => {
+              setGuide({ g: x.id });
+            }}
+          >
+            {x.icon && <Icon n={x.icon} s="16" />}
+            {x.name}
+          </Chip>
+        ))}
       </div>
       <div className="guide-list">
         {list.length ? (
@@ -585,7 +616,7 @@ export function GuideDialog({ p }) {
                   <Icon n={x.icon} />
                 </span>
                 <h3 className="t-sub2 grow">{x.title}</h3>
-                <span className="badge b-outline hide-sm">{(GUIDE_GROUPS.find((y) => y.id === x.g) || {}).name}</span>
+                <span className="badge b-outline hide-sm">{GUIDE_GROUPS.find((y) => y.id === x.g)?.name}</span>
               </header>
               <p>{x.what}</p>
               <ol className="guide-how">
@@ -595,7 +626,7 @@ export function GuideDialog({ p }) {
               </ol>
               {x.go && (
                 <div className="row">
-                  <Btn className="btn sm" onClick={() => guideGo(x.go, app)}>
+                  <Btn className="btn sm" onClick={() => x.go && guideGo(x.go, app)}>
                     <Icon n="arrowRight" s="16" />
                     {x.go.label}
                   </Btn>
