@@ -241,10 +241,11 @@ describe('anthropic provider', () => {
 });
 
 describe('resolveProvider', () => {
-  it('takes an Anthropic key, but only picks it when nothing else is set', () => {
+  it('takes an Anthropic key, and picks it before any other provider', () => {
     const p = resolveProvider({ ANTHROPIC_API_KEY: 'test-key', ANTHROPIC_MODEL_FAST: 'fast-1' });
     expect([p?.id, p?.model('default'), p?.model('quick')]).toEqual(['anthropic', 'claude-sonnet-5-5', 'fast-1']);
-    expect(resolveProvider({ ANTHROPIC_API_KEY: 'k', OPENAI_API_KEY: 'k', OPENAI_MODEL: 'o' })?.id).toBe('openai');
+    expect(resolveProvider({ ANTHROPIC_API_KEY: 'k', OPENAI_API_KEY: 'k', OPENAI_MODEL: 'o' })?.id).toBe('anthropic');
+    expect(resolveProvider({ OPENAI_API_KEY: 'k', OPENAI_MODEL: 'o' })?.id).toBe('openai');
     expect(resolveProvider({ LLM_PROVIDER: 'anthropic', OPENAI_API_KEY: 'k', OPENAI_MODEL: 'o', NODE_ENV: 'production' })).toBeNull();
   });
 });
