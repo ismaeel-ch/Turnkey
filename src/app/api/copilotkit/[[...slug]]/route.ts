@@ -4,7 +4,8 @@ import { refuse, refuseVerdict, visitorKey } from "@/server/guard/http";
 import { resolveAgents } from "@/server/agui/registry";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// one Live station can take a few minutes on a careful model; the step agent caps its own attempts
+export const maxDuration = 300;
 
 // The registry decides which agents exist; it is read on every request so late-registered agents show up.
 const copilotRuntime = new CopilotRuntime({
