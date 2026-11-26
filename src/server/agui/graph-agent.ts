@@ -5,12 +5,15 @@
  * through an `AgentSink`; GraphAgent turns the calls into a valid AG-UI event sequence:
  * RUN_STARTED first, then whatever the sink calls produce, then exactly one of RUN_FINISHED or RUN_ERROR.
  * Open steps, text messages and tool calls are closed for you, so the sequence always passes the protocol's checks.
+ * Each model call the work makes ends with a CUSTOM `usage` event (src/server/llm/usage.ts `CallUsage`): the model,
+ * its tokens, cache hits and cost, so the browser can show what a run and each agent spent.
  * Table of call to event: docs/architecture/ag-ui.md
  */
 import { AbstractAgent } from "@ag-ui/client";
 import { EventType } from "@ag-ui/core";
 import type { BaseEvent, JsonPatchOperation, RunAgentInput } from "@ag-ui/core";
 import { Observable } from "rxjs";
+import { meterCalls } from "@/server/llm/usage";
 
 export type { JsonPatchOperation };
 
@@ -222,7 +225,11 @@ export class GraphAgent extends AbstractAgent {
 
       void (async () => {
         try {
-          await work(sink);
+          // every model call made inside the work is reported as a CUSTOM `usage` event: model, tokens, cache, cost
+          await meterCalls(
+            (call) => sink.custom("usage", call),
+            () => work(sink),
+          );
           if (controller.signal.aborted) sink.fail("aborted", "The run was stopped.");
           else sink.finish();
         } catch (error) {

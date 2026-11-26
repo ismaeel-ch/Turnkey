@@ -136,7 +136,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .conn.done{background:var(--colorStatusSuccessBorder2)}.conn.done::after{border-left-color:var(--colorStatusSuccessBorder2)}
 .conn-dot{display:none;position:absolute;top:-4px;left:-4px;width:10px;height:10px;border-radius:50%;background:var(--colorBrandBackground)}.conn.go .conn-dot{display:block;animation:hand .55s ease-in-out infinite}@keyframes hand{to{left:calc(100% - 4px)}}
 .orch{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:16px;color:var(--colorNeutralForeground2);padding-top:12px;border-top:1px dashed var(--colorNeutralStroke1)}
-.tl-row{display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:center}.tl-l{display:flex;align-items:center;gap:6px;font-size:12px}
+.tl-row{display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:center}.tl-l{display:flex;align-items:center;gap:6px;font-size:12px}.tl-cost{margin-left:auto;font-size:11px;color:var(--colorNeutralForeground3)}.tl-usage{display:flex;align-items:center;gap:6px;font-size:12px;margin:0 0 8px}
 .tl-track{position:relative;height:22px;background:var(--colorNeutralBackground3);border-radius:4px}.tl-bar{position:absolute;top:4px;height:14px;border-radius:3px;background:var(--acc-mark);min-width:3px}
 .tl-bar.k-check,.tl-legend .k-check{background:var(--colorNeutralForeground3)}.tl-bar.k-tool{opacity:.55}.tl-legend .k-tool{background:var(--colorBrandStroke2)}
 .tl-bar.k-wait,.tl-legend .k-wait{background:repeating-linear-gradient(135deg,var(--colorStatusWarningForeground3) 0 4px,var(--colorStatusWarningBackground2) 4px 8px)}.tl-bar.bad{outline:2px solid var(--colorStatusWarningForeground3);outline-offset:1px}

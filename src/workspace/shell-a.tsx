@@ -79,6 +79,7 @@ import { ApiView, ChatPanel, ConnView, DataView } from './shell-b';
 import { startTour } from './shell-c';
 import { RerunBar } from './rerun';
 import { touchOf, touchText } from './provenance';
+import { fmtUsd, usageLine } from '@/platform/agui/usage';
 import { HistoryButtons, openHistory } from './history-ui';
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
@@ -1248,6 +1249,23 @@ export function RunChips({ app, run }: { app: AppRecord; run: Run }) {
     </div>
   ) : null;
 }
+/** One line over the timeline: what the run's model calls cost, or that a saved build replayed for free. */
+export function RunUsage({ run }: { run: Run }) {
+  const u = run.usage;
+  const text =
+    u && u.calls
+      ? u.calls + (u.calls === 1 ? ' model call' : ' model calls') + ' · ' + usageLine(u)
+      : run.mode === 'live'
+        ? run.status === 'running'
+          ? 'No model call has finished yet.'
+          : 'No model calls.'
+        : 'Replayed from a saved build: no model calls, nothing spent.';
+  return (
+    <p className="tl-usage muted" data-calls={u?.calls ?? 0} data-cost={(u?.costUsd ?? 0).toFixed(6)}>
+      <Icon n="receipt" s="14" /> {text}
+    </p>
+  );
+}
 export function TimelineView({ app, run }: { app: AppRecord; run: Run | undefined }) {
   if (!run || !run.steps.length)
     return (
@@ -1266,11 +1284,17 @@ export function TimelineView({ app, run }: { app: AppRecord; run: Run | undefine
   return (
     <div className="line-wrap tl" data-tour="line">
       <RunChips app={app} run={run} />
+      <RunUsage run={run} />
       {lanes.map((id) => (
         <div key={id} className="tl-row">
           <div className="tl-l">
             <AgentAv id={id} size="xs" />
             <span className="hide-sm">{AGENTS[id].name}</span>
+            {run.agentUsage?.[id]?.calls ? (
+              <span className="tl-cost mono" title={usageLine(run.agentUsage[id])}>
+                {fmtUsd(run.agentUsage[id].costUsd)}
+              </span>
+            ) : null}
           </div>
           <div className="tl-track">
             {run.steps
