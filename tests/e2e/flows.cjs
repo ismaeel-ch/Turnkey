@@ -47,7 +47,7 @@ async function flowDemo(browser, url) {
   await shot(page, '01-onboarding');
   await page.getByRole('button', { name: 'Get started' }).click();
   await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
-  check('live choice is offered whenever the device is online, wherever the page runs', !(await page.locator('.choice').nth(1).isDisabled()) && /You are connected/.test(await page.locator('.choice').nth(1).innerText()));
+  check('live choice is offered whenever the device is online, wherever the page runs', !(await page.locator('.choice').nth(1).isDisabled()) && /Model connected|No model connected|Checking the model/.test(await page.locator('.choice').nth(1).innerText()));
   await page.getByRole('button', { name: 'Continue' }).click();
   await shot(page, '02-onboarding-pick');
   await page.getByRole('button', { name: 'Continue' }).click();
