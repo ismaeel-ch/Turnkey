@@ -267,7 +267,27 @@ function FocusOnOpen() {
   }, []);
   return <span ref={ref} hidden />;
 }
+/**
+ * Fluent hides everything behind a modal dialog (aria-hidden on the page root). Our dialogs are removed by the store,
+ * not closed through Fluent, and the hiding was left in place, so screen readers and role queries lost the page.
+ * Once the last dialog is gone, undo it on the page root.
+ */
+function useRestorePage() {
+  useEffect(
+    () => () => {
+      const sweep = () => {
+        if (document.querySelector('.dialog')) return;
+        const r = document.getElementById('root');
+        if (r && r.getAttribute('aria-hidden') === 'true') r.removeAttribute('aria-hidden');
+      };
+      setTimeout(sweep, 0);
+      setTimeout(sweep, 300);
+    },
+    [],
+  );
+}
 export function Dialog({ title, children, foot, onClose, wide, cls }) {
+  useRestorePage();
   return (
     <FluentDialog
       open
@@ -278,19 +298,16 @@ export function Dialog({ title, children, foot, onClose, wide, cls }) {
     >
       <DialogSurface className={cx('dialog', wide && 'wide', cls)}>
         <DialogBody className="dlg">
-          <DialogTitle
-            as="div"
-            className="dhead"
-            action={
-              onClose ? (
-                <Btn className="btn subtle icon" aria-label="Close" onClick={onClose}>
-                  <Icon n="dismiss" />
-                </Btn>
-              ) : undefined
-            }
-          >
-            <h2 className="t-sub1 grow">{title}</h2>
-          </DialogTitle>
+          <div className="dhead">
+            <DialogTitle as="h2" className="t-sub1 grow">
+              {title}
+            </DialogTitle>
+            {onClose && (
+              <Btn className="btn subtle icon" aria-label="Close" onClick={onClose}>
+                <Icon n="dismiss" />
+              </Btn>
+            )}
+          </div>
           <DialogContent className="dbody">{children}</DialogContent>
           {foot && <DialogActions className="dfoot">{foot}</DialogActions>}
         </DialogBody>
