@@ -613,3 +613,20 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .gcard .flow-chips{min-width:0}.gcard .flow-chips>*{white-space:normal;max-width:100%;text-align:left;height:auto}
 #boot{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center}
 .fl-provider{height:100%;background:transparent;color:inherit;font:inherit;line-height:inherit}
+/* command palette (Ctrl/Cmd+K) and the keyboard shortcuts dialog */
+.dialog.palette{width:min(600px,calc(100vw - 32px))}
+.palette .palette-q{width:100%;margin-bottom:8px}
+.palette-list{display:flex;flex-direction:column;max-height:min(420px,55vh);overflow-y:auto}
+.palette-group{padding:8px 8px 2px}
+.palette-opt{display:flex;align-items:center;gap:10px;min-height:36px;padding:6px 8px;border-radius:var(--borderRadiusMedium);cursor:pointer;color:var(--colorNeutralForeground1)}
+.palette-opt .ic{color:var(--colorNeutralForeground2);flex:none}
+.palette-opt.on{background:var(--colorNeutralBackground1Selected);box-shadow:inset 2px 0 0 var(--colorBrandStroke1)}
+.palette-none{padding:12px 8px}
+.palette-hint{margin-top:8px}
+.keys{display:inline-flex;align-items:center;gap:2px;flex:none;white-space:nowrap}
+.keys-then{font-size:11px;color:var(--colorNeutralForeground3)}
+.kbd{display:inline-block;min-width:20px;padding:0 5px;border:1px solid var(--colorNeutralStroke1);border-bottom-width:2px;border-radius:4px;background:var(--colorNeutralBackground2);color:var(--colorNeutralForeground1);font-family:var(--fontFamilyBase);font-size:12px;line-height:18px;text-align:center}
+.keys-table{width:100%;border-collapse:collapse;margin-bottom:12px}
+.keys-table th{text-align:left;font-weight:600;padding:6px 8px;border-bottom:1px solid var(--colorNeutralStroke2)}
+.keys-table td{padding:6px 8px;border-bottom:1px solid var(--colorNeutralStroke3)}
+.keys-table tr.is-off td{color:var(--colorNeutralForeground3)}

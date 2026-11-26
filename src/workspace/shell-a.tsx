@@ -78,6 +78,7 @@ import { AppLogo, ReleaseView, isDirty, relOf } from './release';
 import { ApiView, ChatPanel, ConnView, DataView } from './shell-b';
 import { startTour } from './shell-c';
 import { RerunBar } from './rerun';
+import { openPalette, openShortcuts } from './commands';
 import { touchOf, touchText } from './provenance';
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
@@ -214,6 +215,18 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
               label: 'Feature guide',
               icon: 'bookOpen',
               on: () => openDialog('guide'),
+            },
+            {
+              label: 'Commands',
+              icon: 'search',
+              hint: /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl+K',
+              on: openPalette,
+            },
+            {
+              label: 'Keyboard shortcuts',
+              icon: 'keyboard',
+              hint: '?',
+              on: openShortcuts,
             },
             {
               label: 'Take the guided tour',
@@ -850,12 +863,13 @@ export function Workspace({ app }: { app: AppRecord }) {
         on: del,
       },
     ];
-  const tabs = VIEWS.map((v): TabItem =>
-    v.id === 'release' && app.status === 'ready'
-      ? Object.assign({}, v, {
-          count: rel ? (dirty ? 'draft' : rel.v) : 'new',
-        })
-      : v,
+  const tabs = VIEWS.map(
+    (v): TabItem =>
+      v.id === 'release' && app.status === 'ready'
+        ? Object.assign({}, v, {
+            count: rel ? (dirty ? 'draft' : rel.v) : 'new',
+          })
+        : v,
   );
   const body =
     view === 'build' ? (

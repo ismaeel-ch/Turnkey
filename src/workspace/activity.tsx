@@ -329,6 +329,12 @@ type Styles = ReturnType<typeof useStyles>;
 
 /* ---------- the panel ---------- */
 
+/** The panel listens here so a shortcut or the command palette can open and close it. */
+const panelToggles = new Set<() => void>();
+export function toggleAgentsPanel() {
+  panelToggles.forEach((f) => f());
+}
+
 export function AgentActivity({ app }: { app: AppRecord | null }) {
   const c = useStyles();
   const [open, setOpen] = useState(false);
@@ -337,6 +343,13 @@ export function AgentActivity({ app }: { app: AppRecord | null }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [shown, setShown] = useState<Dict<boolean>>({});
   useEffect(() => startActivityBridge(), []);
+  useEffect(() => {
+    const flip = () => setOpen((o) => !o);
+    panelToggles.add(flip);
+    return () => {
+      panelToggles.delete(flip);
+    };
+  }, []);
   const scope = all || !app ? null : app.id;
   const model = activityNow(scope);
   const working = Object.values(model.agents).filter((a) => a.state === 'working' || a.state === 'waiting').length;
