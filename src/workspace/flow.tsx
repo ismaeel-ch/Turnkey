@@ -1388,6 +1388,7 @@ export function flowKit(): FlowKit {
       nodes = st[0],
       setNodes = st[1],
       inst = R.useRef<FlowInstance | null>(null);
+    const box = R.useRef<HTMLDivElement | null>(null); // the canvas element: no fit while it is hidden or has no size
     R.useEffect(() => {
       setNodes((prev) =>
         p.graph.nodes.map((n) => {
@@ -1404,7 +1405,9 @@ export function flowKit(): FlowKit {
       const go = (d: number) =>
           setTimeout(
             () => {
-              if (!inst.current) return;
+              const el = box.current;
+              // fitting a canvas that is hidden (another tab is open) gives React Flow a NaN viewport
+              if (!inst.current || !el || !el.clientWidth || !el.clientHeight) return;
               if (p.v)
                 void inst.current.setViewport(p.start, {
                   duration: 200,
@@ -1446,6 +1449,7 @@ export function flowKit(): FlowKit {
     };
     return (
       <RF.ReactFlow<IslandNode, RouteEdge>
+        ref={box}
         nodes={nodes}
         edges={p.graph.edges}
         nodeTypes={NODES}
