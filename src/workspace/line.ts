@@ -286,7 +286,7 @@ export const stepEnd = (s: RunStep, ok?: boolean) => {
   s.t1 = Date.now();
   s.ok = ok !== false;
 };
-export const ctxOf = (app, run, agent) => ({
+export const ctxOf = (app: AppRecord, run: Run, agent: string) => ({
   agent,
   runId: run.id,
   appId: app.id,
