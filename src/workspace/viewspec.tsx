@@ -56,7 +56,13 @@ export const VIEW_WHAT: Dict<string> = {
 };
 export const isCat = (c: ColumnDef) => ['select', 'user', 'ref', 'bool'].includes(c.type),
   isDate = (c: ColumnDef) => c.type === 'date' || c.type === 'datetime',
-  isNum = (c: ColumnDef) => c.type === 'number' || c.type === 'money';
+  isNum = (c: ColumnDef) => c.type === 'number' || c.type === 'money',
+  /** A number that names something rather than counts it, like a year: shown without a thousands separator, never summed. */
+  isYear = (c: ColumnDef) => c.type === 'number' && /(^|_)year$/.test(c.name),
+  /** A number that adds up: what totals, sums and averages use. */
+  isMeasure = (c: ColumnDef) => isNum(c) && !isYear(c),
+  /** A score or rate on each record (rating, confidence, chance): adding them up means nothing, so a total row averages them. */
+  isRate = (c: ColumnDef) => isMeasure(c) && /(^|_)(rating|score|confidence|chance|accuracy|share|margin|weight|percent|pct)$/.test(c.name);
 export function viewFit(def: AppDef, t: AppTable, type: string): string | null {
   // null when the view fits the table, otherwise the reason it does not
   const cats = t.columns.filter(isCat).length,
@@ -88,7 +94,7 @@ export const guessEnd = (t: AppTable, start: string | null) => {
 export const normMeasure = (t: AppTable, m: unknown) => {
   const x = /^(sum|avg):(.+)$/.exec(String(m || ''));
   const c = x && colOf(t, snake(x[2]));
-  return x && c && isNum(c) ? x[1] + ':' + snake(x[2]) : 'count';
+  return x && c && isMeasure(c) ? x[1] + ':' + snake(x[2]) : 'count';
 };
 /** The columns a view of a table needs (`by`, `date`, `x` and so on), keeping the advisor's choices that are valid. */
 export type ViewCfg = Dict<string | string[] | null>;
