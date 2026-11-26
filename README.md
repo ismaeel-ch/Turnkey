@@ -6,9 +6,9 @@ Solo entry for the SSI Agent-A-Thon 2026.
 
 **Live app:** https://turnkey-bay.vercel.app/ (no login; **Demo** replays saved builds and calls no model)
 
-![The Build tab for the saved clinic build: six agents on the workflow canvas, a check gate under each, 142 of 142 tests passing](docs/images/build-tab.png)
+![A Demo build: a sentence about a sales team that bids on tenders is typed on Home, the agents work through the workflow canvas while their cards fill the chat, the Tester catches a slip and the Backend agent repairs it, then the built app opens on its Bid room](docs/images/demo.gif)
 
-_The Build tab after the saved "Clinic appointments" build in Demo. Each agent is a node, each check is a gate under it, the chat on the right holds the agents' cards and suggested changes._
+_From one sentence to the running app, played at twice its speed. In Demo the sentence picks the closest saved build, so no model is called._
 
 ## See it in 60 seconds
 
@@ -18,6 +18,10 @@ _The Build tab after the saved "Clinic appointments" build in Demo. Each agent i
    slip and the Backend agent repairs it. Open **Agents** (activity panel) to see every step, tool call and hand-off.
 3. Open the **App** tab: the app it built, with its own sign-in per role, and a **Bid room** where the app's own three
    agents work on a tender.
+
+![The Build tab after the Sales bidding desk build: seven stations on the workflow canvas with a check gate under each, the app's own three agents below them, and 170 of 170 tests passing](docs/images/build-tab.png)
+
+_The Build tab after the build. Each agent is a node and each check is a gate under it. The chat on the right holds the agents' cards and suggested changes._
 
 A longer walk-through is below, and the three-minute demo script is in
 [`docs/hackathon/demo-video.md`](docs/hackathon/demo-video.md).
@@ -66,9 +70,28 @@ are in [`docs/architecture/overview.md`](docs/architecture/overview.md).
 
 _The Agents panel explains the team in the app itself; its Activity tab lists every step, tool call and hand-off as it happens._
 
-![The Tester finds a failing test, the Backend agent repairs it, all 170 tests pass](docs/images/tester-repair.png)
+![The Tester's panel: run 1 fails one of 170 tests, the Backend agent repairs it, run 2 passes all 170, and the six test cases the Tester wrote](docs/images/tester-repair.png)
 
-_The Tester's first run fails one case (a bid manager could delete a tender); the Backend agent repairs it and run 2 passes. (Screenshot from before the Fluent UI change; the steps are the same.)_
+_The Tester's first run fails one case (a bid manager could delete a tender); the Backend agent repairs it and run 2 passes._
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/chat-cards.png" alt="A change from chat: the Orchestrator's change plan card with the SQL it will run and the stations that run again, then an Applied card"></td>
+    <td width="50%"><img src="docs/images/approval.png" alt="The build waits for the owner after Views: a Your approval node on the canvas and an approval card in chat with Approve and continue, See what was made and Stop here"></td>
+  </tr>
+  <tr>
+    <td><em>A change from chat. The Orchestrator shows its plan as a card; only the stations the change touches run again.</em></td>
+    <td><em>An approval the owner placed after Views. The build waits on the canvas and in chat until the owner answers.</em></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/timeline.png" alt="The run timeline: one lane per agent and the Orchestrator's code checks, with the cost line saying a saved build made no model calls"></td>
+    <td><img src="docs/images/history.png" alt="Version history: every change saved as a version with the agents or person who made it, with Restore, Undo and Redo"></td>
+  </tr>
+  <tr>
+    <td><em>The run timeline, one lane per agent. The line on top gives the model calls, tokens and cost; a saved build spends nothing.</em></td>
+    <td><em>Version history. Every change is a version that names the agents or the person who made it.</em></td>
+  </tr>
+</table>
 
 ## What it builds
 
@@ -83,7 +106,7 @@ agent that can send the work back once, and a pause where a person adds a point.
 
 ![The Bid room: three agents have scored a tender, priced it and challenged it](docs/images/bid-room.png)
 
-_The Bid room of the built BidDesk app, with the three agents' results for one tender. All data is made up. (Screenshot from before the Fluent UI change.)_
+_The Bid room of the built BidDesk app, with the three agents' verdict for one tender. All data is made up._
 
 ## The five-minute walk-through
 
@@ -101,6 +124,10 @@ _The Bid room of the built BidDesk app, with the three agents' results for one t
    only the stations the change touches run again, and the tests are regenerated.
 5. Open **Release**, release version 1.0 (every test runs first), and press **Share by link**. Turn on debug mode
    (bug icon in the title bar) to see AG-UI events, tool calls, SQL and model usage.
+
+![The Release tab after version 1.0: share and install, and Export the deliverable as a Markdown document, a printable PDF, a web page, the SQLite database or everything in a zip](docs/images/export.png)
+
+_The Release tab. One deliverable document is made from the app as it is now, in each format._
 
 To see Live agents build from your own words, switch **Live** on in the title bar and type a sentence on a new tab.
 Each Live session is capped at 40 model calls.
@@ -194,6 +221,10 @@ Check a deployment:
 npm run check                 # secrets scan, lint, typecheck, unit tests
 npm run test:e2e -- demo      # one browser flow; CI runs all twelve
 ```
+
+The README's pictures come from `scripts/readme-media.mjs`: start a production build (`npm run build`, then
+`PORT=3333 npx next start`) and run `TK_URL=http://localhost:3333 node scripts/readme-media.mjs`. It needs ffmpeg, uses
+Demo data only, and writes the PNGs and `demo.gif` (a sentence typed on Home, through the build, to the running app) to `docs/images/`.
 
 ## The spike
 
