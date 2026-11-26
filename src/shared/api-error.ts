@@ -6,7 +6,7 @@
  * `requestId` is in the `x-request-id` header of every answer, and in the body of a 500. It matches the server's log
  * line, so a person can quote it when something goes wrong.
  */
-import { z } from 'zod';
+// A hand-written check rather than zod: the workspace imports this file, and zod would add about 95 KB (gzip) to the page.
 
 export const API_ERROR_CODES = [
   'not_configured',
@@ -22,17 +22,16 @@ export const API_ERROR_CODES = [
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
-export const ApiErrorSchema = z.object({
-  code: z.string().min(1).max(64),
-  message: z.string().max(2000).catch(''),
-  requestId: z.string().max(128).optional(),
-});
-export type ApiError = z.infer<typeof ApiErrorSchema>;
+export type ApiError = { code: string; message: string; requestId?: string };
 
 /** Reads an error body, or null when the value is not one. Unknown codes are kept: newer servers may add some. */
 export function parseApiError(value: unknown): ApiError | null {
-  const r = ApiErrorSchema.safeParse(value);
-  return r.success ? r.data : null;
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.code !== 'string' || v.code.length < 1 || v.code.length > 64) return null;
+  if (v.requestId !== undefined && (typeof v.requestId !== 'string' || v.requestId.length > 128)) return null;
+  const message = typeof v.message === 'string' && v.message.length <= 2000 ? v.message : '';
+  return { code: v.code, message, ...(v.requestId !== undefined ? { requestId: v.requestId } : {}) };
 }
 
 /**
