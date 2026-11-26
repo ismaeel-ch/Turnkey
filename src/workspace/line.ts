@@ -11,7 +11,9 @@ import type {
   SavedBuild,
   StationLine,
   StationRecording,
+  UsageSum,
 } from '@/shared/types/workspace';
+import { addUsage, emptyUsage, promptTokens, type CallUsage } from '@/platform/agui/usage';
 import type { AskRequest, Ports, RunResult, WorkflowRun } from '@/platform/orchestrator';
 import { AGENTS } from './agents';
 import {
@@ -954,7 +956,7 @@ export function serverStep(run: Run, agent: string, app: AppRecord, p: Untrusted
   notify();
 }
 /** Who pays for and may stop a model call: a run of the line, a reviewer, the change planner or an app's own team. */
-type CallRun = { id: string; calls: number; tokIn: number; tokOut: number };
+type CallRun = { id: string; calls: number; tokIn: number; tokOut: number; usage?: UsageSum; agentUsage?: Dict<UsageSum> };
 export async function callModel(
   app: AppRecord,
   run: CallRun,
@@ -973,6 +975,9 @@ export async function callModel(
     mid = uid('m');
   let text = '',
     res: { text?: string; truncated?: boolean } | null = null;
+  // what the server reported for this prompt's model calls: real tokens, cache hits and cost, kept on the run
+  const used = emptyUsage();
+  let model = '';
   r.ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   U.calls++;
   run.calls++;
@@ -993,6 +998,13 @@ export async function callModel(
         notify();
       },
       onStep: (p: Untrusted) => serverStep(run as Run, agent, app, p),
+      onUsage: (call: CallUsage) => {
+        addUsage(used, call);
+        addUsage((run.usage ??= emptyUsage()), call);
+        addUsage(((run.agentUsage ??= {})[agent] ??= emptyUsage()), call);
+        model = call.model;
+        notify();
+      },
       activity: { app: app.id, agent },
     });
     text = (res && res.text) || text;
@@ -1009,8 +1021,9 @@ export async function callModel(
     );
   }
   U.stream[app.id] = 0;
-  const tin = Math.round(prompt.length / 4),
-    tout = Math.round(text.length / 4);
+  const real = used.calls > 0 && !used.estimated,
+    tin = real ? promptTokens(used) : Math.round(prompt.length / 4),
+    tout = real ? used.output : Math.round(text.length / 4);
   run.tokIn += tin;
   run.tokOut += tout;
   emit('TEXT_MESSAGE_CONTENT', {
@@ -1032,10 +1045,11 @@ export async function callModel(
       run: run.id,
       agent,
       mode: 'live',
-      model: 'Claude · ' + tier,
+      model: model || 'Claude · ' + tier,
       tokIn: tin,
       tokOut: tout,
-      est: true,
+      est: !real,
+      ...(used.calls ? { cacheRead: used.cacheRead, costUsd: used.unpriced ? null : used.costUsd } : {}),
       ms: performance.now() - t0,
       attempt,
     },

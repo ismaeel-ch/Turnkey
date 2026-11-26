@@ -188,7 +188,25 @@ export interface Run {
   tokIn: number;
   tokOut: number;
   retries: number;
+  /** Live runs: what the server reported for every model call of the run (tokens, cache hits, cost). */
+  usage?: UsageSum;
+  /** The same, by agent id. */
+  agentUsage?: Dict<UsageSum>;
   [field: string]: Loose;
+}
+
+/** Model calls added up: tokens (fresh prompt, output, cache read and write) and dollars. */
+export interface UsageSum {
+  calls: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  costUsd: number;
+  /** Calls the server could not price (left out of `costUsd`). */
+  unpriced: number;
+  /** Calls whose tokens are estimates. */
+  estimated: number;
 }
 
 /** A card under a chat message: an approval, a list of changes, an error and so on. `type` says which. */
@@ -573,6 +591,9 @@ export interface ModelCallRecord {
   est?: boolean;
   ms: number;
   attempt: number;
+  /** Live calls the server reported: prompt tokens read from the cache, and the cost in dollars (null: not priced). */
+  cacheRead?: number;
+  costUsd?: number | null;
 }
 
 /** One SQL statement in the Debug log. */

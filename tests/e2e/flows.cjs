@@ -72,6 +72,9 @@ async function flowDemo(browser, url) {
   check('acceptance test passed', a.tour.length === 7 && a.tour.every(Boolean), a.tour);
   // the agent activity panel: who worked, the hand-offs, the send-back, and the workflow they ran on
   await page.locator('.act-launch').click(); await page.waitForSelector('.act-panel .act-agent');
+  await page.waitForSelector('.act-panel .act-usage'); await sleep(300);
+  const spend = await st(page, () => { const u = document.querySelector('.act-panel .act-usage'); return { calls: u.dataset.calls, text: u.textContent }; });
+  check('agent panel shows spend: today on the server, and nothing for a saved build', spend.calls === '0' && /Spent today/.test(spend.text) && /No model connected|of \$/.test(spend.text), spend);
   const act = await st(page, (aid) => ({ agents: [...document.querySelectorAll('.act-panel .act-agent')].map((x) => x.dataset.agent + ':' + x.dataset.state), kinds: [...document.querySelectorAll('.act-panel .act-item')].map((x) => x.dataset.kind), model: (({ items, agents }) => ({ handoffs: items.filter((i) => i.kind === 'handoff').map((i) => i.from + '>' + i.agent), back: agents.database.sentBack }))(window.__formwork.activity(aid)) }), a.id);
   check('agent panel lists every builder agent as done', act.agents.join(',') === 'researcher:done,database:done,backend:done,views:done,ui:done,tester:done', act.agents);
   check('agent panel shows the hand-offs in order and the send-back to the Database agent', act.model.handoffs.join(',') === 'researcher>database,database>backend,backend>views,views>ui,ui>tester' && act.model.back === 1 && act.kinds.includes('sent_back') && act.kinds.includes('tool_call') && act.kinds.includes('checks'), act.model);
@@ -86,6 +89,7 @@ async function flowDemo(browser, url) {
   await sleep(300); await shot(page, '07-built-line');
   await page.locator('.station').nth(1).click(); await page.getByRole('tab', { name: /^Attempts/ }).click(); await sleep(150); await shot(page, '08-attempts');
   await page.getByRole('button', { name: 'Timeline' }).click(); await sleep(150); await shot(page, '09-timeline');
+  check('the timeline says a saved build replayed with no model calls and nothing spent', /no model calls, nothing spent/.test(await page.locator('.tl-usage').innerText()));
   await page.getByRole('button', { name: 'Workflow', exact: true }).click();
 
   // the built app
@@ -276,6 +280,7 @@ async function flowLive(browser, url) {
       const fn = async function (input, opts) {
         const tm = /^You are (\\w+), one of/.exec(input); if (tm) { window.__calls.push('team:' + tm[1]); if (opts && opts.onText) opts.onText({ text: '{' }); await new Promise((r) => setTimeout(r, 60)); return { text: JSON.stringify(window.__TEAM[tm[1]] || { say: 'Nothing to add.' }), truncated: false }; }
         const who = /You are the ([\\w ]+?) agent/.exec(input)[1]; window.__calls.push(who); const G = window.__GYM; let out;
+        if (opts && opts.onUsage) opts.onUsage({ model: 'claude-haiku-5-5', tier: 'quick', input: 400, output: 100, cacheRead: 1500, cacheWrite: 0, costUsd: 0.001, ms: 100, estimated: false });
         if (/STANDING INSTRUCTION FROM THE OWNER/.test(input)) (window.__noted = window.__noted || []).push(who + ': ' + input.split('STANDING INSTRUCTION FROM THE OWNER')[1].split('\\n')[1]);
         if (/reviewer$/.test(who)) { await new Promise((r) => setTimeout(r, 60)); return { text: JSON.stringify({ findings: window.__findings || [] }), truncated: false }; }
         if (window.__mode === 'deny') { const e = new Error('not granted'); e.code = 'not_granted'; throw e; }
@@ -311,6 +316,10 @@ async function flowLive(browser, url) {
   check('live: one model call per agent plus one retry', calls.join(',') === 'Researcher,Database,Database,Backend,View advisor,UI,Tester', calls);
   const qaL = await appFull(page); check('live: the Tester\'s cases come from the model, are run with the generated tests, and all pass', qaL.qa && qaL.qa.by === 'model' && qaL.cases === 2 && JSON.stringify(qaL.qa.rounds) === '[[0,0]]' && qaL.tests.failed === 0, [qaL.qa, qaL.cases, qaL.tests]);
   check('live: the View advisor\'s plan was normalised (aliases mapped, broken widget left out, dashboard for every role)', a.views.bookings.includes('board') && a.views.bookings.includes('chart') && a.views.classes.includes('timeline') && a.widgets === 6 && a.dashRoles === 3, [a.views, a.widgets, a.dashRoles, a.attempts]);
+  await page.getByRole('button', { name: 'Timeline' }).click(); await page.waitForSelector('.tl-usage');
+  const tlu = await st(page, () => { const u = document.querySelector('.tl-usage'); return { calls: u.dataset.calls, cost: u.dataset.cost, text: u.textContent, db: [...document.querySelectorAll('.tl-row')].map((r) => r.querySelector('.tl-cost')?.textContent || '').join('|') }; });
+  check('live: the timeline shows the cost, tokens and cache hits the server reported for every model call, and each agent\'s cost', tlu.calls === '7' && tlu.cost === '0.007000' && /7 model calls · 14k tokens · 79% from cache · \$0\.007/.test(tlu.text) && tlu.db.split('|')[2] === '$0.002', tlu);
+  await page.getByRole('button', { name: 'Workflow', exact: true }).click();
   await sleep(200); await shot(page, '50-live-built');
   await view(page, 'App'); await page.locator('.persona-btn').first().click(); await land(page); await page.waitForSelector('.kb-col'); await shot(page, '51-live-app');
   await view(page, 'Build'); await say(page, 'Members need an emergency contact'); await waitIdle(page); const b = await appState(page);
