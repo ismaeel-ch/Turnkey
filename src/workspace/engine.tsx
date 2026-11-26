@@ -1,13 +1,50 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
 import { render } from '@/platform/dom';
-import { APILOG, arr, dayOffset, label, nowStamp, pad2, ring, singular, snake, str, toolCall } from './core';
-import { SYS_SQL, createTableSQL, dbDrop, dbExists, dbRollback, dbSavepoint, lastId, qi, sqlMany, sqlPeek, sqlRun, topoOrder } from './db';
+import type { ColumnType } from '@/shared/sql/types';
+import type {
+  AppDef,
+  AppTable,
+  AppUser,
+  BackedDef,
+  BriefedDef,
+  Brief,
+  Check,
+  ColumnDef,
+  Permission,
+  Process,
+  ProcessState,
+  Row,
+  Scope,
+  SeedUser,
+  TableDef,
+  Tone,
+  TourStep,
+  Transition,
+  Untrusted,
+} from '@/shared/types/app';
+import type { SqlValue } from '@/shared/types/sqljs';
+import type { AppRecord, Dict, ToolContext } from '@/shared/types/workspace';
+import { APILOG, arr, errText, dayOffset, label, nowStamp, pad2, ring, singular, snake, str, toolCall } from './core';
+import {
+  SYS_SQL,
+  createTableSQL,
+  dbDrop,
+  dbExists,
+  dbRollback,
+  dbSavepoint,
+  lastId,
+  qi,
+  sqlMany,
+  sqlPeek,
+  sqlRows,
+  sqlRun,
+  topoOrder,
+} from './db';
 import { canRunTeam, normTeam } from './team';
 import { AppPane } from './runtime';
 
 /* ===== Turnkey prototype · engine: definitions, station checks, the role-guarded API, acceptance runner ===== */
-export const TYPES = ['text', 'longtext', 'number', 'money', 'date', 'datetime', 'bool', 'select', 'ref', 'user'];
-export const TYPE_ALIAS = {
+export const TYPES: readonly string[] = ['text', 'longtext', 'number', 'money', 'date', 'datetime', 'bool', 'select', 'ref', 'user'];
+export const TYPE_ALIAS: Dict<ColumnType> = {
   string: 'text',
   varchar: 'text',
   email: 'text',
@@ -34,7 +71,7 @@ export const TYPE_ALIAS = {
   link: 'ref',
   person: 'user',
 };
-export const TYPE_LABEL = {
+export const TYPE_LABEL: Dict<string> = {
   text: 'Text',
   longtext: 'Long text',
   number: 'Number',
@@ -46,7 +83,7 @@ export const TYPE_LABEL = {
   ref: 'Link',
   user: 'Person',
 };
-export const TONES = ['neutral', 'info', 'success', 'warning', 'danger'];
+export const TONES: readonly Tone[] = ['neutral', 'info', 'success', 'warning', 'danger'];
 export const ACCENTS = [
   'teal',
   'blue',
@@ -64,8 +101,20 @@ export const ACCENTS = [
   'grape',
   'seafoam',
 ];
-export const VIEW_TYPES = ['table', 'board', 'calendar', 'timeline', 'chart', 'pivot', 'tree', 'cards', 'dashboard', 'form', 'agents'];
-export const VIEW_ICON = {
+export const VIEW_TYPES: readonly string[] = [
+  'table',
+  'board',
+  'calendar',
+  'timeline',
+  'chart',
+  'pivot',
+  'tree',
+  'cards',
+  'dashboard',
+  'form',
+  'agents',
+];
+export const VIEW_ICON: Dict<string> = {
   table: 'table',
   board: 'board',
   calendar: 'calendar',
@@ -78,7 +127,7 @@ export const VIEW_ICON = {
   form: 'form',
   agents: 'bot',
 };
-export const VIEW_LABEL = {
+export const VIEW_LABEL: Dict<string> = {
   table: 'Table',
   board: 'Board',
   calendar: 'Calendar',
@@ -97,27 +146,30 @@ export const LIMITS = {
   screens: 12,
   rows: 40,
 };
-export const tableOf = (def, name) => def.tables.find((t) => t.name === name);
-export const colOf = (t, name) => (t ? t.columns.find((c) => c.name === name) : null);
-export const roleName = (def, id) => {
+export const tableOf = (def: Pick<AppDef, 'tables'>, name: string | null | undefined): AppTable | undefined =>
+  def.tables.find((t) => t.name === name);
+export const colOf = (t: TableDef | null | undefined, name: string | null | undefined): ColumnDef | null | undefined =>
+  t ? t.columns.find((c) => c.name === name) : null;
+export const roleName = (def: AppDef, id: string) => {
   const r = def.brief && def.brief.roles.find((x) => x.id === id);
   return r ? r.name : label(id);
 };
-export const accOf = (def, role, table) =>
+export const accOf = (def: Pick<AppDef, 'access'>, role: string, table: string): Permission =>
   (def.access[table] || {})[role] || {
     list: 'none',
     create: false,
     update: 'none',
     delete: false,
   };
-export const chk = (name, ok, detail) => ({
+export const chk = (name: string, ok: unknown, detail?: string): Check => ({
   label: name,
   ok: !!ok,
   detail: detail || '',
 });
-export const issuesOf = (checks) => checks.filter((c) => !c.ok).map((c) => c.label + (c.detail ? ': ' + c.detail : ''));
-export const appUsers = (app) => (dbExists(app.id) ? sqlPeek(app.id, 'SELECT id, name, username, role FROM "users" ORDER BY id') : []);
-export function findTable(def, q) {
+export const issuesOf = (checks: Check[]) => checks.filter((c) => !c.ok).map((c) => c.label + (c.detail ? ': ' + c.detail : ''));
+export const appUsers = (app: Pick<AppRecord, 'id'>): AppUser[] =>
+  dbExists(app.id) ? (sqlPeek(app.id, 'SELECT id, name, username, role FROM "users" ORDER BY id') as unknown as AppUser[]) : [];
+export function findTable(def: AppDef, q: unknown) {
   const k = snake(q);
   if (!k) return null;
   const s = singular(k);
@@ -128,7 +180,7 @@ export function findTable(def, q) {
     null
   );
 }
-export function findCol(t, q) {
+export function findCol(t: AppTable, q: unknown) {
   const k = snake(q);
   if (!k) return null;
   return (
@@ -138,7 +190,7 @@ export function findCol(t, q) {
     null
   );
 }
-export function findRole(def, q) {
+export function findRole(def: BriefedDef, q: unknown) {
   const k = singular(snake(q));
   if (!k) return null;
   return (
@@ -149,20 +201,20 @@ export function findRole(def, q) {
 }
 
 /* ---------- station 1: the brief ---------- */
-export function normBrief(o) {
+export function normBrief(o: Untrusted): Brief {
   o = o || {};
-  const seen = {};
+  const seen: Dict<number> = {};
   const p = o.process || {};
   const q = o.question;
   const roles = arr(o.roles)
-    .map((r) => ({
+    .map((r: Untrusted) => ({
       id: snake(r && (r.id || r.name)),
       name: str(r && r.name) || label(r && r.id),
       can: str(r && (r.can || r.description)),
     }))
     .filter((r) => r.id && !seen[r.id] && (seen[r.id] = 1));
   const entities = arr(o.entities)
-    .map((e) =>
+    .map((e: Untrusted) =>
       typeof e === 'string'
         ? {
             name: snake(e),
@@ -182,7 +234,7 @@ export function normBrief(o) {
   }
   const ids = roles.slice(0, 4).map((r) => r.id),
     all = arr(o.stories)
-      .map((s) => ({
+      .map((s: Untrusted) => ({
         role: snake(s && (s.role || s.as)),
         want: str(s && s.want),
         so: str(s && s.so),
@@ -197,8 +249,8 @@ export function normBrief(o) {
     process: {
       entity: ent,
       states: arr(p.states)
-        .map((s) => snake(typeof s === 'string' ? s : s && (s.id || s.label)))
-        .filter((s, i, a) => s && a.indexOf(s) === i)
+        .map((s: Untrusted) => snake(typeof s === 'string' ? s : s && (s.id || s.label)))
+        .filter((s: string, i: number, a: string[]) => s && a.indexOf(s) === i)
         .slice(0, 7),
       note: str(p.note),
     },
@@ -216,7 +268,7 @@ export function normBrief(o) {
     sources: [],
   };
 }
-export function checkBrief(b) {
+export function checkBrief(b: Brief) {
   const ids = b.roles.map((r) => r.id);
   const bad = b.stories.filter((s) => !ids.includes(s.role));
   return [
@@ -237,23 +289,29 @@ export function checkBrief(b) {
 }
 
 /* ---------- station 2: tables and seed data ---------- */
-export function normSchema(o, brief, repair, maxRows) {
+/** What the Database agent hands over: tables with their seed rows, and the seed users. */
+export interface SchemaDraft {
+  tables: (AppTable & { rows: Row[] })[];
+  users: SeedUser[];
+  repaired: boolean;
+}
+export function normSchema(o: Untrusted, brief: Brief, repair?: boolean, maxRows?: number): SchemaDraft {
   o = o || {};
   const roleIds = brief.roles.map((r) => r.id);
   const tables = arr(o.tables)
-    .map((t) => {
+    .map((t: Untrusted) => {
       t = t || {};
       const name = snake(t.name);
-      const used = {};
+      const used: Dict<number> = {};
       const columns = arr(t.columns)
-        .map((c) => {
+        .map((c: Untrusted) => {
           c = c || {};
           let type = String(c.type || 'text').toLowerCase();
           type = TYPES.includes(type) ? type : TYPE_ALIAS[type] || 'text';
-          const col = {
+          const col: ColumnDef = {
             name: snake(c.name),
             label: str(c.label) || label(c.name),
-            type,
+            type: type as ColumnType,
             required: !!c.required,
           };
           if (type === 'ref') {
@@ -264,11 +322,12 @@ export function normSchema(o, brief, repair, maxRows) {
             }
           }
           if (col.type === 'select') {
-            col.options = arr(c.options).map(snake).filter(Boolean);
+            const options = arr(c.options).map(snake).filter(Boolean);
+            col.options = options;
             if (c.labels && typeof c.labels === 'object') {
-              col.labels = {};
+              const labels: Dict<string> = (col.labels = {});
               Object.keys(c.labels).forEach((k) => {
-                if (col.options.includes(snake(k)) && str(c.labels[k])) col.labels[snake(k)] = str(c.labels[k]);
+                if (options.includes(snake(k)) && str(c.labels[k])) labels[snake(k)] = str(c.labels[k]);
               });
             }
           }
@@ -282,7 +341,7 @@ export function normSchema(o, brief, repair, maxRows) {
         const f = columns.find((c) => c.type === 'text') || columns[0];
         title = f ? f.name : '';
       }
-      let owner = snake(t.owner);
+      let owner: string | null = snake(t.owner);
       if (!columns.some((c) => c.name === owner && c.type === 'user')) owner = null;
       return {
         name,
@@ -295,9 +354,9 @@ export function normSchema(o, brief, repair, maxRows) {
       };
     })
     .filter((t) => t.name && t.name !== 'users' && t.name !== 'activity');
-  const taken = {};
-  const users = arr(o.users)
-    .map((u) => ({
+  const taken: Dict<number> = {};
+  const users: SeedUser[] = arr(o.users)
+    .map((u: Untrusted) => ({
       name: str(u && u.name),
       role: snake(u && u.role),
     }))
@@ -321,14 +380,14 @@ export function normSchema(o, brief, repair, maxRows) {
     const names = tables.map((t) => t.name),
       pt = tables.find((t) => t.name === brief.process.entity);
     tables.forEach((t) => {
-      t.columns = t.columns.filter((c) => !(c.type === 'ref' && !names.includes(c.ref)));
+      t.columns = t.columns.filter((c) => !(c.type === 'ref' && !names.includes(c.ref as string)));
       t.columns.forEach((c) => {
-        if (c.type === 'select' && !c.options.length) c.type = 'text';
+        if (c.type === 'select' && !(c.options || []).length) c.type = 'text';
       });
       if (!t.columns.some((c) => c.name === t.title)) t.title = (t.columns[0] || {}).name || '';
     });
     if (pt) {
-      let c = pt.columns.find((x) => x.name === 'status');
+      let c: ColumnDef | undefined = pt.columns.find((x) => x.name === 'status');
       if (!c) {
         c = {
           name: 'status',
@@ -339,11 +398,12 @@ export function normSchema(o, brief, repair, maxRows) {
         };
         pt.columns.push(c);
       }
+      const options = brief.process.states.slice();
       c.type = 'select';
       c.required = true;
-      c.options = brief.process.states.slice();
+      c.options = options;
       pt.rows.forEach((r) => {
-        if (r && !c.options.includes(snake(r.status))) r.status = c.options[0];
+        if (r && !options.includes(snake(r.status))) r.status = options[0];
       });
     }
     brief.roles.forEach((r) => {
@@ -362,9 +422,9 @@ export function normSchema(o, brief, repair, maxRows) {
     repaired: !!repair,
   };
 }
-export function checkSchemaShape(sc, brief) {
+export function checkSchemaShape(sc: SchemaDraft, brief: Brief) {
   const names = sc.tables.map((t) => t.name);
-  const out = [];
+  const out: Check[] = [];
   const missing = brief.entities.filter((e) => !names.includes(e.name)).map((e) => e.name);
   out.push(
     chk(
@@ -374,12 +434,12 @@ export function checkSchemaShape(sc, brief) {
     ),
   );
   out.push(chk('Within limits: ' + LIMITS.tables + ' tables', sc.tables.length <= LIMITS.tables, sc.tables.length + ' tables'));
-  const bad = [];
+  const bad: string[] = [];
   sc.tables.forEach((t) =>
     t.columns.forEach((c) => {
-      if (c.type === 'ref' && !names.includes(c.ref))
+      if (c.type === 'ref' && !names.includes(c.ref as string))
         bad.push(t.name + '.' + c.name + ' points to ' + (c.ref || 'nothing') + ', which does not exist');
-      if (c.type === 'select' && !c.options.length) bad.push(t.name + '.' + c.name + ' is a choice with no options');
+      if (c.type === 'select' && !(c.options || []).length) bad.push(t.name + '.' + c.name + ' is a choice with no options');
     }),
   );
   out.push(chk('Every link points to a table that exists', !bad.length, bad.join('; ') || 'all links resolve'));
@@ -387,17 +447,18 @@ export function checkSchemaShape(sc, brief) {
   out.push(chk('Every table has columns and a title column', !noTitle.length, noTitle.length ? 'fix: ' + noTitle.join(', ') : ''));
   const pt = sc.tables.find((t) => t.name === brief.process.entity);
   const st = pt && pt.columns.find((c) => c.name === 'status');
+  const stOptions = (st && st.options) || [];
   const same =
     st &&
     st.type === 'select' &&
-    st.options.length === brief.process.states.length &&
-    brief.process.states.every((s) => st.options.includes(s));
+    stOptions.length === brief.process.states.length &&
+    brief.process.states.every((s) => stOptions.includes(s));
   out.push(
     chk(
       'The status column matches the process in the brief',
       !!same,
       same
-        ? brief.process.entity + '.status: ' + st.options.join(', ')
+        ? brief.process.entity + '.status: ' + stOptions.join(', ')
         : brief.process.entity + '.status must be a choice with exactly: ' + brief.process.states.join(', '),
     ),
   );
@@ -411,12 +472,17 @@ export function checkSchemaShape(sc, brief) {
   );
   return out;
 }
-export const DAY_WORD = {
+export const DAY_WORD: Dict<number> = {
   today: 0,
   tomorrow: 1,
   yesterday: -1,
 };
-export function seedValue(c, v, look) {
+/** Finds a row by text: a person by name, or a record by its title. Returns its position (1, 2, 3) or 0. */
+export interface SeedLookup {
+  user(name: string): number;
+  ref(table: string, text: string): number;
+}
+export function seedValue(c: ColumnDef, v: unknown, look?: SeedLookup | null): [SqlValue, string | null] {
   // agent-written seed values use day offsets and row positions; returns [value, problem]
   if (v == null || v === '') return [null, c.required ? 'is required' : null];
   switch (c.type) {
@@ -448,35 +514,44 @@ export function seedValue(c, v, look) {
     }
     case 'select': {
       const s = snake(v);
-      return c.options.includes(s) ? [s, null] : [null, '"' + v + '" is not one of ' + c.options.join(', ')];
+      const options = c.options || [];
+      return options.includes(s) ? [s, null] : [null, '"' + v + '" is not one of ' + options.join(', ')];
     }
     case 'ref':
     case 'user': {
-      let x = parseInt(v, 10);
-      if (!(x > 0) && look && typeof v === 'string') x = c.type === 'user' ? look.user(v) : look.ref(c.ref, v);
+      let x = parseInt(String(v), 10);
+      if (!(x > 0) && look && typeof v === 'string') x = c.type === 'user' ? look.user(v) : look.ref(c.ref as string, v);
       return x > 0 ? [x, null] : [null, 'must be a row position (1, 2, 3)'];
     }
     default:
       return [String(v), null];
   }
 }
-export function insertSeed(appId, tables, rowsOf, problems, by, users, lenient) {
+export function insertSeed(
+  appId: string,
+  tables: TableDef[],
+  rowsOf: Dict<unknown>,
+  problems: string[],
+  by: string,
+  users: unknown,
+  lenient?: boolean,
+) {
   let total = 0;
-  const same = (a, b) =>
+  const same = (a: unknown, b: unknown) =>
     String(a == null ? '' : a)
       .trim()
       .toLowerCase() === String(b).trim().toLowerCase();
-  const look = {
-    user: (name) => arr(users).findIndex((u) => same(u.name, name)) + 1,
+  const look: SeedLookup = {
+    user: (name) => arr<SeedUser>(users).findIndex((u) => same(u.name, name)) + 1,
     ref: (tn, text) => {
       const t = tables.find((x) => x.name === tn);
-      return t ? arr(rowsOf[tn]).findIndex((r) => r && same(r[t.title], text)) + 1 : 0;
+      return t ? arr<Row>(rowsOf[tn]).findIndex((r) => r && same(r[t.title], text)) + 1 : 0;
     },
   };
   for (const t of topoOrder(tables)) {
     const cols = t.columns,
-      rows = arr(rowsOf[t.name]),
-      list = [];
+      rows = arr<Row | null>(rowsOf[t.name]),
+      list: SqlValue[][] = [];
     rows.forEach((row, i) => {
       let bad = false;
       const vals = cols.map((c) => {
@@ -489,8 +564,8 @@ export function insertSeed(appId, tables, rowsOf, problems, by, users, lenient) 
       });
       const own = t.owner
         ? vals[cols.findIndex((c) => c.name === t.owner)]
-        : row && row._by > 0 && row._by <= arr(users).length
-          ? Math.round(row._by)
+        : row && Number(row._by) > 0 && Number(row._by) <= arr(users).length
+          ? Math.round(Number(row._by))
           : null;
       if (!(lenient && bad)) list.push(vals.concat([own, dayOffset(-((rows.length - i) % 9)) + 'T09:00']));
     });
@@ -514,7 +589,7 @@ export function insertSeed(appId, tables, rowsOf, problems, by, users, lenient) 
         try {
           total += sqlMany(appId, text, [p], by);
         } catch (e) {
-          problems.push(t.name + ' ' + e.message);
+          problems.push(t.name + ' ' + (e as Error).message);
         }
       });
       continue;
@@ -539,14 +614,14 @@ export function insertSeed(appId, tables, rowsOf, problems, by, users, lenient) 
         by,
       );
     } catch (e) {
-      problems.push(t.name + ' ' + e.message);
+      problems.push(t.name + ' ' + (e as Error).message);
     }
   }
   return total;
 }
-export function buildDatabase(app, sc, ctx) {
+export function buildDatabase(app: AppRecord, sc: SchemaDraft, ctx: ToolContext) {
   // creates the SQLite file from the table definitions; every result is a check
-  const out = [],
+  const out: Check[] = [],
     id = app.id;
   dbDrop(id);
   const ddl = SYS_SQL.concat(sc.tables.map(createTableSQL));
@@ -567,7 +642,7 @@ export function buildDatabase(app, sc, ctx) {
   out.push(chk('Tables created in SQLite', r1.ok, r1.ok ? ddl.length + ' CREATE TABLE statements ran' : r1.result.error));
   if (!r1.ok) return out;
   let total = 0;
-  const rowsOf = {};
+  const rowsOf: Dict<Row[]> = {};
   sc.tables.forEach((t) => {
     rowsOf[t.name] = t.rows;
   });
@@ -580,7 +655,7 @@ export function buildDatabase(app, sc, ctx) {
       rows: sc.tables.map((t) => t.name + ': ' + t.rows.length),
     },
     () => {
-      const problems = [];
+      const problems: string[] = [];
       sqlMany(
         id,
         'INSERT INTO "users" ("name", "username", "password", "role") VALUES (?, ?, ?, ?)',
@@ -614,7 +689,7 @@ export function buildDatabase(app, sc, ctx) {
   out.push(checkLinks(app, ctx));
   return out;
 }
-export function checkLinks(app, ctx) {
+export function checkLinks(app: AppRecord, ctx: ToolContext) {
   const r = toolCall(
     ctx,
     'check_sql',
@@ -622,8 +697,8 @@ export function checkLinks(app, ctx) {
       pragma: ['foreign_key_check', 'integrity_check'],
     },
     () => {
-      const fk = sqlRun(app.id, 'PRAGMA foreign_key_check', null, 'check');
-      const ic = sqlRun(app.id, 'PRAGMA integrity_check', null, 'check');
+      const fk = sqlRows(app.id, 'PRAGMA foreign_key_check', null, 'check');
+      const ic = sqlRows(app.id, 'PRAGMA integrity_check', null, 'check');
       if (fk.length)
         throw new Error(fk.length + ' rows point to records that do not exist (first: ' + fk[0].table + ' row ' + fk[0].rowid + ')');
       return {
@@ -634,12 +709,12 @@ export function checkLinks(app, ctx) {
   );
   return chk('Links between rows are consistent', r.ok, r.ok ? 'foreign_key_check and integrity_check passed' : r.result.error);
 }
-export function reseed(app) {
+export function reseed(app: AppRecord) {
   // "Reset data": empty every table and put the original seed rows back
   const def = app.def,
     id = app.id;
   const order = topoOrder(def.tables).reverse();
-  const problems = [];
+  const problems: string[] = [];
   sqlRun(id, 'DELETE FROM "activity"', null, 'reset');
   order.forEach((t) => sqlRun(id, 'DELETE FROM ' + qi(t.name), null, 'reset'));
   sqlRun(id, 'DELETE FROM sqlite_sequence WHERE name <> ?', ['users'], 'reset');
@@ -651,7 +726,13 @@ export function reseed(app) {
 }
 
 /* ---------- station 3: workflow, access rules, endpoints ---------- */
-export function normBackend(o, def) {
+/** What the Backend agent hands over, once normalised. */
+export interface BackendDraft {
+  process: Process;
+  access: Dict<Dict<Permission>>;
+  team: ReturnType<typeof normTeam>;
+}
+export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
   o = o || {};
   const b = def.brief,
     roleIds = b.roles.map((r) => r.id),
@@ -659,8 +740,8 @@ export function normBackend(o, def) {
   const table = tableOf(def, snake(st.table)) ? snake(st.table) : b.process.entity;
   const t = tableOf(def, table);
   const column = t && colOf(t, snake(st.column)) ? snake(st.column) : 'status';
-  const states = arr(st.states)
-    .map((s) =>
+  const states: ProcessState[] = arr(st.states)
+    .map((s: Untrusted): { id: string; label?: string; tone?: Tone } =>
       typeof s === 'string'
         ? {
             id: snake(s),
@@ -675,14 +756,14 @@ export function normBackend(o, def) {
     .map((s) => ({
       id: s.id,
       label: s.label || label(s.id),
-      tone: TONES.includes(s.tone) ? s.tone : 'neutral',
+      tone: s.tone && TONES.includes(s.tone) ? s.tone : 'neutral',
     }));
-  const list1 = (v) => (v == null ? [] : Array.isArray(v) ? v : [v]),
-    yes = (v) => v === true || v === 'true' || v === 'yes';
-  const transitions = arr(st.transitions)
-    .map((x) => {
+  const list1 = (v: unknown): unknown[] => (v == null ? [] : Array.isArray(v) ? v : [v]),
+    yes = (v: unknown) => v === true || v === 'true' || v === 'yes';
+  const transitions: Transition[] = arr(st.transitions)
+    .map((x: Untrusted) => {
       x = x || {};
-      const set = {};
+      const set: Dict<unknown> = {};
       if (x.set && typeof x.set === 'object')
         Object.keys(x.set).forEach((k) => {
           if (t && colOf(t, snake(k))) set[snake(k)] = x.set[k];
@@ -699,7 +780,7 @@ export function normBackend(o, def) {
       };
     })
     .filter((x) => x.id);
-  const access = {};
+  const access: Dict<Dict<Permission>> = {};
   def.tables.forEach((tb) => {
     access[tb.name] = {};
     roleIds.forEach((r) => {
@@ -711,10 +792,10 @@ export function normBackend(o, def) {
       };
     });
   });
-  const sc = (v) => (yes(v) || v === 'all' ? 'all' : v === 'own' ? 'own' : 'none');
-  let rules = o.access;
+  const sc = (v: unknown): Scope => (yes(v) || v === 'all' ? 'all' : v === 'own' ? 'own' : 'none');
+  let rules: Untrusted = o.access;
   if (rules && !Array.isArray(rules) && typeof rules === 'object') {
-    const flat = [];
+    const flat: Untrusted[] = [];
     Object.keys(rules).forEach((tn) => {
       const v = rules[tn];
       if (v && typeof v === 'object')
@@ -733,7 +814,7 @@ export function normBackend(o, def) {
     });
     rules = flat;
   }
-  arr(rules).forEach((a) => {
+  arr(rules).forEach((a: Untrusted) => {
     a = a || {};
     const tn = snake(a.table),
       r = snake(a.role);
@@ -745,7 +826,7 @@ export function normBackend(o, def) {
       delete: yes(a.delete),
     };
   });
-  const P = {
+  const P: Process = {
     table,
     column,
     states,
@@ -758,13 +839,14 @@ export function normBackend(o, def) {
     team: normTeam(o.team, def, P),
   };
 }
-export function checkBackendShape(def, be) {
+export function checkBackendShape(def: BriefedDef, be: Pick<BackendDraft, 'process' | 'access'>) {
   const P = be.process,
     t = tableOf(def, P.table),
     col = colOf(t, P.column),
     ids = P.states.map((s) => s.id),
-    out = [];
-  const same = col && col.type === 'select' && ids.length === col.options.length && col.options.every((o) => ids.includes(o));
+    out: Check[] = [];
+  const colOptions = (col && col.options) || [];
+  const same = col && col.type === 'select' && ids.length === colOptions.length && colOptions.every((o) => ids.includes(o));
   out.push(
     chk(
       'The workflow uses the states stored in the table',
@@ -803,13 +885,13 @@ export function checkBackendShape(def, be) {
     .filter(
       (r) =>
         !def.tables.some((tb) => {
-          const a = (be.access[tb.name] || {})[r.id] || {};
+          const a: Partial<Permission> = (be.access[tb.name] || {})[r.id] || {};
           return a.list && a.list !== 'none';
         }),
     )
     .map((r) => r.name);
   const dark = def.tables
-    .filter((tb) => !def.brief.roles.some((r) => ((be.access[tb.name] || {})[r.id] || {}).list !== 'none'))
+    .filter((tb) => !def.brief.roles.some((r) => ((be.access[tb.name] || {})[r.id] || ({} as Partial<Permission>)).list !== 'none'))
     .map((tb) => tb.name);
   out.push(
     chk(
@@ -824,11 +906,24 @@ export function checkBackendShape(def, be) {
   );
   return out;
 }
-export function deriveEndpoints(def) {
+/** One endpoint of a built app's API, and which roles may call it with which scope. */
+export interface Endpoint {
+  id: string;
+  method: string;
+  path: string;
+  table: string | null;
+  sys?: boolean;
+  open?: boolean;
+  action?: string;
+  tr?: string;
+  roles: Dict<string>;
+  sql: string;
+}
+export function deriveEndpoints(def: BriefedDef): Endpoint[] {
   // the endpoint list is derived from tables + access + workflow; the router below enforces it
   const roles = def.brief.roles.map((r) => r.id),
-    eps = [],
-    all = {};
+    eps: Endpoint[] = [],
+    all: Dict<string> = {};
   roles.forEach((r) => {
     all[r] = 'all';
   });
@@ -855,8 +950,8 @@ export function deriveEndpoints(def) {
     const A = def.access[t.name] || {},
       own = t.owner || 'created_by',
       n = t.name;
-    const pick = (f) => {
-      const o = {};
+    const pick = (f: (a: Partial<Permission>) => string | boolean | undefined) => {
+      const o: Dict<string> = {};
       roles.forEach((r) => {
         const v = f(A[r] || {});
         if (v && v !== 'none') o[r] = v === true ? 'all' : v;
@@ -911,7 +1006,7 @@ export function deriveEndpoints(def) {
     });
     if (def.process && def.process.table === n)
       def.process.transitions.forEach((x) => {
-        const o = {};
+        const o: Dict<string> = {};
         x.roles.forEach((r) => {
           o[r] = (A[r] || {}).list === 'own' ? 'own' : 'all';
         });
@@ -927,11 +1022,11 @@ export function deriveEndpoints(def) {
             'UPDATE ' +
             n +
             ' SET ' +
-            def.process.column +
+            (def.process as Process).column +
             " = '" +
             x.to +
             "' WHERE id = :id AND " +
-            def.process.column +
+            (def.process as Process).column +
             ' IN (' +
             x.from.map((f) => "'" + f + "'").join(', ') +
             ')',
@@ -940,19 +1035,38 @@ export function deriveEndpoints(def) {
   });
   return eps;
 }
-export function httpErr(status, message, fields) {
-  const e = new Error(message);
+/** An error the API answers with: an HTTP status, and for 400 the fields that need attention. */
+export type HttpError = Error & { status?: number; fields?: Dict<string> };
+/** What a call to a built app's API returns. */
+export interface ApiResult {
+  status: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the JSON body: a row, a list of rows or { id }, by route; callers know which
+  data?: any;
+  error?: string;
+  fields?: Dict<string>;
+  ms?: number;
+}
+export function httpErr(status: number, message: string, fields?: Dict<string>) {
+  const e: HttpError = new Error(message);
   e.status = status;
   e.fields = fields;
   return e;
 }
-export function apiCall(app, user, method, path, body, src) {
+export function apiCall(
+  app: AppRecord,
+  user: AppUser | null | undefined,
+  method: string,
+  path: string,
+  body?: Dict<unknown> | null,
+  src?: string,
+): ApiResult {
   // the "backend": every screen of a built app goes through here
   const t0 = performance.now();
-  let res;
+  let res: ApiResult;
   try {
     res = apiRoute(app, user, String(method).toUpperCase(), path, body || {});
-  } catch (e) {
+  } catch (err) {
+    const e = err as HttpError | null;
     res =
       e && e.status
         ? {
@@ -963,7 +1077,7 @@ export function apiCall(app, user, method, path, body, src) {
         : /constraint/i.test(String(e && e.message))
           ? {
               status: 400,
-              error: 'The database refused this: ' + e.message,
+              error: 'The database refused this: ' + (e as HttpError).message,
             }
           : {
               status: 500,
@@ -988,7 +1102,7 @@ export function apiCall(app, user, method, path, body, src) {
   );
   return res;
 }
-export function logAct(app, user, table, rowId, action, detail) {
+export function logAct(app: AppRecord, user: AppUser, table: string, rowId: SqlValue, action: string, detail?: string) {
   sqlRun(app.id, 'INSERT INTO "activity" ("at", "user_id", "table_name", "row_id", "action", "detail") VALUES (?, ?, ?, ?, ?, ?)', [
     nowStamp(),
     user.id,
@@ -998,7 +1112,7 @@ export function logAct(app, user, table, rowId, action, detail) {
     detail || '',
   ]);
 }
-export function coerceField(c, v) {
+export function coerceField(c: ColumnDef, v: unknown): [SqlValue | undefined, string | null] {
   if (v === undefined) return [undefined, null];
   if (v === null || v === '') return [null, null];
   switch (c.type) {
@@ -1017,22 +1131,24 @@ export function coerceField(c, v) {
       const x = Number(v);
       return isNaN(x) ? [null, 'Use a number'] : [x, null];
     }
-    case 'select':
-      return c.options.includes(String(v)) ? [String(v), null] : [null, 'Pick one of: ' + c.options.map(label).join(', ')];
+    case 'select': {
+      const options = c.options || [];
+      return options.includes(String(v)) ? [String(v), null] : [null, 'Pick one of: ' + options.map(label).join(', ')];
+    }
     case 'ref':
     case 'user': {
-      const x = parseInt(v, 10);
+      const x = parseInt(String(v), 10);
       return x > 0 ? [x, null] : [null, 'Pick one'];
     }
     default:
       return [String(v), null];
   }
 }
-export function readBody(app, t, user, body, partial) {
+export function readBody(app: AppRecord, t: AppTable, user: AppUser, body: Dict<unknown>, partial: boolean) {
   const def = app.def,
     P = def.process && def.process.table === t.name ? def.process : null,
-    vals = {},
-    fields = {};
+    vals: Dict<SqlValue> = {},
+    fields: Dict<string> = {};
   for (const c of t.columns) {
     if (P && c.name === P.column) {
       if (partial && body[c.name] !== undefined) fields[c.name] = 'Status changes go through the workflow actions';
@@ -1053,12 +1169,12 @@ export function readBody(app, t, user, body, partial) {
       fields[c.name] = 'Required';
       continue;
     }
-    if (v != null && c.type === 'ref' && !sqlRun(app.id, 'SELECT 1 AS ok FROM ' + qi(c.ref) + ' WHERE "id" = ?', [v])[0]) {
+    if (v != null && c.type === 'ref' && !sqlRows(app.id, 'SELECT 1 AS ok FROM ' + qi(c.ref) + ' WHERE "id" = ?', [v])[0]) {
       fields[c.name] = 'That record does not exist';
       continue;
     }
     if (v != null && c.type === 'user') {
-      const u = sqlRun(app.id, 'SELECT role FROM "users" WHERE "id" = ?', [v])[0];
+      const u = sqlRows(app.id, 'SELECT role FROM "users" WHERE "id" = ?', [v])[0];
       if (!u) {
         fields[c.name] = 'That person does not exist';
         continue;
@@ -1075,7 +1191,7 @@ export function readBody(app, t, user, body, partial) {
     fields,
   };
 }
-export function apiRoute(app, user, method, path, body) {
+export function apiRoute(app: AppRecord, user: AppUser | null | undefined, method: string, path: string, body: Dict<unknown>): ApiResult {
   const def = app.def,
     id0 = app.id,
     seg = path
@@ -1084,7 +1200,7 @@ export function apiRoute(app, user, method, path, body) {
       .split('/')
       .filter(Boolean);
   if (seg[0] === 'login' && method === 'POST') {
-    const u = sqlRun(id0, 'SELECT id, name, username, role FROM "users" WHERE username = ? AND password = ?', [
+    const u = sqlRows(id0, 'SELECT id, name, username, role FROM "users" WHERE username = ? AND password = ?', [
       str(body.username).toLowerCase(),
       String(body.password || ''),
     ])[0];
@@ -1098,7 +1214,7 @@ export function apiRoute(app, user, method, path, body) {
   if (seg[0] === 'users' && method === 'GET')
     return {
       status: 200,
-      data: sqlRun(id0, 'SELECT id, name, username, role FROM "users" ORDER BY id'),
+      data: sqlRows(id0, 'SELECT id, name, username, role FROM "users" ORDER BY id'),
     };
   const t = tableOf(def, seg[0]);
   if (!t) throw httpErr(404, 'No such resource: /' + (seg[0] || ''));
@@ -1106,26 +1222,26 @@ export function apiRoute(app, user, method, path, body) {
     own = t.owner || 'created_by',
     T = qi(t.name),
     P = def.process && def.process.table === t.name ? def.process : null;
-  const deny = (verb) => httpErr(403, roleName(def, user.role) + ' cannot ' + verb + ' ' + t.label.toLowerCase());
+  const deny = (verb: string) => httpErr(403, roleName(def, user.role) + ' cannot ' + verb + ' ' + t.label.toLowerCase());
   const id = seg[1] && /^\d+$/.test(seg[1]) ? +seg[1] : null;
-  const getRow = (scope) =>
-    sqlRun(
+  const getRow = (scope?: string) =>
+    sqlRows(
       id0,
       'SELECT * FROM ' + T + ' WHERE "id" = ?' + (scope === 'own' ? ' AND ' + qi(own) + ' = ?' : ''),
       scope === 'own' ? [id, user.id] : [id],
     )[0];
-  const filt = (src) => {
+  const filt = (src: unknown) => {
     const w = ['1 = 1'],
-      p = [];
+      p: SqlValue[] = [];
     if (acc.list === 'own') {
       w.push(qi(own) + ' = ?');
       p.push(user.id);
     }
     if (src && typeof src === 'object')
-      Object.keys(src).forEach((k) => {
-        if ((colOf(t, k) || k === 'created_by') && src[k] != null && src[k] !== '') {
+      Object.entries(src as Dict<SqlValue>).forEach(([k, v]) => {
+        if ((colOf(t, k) || k === 'created_by') && v != null && v !== '') {
           w.push(qi(k) + ' = ?');
-          p.push(src[k]);
+          p.push(v);
         }
       });
     return {
@@ -1136,12 +1252,12 @@ export function apiRoute(app, user, method, path, body) {
   if (seg[1] === 'stats') {
     if (method !== 'GET') throw httpErr(405, 'Use GET');
     if (acc.list === 'none') throw deny('see');
-    const g = body.group && colOf(t, body.group) ? body.group : null,
-      sm = body.sum && colOf(t, body.sum) ? body.sum : null,
+    const g = typeof body.group === 'string' && colOf(t, body.group) ? body.group : null,
+      sm = typeof body.sum === 'string' && colOf(t, body.sum) ? body.sum : null,
       f = filt(body.where);
     return {
       status: 200,
-      data: sqlRun(
+      data: sqlRows(
         id0,
         'SELECT ' +
           (g ? qi(g) + ' AS k, ' : '') +
@@ -1161,7 +1277,7 @@ export function apiRoute(app, user, method, path, body) {
     const f = filt(body.filter);
     return {
       status: 200,
-      data: sqlRun(id0, 'SELECT * FROM ' + T + ' WHERE ' + f.w + ' ORDER BY "id" DESC LIMIT 500', f.p),
+      data: sqlRows(id0, 'SELECT * FROM ' + T + ' WHERE ' + f.w + ' ORDER BY "id" DESC LIMIT 500', f.p),
     };
   }
   if (method === 'GET' && id != null) {
@@ -1171,7 +1287,7 @@ export function apiRoute(app, user, method, path, body) {
     if (seg[2] === 'activity')
       return {
         status: 200,
-        data: sqlRun(
+        data: sqlRows(
           id0,
           'SELECT a.id, a.at, a.action, a.detail, u.name AS who FROM "activity" a LEFT JOIN "users" u ON u.id = a.user_id WHERE a.table_name = ? AND a.row_id = ? ORDER BY a.id DESC LIMIT 20',
           [t.name, id],
@@ -1203,7 +1319,7 @@ export function apiRoute(app, user, method, path, body) {
     logAct(app, user, t.name, nid, 'created', '');
     return {
       status: 201,
-      data: sqlRun(id0, 'SELECT * FROM ' + T + ' WHERE "id" = ?', [nid])[0],
+      data: sqlRows(id0, 'SELECT * FROM ' + T + ' WHERE "id" = ?', [nid])[0],
     };
   }
   if (method === 'POST' && id != null && seg[2]) {
@@ -1212,12 +1328,12 @@ export function apiRoute(app, user, method, path, body) {
     if (!tr.roles.includes(user.role)) throw httpErr(403, roleName(def, user.role) + ' cannot ' + tr.label.toLowerCase());
     const row = getRow(acc.list === 'own' ? 'own' : 'all');
     if (!row) throw httpErr(404, t.one + ' not found');
-    if (!tr.from.includes(row[P.column]))
-      throw httpErr(409, 'Cannot ' + tr.label.toLowerCase() + ' while it is ' + label(row[P.column]).toLowerCase());
+    const state = row[P.column] as string;
+    if (!tr.from.includes(state)) throw httpErr(409, 'Cannot ' + tr.label.toLowerCase() + ' while it is ' + label(state).toLowerCase());
     const sets = [qi(P.column) + ' = ?'],
-      ps = [tr.to];
+      ps: SqlValue[] = [tr.to];
     Object.keys(tr.set || {}).forEach((k) => {
-      const v = tr.set[k];
+      const v = tr.set[k] as SqlValue;
       sets.push(qi(k) + ' = ?');
       ps.push(v === ':me' ? user.id : v === ':today' ? dayOffset(0) : v === ':now' ? nowStamp() : v);
     });
@@ -1226,7 +1342,7 @@ export function apiRoute(app, user, method, path, body) {
       'UPDATE ' + T + ' SET ' + sets.join(', ') + ' WHERE "id" = ? AND ' + qi(P.column) + ' IN (' + tr.from.map(() => '?').join(', ') + ')',
       ps.concat([id], tr.from),
     );
-    logAct(app, user, t.name, id, tr.label.toLowerCase(), label(row[P.column]) + ' → ' + label(tr.to));
+    logAct(app, user, t.name, id, tr.label.toLowerCase(), label(state) + ' → ' + label(tr.to));
     return {
       status: 200,
       data: getRow('all'),
@@ -1255,7 +1371,7 @@ export function apiRoute(app, user, method, path, body) {
     if (!getRow(acc.list === 'own' ? 'own' : 'all')) throw httpErr(404, t.one + ' not found');
     try {
       sqlRun(id0, 'DELETE FROM ' + T + ' WHERE "id" = ?', [id]);
-    } catch (e) {
+    } catch {
       throw httpErr(409, 'Other records still point to this ' + t.one.toLowerCase() + '. Remove those first.');
     }
     logAct(app, user, t.name, id, 'deleted', '');
@@ -1268,12 +1384,20 @@ export function apiRoute(app, user, method, path, body) {
   }
   throw httpErr(405, 'Method not allowed');
 }
-export function testMatrix(app) {
+/** One call of the permission matrix: an endpoint called as a role, and whether it behaved as declared. */
+export interface MatrixCall {
+  ep: string;
+  role: string;
+  allowed: boolean;
+  status: number;
+  ok: boolean;
+}
+export function testMatrix(app: AppRecord & { def: BriefedDef }) {
   // call every endpoint as every role inside a savepoint, then roll back
   const def = app.def,
     eps = deriveEndpoints(def).filter((e) => !e.sys),
     users = appUsers(app),
-    out = [];
+    out: MatrixCall[] = [];
   dbSavepoint(app.id, 'mx');
   try {
     eps.forEach((ep) =>
@@ -1297,9 +1421,9 @@ export function testMatrix(app) {
   }
   return out;
 }
-export function checkBackendLive(app, ctx) {
+export function checkBackendLive(app: AppRecord & { def: BriefedDef }, ctx: ToolContext) {
   const def = app.def;
-  let mx = [];
+  let mx: MatrixCall[] = [];
   const r = toolCall(
     ctx,
     'call_as',
@@ -1325,21 +1449,21 @@ export function checkBackendLive(app, ctx) {
       };
     },
   );
-  app.matrix = {
+  const matrix = (app.matrix = {
     at: Date.now(),
     calls: mx.length,
     refused: mx.filter((m) => !m.allowed).length,
     failed: mx.filter((m) => !m.ok).map((m) => m.ep + '|' + m.role),
-  };
+  });
   const out = [
     chk(
       'Permission matrix: every call behaved as declared',
       r.ok,
-      r.ok ? mx.length + ' calls as ' + def.brief.roles.length + ' roles, ' + app.matrix.refused + ' refused with 403' : r.result.error,
+      r.ok ? mx.length + ' calls as ' + def.brief.roles.length + ' roles, ' + matrix.refused + ' refused with 403' : r.result.error,
     ),
   ];
   const users = appUsers(app),
-    leaks = [];
+    leaks: string[] = [];
   let n = 0;
   def.tables.forEach((t) =>
     def.brief.roles.forEach((role) => {
@@ -1348,7 +1472,7 @@ export function checkBackendLive(app, ctx) {
       if (!u) return;
       n++;
       const res = apiCall(app, u, 'GET', '/api/' + t.name, {}, 'check');
-      if (res.status !== 200 || res.data.some((row) => row[t.owner || 'created_by'] !== u.id)) leaks.push(t.name + ' as ' + role.id);
+      if (res.status !== 200 || res.data.some((row: Row) => row[t.owner || 'created_by'] !== u.id)) leaks.push(t.name + ' as ' + role.id);
     }),
   );
   out.push(
@@ -1362,10 +1486,10 @@ export function checkBackendLive(app, ctx) {
 }
 
 /* ---------- station 4: screens, layout, tour ---------- */
-export function renderTest(app) {
+export function renderTest(app: AppRecord) {
   // mount every screen for every role it is meant for, off-screen
   const users = appUsers(app),
-    fails = [],
+    fails: string[] = [],
     host = document.createElement('div');
   let n = 0;
   app.def.screens.forEach((scr) =>
@@ -1385,18 +1509,19 @@ export function renderTest(app) {
               month: 0,
               test: true,
             }}
+            solo={false}
           />,
           host,
         );
         if (!host.querySelector('.app-main')) throw new Error('nothing rendered');
       } catch (e) {
-        fails.push(scr.name + ' as ' + roleName(app.def, rid) + ': ' + ((e && e.message) || e));
+        fails.push(scr.name + ' as ' + roleName(app.def, rid) + ': ' + errText(e));
       }
     }),
   );
   try {
     render(null, host);
-  } catch (e) {}
+  } catch {}
   return chk(
     'Every screen mounts for every role that may open it',
     !fails.length,
@@ -1405,10 +1530,10 @@ export function renderTest(app) {
 }
 
 /* ---------- station 5: the tour, played as an acceptance test ---------- */
-export function tourValues(app, t, values) {
-  const same = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase(),
-    out = {};
-  const look = {
+export function tourValues(app: AppRecord, t: AppTable, values: Dict<unknown> | null | undefined) {
+  const same = (a: unknown, b: unknown) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase(),
+    out: Dict<SqlValue> = {};
+  const look: SeedLookup = {
     user: (name) =>
       (
         appUsers(app).find((u) => same(u.name, name)) || {
@@ -1418,11 +1543,11 @@ export function tourValues(app, t, values) {
     ref: (tn, text) => {
       const rt = tableOf(app.def, tn);
       return rt
-        ? (
+        ? ((
             sqlPeek(app.id, 'SELECT id FROM ' + qi(tn) + ' WHERE ' + qi(rt.title) + ' = ? LIMIT 1', [String(text)])[0] || {
               id: 0,
             }
-          ).id
+          ).id as number)
         : 0;
     },
   };
@@ -1434,7 +1559,20 @@ export function tourValues(app, t, values) {
   });
   return out;
 }
-export function tourExec(app, st, step) {
+/** What the tour remembers between steps: the last record each table got, and the last record overall. */
+export interface TourState {
+  rows: Dict<number>;
+  last: { table: string; id: number } | null;
+}
+/** The outcome of one tour step. */
+export interface TourResult {
+  ok?: boolean;
+  detail?: string;
+  user?: AppUser;
+  screen?: string | null;
+  rec?: { table: string; id: number } | null;
+}
+export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourResult {
   // one step against the real endpoints; the player and the headless test share this
   const def = app.def,
     users = appUsers(app);
@@ -1447,20 +1585,20 @@ export function tourExec(app, st, step) {
   const tn = step.table || (st.last && st.last.table) || (def.process && def.process.table),
     t = tableOf(def, tn);
   const scr = step.screen
-    ? def.screens.find((s) => s.name.toLowerCase() === step.screen.toLowerCase() && s.roles.includes(u.role))
+    ? def.screens.find((s) => s.name.toLowerCase() === String(step.screen).toLowerCase() && s.roles.includes(u.role))
     : def.screens.find((s) => s.table === tn && (s.type === 'table' || s.type === 'board') && s.roles.includes(u.role)) ||
       def.screens.find((s) => s.table === tn && s.type !== 'form' && s.roles.includes(u.role));
-  const out = {
+  const out: TourResult = {
       user: u,
       screen: scr ? scr.id : null,
       rec: null,
     },
-    fail = (d) =>
+    fail = (d: string) =>
       Object.assign(out, {
         ok: false,
         detail: d,
       }),
-    pass = (d) =>
+    pass = (d: string) =>
       Object.assign(out, {
         ok: true,
         detail: d,
@@ -1472,7 +1610,7 @@ export function tourExec(app, st, step) {
     return r.status === 200 ? pass(u.name + ' opened ' + scr.name + ' (' + r.data.length + ' rows)') : fail(r.status + ' ' + r.error);
   }
   if (!t) return fail('No table called ' + tn);
-  const id = st.rows[tn];
+  const id = st.rows[t.name];
   if (step.do === 'create') {
     const r = apiCall(app, u, 'POST', '/api/' + tn, tourValues(app, t, step.values), 'tour');
     if (r.status !== 201)
@@ -1482,15 +1620,15 @@ export function tourExec(app, st, step) {
           r.error +
           (r.fields
             ? ' (' +
-              Object.keys(r.fields)
-                .map((k) => k + ': ' + r.fields[k])
+              Object.entries(r.fields)
+                .map(([k, v]) => k + ': ' + v)
                 .join(', ') +
               ')'
             : ''),
       );
-    st.rows[tn] = r.data.id;
+    st.rows[t.name] = r.data.id;
     st.last = {
-      table: tn,
+      table: t.name,
       id: r.data.id,
     };
     out.rec = st.last;
@@ -1520,12 +1658,12 @@ export function tourExec(app, st, step) {
   }
   if (!id) return fail('Nothing was created earlier in the tour for ' + tn);
   out.rec = {
-    table: tn,
+    table: t.name,
     id,
   };
   if (step.do === 'hidden') {
     const r = apiCall(app, u, 'GET', '/api/' + tn, {}, 'tour'),
-      found = r.status === 200 && r.data.some((x) => x.id === id);
+      found = r.status === 200 && r.data.some((x: Row) => x.id === id);
     out.rec = null;
     return !found
       ? pass((r.status === 200 ? '200 OK' : r.status) + ' · ' + u.name + ' does not see ' + t.one.toLowerCase() + ' #' + id)
@@ -1533,7 +1671,7 @@ export function tourExec(app, st, step) {
   }
   if (step.do === 'see') {
     const r = apiCall(app, u, 'GET', '/api/' + tn, {}, 'tour');
-    const found = r.status === 200 && r.data.some((x) => x.id === id);
+    const found = r.status === 200 && r.data.some((x: Row) => x.id === id);
     if (!found) out.rec = null;
     return found
       ? pass('200 OK · ' + u.name + ' sees ' + t.one.toLowerCase() + ' #' + id)
@@ -1541,16 +1679,18 @@ export function tourExec(app, st, step) {
   }
   if (step.do === 'transition') {
     const r = apiCall(app, u, 'POST', '/api/' + tn + '/' + id + '/' + step.transition, {}, 'tour');
-    return r.status === 200 ? pass('200 OK · now ' + label(r.data[def.process.column]).toLowerCase()) : fail(r.status + ' ' + r.error);
+    return r.status === 200
+      ? pass('200 OK · now ' + label(r.data[(def.process as Process).column]).toLowerCase())
+      : fail(r.status + ' ' + r.error);
   }
   return fail('Unknown step');
 }
-export function runAcceptance(app, ctx) {
-  const st = {
+export function runAcceptance(app: AppRecord, ctx: ToolContext) {
+  const st: TourState = {
     rows: {},
     last: null,
   };
-  let results = [];
+  let results: { ok?: boolean; detail?: string; who: string }[] = [];
   const r = toolCall(
     ctx,
     'play_tour',
@@ -1605,7 +1745,7 @@ export function runAcceptance(app, ctx) {
 }
 
 /* ---------- safe defaults when an agent cannot pass after its retries ---------- */
-export function fallbackBackend(def) {
+export function fallbackBackend(def: BriefedDef) {
   const b = def.brief,
     roles = b.roles.map((r) => r.id),
     states = b.process.states;
@@ -1626,7 +1766,7 @@ export function fallbackBackend(def) {
         roles: roles.slice(0, 2),
       })),
     },
-    access: [].concat.apply(
+    access: ([] as Dict<unknown>[]).concat.apply(
       [],
       def.tables.map((t) =>
         roles.map((r, i) => ({
@@ -1641,9 +1781,9 @@ export function fallbackBackend(def) {
     ),
   };
 }
-export function fallbackUI(def) {
+export function fallbackUI(def: BackedDef) {
   const roles = def.brief.roles.map((r) => r.id),
-    screens = [];
+    screens: { name: string; type: string; table: string; roles: string[]; group?: string; icon?: string }[] = [];
   def.tables.forEach((t) => {
     const rs = roles.filter((r) => accOf(def, r, t.name).list !== 'none');
     if (!rs.length) return;
@@ -1684,7 +1824,7 @@ export function fallbackUI(def) {
     tour: roles.map((r) => ({
       role: r,
       do: 'open',
-      screen: (screens.find((s) => s.roles.includes(r)) || {}).name,
+      screen: (screens.find((s) => s.roles.includes(r)) || { name: undefined }).name,
       say: roleName(def, r) + ' signs in and opens their first screen.',
     })),
   };

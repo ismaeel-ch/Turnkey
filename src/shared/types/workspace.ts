@@ -7,6 +7,7 @@
  * The workspace modules are typed one at a time. Fields that only untyped modules read stay loose (`Loose`) until the
  * module that owns them is typed and can say what they hold.
  */
+import type { AppDef } from './app';
 
 /** A value whose shape is not described yet. Narrow it where you read it. */
 export type Loose = unknown;
@@ -63,6 +64,11 @@ export interface AppRecord {
   created: number;
   updated: number;
   shared?: { key: string } | null;
+  def: AppDef;
+  /** the seed rows by table, kept so "Reset data" can put them back */
+  seed?: { rows: Dict<Loose[]> } | null;
+  /** the last permission matrix the Backend check ran */
+  matrix?: { at: number; calls: number; refused: number; failed: string[] };
   [field: string]: Loose;
 }
 
