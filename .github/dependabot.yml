@@ -1,0 +1,24 @@
+# Dependency updates, weekly, grouped. The two ecosystems share a budget of five open pull requests:
+# npm opens at most 4 and GitHub Actions at most 1.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 4
+    groups:
+      production-dependencies:
+        dependency-type: production
+      development-dependencies:
+        dependency-type: development
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    groups:
+      actions:
+        patterns:
+          - "*"
