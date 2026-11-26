@@ -12,9 +12,11 @@
 //   2. The page loads in a real browser and the workspace opens, with no uncaught error on the page.
 //   3. A sample app builds from its saved build with every generated test passing, Share makes a short link, and that
 //      link opens the app on its own in a fresh browser. Demo mode is on, so none of this calls the model.
-//   4. When a model is configured, one tool call through /api/health?probe=1. That is the only model call, on the
-//      quick tier, and it goes through the site's own rate limits and spend cap. With no model configured the app
-//      still works (that is a project rule), so this is reported as a warning, not a failure.
+//   The first-run screen must say "Model connected" when the server has a model, and "No model connected" when not.
+//   4. When a model is configured: one Live build of the clinic sample from its sentence (about ten model calls; the
+//      workspace caps a session at 40), and one tool call through /api/health?probe=1. Both go through the site's own
+//      rate limits and spend cap. SMOKE_LIVE_BUILD=0 skips the build. With no model configured the app still works
+//      (a project rule), so the model checks are a warning, not a failure.
 //
 // Every share leaves one small record in the short-link store, named "release-check" (then -2 … -5, then random).
 // Exits 1 if any check fails. Writes a table to $GITHUB_STEP_SUMMARY when that is set. Prints no secrets: it reads
@@ -25,6 +27,10 @@ const { chromium } = require('playwright');
 const base = String(process.env.TK_URL || process.env.SMOKE_URL || process.argv[2] || '').replace(/\/+$/, '');
 const expectVersion = String(process.env.EXPECT_VERSION || '').replace(/^v/, '');
 const SHARE_NAME = 'Release check';
+// The clinic sample's sentence (src/workspace/builds.ts), built live by the model. SMOKE_LIVE_BUILD=0 skips that build.
+const CLINIC =
+  'A clinic front desk books patient appointments, doctors work from their own schedule and write visit notes, and the manager tracks no-shows.';
+const LIVE_BUILD = process.env.SMOKE_LIVE_BUILD !== '0';
 
 if (!/^https?:\/\/[^/\s]+$/.test(base)) {
   console.error('Give the site address, for example: node tests/e2e/smoke.cjs https://turnkey-bay.vercel.app');
@@ -101,7 +107,59 @@ async function checkHttp() {
   }
 }
 
-async function checkBrowser() {
+/** The first-run steps, as in the browser flows. With `badge`, checks the Live choice says that about the model. With
+ *  `live`, picks Live instead of Demo. */
+async function enter(page, opts = {}) {
+  await page.waitForSelector('.ob-card', { timeout: 30000 });
+  await page.getByRole('button', { name: 'Get started' }).click();
+  await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
+  const liveChoice = page.locator('.choice').nth(1);
+  if (opts.badge) {
+    // the page asks the server whether a model is connected; wait until it has an answer
+    let text = '';
+    for (let i = 0; i < 80; i++) {
+      text = (await liveChoice.locator('.badge').innerText().catch(() => '')).trim();
+      if (text && text !== 'Checking the model') break;
+      await sleep(250);
+    }
+    if (text === opts.badge) record('first run says whether a model is connected', 'pass', text);
+    else record('first run says whether a model is connected', 'fail', `expected "${opts.badge}", got "${text}"`);
+  }
+  if (opts.live) await liveChoice.click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: /empty workspace/ }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('.ob-body .switch').click();
+  await page.getByRole('button', { name: 'Open my workspace' }).click();
+  await page.waitForSelector('.home', { timeout: 20000 });
+}
+
+/** Status of the app in the open tab, or null. */
+const appNow = (page) =>
+  page.evaluate(() => {
+    const s = window.__formwork.state();
+    const t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]);
+    const a = t && t.app ? s.apps[t.app] : null;
+    return a ? { status: a.status, name: a.name, mode: a.mode, tests: a.tests || null } : null;
+  });
+
+/** Waits for the open app to finish building, answering any question the agents ask with its first option. */
+async function waitBuilt(page, ms) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const a = await appNow(page);
+    if (a && (a.status === 'ready' || a.status === 'failed')) {
+      await page.waitForFunction(() => !document.querySelector('.work-head .spin'), null, { timeout: 30000 });
+      return appNow(page);
+    }
+    const ask = page.locator('.gcard.ask .opt:not([disabled])');
+    if (await ask.count()) await ask.first().click().catch(() => {});
+    await sleep(250);
+  }
+  throw new Error(`the build did not finish within ${Math.round(ms / 1000)} s`);
+}
+
+async function checkBrowser(health) {
   const browser = await chromium.launch();
   const errors = [];
   try {
@@ -112,15 +170,7 @@ async function checkBrowser() {
     // the page loads and the workspace opens (the same first-run steps as the browser flows in tests/e2e)
     try {
       await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      await page.waitForSelector('.ob-card', { timeout: 30000 });
-      await page.getByRole('button', { name: 'Get started' }).click();
-      await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
-      await page.getByRole('button', { name: 'Continue' }).click();
-      await page.getByRole('button', { name: /empty workspace/ }).click();
-      await page.getByRole('button', { name: 'Continue' }).click();
-      await page.locator('.ob-body .switch').click();
-      await page.getByRole('button', { name: 'Open my workspace' }).click();
-      await page.waitForSelector('.home', { timeout: 20000 });
+      await enter(page, { badge: health.live ? 'Model connected' : 'No model connected' });
       record('page loads and the workspace opens', 'pass');
     } catch (e) {
       record('page loads and the workspace opens', 'fail', firstLine(e));
@@ -145,24 +195,8 @@ async function checkBrowser() {
     let short = '';
     try {
       await page.locator('[data-tpl="clinic"] .tpl-build').click();
-      for (let i = 0; i < 400; i++) {
-        const status = await page.evaluate(() => {
-          const s = window.__formwork.state();
-          const t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]);
-          const a = t && t.app ? s.apps[t.app] : null;
-          return a ? a.status : null;
-        });
-        if (status === 'ready') break;
-        if (status === 'failed') throw new Error('the template build failed');
-        const ask = page.locator('.gcard.ask .opt:not([disabled])');
-        if (await ask.count())
-          await ask
-            .first()
-            .click()
-            .catch(() => {});
-        await sleep(150);
-      }
-      await page.waitForFunction(() => !document.querySelector('.work-head .spin'), null, { timeout: 30000 });
+      const built = await waitBuilt(page, 120000);
+      if (built.status !== 'ready') throw new Error('the template build failed');
       const tests = await page.evaluate(() => {
         const s = window.__formwork.state();
         const t = s.tabs[s.session].find((x) => x.id === s.active[s.session]);
@@ -212,9 +246,42 @@ async function checkBrowser() {
       await other.close();
     }
   } finally {
+    if (health.live && LIVE_BUILD) await liveBuild(browser, errors);
     if (errors.length) record('no uncaught errors on the page', 'fail', errors.slice(0, 3).join(' | '));
     else record('no uncaught errors on the page', 'pass');
     await browser.close();
+  }
+}
+
+/** One real Live build of the clinic sample, from its sentence: one model call per agent plus any send-back, about ten
+ *  in all, capped by the workspace at CAP calls a session. Only runs when a model is configured. */
+async function liveBuild(browser, errors) {
+  const name = 'Live build of the clinic sample';
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => errors.push(String(e && e.message ? e.message : e).slice(0, 300)));
+    await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await enter(page, { live: true });
+    await page.waitForFunction(() => window.__formwork.wf.mode().id === 'live', null, { timeout: 20000 });
+    await page.evaluate(() => {
+      window.__formwork.state().settings.speed = 'instant';
+    });
+    const started = Date.now();
+    await page.fill('#home-prompt', CLINIC);
+    await page.locator('.prompt .btn.primary').click();
+    const a = await waitBuilt(page, 8 * 60 * 1000);
+    const calls = await page.evaluate(() => window.__formwork.view().calls);
+    const took = Math.round((Date.now() - started) / 1000);
+    const t = a.tests;
+    if (a.status === 'ready' && a.mode === 'live' && t && t.total > 0 && t.failed === 0)
+      record(name, 'pass', `${a.name}: ${calls} model calls, ${took} s, ${t.total} tests pass`);
+    else
+      record(name, 'fail', `status ${a.status}, mode ${a.mode}, ${calls} model calls, ${took} s, tests ${JSON.stringify(t)}`);
+  } catch (e) {
+    record(name, 'fail', firstLine(e));
+  } finally {
+    await ctx.close();
   }
 }
 
@@ -250,7 +317,7 @@ async function main() {
   const health = await checkHealth();
   if (health) {
     await checkHttp();
-    await checkBrowser();
+    await checkBrowser(health);
     await checkLive(health);
   }
   const failed = results.filter((r) => r.status === 'fail').length;
