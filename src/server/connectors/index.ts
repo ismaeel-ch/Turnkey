@@ -15,4 +15,4 @@ export function listConnectorTools(): ConnectorDescription[] {
   return connectors.map((c) => c.describe);
 }
 
-export type { Connector, ConnectorDescription, ConnectorItem, ConnectorLookup, ConnectorResult } from './types';
+export type { Connector, ConnectorDescription, ConnectorLookup } from './types';

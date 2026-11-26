@@ -25,18 +25,13 @@ import {
 } from '@fluentui/react-components';
 import { deriveActivity, subscribeAgentEvents } from '@/platform/agui/activity';
 import type { ActivityItem, ActivityKind, ActivityModel, AgentState, AgentStatus, RawAgentEvent } from '@/platform/agui/activity';
-import type { AppRecord, AppFlow, Dict, ReviewerInfo } from '@/shared/types/workspace';
+import type { AppRecord, Dict } from '@/shared/types/workspace';
 import { EV, PHONE, S, cap, cx, emit, fmtClock } from './core';
 import { AGENTS } from './agents';
 import { STATIONS } from './line';
 import { REVIEWERS, flowOf } from './custom';
 import { isDark } from './flow';
 import { Icon } from './ui';
-
-// custom.tsx is not typed yet; these say what its exports hold. Read REVIEWERS when called, not at module load:
-// custom.tsx imports this module through shell-c.tsx, so at load time REVIEWERS may not be initialised yet.
-const revs = (): Dict<ReviewerInfo> => REVIEWERS as Dict<ReviewerInfo>;
-const flowOfApp = (app: AppRecord): AppFlow => flowOf(app);
 
 /** What the panel shows for one agent. */
 export interface AgentCard {
@@ -138,7 +133,7 @@ const stepName = (it: StepRef): string => {
   const st = STATIONS.find((x) => x.id === it.step);
   if (st) return st.name;
   if (it.step === 'tests') return 'Tests';
-  if (it.step.startsWith('review_')) return revs()[it.step.slice(7)]?.short || 'a review';
+  if (it.step.startsWith('review_')) return REVIEWERS[it.step.slice(7)]?.short || 'a review';
   return cap(it.step.replace(/_/g, ' '));
 };
 // "the Research station", "the security review", "Tests": how a step reads in a sentence
@@ -242,7 +237,26 @@ const useStyles = makeStyles({
     zIndex: 40,
     boxShadow: tokens.shadow8,
   },
-  launchPhone: { top: 'auto', bottom: '96px', transform: 'rotate(180deg)' },
+  // On a phone the edge tab would cover the page, so the launcher becomes an icon button in the title bar, in the
+  // space PhoneBar keeps free for it (.act-slot) just left of the account button.
+  launchPhone: {
+    top: 'calc(env(safe-area-inset-top) + 4px)',
+    right: '40px',
+    left: 'auto',
+    transform: 'none',
+    writingMode: 'horizontal-tb',
+    width: '44px',
+    minWidth: '44px',
+    maxWidth: '44px',
+    height: '44px',
+    padding: 0,
+    borderTopLeftRadius: tokens.borderRadiusCircular,
+    borderBottomLeftRadius: tokens.borderRadiusCircular,
+    borderTopRightRadius: tokens.borderRadiusCircular,
+    borderBottomRightRadius: tokens.borderRadiusCircular,
+    boxShadow: 'none',
+    zIndex: 50,
+  },
   drawer: { width: '440px', maxWidth: '100vw' },
   head: { paddingBottom: tokens.spacingVerticalS },
   bar: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS, flexWrap: 'wrap' },
@@ -335,11 +349,13 @@ export function AgentActivity({ app }: { app: AppRecord | null }) {
       <Button
         className={mergeClasses('act-launch', c.launch, PHONE() && c.launchPhone)}
         appearance={working ? 'primary' : 'secondary'}
-        icon={<Icon n="team" s="16" />}
+        icon={<Icon n="team" s={PHONE() ? '20' : '16'} />}
         aria-expanded={open}
+        aria-label={PHONE() ? (working ? 'Agents, ' + working + ' working' : 'Agents') : undefined}
+        title={PHONE() ? 'Agent activity' : undefined}
         onClick={() => setOpen(!open)}
       >
-        {working ? 'Agents · ' + working + ' working' : 'Agents'}
+        {PHONE() ? null : working ? 'Agents · ' + working + ' working' : 'Agents'}
       </Button>
       <OverlayDrawer
         open={open}
@@ -502,7 +518,7 @@ function rosterOf(app: AppRecord | null, model: ActivityModel): { info: AgentCar
   if (app) {
     STATIONS.forEach((s) => add(s.agent));
     if (AGENTS.tester) add('tester');
-    const f = flowOfApp(app);
+    const f = flowOf(app);
     (f.reviewers || []).forEach((r) => add('rv_' + r));
     if (app.def && app.def.team) app.def.team.agents.forEach((a) => add(a.id));
   }
@@ -518,7 +534,7 @@ function rosterOf(app: AppRecord | null, model: ActivityModel): { info: AgentCar
 /* ---------- how it works ---------- */
 
 function HowItWorks({ app, model, c }: { app: AppRecord | null; model: ActivityModel; c: Styles }) {
-  const f = app ? flowOfApp(app) : null;
+  const f = app ? flowOf(app) : null;
   const attempts = f && f.attempts >= 1 && f.attempts <= 3 ? f.attempts : 3;
   const team = app && app.def && app.def.team;
   const stateOf = (id: string): AgentState => (model.agents[id] ? model.agents[id].state : 'idle');
@@ -552,7 +568,7 @@ function HowItWorks({ app, model, c }: { app: AppRecord | null; model: ActivityM
           {stations.map((st, i) => {
             const info = agentInfo(st.agent, app);
             const s = stateOf(st.agent);
-            const reviewers = f ? (f.reviewers || []).filter((r) => revs()[r] && revs()[r].after === st.id) : [];
+            const reviewers = f ? (f.reviewers || []).filter((r) => REVIEWERS[r] && REVIEWERS[r].after === st.id) : [];
             const asks = f && f.approve && f.approve[st.id];
             const byRules = f && f.by && f.by[st.id] === 'rules';
             return (
@@ -580,8 +596,8 @@ function HowItWorks({ app, model, c }: { app: AppRecord | null; model: ActivityM
                     {(reviewers.length > 0 || asks) && (
                       <div className={c.chips}>
                         {reviewers.map((r) => (
-                          <Badge key={r} appearance="outline" size="small" icon={<Icon n={revs()[r].icon} s="12" />}>
-                            {'Then ' + revs()[r].name}
+                          <Badge key={r} appearance="outline" size="small" icon={<Icon n={REVIEWERS[r].icon} s="12" />}>
+                            {'Then ' + REVIEWERS[r].name}
                           </Badge>
                         ))}
                         {asks && (

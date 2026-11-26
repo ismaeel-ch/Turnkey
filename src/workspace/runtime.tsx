@@ -35,17 +35,17 @@ export const userName = (app: AppRecord, id: unknown) => {
   const u = appUsers(app).find((x) => x.id === id);
   return u ? u.name : id == null ? '' : 'User #' + id;
 };
-export const isStatusCol = (def: AppDef, t: TableName, c: ColumnDef | null | undefined) =>
-  !!(c && def.process && def.process.table === t.name && def.process.column === c.name);
+export const isStatusCol = (def: AppDef, t: TableName | null | undefined, c: ColumnDef | null | undefined) =>
+  !!(c && t && def.process && def.process.table === t.name && def.process.column === c.name);
 export const optLabel = (c: ColumnDef | null | undefined, v: unknown): string => (c && c.labels && c.labels[String(v)]) || label(v); // a choice may carry its own wording (PatentsView, arXiv)
-export const stateLabel = (def: AppDef, t: TableName, c: ColumnDef | null | undefined, v: unknown): string => {
+export const stateLabel = (def: AppDef, t: TableName | null | undefined, c: ColumnDef | null | undefined, v: unknown): string => {
   if (isStatusCol(def, t, c)) {
     const s = def.process?.states.find((x) => x.id === v);
     if (s) return s.label;
   }
   return optLabel(c, v);
 };
-export const stateTone = (def: AppDef, t: TableName, c: ColumnDef | null | undefined, v: unknown): string => {
+export const stateTone = (def: AppDef, t: TableName | null | undefined, c: ColumnDef | null | undefined, v: unknown): string => {
   if (isStatusCol(def, t, c)) {
     const s = def.process?.states.find((x) => x.id === v);
     if (s) return s.tone;
@@ -123,7 +123,8 @@ export function stageOf(app: AppRecord): Stage {
     })
   );
 }
-export function AppPane({ app, pane, solo }: { app: AppRecord; pane: Pane; solo?: SoloItems }) {
+export function AppPane({ app, pane, solo: given }: { app: AppRecord; pane: Pane; solo?: (SoloItem | null | false | undefined)[] | null }) {
+  const solo = (given || []).filter((x): x is SoloItem => !!x);
   const box = useElWidth(),
     compact = !pane.test && isCompact(box[1]);
   const def = app.def,
