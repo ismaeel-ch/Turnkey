@@ -21,7 +21,8 @@ name: Release and deploy
 on:
   push:
     branches: [main]
-    paths: [package.json]
+    # A change to this file also counts, so that fixing the workflow retries a version whose release failed.
+    paths: [package.json, .github/workflows/release.yml]
   release:
     types: [published]
   workflow_dispatch:
@@ -40,8 +41,6 @@ permissions:
 
 env:
   VERCEL_CLI: vercel@65.14.0
-  # The public production address. Set the repository variable PRODUCTION_URL if it changes.
-  PRODUCTION_URL: ${{ vars.PRODUCTION_URL || 'https://ssi-ai-hackathon.vercel.app' }}
 
 jobs:
   prepare:
@@ -125,7 +124,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: production
-      url: ${{ env.PRODUCTION_URL }}
+      url: ${{ steps.address.outputs.url }}
     env:
       TAG: ${{ needs.prepare.outputs.tag }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -159,9 +158,41 @@ jobs:
           url="$(npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --token="$VERCEL_TOKEN")"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed $TAG to $url"
+      - name: Find the production address of the deployment
+        id: address
+        # The deployment's own URL can sit behind Vercel's deployment protection, so the health check uses the
+        # production address Vercel assigned to it: the repository variable PRODUCTION_URL if set, otherwise the
+        # deployment's shortest alias as reported by the Vercel API.
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          OVERRIDE: ${{ vars.PRODUCTION_URL }}
+        run: |
+          set -euo pipefail
+          if [ -n "$OVERRIDE" ]; then
+            echo "url=$OVERRIDE" >> "$GITHUB_OUTPUT"
+            echo "Using PRODUCTION_URL: $OVERRIDE"
+            exit 0
+          fi
+          host="${DEPLOYMENT_URL#https://}"
+          query=""
+          case "$VERCEL_ORG_ID" in team_*) query="?teamId=$VERCEL_ORG_ID" ;; esac
+          curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v13/deployments/$host$query" > deployment.json
+          alias="$(node -e '
+            const d = JSON.parse(require("fs").readFileSync("deployment.json", "utf8"));
+            const list = (d.alias || []).slice().sort((a, b) => a.length - b.length);
+            process.stdout.write(list[0] || "");
+          ')"
+          rm -f deployment.json
+          if [ -z "$alias" ]; then
+            echo "Vercel reported no production alias for $DEPLOYMENT_URL."
+            exit 1
+          fi
+          echo "url=https://$alias" >> "$GITHUB_OUTPUT"
+          echo "Production address: https://$alias"
       - name: Smoke test the health route on the production address
-        # The production address, not the deployment's own URL: Vercel's deployment protection can put a login in
-        # front of the latter.
+        env:
+          PRODUCTION_URL: ${{ steps.address.outputs.url }}
         run: |
           for attempt in 1 2 3; do
             if curl --fail --silent --show-error --max-time 20 "$PRODUCTION_URL/api/health"; then
@@ -171,18 +202,19 @@ jobs:
             fi
             sleep 10
           done
-          echo "The health route did not answer after three attempts."
+          echo "The health route at $PRODUCTION_URL did not answer after three attempts."
           exit 1
       - name: Summary
         if: always()
         env:
           URL: ${{ steps.deploy.outputs.url }}
+          PRODUCTION_URL: ${{ steps.address.outputs.url }}
           OUTCOME: ${{ job.status }}
         run: |
           {
             echo "### Production deploy of $TAG"
             echo ""
-            echo "Result: $OUTCOME. Deployment: ${URL:-not created}. Live at $PRODUCTION_URL"
+            echo "Result: $OUTCOME. Deployment: ${URL:-not created}. Live at ${PRODUCTION_URL:-unknown}"
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish:
