@@ -21,7 +21,7 @@ describe('team policy', () => {
   });
 
   it('accepts the teams of the three quest apps as the workspace saves them', () => {
-    const quests = (['factcheck', 'priorart', 'debate'] as const).map((id) => (REC as Record<string, Rec>)[id]?.backend?.().team);
+    const quests = (['factcheck', 'priorart', 'debate'] as const).map((id) => (REC as unknown as Record<string, Rec>)[id]?.backend?.().team);
     expect(quests.every(Boolean)).toBe(true);
     for (const team of quests) {
       const r = factRequest();
