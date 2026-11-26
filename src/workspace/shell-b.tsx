@@ -1,6 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
 import { useLayoutEffect, useRef } from 'react';
-import { NativeField } from '@/platform/dom';
 import {
   APILOG,
   BRAND,
@@ -70,7 +69,7 @@ import { TeamAv, teamAgentOf } from './team';
 import { AGENTS, PENDING, RUNS, STATIONS, answerQuestion, resetAppData } from './line';
 import { handleChat, suggestChanges } from './changes';
 import { FlowCards, flowOf, flowTips } from './custom';
-import { Btn, AgentAv, Empty, Field, Icon, Json, MBar, Proto, Spinner, Switch, Tabs } from './ui';
+import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto, Select, Spinner, Switch, Tabs, Textarea } from './ui';
 import { isStatusCol, startWalk } from './runtime';
 import { ReleaseCard } from './release';
 
@@ -274,8 +273,8 @@ export function DataView({ app }) {
               <p className="muted t-cap">
                 Runs on the real SQLite file in this browser. Writes are kept, so use Reset data to undo experiments.
               </p>
-              <NativeField
-                as="textarea"
+              <Textarea
+                native
                 className="textarea mono"
                 id={'sql-in-' + app.id}
                 rows="4"
@@ -295,16 +294,16 @@ export function DataView({ app }) {
                   'SELECT * FROM activity ORDER BY id DESC LIMIT 20',
                   'PRAGMA foreign_key_check',
                 ].map((q) => (
-                  <button
+                  <Chip
                     key={q}
-                    className="chip mono"
+                    className="mono"
                     onClick={() => {
                       D.sql = q;
                       notify();
                     }}
                   >
                     {q.length > 34 ? q.slice(0, 34) + '…' : q}
-                  </button>
+                  </Chip>
                 ))}
               </div>
               {D.out &&
@@ -550,8 +549,8 @@ export function ApiView({ app }) {
                 </p>
                 {!ep.open && (
                   <Field id={'api-u-' + app.id} label="Call as">
-                    <NativeField
-                      as="select"
+                    <Select
+                      native
                       className="select"
                       id={'api-u-' + app.id}
                       value={String(user.id)}
@@ -568,13 +567,13 @@ export function ApiView({ app }) {
                           {roleName(def, u.role)}
                         </option>
                       ))}
-                    </NativeField>
+                    </Select>
                   </Field>
                 )}
                 {/:id/.test(ep.path) && (
                   <Field id={'api-id-' + app.id} label="Record id">
-                    <NativeField
-                      as="input"
+                    <Input
+                      native
                       className="input"
                       id={'api-id-' + app.id}
                       type="number"
@@ -588,8 +587,8 @@ export function ApiView({ app }) {
                 )}
                 {ep.method !== 'GET' && ep.method !== 'DELETE' && (
                   <Field id={'api-b-' + app.id} label="JSON body">
-                    <NativeField
-                      as="textarea"
+                    <Textarea
+                      native
                       className="textarea mono"
                       id={'api-b-' + app.id}
                       rows="6"
@@ -693,7 +692,7 @@ export function ConnView({ app }) {
       </div>
       <div className="conn-grid">
         {list.map((c) => (
-          <div key={c.id} className={cx('card conn-card', cur.id === c.id && 'sel')}>
+          <Card key={c.id} className={cx('card conn-card', cur.id === c.id && 'sel')}>
             <div className="row">
               <button
                 className="conn-main"
@@ -728,10 +727,10 @@ export function ConnView({ app }) {
             <span className={'badge b-' + (!connOn(c.id) ? 'neutral' : off ? 'warning' : 'success')}>
               {!connOn(c.id) ? 'Off' : off ? 'Needs internet' : 'Connected'}
             </span>
-          </div>
+          </Card>
         ))}
       </div>
-      <section className="card flat conn-detail">
+      <Card className="card flat conn-detail">
         <div className="row between wrap">
           <div className="col gap0">
             <strong className="t-sub2">{cur.name}</strong>
@@ -797,7 +796,7 @@ export function ConnView({ app }) {
             </div>
           </div>
         )}
-      </section>
+      </Card>
     </div>
   );
 }
@@ -1275,9 +1274,9 @@ export function ChatPanel({ app }) {
         <div className="chat-tips">
           <span className="t-cap muted">Try a change</span>
           {tips.map((t) => (
-            <button key={t} className="chip" onClick={() => send(t)}>
+            <Chip key={t} onClick={() => send(t)}>
               {t}
-            </button>
+            </Chip>
           ))}
         </div>
       )}
@@ -1285,10 +1284,10 @@ export function ChatPanel({ app }) {
         <div className="chat-tips flow-tips">
           <span className="t-cap muted">Change how it is built</span>
           {ftips.map((t) => (
-            <button key={t} className="chip" onClick={() => send(t)}>
+            <Chip key={t} onClick={() => send(t)}>
               <Icon n="options" s="12" />
               {t}
-            </button>
+            </Chip>
           ))}
         </div>
       )}
@@ -1299,8 +1298,8 @@ export function ChatPanel({ app }) {
           send();
         }}
       >
-        <NativeField
-          as="textarea"
+        <Textarea
+          native
           className="textarea"
           id={'chat-' + app.id}
           rows="2"
@@ -1721,8 +1720,8 @@ export function DebugDrawer({ app }) {
           }}
         />
         <span className="grow" />
-        <NativeField
-          as="input"
+        <Input
+          native
           className="input sm"
           id="dbg-q"
           placeholder="Filter"

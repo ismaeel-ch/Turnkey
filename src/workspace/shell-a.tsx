@@ -1,5 +1,4 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
-import { NativeField } from '@/platform/dom';
 import {
   BRAND,
   LS,
@@ -46,7 +45,26 @@ import { BuildSummary, FlowView } from './flow';
 import { AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp, rebuild, startBuild, stopRun } from './line';
 import { CustomTab, FlowChips, REVIEWERS, ReviewPanel, answerGate, flowList, flowOf, reviewerAt } from './custom';
 import { TesterPanel } from './tester';
-import { Btn, AgentAv, Avatar, CheckList, Empty, Icon, Logo, MBar, Menu, Proto, STATUS_META, Seg, Spinner, Switch, Tabs } from './ui';
+import {
+  AgentAv,
+  Avatar,
+  Btn,
+  Card,
+  CheckList,
+  Chip,
+  Empty,
+  Icon,
+  Logo,
+  MBar,
+  Menu,
+  Proto,
+  Seg,
+  Spinner,
+  STATUS_META,
+  Switch,
+  Tabs,
+  Textarea,
+} from './ui';
 import { AppLauncher, PhoneBar, PhoneNav } from './mobile';
 import { StageView, stageOf, startWalk, stateLabel, stateTone } from './runtime';
 import { enterSolo, keepShared, openShare, sharedApps } from './share';
@@ -344,7 +362,7 @@ export function Home() {
     const r = REC[id],
       has = builtOf(id);
     return (
-      <div key={id} className="card tpl" data-tpl={id}>
+      <Card key={id} className="card tpl" data-tpl={id}>
         <span className="row gap8">
           <span className={'tpl-ic acc-' + r.accent}>
             <Icon n={r.icon} s="24" />
@@ -387,7 +405,7 @@ export function Home() {
             </Btn>
           )}
         </span>
-      </div>
+      </Card>
     );
   };
   const mine0 = (
@@ -423,7 +441,7 @@ export function Home() {
       {apps.length ? (
         <div className="apps">
           {apps.map((a) => (
-            <div key={a.id} className="card app-row">
+            <Card key={a.id} className="card app-row">
               <button className="app-open" onClick={() => openTab(a.id)}>
                 <AppLogo app={a} size={36} />
                 <span className="col gap0 grow">
@@ -490,7 +508,7 @@ export function Home() {
               <Btn className="btn subtle icon" aria-label={'Delete ' + a.name} title="Delete app" onClick={() => del(a)}>
                 <Icon n="trash" />
               </Btn>
-            </div>
+            </Card>
           ))}
         </div>
       ) : (
@@ -511,8 +529,8 @@ export function Home() {
           Say what the work is in one sentence. A team of agents builds the whole app, tests it and hands it over ready to use.
         </p>
         <div className="prompt" data-tour="prompt">
-          <NativeField
-            as="textarea"
+          <Textarea
+            native
             className="textarea"
             id="home-prompt"
             rows="2"
@@ -604,7 +622,7 @@ export function Home() {
             </div>
             <div className="apps">
               {guests.map((a) => (
-                <div key={a.id} className="card app-row">
+                <Card key={a.id} className="card app-row">
                   <button
                     className="app-open"
                     onClick={() =>
@@ -636,7 +654,7 @@ export function Home() {
                   <Btn className="btn subtle icon" aria-label={'Remove ' + a.name} title="Remove this copy" onClick={() => del(a)}>
                     <Icon n="trash" />
                   </Btn>
-                </div>
+                </Card>
               ))}
             </div>
           </>
@@ -1187,9 +1205,9 @@ export function RunChips({ app, run }) {
   return app.runs.length > 1 ? (
     <div className="chips">
       {app.runs.map((r) => (
-        <button
+        <Chip
           key={r.id}
-          className={cx('chip', r.id === run.id && 'on')}
+          on={!!(r.id === run.id)}
           title={r.label}
           onClick={() => {
             U.runSel[app.id] = r.id;
@@ -1197,7 +1215,7 @@ export function RunChips({ app, run }) {
           }}
         >
           {RUN_KIND[r.kind] || 'Run'} {r.n}
-        </button>
+        </Chip>
       ))}
     </div>
   ) : null;
@@ -1611,7 +1629,7 @@ export function StationOut({ app, st }) {
         </div>
         <div className="tables">
           {def.tables.map((t) => (
-            <div key={t.name} className="card flat tcard">
+            <Card key={t.name} className="card flat tcard">
               <div className="row between">
                 <strong>{t.label}</strong>
                 <span className="t-cap muted mono">
@@ -1649,7 +1667,7 @@ export function StationOut({ app, st }) {
                   </tbody>
                 </table>
               )}
-            </div>
+            </Card>
           ))}
         </div>
         {def.migrations.length > 0 && (
@@ -1896,7 +1914,7 @@ export function StationOut({ app, st }) {
         </p>
         <div className="screens">
           {def.screens.map((s) => (
-            <div key={s.id} className="card flat scard">
+            <Card key={s.id} className="card flat scard">
               <span className="scard-ic">
                 <Icon n={VIEW_ICON[s.type]} />
               </span>
@@ -1918,7 +1936,7 @@ export function StationOut({ app, st }) {
                   ))}
                 </span>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       </div>

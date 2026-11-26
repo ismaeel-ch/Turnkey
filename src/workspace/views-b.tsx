@@ -4,7 +4,7 @@ import { toStyle } from '@/platform/dom';
 import { DOW, MON, cap, cx, fmtDate, fmtNum, fmtTime, isoDate, notify, parseISO, toast, today } from './core';
 import { accOf, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isNum } from './viewspec';
-import { Btn, Empty, Icon, Seg, Switch } from './ui';
+import { Btn, Card, Empty, FilterChip, Icon, Seg, Switch } from './ui';
 import { cellText, fetchApi, rowTitle, stateLabel, stateTone } from './runtime';
 import { NoRows, Pick, choices, passes, vxState } from './views-a';
 
@@ -741,7 +741,7 @@ export function VChart({ app, user, pane, scr, t, rows, cfg, setCfg, drill }) {
         <Switch id={id + 't'} on={!!cfg.table} onChange={(v) => setCfg('table', v)} text="Data table" />
       </div>
       {noStack && cfg.split ? <p className="t-cap muted">Averages cannot be stacked, so the split is off for this shape.</p> : null}
-      <section className="card chart-card">
+      <Card className="card chart-card">
         <h3 className="widget-h">{cap(about)}</h3>
         {time ? (
           <TimePlot
@@ -766,7 +766,7 @@ export function VChart({ app, user, pane, scr, t, rows, cfg, setCfg, drill }) {
           <HBars cats={D.cats} series={D.series} unit={M.label} onPick={(c, s) => drill(pickPair(xc, sp, c, s))} />
         )}
         <p className="t-cap muted">Select a mark to see the records behind it.</p>
-      </section>
+      </Card>
       {cfg.table ? <DataTable head={head} rows={table} /> : null}
     </>
   );
@@ -1341,21 +1341,18 @@ export function Dash({ app, user, pane, scr, test }) {
     const t = tableOf(def, f.table),
       c = colOf(t, f.col);
     return (
-      <span key={i} className="chip on">
+      <FilterChip
+        key={i}
+        removeLabel={'Remove the filter on ' + c.label}
+        onRemove={() => {
+          ds.f.splice(i, 1);
+          notify();
+        }}
+      >
         {c.label}
         {': '}
         {f.val == null ? 'Not set' : cellText(app, user, t, c, f.val, 1)}
-        <button
-          className="chip-x"
-          aria-label={'Remove the filter on ' + c.label}
-          onClick={() => {
-            ds.f.splice(i, 1);
-            notify();
-          }}
-        >
-          <Icon n="dismiss" s="12" />
-        </button>
-      </span>
+      </FilterChip>
     );
   };
   const card = (x) => {
@@ -1447,7 +1444,7 @@ export function Dash({ app, user, pane, scr, test }) {
       );
     }
     return (
-      <section key={x.i} className={cx('card widget', w.kind === 'line' && 'wide')}>
+      <Card key={x.i} className={cx('card widget', w.kind === 'line' && 'wide')}>
         <div className="row between">
           <h3 className="widget-h">{w.label}</h3>
           {w.kind !== 'recent' && (
@@ -1462,7 +1459,7 @@ export function Dash({ app, user, pane, scr, test }) {
           )}
         </div>
         {body}
-      </section>
+      </Card>
     );
   };
   return (
