@@ -3,7 +3,7 @@ import { engineProblem, storageProblem } from './errors';
 import { modelHost } from '@/platform/model-client';
 import { type ReactNode, Suspense, lazy, useState, useLayoutEffect, useSyncExternalStore } from 'react';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
-import type { BackedDef } from '@/shared/types/app';
+import type { BackedDef, TourStep } from '@/shared/types/app';
 import type { SqlValue } from '@/shared/types/sqljs';
 import type { AppRecord, Dict, Downloader, OnboardingForm, ProductTourStep, Settings, SignInForm } from '@/shared/types/workspace';
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
@@ -59,8 +59,8 @@ import {
   setSaveTimer,
   setU,
 } from './core';
-import { DBX, PEEK, backupWorkspace, dbCount, dbExists, dbFlush, dbSave, initSqlite, restoreWorkspace, sqlRun } from './db';
-import { appUsers, reseed } from './engine';
+import { DBX, PEEK, backupWorkspace, dbCount, dbExists, dbFlush, dbRollback, dbSave, dbSavepoint, initSqlite, restoreWorkspace, sqlRun } from './db';
+import { appUsers, reseed, tourExec } from './engine';
 import { DATA_VIEWS, migrateApp } from './viewspec';
 import { REC, TEMPLATES } from './builds';
 import { QUESTS } from './quests';
@@ -1889,6 +1889,15 @@ export function boot() {
     activity: (appId: string) => activityNow(appId),
     history: historyHooks,
     runTests: (app: AppRecord) => runTestsSync(app),
+    /** Runs one walkthrough step against an app's data and undoes what it changed. */
+    tourStep: (id: string, step: TourStep, rows?: Dict<number>) => {
+      dbSavepoint(id, 'hook');
+      try {
+        return tourExec(S.apps[id], { rows: rows || {}, last: null }, step);
+      } finally {
+        dbRollback(id, 'hook');
+      }
+    },
     suite: (id: string) =>
       suiteOf(S.apps[id]).map((x) => ({
         id: x.id,

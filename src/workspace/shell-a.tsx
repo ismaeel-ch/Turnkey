@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { AreaBoundary } from '@/platform/area-boundary';
 import {
   BRAND,
@@ -872,13 +873,12 @@ export function Workspace({ app }: { app: AppRecord }) {
         on: del,
       },
     ];
-  const tabs = VIEWS.map(
-    (v): TabItem =>
-      v.id === 'release' && app.status === 'ready'
-        ? Object.assign({}, v, {
-            count: rel ? (dirty ? 'draft' : rel.v) : 'new',
-          })
-        : v,
+  const tabs = VIEWS.map((v): TabItem =>
+    v.id === 'release' && app.status === 'ready'
+      ? Object.assign({}, v, {
+          count: rel ? (dirty ? 'draft' : rel.v) : 'new',
+        })
+      : v,
   );
   const body =
     view === 'build' ? (
@@ -1550,12 +1550,10 @@ export function AccessMatrix({ app }: { app: AppRecord }) {
                 return (
                   <td key={r.id}>
                     {bits.length ? (
-                      bits.map((b, i) => (
-                        <>
-                          <span key={i} className={cx('badge', /own/.test(b) ? 'b-warning' : 'b-outline')}>
-                            {b}
-                          </span>{' '}
-                        </>
+                      bits.map((b) => (
+                        <Fragment key={b}>
+                          <span className={cx('badge', /own/.test(b) ? 'b-warning' : 'b-outline')}>{b}</span>{' '}
+                        </Fragment>
                       ))
                     ) : (
                       <span className="muted">No access</span>
@@ -1789,7 +1787,11 @@ export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
                     <td>
                       <strong>{x.label}</strong>
                     </td>
-                    <td>{x.from.map((f) => [pill(f), ' '])}</td>
+                    <td>
+                      {x.from.map((f) => (
+                        <Fragment key={f}>{pill(f)} </Fragment>
+                      ))}
+                    </td>
                     <td>{pill(x.to)}</td>
                     <td>{x.roles.map((r) => roleName(def, r)).join(', ')}</td>
                   </tr>
