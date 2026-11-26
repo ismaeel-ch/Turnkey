@@ -195,7 +195,12 @@ describe('POST /api/agent/step', () => {
       const post = (body: unknown) => POST(new Request('http://x/api/agent/step', { method: 'POST', body: JSON.stringify(body) }));
       const bad = await post({ prompt: '' });
       expect(bad.status).toBe(400);
-      const ok = await post({ prompt: 'Say hello' });
+      // Only prompts shaped like Turnkey's own agents' pass the prompt policy (src/server/guard/prompt.ts).
+      expect((await post({ prompt: 'Say hello' })).status).toBe(400);
+      const ok = await post({
+        prompt:
+          'You are the Researcher agent on Turnkey, a line of agents that builds small record-keeping web apps (tables, roles, one status workflow, screens) from one sentence. Code checks your answer and sends it back if it fails, so follow the format exactly. Reply with ONE JSON object and nothing else: no prose, no code fences.\n\nREQUEST: "a clinic"',
+      });
       expect(ok.headers.get('content-type')).toMatch(/ndjson/);
       const lines = (await ok.text())
         .trim()
