@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import type { AppRecord } from '@/shared/types/workspace';
 import { S, notify, useStore } from './core';
 import { PENDING, RUNS, STATIONS } from './line';
+import { TEAMS } from './team';
 import { Btn, Icon, MBar } from './ui';
 
 /** How long the workspace waits after the last workflow edit before it re-runs. */
@@ -32,6 +33,12 @@ interface Queued {
 
 const QUEUE: Record<string, Queued> = {};
 
+/**
+ * True while something holds the app: a run of the line, an approval card, or the app's own agent team writing rows.
+ * A re-run rebuilds the access rules and screens the team's writes go through, so it waits for the team too.
+ */
+const busy = (appId: string) => !!(RUNS[appId] || PENDING[appId] || TEAMS[appId]?.status === 'running');
+
 /** True when a re-run from this station only rebuilds what comes after the data, so records stay. */
 export const safeToAutoRun = (from: number) => from >= 2;
 
@@ -44,7 +51,7 @@ function fire(appId: string) {
     cancelRerun(appId);
     return;
   }
-  if (RUNS[appId] || PENDING[appId]) {
+  if (busy(appId)) {
     q.timer = setTimeout(() => fire(appId), BUSY_RETRY_MS);
     return;
   }
@@ -128,10 +135,10 @@ export function RerunBar({ app, compact }: { app: AppRecord; compact?: boolean }
   const q = queuedRerun(app.id),
     left = useSecondsLeft(q ? q.due : null);
   if (!q) return null;
-  const busy = !!(RUNS[app.id] || PENDING[app.id]),
+  const held = busy(app.id),
     actions = (
       <span className="row gap1">
-        <Btn className="btn sm primary" disabled={busy} onClick={() => rerunNow(app.id)}>
+        <Btn className="btn sm primary" disabled={held} onClick={() => rerunNow(app.id)}>
           <Icon n="rerun" s="16" />
           Run now
         </Btn>
@@ -143,14 +150,14 @@ export function RerunBar({ app, compact }: { app: AppRecord; compact?: boolean }
   if (compact)
     return (
       <div className="col gap1 rerun-wait" role="status">
-        <span className="t-cap">{rerunText(q.from, left, busy)}</span>
+        <span className="t-cap">{rerunText(q.from, left, held)}</span>
         {actions}
       </div>
     );
   return (
     <div className="rerun-wait">
       <MBar tone="info" action={actions}>
-        {rerunText(q.from, left, busy)}
+        {rerunText(q.from, left, held)}
       </MBar>
     </div>
   );

@@ -68,6 +68,7 @@ import { TEAMS } from './team';
 import { TESTS, runTestsSync, suiteOf } from './tests';
 import { FLOW, isDark } from './flow';
 import { LIVE, RUNS, STATIONS, deleteApp, pushChat, resumeInterrupted, runBuild, startBuild, stopRun } from './line';
+import { cancelRerun, queuedRerun } from './rerun';
 import { buildPack, parseChange, planOps, runChange } from './changes';
 import { AddStepDialog, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
 import { REVIEWERS } from './reviewers';
@@ -1828,6 +1829,8 @@ export function boot() {
       mode: modeNow,
       reach: checkReach,
       runs: () => RUNS,
+      queued: queuedRerun,
+      cancelRerun,
       dirty: isDirty,
       relOf,
       release: releaseApp,
