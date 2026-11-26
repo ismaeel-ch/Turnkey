@@ -1,11 +1,13 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
+import type { FormEvent } from 'react';
+import type { AppAction, AppDef, AppTable, AppUser, ColumnDef, Row, Screen, StoredRow, TableDef, Transition } from '@/shared/types/app';
+import type { AppRecord, Dict, Pane, PaneForm, RecordRef, Stage, Walk } from '@/shared/types/workspace';
 import { BRAND, U, arr, confirmBox, cx, fmtDate, fmtDateTime, fmtNum, label, needNet, notify, online, toast } from './core';
 import { DBX, dbExists } from './db';
-import { accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec } from './engine';
+import { accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec, type ApiResult } from './engine';
 import { REC, allConnectors, callConnector, connOn } from './builds';
 import { TeamConsole } from './room';
 import { resetAppData } from './line';
-import { Avatar, Btn, Empty, Field, Icon, Input, MBar, Menu, Proto, Select, Switch, Textarea } from './ui';
+import { Avatar, Btn, Empty, Field, Icon, Input, MBar, Menu, Proto, Select, Switch, Textarea, type MenuEntry } from './ui';
 import { AppSheets, AppTabs, isCompact, useElWidth } from './mobile';
 import { Explorer } from './views-a';
 import { Dash } from './views-b';
@@ -14,42 +16,57 @@ import { AppLogo } from './release';
 /* ===== Turnkey prototype · runtime: draws a built app from its definition =====
    Nothing here is specific to one app. Tables, columns, roles, workflow, screens and layout all come from
    the definition the agents wrote, and every read or write goes through apiCall (the role-guarded backend). */
-export const APICACHE = new Map();
-export function fetchApi(app, user, path, body, src) {
+/** Menu entries a page that shows the app on its own adds to the user menu (back, about). */
+export type SoloItems = (MenuEntry | '-')[];
+/** The table a status column belongs to; only its name matters. */
+type TableName = Pick<TableDef, 'name'>;
+export const APICACHE = new Map<string, ApiResult>();
+/** A GET through the role-guarded API, cached until the app's data or definition changes. */
+export function fetchApi(app: AppRecord, user: AppUser, path: string, body?: Dict<unknown> | null, src?: string): ApiResult {
   const key = app.id + '|' + user.id + '|' + path + '|' + (body ? JSON.stringify(body) : '') + '|' + (DBX.ver[app.id] || 0) + '|' + app.rev;
-  if (APICACHE.has(key)) return APICACHE.get(key);
+  const hit = APICACHE.get(key);
+  if (hit) return hit;
   if (APICACHE.size > 600) APICACHE.clear();
   const res = apiCall(app, user, 'GET', path, body, src || 'app');
   APICACHE.set(key, res);
   return res;
 }
-export const userName = (app, id) => {
+export const userName = (app: AppRecord, id: unknown) => {
   const u = appUsers(app).find((x) => x.id === id);
   return u ? u.name : id == null ? '' : 'User #' + id;
 };
-export const isStatusCol = (def, t, c) => !!(def.process && def.process.table === t.name && def.process.column === c.name);
-export const optLabel = (c, v) => (c && c.labels && c.labels[v]) || label(v); // a choice may carry its own wording (PatentsView, arXiv)
-export const stateLabel = (def, t, c, v) => {
+export const isStatusCol = (def: AppDef, t: TableName, c: ColumnDef | null | undefined) =>
+  !!(c && def.process && def.process.table === t.name && def.process.column === c.name);
+export const optLabel = (c: ColumnDef | null | undefined, v: unknown): string => (c && c.labels && c.labels[String(v)]) || label(v); // a choice may carry its own wording (PatentsView, arXiv)
+export const stateLabel = (def: AppDef, t: TableName, c: ColumnDef | null | undefined, v: unknown): string => {
   if (isStatusCol(def, t, c)) {
-    const s = def.process.states.find((x) => x.id === v);
+    const s = def.process?.states.find((x) => x.id === v);
     if (s) return s.label;
   }
   return optLabel(c, v);
 };
-export const stateTone = (def, t, c, v) => {
+export const stateTone = (def: AppDef, t: TableName, c: ColumnDef | null | undefined, v: unknown): string => {
   if (isStatusCol(def, t, c)) {
-    const s = def.process.states.find((x) => x.id === v);
+    const s = def.process?.states.find((x) => x.id === v);
     if (s) return s.tone;
   }
   return 'neutral';
 };
-export function cellText(app, user, t, c, v, depth) {
+/** A value as the app shows it in text: dates written out, choices by their label, references by the record's name. */
+export function cellText(
+  app: AppRecord,
+  user: AppUser,
+  t: TableName,
+  c: ColumnDef | null | undefined,
+  v: unknown,
+  depth?: number,
+): string {
   if (v == null || v === '' || !c) return '';
   switch (c.type) {
     case 'date':
-      return fmtDate(v);
+      return fmtDate(String(v));
     case 'datetime':
-      return fmtDateTime(v);
+      return fmtDateTime(String(v));
     case 'bool':
       return v ? 'Yes' : 'No';
     case 'money':
@@ -64,16 +81,16 @@ export function cellText(app, user, t, c, v, depth) {
       if (!rt) return '#' + v;
       if ((depth || 0) > 1) return rt.one + ' #' + v;
       const res = fetchApi(app, user, '/api/' + c.ref),
-        row = res.status === 200 ? res.data.find((r) => r.id === v) : null;
+        row = res.status === 200 ? (res.data as StoredRow[]).find((r) => r.id === v) : null;
       return row ? cellText(app, user, rt, colOf(rt, rt.title), row[rt.title], (depth || 0) + 1) || rt.one + ' #' + v : rt.one + ' #' + v;
     }
     default:
       return String(v);
   }
 }
-export const rowTitle = (app, user, t, row, col) =>
-  cellText(app, user, t, colOf(t, col || t.title), row[col || t.title], 0) || t.one + ' #' + row.id;
-export function Cell({ app, user, t, c, v }) {
+export const rowTitle = (app: AppRecord, user: AppUser, t: AppTable, row: Row, col?: string | null) =>
+  cellText(app, user, t, colOf(t, col || t.title), row[col || t.title], 0) || t.one + ' #' + String(row.id);
+export function Cell({ app, user, t, c, v }: { app: AppRecord; user: AppUser; t: TableName; c: ColumnDef; v: unknown }) {
   if (v == null || v === '') return <span className="muted">–</span>;
   if (c.type === 'select')
     return (
@@ -90,7 +107,7 @@ export function Cell({ app, user, t, c, v }) {
     );
   return cellText(app, user, t, c, v, 0);
 }
-export const newPane = (n) => ({
+export const newPane = (n: number): Pane => ({
   n,
   uid: null,
   screen: null,
@@ -103,7 +120,7 @@ export const newPane = (n) => ({
   login: null,
   conn: null,
 });
-export function stageOf(app) {
+export function stageOf(app: AppRecord): Stage {
   return (
     U.stage[app.id] ||
     (U.stage[app.id] = {
@@ -113,8 +130,9 @@ export function stageOf(app) {
     })
   );
 }
-export function AppPane({ app, pane, solo }) {
-  const box = useElWidth(),
+export function AppPane({ app, pane, solo }: { app: AppRecord; pane: Pane; solo?: SoloItems }) {
+  // mobile.tsx is not typed yet: the hook returns a ref callback and the element's width
+  const box = useElWidth() as unknown as [(el: HTMLDivElement | null) => void, number],
     compact = !pane.test && isCompact(box[1]);
   const def = app.def,
     users = appUsers(app),
@@ -128,7 +146,7 @@ export function AppPane({ app, pane, solo }) {
   if (!user) return <AppLogin app={app} pane={pane} users={users} solo={solo} />;
   const screens = def.screens.filter((s) => s.roles.includes(user.role)),
     scr = screens.find((s) => s.id === pane.screen) || screens[0];
-  const go = (id) => {
+  const go = (id: string) => {
       pane.screen = id;
       pane.rec = null;
       pane.form = null;
@@ -137,7 +155,7 @@ export function AppPane({ app, pane, solo }) {
     },
     th = def.theme,
     navKind = ['top', 'rail'].includes(th.nav) ? th.nav : 'side';
-  const swap = (u) => {
+  const swap = (u: AppUser | null) => {
     pane.uid = u ? u.id : null;
     pane.screen = null;
     pane.rec = null;
@@ -145,7 +163,7 @@ export function AppPane({ app, pane, solo }) {
     pane.sheet = null;
     notify();
   };
-  const nav = (cls) => (
+  const nav = (cls: string) => (
     <nav className={'app-nav ' + cls} aria-label="Screens">
       {screens.map((s) => (
         <button
@@ -155,34 +173,31 @@ export function AppPane({ app, pane, solo }) {
           title={s.name}
           onClick={() => go(s.id)}
         >
-          <Icon n={s.icon} s={cls === 'rail' ? '20' : '16'} />
+          <Icon n={s.icon || 'circle'} s={cls === 'rail' ? '20' : '16'} />
           <span>{s.name}</span>
         </button>
       ))}
     </nav>
   );
-  const items = [
+  const items: SoloItems = [
     {
       head: true,
       label: 'Switch user',
     },
-  ].concat(
-    users.map((u) => ({
+    ...users.map((u) => ({
       label: u.name,
       hint: roleName(def, u.role),
       check: u.id === user.id,
       on: () => swap(u),
     })),
-    [
-      '-',
-      {
-        label: 'Sign out',
-        icon: 'signOut',
-        on: () => swap(null),
-      },
-    ],
-    solo && solo.length ? ['-'].concat(solo) : [],
-  );
+    '-',
+    {
+      label: 'Sign out',
+      icon: 'signOut',
+      on: () => swap(null),
+    },
+    ...(solo && solo.length ? (['-'] as SoloItems).concat(solo) : []),
+  ];
   return (
     <div
       className={cx('app', 'acc-' + th.accent, 'nav-' + navKind, th.density === 'compact' && 'dense', compact && 'compact')}
@@ -237,17 +252,17 @@ export function AppPane({ app, pane, solo }) {
             <Empty icon="lock" title="Nothing to open" text={roleName(def, user.role) + ' has no screens.'} />
           )}
         </main>
-        {pane.rec && <RecordDrawer app={app} user={user} pane={pane} compact={compact} />}
+        {pane.rec && <RecordDrawer app={app} user={user} pane={pane} rec={pane.rec} compact={compact} />}
       </div>
       {compact && <AppTabs screens={screens} scr={scr} pane={pane} go={go} />}
-      {pane.form && <RecordForm app={app} user={user} pane={pane} />}
+      {pane.form && <RecordForm app={app} user={user} pane={pane} f={pane.form} />}
       {compact && pane.sheet && (
         <AppSheets app={app} pane={pane} user={user} users={users} screens={screens} scr={scr} go={go} swap={swap} solo={solo} />
       )}
     </div>
   );
 }
-export function AppLogin({ app, pane, users, solo }) {
+export function AppLogin({ app, pane, users, solo }: { app: AppRecord; pane: Pane; users: AppUser[]; solo?: SoloItems }) {
   const def = app.def,
     f =
       pane.login ||
@@ -256,7 +271,7 @@ export function AppLogin({ app, pane, users, solo }) {
         p: '',
         err: '',
       });
-  const login = (u, p) => {
+  const login = (u: string, p: string) => {
     const r = apiCall(
       app,
       null,
@@ -272,13 +287,13 @@ export function AppLogin({ app, pane, users, solo }) {
       pane.uid = r.data.id;
       pane.screen = null;
       pane.login = null;
-    } else f.err = r.error;
+    } else f.err = r.error || '';
     notify();
   };
   return (
     <div className={cx('app app-login', 'acc-' + def.theme.accent)}>
       <div className="login-card">
-        <AppLogo app={app} size={64} />
+        <AppLogo app={app} size={64} cls={undefined} />
         <h2 className="t-sub1">
           {'Sign in to '}
           {app.name}
@@ -317,8 +332,8 @@ export function AppLogin({ app, pane, users, solo }) {
             placeholder="Username"
             autoComplete="off"
             value={f.u}
-            onInput={(e) => {
-              f.u = e.target.value;
+            onInput={(e: FormEvent<HTMLInputElement>) => {
+              f.u = e.currentTarget.value;
             }}
           />
           <Input
@@ -330,8 +345,8 @@ export function AppLogin({ app, pane, users, solo }) {
             placeholder="Password"
             autoComplete="off"
             value={f.p}
-            onInput={(e) => {
-              f.p = e.target.value;
+            onInput={(e: FormEvent<HTMLInputElement>) => {
+              f.p = e.currentTarget.value;
             }}
           />
           <Btn className="btn primary" type="submit">
@@ -347,7 +362,7 @@ export function AppLogin({ app, pane, users, solo }) {
             </span>
             <span className="grow" />
             {solo
-              .filter((it) => it !== '-' && (it.icon === 'info' || it.icon === 'arrowLeft'))
+              .filter((it): it is MenuEntry => it !== '-' && (it.icon === 'info' || it.icon === 'arrowLeft'))
               .map((it, i) => (
                 <Btn key={i} type="button" className="btn subtle sm" onClick={it.on}>
                   {it.label}
@@ -359,36 +374,52 @@ export function AppLogin({ app, pane, users, solo }) {
     </div>
   );
 }
-export function Screen({ app, user, pane, scr }) {
+/** What every page of a built app is given. */
+export interface ScreenProps {
+  app: AppRecord;
+  user: AppUser;
+  pane: Pane;
+  scr: Screen;
+}
+export function Screen({ app, user, pane, scr }: ScreenProps) {
   // a page is a dashboard, a form, the agents console, or one table opened in its default view
   if (scr.type === 'dashboard') return <Dash app={app} user={user} pane={pane} scr={scr} />;
   if (scr.type === 'form') return <FormScreen app={app} user={user} pane={pane} scr={scr} />;
   if (scr.type === 'agents') return <TeamConsole app={app} user={user} pane={pane} scr={scr} />;
   return <Explorer app={app} user={user} pane={pane} scr={scr} />;
 }
-export function formCols(app, user, t, isNew) {
+export function formCols(app: AppRecord, user: AppUser, t: AppTable, isNew: boolean) {
   const def = app.def,
     acc = accOf(def, user.role, t.name);
   return t.columns.filter((c) => !isStatusCol(def, t, c) && !(isNew && t.owner === c.name && acc.list === 'own'));
 }
-export function FieldInput({ app, user, c, f, idp }) {
+export function FieldInput({ app, user, c, f, idp }: { app: AppRecord; user: AppUser; c: ColumnDef; f: PaneForm; idp: string }) {
   const def = app.def,
     id = idp + c.name,
     v = f.vals[c.name],
-    set = (x) => {
+    set = (x: unknown) => {
       f.vals[c.name] = x;
       if (f.errs) delete f.errs[c.name];
       notify();
     };
   let ctl;
   if (c.type === 'longtext')
-    ctl = <Textarea native className="textarea" id={id} rows="3" value={v || ''} onInput={(e) => set(e.target.value)} />;
+    ctl = (
+      <Textarea
+        native
+        className="textarea"
+        id={id}
+        rows={3}
+        value={v || ''}
+        onInput={(e: FormEvent<HTMLTextAreaElement>) => set(e.currentTarget.value)}
+      />
+    );
   else if (c.type === 'bool') ctl = <Switch id={id} on={!!v} onChange={(x) => set(x ? 1 : 0)} text={v ? 'Yes' : 'No'} />;
   else if (c.type === 'select')
     ctl = (
       <Select native className="select" id={id} value={v || ''} onChange={(e) => set(e.target.value || null)}>
         <option value="">{c.required ? 'Choose…' : 'None'}</option>
-        {c.options.map((o) => (
+        {(c.options || []).map((o) => (
           <option key={o} value={o}>
             {optLabel(c, o)}
           </option>
@@ -428,9 +459,9 @@ export function FieldInput({ app, user, c, f, idp }) {
           onChange={(e) => set(e.target.value ? +e.target.value : null)}
         >
           <option value="">{c.required ? 'Choose…' : 'None'}</option>
-          {res.data.map((r) => (
+          {(res.data as StoredRow[]).map((r) => (
             <option key={r.id} value={String(r.id)}>
-              {rowTitle(app, user, rt, r)}
+              {rt ? rowTitle(app, user, rt, r) : '#' + r.id}
             </option>
           ))}
         </Select>
@@ -441,9 +472,9 @@ export function FieldInput({ app, user, c, f, idp }) {
           id={id}
           type="number"
           min="1"
-          placeholder={rt.one + ' number'}
+          placeholder={(rt ? rt.one : 'Record') + ' number'}
           value={v == null ? '' : v}
-          onInput={(e) => set(e.target.value || null)}
+          onInput={(e: FormEvent<HTMLInputElement>) => set(e.currentTarget.value || null)}
         />
       );
   } else
@@ -463,7 +494,7 @@ export function FieldInput({ app, user, c, f, idp }) {
         }
         step={c.type === 'money' ? '0.01' : c.type === 'number' ? 'any' : undefined}
         value={v == null ? '' : v}
-        onInput={(e) => set(e.target.value === '' ? null : e.target.value)}
+        onInput={(e: FormEvent<HTMLInputElement>) => set(e.currentTarget.value === '' ? null : e.currentTarget.value)}
       />
     );
   return (
@@ -472,8 +503,8 @@ export function FieldInput({ app, user, c, f, idp }) {
     </Field>
   );
 }
-export function saveForm(app, user, t, f, cols) {
-  const body = {};
+export function saveForm(app: AppRecord, user: AppUser, t: AppTable, f: PaneForm, cols: ColumnDef[]): StoredRow | null {
+  const body: Dict<unknown> = {};
   cols.forEach((c) => {
     const v = f.vals[c.name];
     body[c.name] = v === undefined ? null : v;
@@ -490,15 +521,16 @@ export function saveForm(app, user, t, f, cols) {
   f.err = r.status + ' ' + r.error;
   return null;
 }
-export function RecordForm({ app, user, pane }) {
-  const f = pane.form,
-    t = tableOf(app.def, f.table),
+export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUser; pane: Pane; f: PaneForm }) {
+  const t = tableOf(app.def, f.table);
+  if (!t) return null;
+  const
     cols = formCols(app, user, t, !f.id),
     close = () => {
       pane.form = null;
       notify();
     };
-  const save = (e) => {
+  const save = (e: FormEvent) => {
     e.preventDefault();
     const row = saveForm(app, user, t, f, cols);
     if (row) {
@@ -551,9 +583,10 @@ export function RecordForm({ app, user, pane }) {
     </div>
   );
 }
-export function FormScreen({ app, user, pane, scr }) {
-  const t = tableOf(app.def, scr.table),
-    forms = pane.forms || (pane.forms = {}),
+export function FormScreen({ app, user, pane, scr }: ScreenProps) {
+  const t = tableOf(app.def, scr.table);
+  if (!t) return <Empty icon="warning" title="This page has no table" />;
+  const forms = pane.forms || (pane.forms = {}),
     f =
       forms[scr.id] ||
       (forms[scr.id] = {
@@ -564,7 +597,7 @@ export function FormScreen({ app, user, pane, scr }) {
         done: null,
       }),
     cols = formCols(app, user, t, true);
-  const save = (e) => {
+  const save = (e: FormEvent) => {
     e.preventDefault();
     const row = saveForm(app, user, t, f, cols);
     if (row) {
@@ -594,6 +627,7 @@ export function FormScreen({ app, user, pane, scr }) {
                 type="button"
                 className="btn sm"
                 onClick={() => {
+                  if (f.done == null) return;
                   pane.rec = {
                     table: t.name,
                     id: f.done,
@@ -627,16 +661,28 @@ export function FormScreen({ app, user, pane, scr }) {
     </div>
   );
 }
-export function RecordDrawer({ app, user, pane, compact }) {
+export function RecordDrawer({
+  app,
+  user,
+  pane,
+  rec,
+  compact,
+}: {
+  app: AppRecord;
+  user: AppUser;
+  pane: Pane;
+  rec: RecordRef;
+  compact: boolean;
+}) {
   const def = app.def,
-    t = tableOf(def, pane.rec.table),
+    t = tableOf(def, rec.table),
     close = () => {
       pane.rec = null;
       pane.conn = null;
       notify();
     };
   if (!t) return null;
-  const res = fetchApi(app, user, '/api/' + t.name + '/' + pane.rec.id);
+  const res = fetchApi(app, user, '/api/' + t.name + '/' + rec.id);
   const back = compact ? (
       <Btn className="btn subtle icon" aria-label="Back" onClick={close}>
         <Icon n="arrowLeft" />
@@ -664,15 +710,15 @@ export function RecordDrawer({ app, user, pane, compact }) {
         </div>
       </aside>
     );
-  const row = res.data,
+  const row: StoredRow = res.data,
     acc = accOf(def, user.role, t.name),
     P = def.process && def.process.table === t.name ? def.process : null,
     sc = P ? colOf(t, P.column) : null;
-  const trs = P ? P.transitions.filter((x) => x.roles.includes(user.role) && x.from.includes(row[P.column])) : [];
-  const act = (tr) => {
+  const trs = P ? P.transitions.filter((x) => x.roles.includes(user.role) && x.from.includes(String(row[P.column]))) : [];
+  const act = (tr: Transition) => {
     const r = apiCall(app, user, 'POST', '/api/' + t.name + '/' + row.id + '/' + tr.id, {}, 'app');
     toast(
-      r.status === 200 ? tr.label + ': now ' + label(r.data[P.column]).toLowerCase() : r.status + ' ' + r.error,
+      r.status === 200 && P ? tr.label + ': now ' + label(r.data[P.column]).toLowerCase() : r.status + ' ' + r.error,
       r.status === 200 ? 'success' : 'danger',
     );
     notify();
@@ -696,7 +742,7 @@ export function RecordDrawer({ app, user, pane, compact }) {
   };
   const canEdit = acc.update === 'all' || (acc.update === 'own' && row[t.owner || 'created_by'] === user.id);
   const edit = () => {
-    const vals = {};
+    const vals: Dict<unknown> = {};
     t.columns.forEach((c) => {
       vals[c.name] = row[c.name];
     });
@@ -714,7 +760,7 @@ export function RecordDrawer({ app, user, pane, compact }) {
   );
   const log = fetchApi(app, user, '/api/' + t.name + '/' + row.id + '/activity'),
     out = pane.conn && pane.conn.row === row.id ? pane.conn : null;
-  const runAction = (a) => {
+  const runAction = (a: AppAction) => {
     const c = allConnectors().find((x) => x.id === a.connector) || {
       name: a.connector,
     };
@@ -816,7 +862,7 @@ export function RecordDrawer({ app, user, pane, compact }) {
             </div>
             {out.res.ok ? (
               <ul className="rel">
-                {arr(out.res.result.results).map((x, i) => (
+                {arr<{ url?: string; title?: string; excerpt?: string }>((out.res.result as { results?: unknown }).results).map((x, i) => (
                   <li key={i}>
                     <a className="rel-i" href={x.url} target="_blank" rel="noopener noreferrer">
                       <span className="col gap0 grow">
@@ -829,7 +875,7 @@ export function RecordDrawer({ app, user, pane, compact }) {
                 ))}
               </ul>
             ) : (
-              <MBar tone="warning">{out.res.result.error}</MBar>
+              <MBar tone="warning">{String((out.res.result as { error?: unknown }).error)}</MBar>
             )}
           </section>
         )}
@@ -840,7 +886,7 @@ export function RecordDrawer({ app, user, pane, compact }) {
           <h3 className="sec-h">Activity</h3>
           {log.status === 200 && log.data.length ? (
             <ul className="act">
-              {log.data.map((a) => (
+              {(log.data as { id: number; who?: string; action: string; detail?: string; at: string }[]).map((a) => (
                 <li key={a.id}>
                   <span className="t-strong">{a.who || 'Someone'}</span> {a.action}
                   {a.detail ? ' · ' + a.detail : ''}
@@ -852,30 +898,32 @@ export function RecordDrawer({ app, user, pane, compact }) {
               ))}
             </ul>
           ) : (
-            <p className="muted t-cap">Nothing since it was created{row.created_at ? ' on ' + fmtDate(row.created_at) : ''}.</p>
+            <p className="muted t-cap">Nothing since it was created{row.created_at ? ' on ' + fmtDate(String(row.created_at)) : ''}.</p>
           )}
         </section>
       </div>
     </aside>
   );
 }
-export function Related({ app, user, pane, t, k, row }) {
+export function Related({ app, user, pane, t, k, row }: { app: AppRecord; user: AppUser; pane: Pane; t: AppTable; k: AppTable; row: StoredRow }) {
   const def = app.def,
-    c = k.columns.find((x) => x.type === 'ref' && x.ref === t.name),
-    res = fetchApi(app, user, '/api/' + k.name, {
+    c = k.columns.find((x) => x.type === 'ref' && x.ref === t.name);
+  if (!c) return null;
+  const res = fetchApi(app, user, '/api/' + k.name, {
       filter: {
         [c.name]: row.id,
       },
     }),
     P = def.process && def.process.table === k.name ? def.process : null;
   if (res.status !== 200) return null;
+  const list: StoredRow[] = res.data;
   return (
     <section>
       <div className="row between">
         <h3 className="sec-h">
           {k.label}
           {' ('}
-          {res.data.length})
+          {list.length})
         </h3>
         {accOf(def, user.role, k.name).create && (
           <Btn
@@ -897,9 +945,9 @@ export function Related({ app, user, pane, t, k, row }) {
           </Btn>
         )}
       </div>
-      {res.data.length ? (
+      {list.length ? (
         <ul className="rel">
-          {res.data.slice(0, 6).map((r) => (
+          {list.slice(0, 6).map((r) => (
             <li key={r.id}>
               <button
                 className="rel-i"
@@ -930,7 +978,7 @@ export function Related({ app, user, pane, t, k, row }) {
 }
 
 /* ---------- the stage: the built app, as one or two users, with the walkthrough player ---------- */
-export function startWalk(app) {
+export function startWalk(app: AppRecord) {
   const st = stageOf(app);
   st.tour = {
     i: 0,
@@ -944,7 +992,7 @@ export function startWalk(app) {
   U.view[app.id] = 'app';
   notify();
 }
-export function StageView({ app }) {
+export function StageView({ app }: { app: AppRecord }) {
   const st = stageOf(app),
     def = app.def,
     ready = def.screens.length > 0 && dbExists(app.id);
@@ -959,8 +1007,9 @@ export function StageView({ app }) {
       </div>
     );
   const users = appUsers(app),
-    p0 = st.panes[0];
-  const setUser = (pane, id) => {
+    p0 = st.panes[0],
+    saved = app.tpl ? REC[app.tpl] : undefined;
+  const setUser = (pane: Pane, id: number | null) => {
     pane.uid = id;
     pane.screen = null;
     pane.rec = null;
@@ -1020,9 +1069,9 @@ export function StageView({ app }) {
           <span className="hide-sm">Two users</span>
         </Btn>
         <span className="grow" />
-        {REC[app.tpl] && (
+        {saved && (
           <span className="hide-sm">
-            <Proto>{'Made-up data' + (REC[app.tpl].sampleNote ? '. ' + REC[app.tpl].sampleNote : '')}</Proto>
+            <Proto>{'Made-up data' + (saved.sampleNote ? '. ' + saved.sampleNote : '')}</Proto>
           </span>
         )}
         <Btn className="btn sm" data-tour="walk" disabled={!def.tour.length} onClick={() => startWalk(app)}>
@@ -1044,18 +1093,17 @@ export function StageView({ app }) {
           </div>
         )}
       </div>
-      {st.tour && <WalkPlayer app={app} st={st} />}
+      {st.tour && <WalkPlayer app={app} st={st} T={st.tour} />}
     </div>
   );
 }
-export function WalkPlayer({ app, st }) {
-  const T = st.tour,
-    steps = app.def.tour,
+export function WalkPlayer({ app, st, T }: { app: AppRecord; st: Stage; T: Walk }) {
+  const steps = app.def.tour,
     step = steps[T.i],
     done = T.i >= steps.length,
     r = T.res[T.i],
     p = st.panes[0];
-  const exec = (i) => {
+  const exec = (i: number) => {
     const x = tourExec(app, T.state, steps[i]);
     T.res[i] = {
       ok: x.ok,

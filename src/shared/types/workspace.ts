@@ -224,7 +224,8 @@ export interface ViewState {
   itab: Dict<Loose>;
   runSel: Dict<Loose>;
   follow: Dict<Loose>;
-  stage: Dict<Loose>;
+  /** the built app's preview, per app (src/workspace/runtime.tsx) */
+  stage: Dict<Stage>;
   data: Dict<Loose>;
   api: Dict<Loose>;
   conn: Loose;
@@ -419,4 +420,130 @@ export interface Review {
   status: string;
   findings: { state: string; [field: string]: Loose }[];
   [field: string]: Loose;
+}
+
+/* ---------- a built app on screen (src/workspace/runtime.tsx, views-a.tsx, views-b.tsx, room.tsx) ---------- */
+/** One record of a table: what the record drawer opens. */
+export interface RecordRef {
+  table: string;
+  id: number;
+}
+
+/** A record form being filled in: a new record (`id` null) or an edit. */
+export interface PaneForm {
+  table: string;
+  id: number | null;
+  vals: Dict<Loose>;
+  errs: Dict<string>;
+  err?: string;
+  /** form screens: the id of the record just created */
+  done?: number | null;
+}
+
+/** One filter of a data view: a column, a condition (`is`, `has`, `range`, `between` ...) and its value. */
+export interface ViewFilter {
+  col: string;
+  op: string;
+  /** a value of the column; a range name for `range`; `[from, to]` dates for `between`; null for `empty` */
+  val: Loose;
+}
+
+/** What a person chose for one view: the View advisor's plan is merged under it. Every field names a column. */
+export interface ViewOptions {
+  by?: string | null;
+  lane?: string | null;
+  date?: string | null;
+  start?: string | null;
+  end?: string | null;
+  x?: string | null;
+  split?: string | null;
+  measure?: string | null;
+  bucket?: string | null;
+  kind?: string | null;
+  rows?: string | null;
+  cols?: string | null;
+  parent?: string | null;
+  levels?: string[];
+  mode?: string | null;
+  zoom?: string | null;
+  /** chart: show the data table under it */
+  table?: boolean;
+}
+
+/** How a person left one page of a built app: view, search, filters, sorting and each view's options. */
+export interface ExplorerState {
+  view: string;
+  q: string;
+  filters: ViewFilter[];
+  sort: { col: string; dir: number } | null;
+  group: string;
+  /** column name to hidden, once the table view has drawn */
+  hidden: Dict<boolean> | null;
+  page: number;
+  /** closed groups (table) and open branches (tree) */
+  closed: Dict<boolean>;
+  open: Dict<boolean>;
+  cfg: Dict<ViewOptions>;
+  /** the filter being written in the filter box */
+  fd: { col: string; op: string; val: Loose } | null;
+  /** calendar: months or weeks from today, and the day showing all its records */
+  month?: number;
+  calOpen?: string | null;
+  /** timeline: days from the default window */
+  tlOff?: number;
+}
+
+/** A dashboard filter set by selecting a bar. */
+export interface DashFilter {
+  table: string;
+  col: string;
+  val: Loose;
+}
+
+/** A connector call made from a record's action button, and its answer. */
+export interface PaneCall {
+  row: number;
+  name: string;
+  label: string;
+  res: { ok: boolean; result: Loose };
+}
+
+/** One copy of a built app on screen: who is signed in, which page, and what is open. */
+export interface Pane {
+  n: number;
+  /** the signed-in user's id */
+  uid: number | null;
+  screen: string | null;
+  rec: RecordRef | null;
+  form: PaneForm | null;
+  /** form screens' drafts, by screen id */
+  forms: Dict<PaneForm>;
+  /** each page's state, by screen id */
+  vs: Dict<ExplorerState>;
+  /** the dashboard's date range and bar filters */
+  ds: { range: string; f: DashFilter[] } | null;
+  /** the agent room's start form */
+  tf: PaneForm | null;
+  login: { u: string; p: string; err: string } | null;
+  conn: PaneCall | null;
+  /** phone layout: the open sheet */
+  sheet?: string | null;
+  /** the agent room: the case on show */
+  caseId?: number | null;
+  /** drawn by a check, not by a person: nothing is remembered */
+  test?: boolean;
+}
+
+/** The walkthrough player: the step on show, each step's result, and what the tour remembers. */
+export interface Walk {
+  i: number;
+  res: ({ ok?: boolean; detail?: string } | undefined)[];
+  state: { rows: Dict<number>; last: RecordRef | null };
+}
+
+/** The built app's preview: one or two panes, and the walkthrough when it plays. */
+export interface Stage {
+  split: boolean;
+  panes: Pane[];
+  tour: Walk | null;
 }

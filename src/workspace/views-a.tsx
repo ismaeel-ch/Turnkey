@@ -1,5 +1,6 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type DragEvent, type FormEvent, type FunctionComponent, type ReactNode } from 'react';
+import type { AppDef, AppTable, AppUser, ColumnDef, Screen, StoredRow } from '@/shared/types/app';
+import type { AppRecord, Dict, ExplorerState, Pane, ViewFilter, ViewOptions } from '@/shared/types/workspace';
 import {
   MON,
   MONTH,
@@ -22,13 +23,13 @@ import {
 } from './core';
 import { VIEW_ICON, VIEW_LABEL, accOf, apiCall, appUsers, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isNum, viewCfg, viewFit, viewsOf } from './viewspec';
-import { Btn, Empty, FilterChip, Icon, Input, MBar, Menu, Seg, Select } from './ui';
+import { Btn, Empty, FilterChip, Icon, Input, MBar, Menu, Seg, Select, type MenuEntry } from './ui';
 import { Cell, cellText, fetchApi, isStatusCol, optLabel, rowTitle, stateLabel, stateTone } from './runtime';
 import { VChart, VPivot, VTimeline } from './views-b';
 
 /* ===== Turnkey prototype · the data explorer: one table, many views =====
    Every view below draws the same rows: the ones the API returned for this user, after the search box and the filters. */
-export const OP_TEXT = {
+export const OP_TEXT: Dict<string> = {
   is: 'is',
   not: 'is not',
   has: 'contains',
@@ -41,7 +42,7 @@ export const OP_TEXT = {
   empty: 'is empty',
   filled: 'is filled',
 };
-export const RANGES = {
+export const RANGES: Dict<string> = {
   today: 'today',
   week: 'in the next 7 days',
   upcoming: 'today or later',
@@ -49,7 +50,22 @@ export const RANGES = {
   past30: 'in the past 30 days',
   month: 'this month',
 };
-export const opsFor = (c) =>
+/** A value read from a row, as the date helpers take it. */
+export const asText = (v: unknown) => (v == null ? null : String(v));
+/** The `[from, to]` dates of a `between` filter. */
+export const span = (v: unknown): [string, string] => (Array.isArray(v) ? [String(v[0]), String(v[1])] : ['', '']);
+/** A choice a category column can take, in its stable order. */
+export interface Choice {
+  key: string | number | null;
+  label: string;
+}
+/** A filter to add when a mark of a chart or a cell of a pivot is selected: `op` defaults to `is` (or `empty`). */
+export interface DrillPair {
+  col: string;
+  op?: string;
+  val: unknown;
+}
+export const opsFor = (c: ColumnDef) =>
   isCat(c)
     ? ['is', 'not', 'empty', 'filled']
     : isDate(c)
@@ -57,19 +73,20 @@ export const opsFor = (c) =>
       : isNum(c)
         ? ['gt', 'lt', 'is', 'empty']
         : ['has', 'empty', 'filled'];
-export function inRange(v, r) {
-  const n = dayDiff(v);
+export function inRange(v: unknown, r: unknown) {
+  const s = asText(v);
+  const n = dayDiff(s);
   if (n == null) return false;
   if (r === 'today') return n === 0;
   if (r === 'week') return n >= 0 && n < 7;
   if (r === 'upcoming') return n >= 0;
   if (r === 'past7') return n <= 0 && n > -7;
   if (r === 'past30') return n <= 0 && n > -30;
-  const d = parseISO(v),
+  const d = parseISO(s),
     t = today();
-  return d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
+  return !!d && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
 }
-export function passes(f, v) {
+export function passes(f: ViewFilter, v: unknown) {
   const none = v == null || v === '';
   switch (f.op) {
     case 'empty':
@@ -93,20 +110,20 @@ export function passes(f, v) {
     case 'range':
       return !none && inRange(v, f.val);
     case 'between':
-      return !none && String(v).slice(0, 10) >= f.val[0] && String(v).slice(0, 10) <= f.val[1];
+      return !none && String(v).slice(0, 10) >= span(f.val)[0] && String(v).slice(0, 10) <= span(f.val)[1];
     default:
       return true;
   }
 }
-export function catChoices(app, user, c) {
+export function catChoices(app: AppRecord, user: AppUser, c: ColumnDef & { _t?: string }): Choice[] {
   // the values a category column can take, in a stable order, so colours follow the value
   if (c.type === 'select')
-    return c.options.map((o) => ({
+    return (c.options || []).map((o) => ({
       key: o,
       label: stateLabel(
         app.def,
         {
-          name: c._t,
+          name: c._t || '',
         },
         c,
         o,
@@ -132,8 +149,8 @@ export function catChoices(app, user, c) {
       }));
   const rt = tableOf(app.def, c.ref),
     res = rt ? fetchApi(app, user, '/api/' + c.ref) : null;
-  return res && res.status === 200
-    ? res.data
+  return rt && res && res.status === 200
+    ? (res.data as StoredRow[])
         .slice()
         .sort((a, b) => a.id - b.id)
         .map((r) => ({
@@ -142,7 +159,7 @@ export function catChoices(app, user, c) {
         }))
     : [];
 }
-export const choices = (app, user, t, c) =>
+export const choices = (app: AppRecord, user: AppUser, t: AppTable, c: ColumnDef) =>
   catChoices(
     app,
     user,
@@ -153,12 +170,14 @@ export const choices = (app, user, t, c) =>
       c,
     ),
   );
-export const prefKey = (app, user, scr) => app.id + '|' + user.id + '|' + scr.id;
-export function vxState(pane, scr, app, user, test) {
+export const prefKey = (app: AppRecord, user: AppUser, scr: Pick<Screen, 'id'>) => app.id + '|' + user.id + '|' + scr.id;
+/** The page fields `vxState` reads. A dashboard link may open a page by id alone. */
+type PageRef = Pick<Screen, 'id' | 'type'> & Partial<Pick<Screen, 'range' | 'date'>>;
+export function vxState(pane: Pane, scr: PageRef, app: AppRecord, user: AppUser, test?: boolean): ExplorerState {
   // how this person left this page: view, filters, sorting and options are kept with the app
   const all = pane.vs || (pane.vs = {});
   if (!all[scr.id]) {
-    const saved = !test && !pane.test && app && user && S.prefs ? S.prefs[prefKey(app, user, scr)] : null;
+    const saved = !test && !pane.test && app && user && S.prefs ? (S.prefs[prefKey(app, user, scr)] as Partial<ExplorerState> | undefined) : null;
     all[scr.id] = Object.assign(
       {
         view: scr.type,
@@ -187,7 +206,7 @@ export function vxState(pane, scr, app, user, test) {
   }
   return all[scr.id];
 }
-export function vxRemember(app, user, scr, st) {
+export function vxRemember(app: AppRecord, user: AppUser, scr: Screen, st: ExplorerState) {
   const P = S.prefs || (S.prefs = {});
   P[prefKey(app, user, scr)] = {
     view: st.view,
@@ -199,31 +218,38 @@ export function vxRemember(app, user, scr, st) {
   };
   saveSoon();
 }
-export function vxCfg(def, t, scr, st, type) {
+export function vxCfg(def: AppDef, t: AppTable, scr: Screen, st: ExplorerState, type: string): ViewOptions {
   // the advisor's plan, then the page's presets, then what the person chose; every column is checked again
-  const base = Object.assign({}, viewsOf(def, t).find((v) => v.type === type) || {}),
-    mine = st.cfg[type] || {};
+  const base: Dict<unknown> = Object.assign({}, viewsOf(def, t).find((v) => v.type === type) || {}),
+    mine: ViewOptions = st.cfg[type] || {};
   if (type === 'board' && scr.group) base.by = scr.group;
   if ((type === 'calendar' || type === 'timeline') && scr.date) {
     base.date = scr.date;
     base.start = scr.date;
     if (scr.end) base.end = scr.end;
   }
-  const o = viewCfg(def, t, type, Object.assign({}, base, mine));
-  ['split', 'lane', 'end'].forEach((k) => {
+  // viewCfg checks every column it keeps; its settings are the ViewOptions fields
+  const o = viewCfg(def, t, type, Object.assign({}, base, mine)) as ViewOptions;
+  (['split', 'lane', 'end'] as const).forEach((k) => {
     if (k in mine && mine[k] == null && k in o) o[k] = null;
   });
-  if (type === 'tree' && Array.isArray(mine.levels)) o.levels = mine.levels.filter((n) => colOf(t, n) && isCat(colOf(t, n)));
-  ['mode', 'zoom', 'table'].forEach((k) => {
-    if (mine[k] != null) o[k] = mine[k];
-  });
+  if (type === 'tree' && Array.isArray(mine.levels))
+    o.levels = mine.levels.filter((n) => {
+      const c = colOf(t, n);
+      return !!c && isCat(c);
+    });
+  if (mine.mode != null) o.mode = mine.mode;
+  if (mine.zoom != null) o.zoom = mine.zoom;
+  if (mine.table != null) o.table = mine.table;
   return o;
 }
-export function FilterBox({ app, user, t, st, set }) {
+/** Changes a page's state, remembers it for this person and redraws. */
+export type SetState = (fn: (s: ExplorerState) => void) => void;
+export function FilterBox({ app, user, t, st, set }: { app: AppRecord; user: AppUser; t: AppTable; st: ExplorerState; set: SetState }) {
   const s0 = useState(false),
     open = s0[0],
     setOpen = s0[1],
-    ref = useRef(),
+    ref = useRef<HTMLDivElement>(null),
     d =
       st.fd ||
       (st.fd = {
@@ -233,8 +259,8 @@ export function FilterBox({ app, user, t, st, set }) {
       });
   useEffect(() => {
     if (!open) return undefined;
-    const h = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
@@ -244,7 +270,7 @@ export function FilterBox({ app, user, t, st, set }) {
     op = ops.includes(d.op) ? d.op : ops[0],
     noVal = op === 'empty' || op === 'filled',
     id = 'fl_' + t.name + '_';
-  const upd = (k, v) => {
+  const upd = (k: 'col' | 'op' | 'val', v: string) => {
     d[k] = v;
     if (k === 'col') {
       d.op = '';
@@ -252,7 +278,7 @@ export function FilterBox({ app, user, t, st, set }) {
     }
     notify();
   };
-  const add = (e) => {
+  const add = (e: FormEvent) => {
     e.preventDefault();
     if (!noVal && (d.val === '' || d.val == null)) return;
     set((s) => {
@@ -266,7 +292,7 @@ export function FilterBox({ app, user, t, st, set }) {
     });
     setOpen(false);
   };
-  let ctl = null;
+  let ctl: ReactNode = null;
   if (!noVal)
     ctl = isCat(c) ? (
       <Select native className="select" id={id + 'v'} aria-label="Value" value={String(d.val)} onChange={(e) => upd('val', e.target.value)}>
@@ -294,7 +320,7 @@ export function FilterBox({ app, user, t, st, set }) {
         aria-label="Value"
         type={isDate(c) ? 'date' : isNum(c) ? 'number' : 'text'}
         value={d.val}
-        onInput={(e) => upd('val', e.target.value)}
+        onInput={(e: FormEvent<HTMLInputElement>) => upd('val', e.currentTarget.value)}
       />
     );
   return (
@@ -329,10 +355,33 @@ export function FilterBox({ app, user, t, st, set }) {
     </div>
   );
 }
-export function Explorer({ app, user, pane, scr, test }) {
+/** What every data view is given: the rows to draw, and ways to change the page. */
+export interface ViewProps {
+  app: AppRecord;
+  user: AppUser;
+  pane: Pane;
+  scr: Screen;
+  t: AppTable;
+  rows: StoredRow[];
+  st: ExplorerState;
+  cfg: ViewOptions;
+  setCfg: <K extends keyof ViewOptions>(k: K, v: ViewOptions[K]) => void;
+  set: SetState;
+  open: (r: StoredRow) => void;
+  openNew: (preset?: Dict<unknown>) => void;
+  drill: (pairs: (DrillPair | null | undefined)[]) => void;
+  canCreate: boolean;
+}
+export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user: AppUser; pane: Pane; scr: Screen; test?: boolean }) {
   const def = app.def,
-    t = tableOf(def, scr.table),
-    keep = !test && !pane.test,
+    t = tableOf(def, scr.table);
+  if (!t)
+    return (
+      <div className="scr">
+        <MBar tone="danger">{'This page shows a table that is not there: ' + scr.table}</MBar>
+      </div>
+    );
+  const keep = !test && !pane.test,
     st = vxState(pane, scr, app, user, test),
     acc = accOf(def, user.role, t.name),
     res = fetchApi(app, user, '/api/' + t.name, null, test || pane.test ? 'check' : 'app');
@@ -346,7 +395,7 @@ export function Explorer({ app, user, pane, scr, test }) {
     recT = rec.map((v) => v.type),
     view = DATA_VIEWS.includes(st.view) && !viewFit(def, t, st.view) ? st.view : 'table',
     q = str(st.q).toLowerCase();
-  let rows = res.data;
+  let rows: StoredRow[] = res.data;
   st.filters.forEach((f) => {
     if (colOf(t, f.col)) rows = rows.filter((r) => passes(f, r[f.col]));
   });
@@ -359,19 +408,19 @@ export function Explorer({ app, user, pane, scr, test }) {
             .indexOf(q) >= 0,
       ),
     );
-  const set = (fn) => {
+  const set: SetState = (fn) => {
       fn(st);
       if (keep) vxRemember(app, user, scr, st);
       notify();
     },
-    open = (r) => {
+    open = (r: StoredRow) => {
       pane.rec = {
         table: t.name,
         id: r.id,
       };
       notify();
     };
-  const openNew = (preset) => {
+  const openNew = (preset?: Dict<unknown>) => {
     pane.form = {
       table: t.name,
       id: null,
@@ -380,9 +429,10 @@ export function Explorer({ app, user, pane, scr, test }) {
     };
     notify();
   };
-  const drill = (pairs) =>
+  const drill = (pairs: (DrillPair | null | undefined)[]) =>
     set((s) => {
-      pairs.filter(Boolean).forEach((p) => {
+      pairs.forEach((p) => {
+        if (!p) return;
         s.filters = s.filters.filter((f) => f.col !== p.col);
         s.filters.push(
           p.op
@@ -409,13 +459,13 @@ export function Explorer({ app, user, pane, scr, test }) {
       s.group = '';
     });
   const cfg = vxCfg(def, t, scr, st, view),
-    setCfg = (k, v) =>
+    setCfg = <K extends keyof ViewOptions>(k: K, v: ViewOptions[K]) =>
       set((s) => {
         s.cfg[view] = Object.assign({}, s.cfg[view], {
           [k]: v,
         });
       });
-  const P = {
+  const P: ViewProps = {
     app,
     user,
     pane,
@@ -431,27 +481,28 @@ export function Explorer({ app, user, pane, scr, test }) {
     drill,
     canCreate: acc.create,
   };
-  const chip = (f, i) => {
+  const chip = (f: ViewFilter, i: number) => {
     const c = colOf(t, f.col);
     if (!c) return null;
+    const [from, to] = span(f.val);
     const v =
       f.op === 'range'
-        ? RANGES[f.val]
+        ? RANGES[String(f.val)]
         : f.op === 'between'
-          ? f.val[0] === f.val[1]
-            ? fmtDate(f.val[0])
-            : fmtDate(f.val[0]) + ' to ' + fmtDate(f.val[1])
+          ? from === to
+            ? fmtDate(from)
+            : fmtDate(from) + ' to ' + fmtDate(to)
           : f.val == null
             ? ''
             : isCat(c)
               ? (
                   choices(app, user, t, c).find((o) => String(o.key) === String(f.val)) || {
-                    label: f.val,
+                    label: String(f.val),
                   }
                 ).label
               : isDate(c)
-                ? fmtDate(f.val)
-                : f.val;
+                ? fmtDate(String(f.val))
+                : String(f.val);
     return (
       <FilterChip
         key={i}
@@ -463,13 +514,13 @@ export function Explorer({ app, user, pane, scr, test }) {
           })
         }
       >
-        {c.label} {f.op === 'range' || (f.op === 'between' && f.val[0] === f.val[1]) ? 'is' : OP_TEXT[f.op]} {v}
+        {c.label} {f.op === 'range' || (f.op === 'between' && from === to) ? 'is' : OP_TEXT[f.op]} {v}
       </FilterChip>
     );
   };
   const csv = () => {
     const cols = t.columns,
-      esc = (x) => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"';
+      esc = (x: unknown) => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"';
     copyText(
       [cols.map((c) => esc(c.label)).join(',')]
         .concat(rows.map((r) => cols.map((c) => esc(cellText(app, user, t, c, r[c.name], 1))).join(',')))
@@ -478,16 +529,18 @@ export function Explorer({ app, user, pane, scr, test }) {
     );
   };
   const more = DATA_VIEWS.filter((v) => !recT.includes(v)),
-    V = {
-      table: VTable,
+    V = (
+      {
+        table: VTable,
       board: VBoard,
       calendar: VCalendar,
       cards: VCards,
       tree: VTree,
       chart: VChart,
       pivot: VPivot,
-      timeline: VTimeline,
-    }[view];
+        timeline: VTimeline,
+      } as Dict<FunctionComponent<ViewProps>>
+    )[view];
   return (
     <div className="scr vx">
       <div className="scr-head">
@@ -509,9 +562,9 @@ export function Explorer({ app, user, pane, scr, test }) {
             aria-label={'Search ' + t.label.toLowerCase()}
             placeholder="Search"
             value={st.q || ''}
-            onInput={(e) =>
+            onInput={(e: FormEvent<HTMLInputElement>) =>
               set((s) => {
-                s.q = e.target.value;
+                s.q = e.currentTarget.value;
                 s.page = 0;
               })
             }
@@ -570,9 +623,9 @@ export function Explorer({ app, user, pane, scr, test }) {
                 {
                   head: true,
                   label: 'Not recommended here',
-                },
+                } as MenuEntry,
               ].concat(
-                more.map((v) => {
+                more.map((v): MenuEntry => {
                   const why = viewFit(def, t, v);
                   return {
                     label: VIEW_LABEL[v],
@@ -618,7 +671,22 @@ export function Explorer({ app, user, pane, scr, test }) {
     </div>
   );
 }
-export const Pick = ({ id, label: text, value, onChange, opts, none }) => (
+/** A small labelled dropdown of a view's options. */
+export const Pick = ({
+  id,
+  label: text,
+  value,
+  onChange,
+  opts,
+  none,
+}: {
+  id: string;
+  label: string;
+  value: string | null | undefined;
+  onChange: (v: string | null) => void;
+  opts: { name: string; label?: string }[];
+  none?: string;
+}) => (
   <label className="pick">
     <span>{text}</span>
     <Select native className="select sm" id={id} value={value || ''} onChange={(e) => onChange(e.target.value || null)}>
@@ -631,17 +699,19 @@ export const Pick = ({ id, label: text, value, onChange, opts, none }) => (
     </Select>
   </label>
 );
-export const NoRows = ({ t }) => (
+export const NoRows = ({ t }: { t: AppTable }) => (
   <Empty icon="search" title={'No ' + t.label.toLowerCase() + ' to show'} text="Nothing matches the search and filters." />
 );
-export function VTable({ app, user, pane, scr, t, rows, st, set, open }) {
+export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewProps) {
   if (!st.hidden) {
-    st.hidden = {};
+    const h: Dict<boolean> = {};
     t.columns.forEach((c) => {
-      st.hidden[c.name] = !scr.columns.includes(c.name);
+      h[c.name] = !scr.columns.includes(c.name);
     });
+    st.hidden = h;
   }
-  const cols = t.columns.filter((c) => !st.hidden[c.name]),
+  const hidden = st.hidden;
+  const cols = t.columns.filter((c) => !hidden[c.name]),
     sort = st.sort && colOf(t, st.sort.col) ? st.sort : null,
     list = rows.slice(),
     g = colOf(t, st.group),
@@ -649,27 +719,31 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }) {
     per = 25,
     pages = Math.max(1, Math.ceil(list.length / per)),
     page = Math.min(st.page || 0, pages - 1);
-  const raw = (c, r) =>
+  const raw = (c: ColumnDef, r: StoredRow): string | number =>
     isNum(c) || isDate(c) || c.type === 'bool'
       ? r[c.name] == null
         ? ''
-        : r[c.name]
+        : (r[c.name] as string | number)
       : String(cellText(app, user, t, c, r[c.name], 1)).toLowerCase();
-  if (sort) {
-    const c = colOf(t, sort.col);
+  const sc = sort ? colOf(t, sort.col) : null;
+  if (sort && sc) {
+    const c = sc;
     list.sort((a, b) => {
       const x = raw(c, a),
         y = raw(c, b);
       return (x > y ? 1 : x < y ? -1 : 0) * sort.dir;
     });
-  } else if (scr.date) list.sort((a, b) => String(a[scr.date]).localeCompare(String(b[scr.date])));
-  const sum = (c, l) => l.reduce((n, r) => n + (Number(r[c.name]) || 0), 0),
+  } else if (scr.date) {
+    const dc = scr.date;
+    list.sort((a, b) => String(a[dc]).localeCompare(String(b[dc])));
+  }
+  const sum = (c: ColumnDef, l: StoredRow[]) => l.reduce((n, r) => n + (Number(r[c.name]) || 0), 0),
     id = 'tb' + scr.id + pane.n;
-  const row = (r) => (
+  const row = (r: StoredRow) => (
     <tr
       key={r.id}
       className="clickable"
-      tabIndex="0"
+      tabIndex={0}
       onClick={() => open(r)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') open(r);
@@ -682,8 +756,9 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }) {
       ))}
     </tr>
   );
-  let body;
+  let body: ReactNode;
   if (g) {
+    const gc = g;
     const keys = choices(app, user, t, g).concat([
       {
         key: null,
@@ -691,9 +766,9 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }) {
       },
     ]);
     body = keys.map((k) => {
-      const l = list.filter((r) => (k.key == null ? r[g.name] == null || r[g.name] === '' : String(r[g.name]) === String(k.key)));
+      const l = list.filter((r) => (k.key == null ? r[gc.name] == null || r[gc.name] === '' : String(r[gc.name]) === String(k.key)));
       if (!l.length) return null;
-      const shut = st.closed[g.name + k.key];
+      const shut = st.closed[gc.name + k.key];
       return [
         <tr key={'g' + k.key} className="grp">
           <td colSpan={cols.length}>
@@ -702,7 +777,7 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }) {
               aria-expanded={!shut}
               onClick={() =>
                 set((s) => {
-                  s.closed[g.name + k.key] = !shut;
+                  s.closed[gc.name + k.key] = !shut;
                 })
               }
             >
@@ -771,10 +846,11 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }) {
           }}
           items={t.columns.map((c) => ({
             label: c.label,
-            check: !st.hidden[c.name],
+            check: !hidden[c.name],
             on: () =>
               set((s) => {
-                s.hidden[c.name] = !s.hidden[c.name];
+                const h = s.hidden || (s.hidden = {});
+                h[c.name] = !h[c.name];
               }),
           }))}
         />
@@ -869,7 +945,7 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }) {
     </>
   );
 }
-export function VBoard({ app, user, pane, scr, t, rows, cfg, setCfg, open }) {
+export function VBoard({ app, user, pane, scr, t, rows, cfg, setCfg, open }: ViewProps) {
   const def = app.def,
     g = colOf(t, cfg.by),
     lane = colOf(t, cfg.lane),
@@ -879,15 +955,15 @@ export function VBoard({ app, user, pane, scr, t, rows, cfg, setCfg, open }) {
   if (!g) return <Empty icon="board" title="No choice field to group by" />;
   const cols = scr.columns
     .map((n) => colOf(t, n))
-    .filter((c) => c && c.name !== g.name && c.name !== lab && c.type !== 'longtext')
+    .filter((c): c is ColumnDef => !!c && c.name !== g.name && c.name !== lab && c.type !== 'longtext')
     .slice(0, 3);
-  const drop = (e, to) => {
+  const drop = (e: DragEvent<HTMLElement>, to: string) => {
     e.preventDefault();
     const rid = +e.dataTransfer.getData('text/plain'),
       r0 = rows.find((r) => r.id === rid);
     if (!r0 || r0[g.name] === to) return;
     if (P) {
-      const tr = P.transitions.find((x) => x.to === to && x.from.includes(r0[g.name]) && x.roles.includes(user.role));
+      const tr = P.transitions.find((x) => x.to === to && x.from.includes(String(r0[g.name])) && x.roles.includes(user.role));
       if (!tr)
         return toast(
           roleName(def, user.role) +
@@ -917,9 +993,9 @@ export function VBoard({ app, user, pane, scr, t, rows, cfg, setCfg, open }) {
     }
     notify();
   };
-  const board = (list, key) => (
+  const board = (list: StoredRow[], key: string) => (
     <div key={key} className="kb">
-      {g.options.map((o) => {
+      {(g.options || []).map((o) => {
         const l = list.filter((r) => r[g.name] === o);
         return (
           <section
@@ -938,7 +1014,7 @@ export function VBoard({ app, user, pane, scr, t, rows, cfg, setCfg, open }) {
                 <button
                   key={r.id}
                   className="kb-card"
-                  draggable="true"
+                  draggable
                   onDragStart={(e) => e.dataTransfer.setData('text/plain', String(r.id))}
                   onClick={() => open(r)}
                 >
@@ -1009,7 +1085,7 @@ export function VBoard({ app, user, pane, scr, t, rows, cfg, setCfg, open }) {
     </>
   );
 }
-export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, open, openNew, canCreate }) {
+export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, open, openNew, canCreate }: ViewProps) {
   const def = app.def,
     dc = colOf(t, cfg.date);
   if (!dc) return <Empty icon="calendar" title="No date field" />;
@@ -1025,11 +1101,11 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
       ? new Date(base.getFullYear(), base.getMonth(), base.getDate() - ((base.getDay() + 6) % 7) + off * 7)
       : new Date(base.getFullYear(), base.getMonth() + off, 1),
     start = week ? first : new Date(first.getFullYear(), first.getMonth(), 1 - ((first.getDay() + 6) % 7)),
-    byDay = {};
+    byDay: Dict<StoredRow[]> = {};
   rows.forEach((r) => {
-    const a = parseISO(r[dc.name]);
+    const a = parseISO(asText(r[dc.name]));
     if (!a) return;
-    const b = cfg.end && r[cfg.end] ? parseISO(r[cfg.end]) : null;
+    const b = cfg.end && r[cfg.end] ? parseISO(asText(r[cfg.end])) : null;
     let d = new Date(a.getFullYear(), a.getMonth(), a.getDate()),
       n = 0;
     const last = b && b >= d ? b : d;
@@ -1040,10 +1116,10 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
       n++;
     }
   });
-  const days = [];
+  const days: Date[] = [];
   for (let i = 0; i < (week ? 7 : 42); i++) days.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
   const count = week ? 7 : days[35].getMonth() !== first.getMonth() ? 35 : 42,
-    move = (n) =>
+    move = (n: number) =>
       set((s) => {
         s.month = n;
         s.calOpen = null;
@@ -1079,7 +1155,7 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
             },
           ]}
           value={week ? 'week' : 'month'}
-          onChange={(v) => {
+          onChange={(v: string) => {
             st.month = 0;
             setCfg('mode', v);
           }}
@@ -1124,7 +1200,7 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
                   title={rowTitle(app, user, t, r) + (P ? ' · ' + stateLabel(def, t, colOf(t, P.column), r[P.column]) : '')}
                   onClick={() => open(r)}
                 >
-                  {isDT && <span className="cal-t">{fmtTime(r[dc.name])}</span>}
+                  {isDT && <span className="cal-t">{fmtTime(asText(r[dc.name]))}</span>}
                   <span className="ellipsis">{rowTitle(app, user, t, r, lab)}</span>
                 </button>
               ))}
@@ -1148,13 +1224,13 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
     </>
   );
 }
-export function VCards({ app, user, scr, t, rows, open }) {
+export function VCards({ app, user, scr, t, rows, open }: ViewProps) {
   const def = app.def,
     P = def.process && def.process.table === t.name ? def.process : null,
     lab = scr.label || t.title,
     cols = scr.columns
       .map((n) => colOf(t, n))
-      .filter((c) => c && c.name !== lab && !(P && c.name === P.column) && c.type !== 'longtext')
+      .filter((c): c is ColumnDef => !!c && c.name !== lab && !(P && c.name === P.column) && c.type !== 'longtext')
       .slice(0, 4),
     long = t.columns.find((c) => c.type === 'longtext');
   if (!rows.length) return <NoRows t={t} />;
@@ -1171,7 +1247,7 @@ export function VCards({ app, user, scr, t, rows, open }) {
                 </span>
               )}
             </span>
-            {long && r[long.name] ? <span className="muted t-cap clamp">{r[long.name]}</span> : null}
+            {long && r[long.name] ? <span className="muted t-cap clamp">{String(r[long.name])}</span> : null}
             {cols.map(
               (c) =>
                 r[c.name] != null &&
@@ -1191,7 +1267,7 @@ export function VCards({ app, user, scr, t, rows, open }) {
     </>
   );
 }
-export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, open }) {
+export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, open }: ViewProps) {
   const def = app.def,
     cats = t.columns.filter(isCat),
     self = cfg.parent ? colOf(t, cfg.parent) : null,
@@ -1201,13 +1277,13 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
     P = def.process && def.process.table === t.name ? def.process : null,
     id = 'tr' + scr.id + pane.n,
     tag = P ? null : t.columns.find((c) => c.type === 'select' && (byParent || !levels.includes(c.name)));
-  const isOpen = (k, depth) => (st.open[k] != null ? st.open[k] : depth < (byParent ? 2 : 1)),
-    tog = (k, depth) =>
+  const isOpen = (k: string, depth: number) => (st.open[k] != null ? st.open[k] : depth < (byParent ? 2 : 1)),
+    tog = (k: string, depth: number) =>
       set((s) => {
         s.open[k] = !isOpen(k, depth);
       });
-  const total = (l) => (num ? l.reduce((n, r) => n + (Number(r[num.name]) || 0), 0) : 0);
-  const leaf = (r, depth, kids) => (
+  const total = (l: StoredRow[]) => (num ? l.reduce((n, r) => n + (Number(r[num.name]) || 0), 0) : 0);
+  const leaf = (r: StoredRow, depth: number, kids: number) => (
     <li key={'r' + r.id}>
       <div
         className="tree-row"
@@ -1240,24 +1316,27 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
       </div>
     </li>
   );
-  let body;
-  if (byParent) {
-    const ids = new Set(rows.map((r) => r.id)),
-      kidsOf = (pid) => rows.filter((r) => r[self.name] === pid).sort((a, b) => a.id - b.id),
-      walk = (r, depth) => {
+  type Tree = ReactNode | Tree[];
+  let body: Tree;
+  if (self && byParent) {
+    const pc = self.name,
+      ids = new Set<unknown>(rows.map((r) => r.id)),
+      kidsOf = (pid: number) => rows.filter((r) => r[pc] === pid).sort((a, b) => a.id - b.id),
+      walk = (r: StoredRow, depth: number): Tree[] => {
         const k = kidsOf(r.id);
-        return [leaf(r, depth, k.length)].concat(
+        return [leaf(r, depth, k.length) as Tree].concat(
           k.length && isOpen('p' + r.id, depth) && depth < 8 ? k.map((x) => walk(x, depth + 1)) : [],
         );
       };
     body = rows
-      .filter((r) => r[self.name] == null || !ids.has(r[self.name]))
+      .filter((r) => r[pc] == null || !ids.has(r[pc]))
       .sort((a, b) => a.id - b.id)
       .map((r) => walk(r, 0));
   } else {
-    const walk = (list, depth, path) => {
+    const walk = (list: StoredRow[], depth: number, path: string): Tree[] => {
       if (depth >= levels.length) return list.map((r) => leaf(r, depth, 0));
       const c = colOf(t, levels[depth]);
+      if (!c) return [];
       return choices(app, user, t, c)
         .concat([
           {
@@ -1271,7 +1350,7 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
           const key = path + '/' + k.key,
             on = isOpen(key, depth);
           return [
-            <li key={key}>
+            (<li key={key}>
               <div
                 className="tree-row grp"
                 style={{
@@ -1292,13 +1371,13 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
                   ) : null}
                 </button>
               </div>
-            </li>,
+            </li>) as Tree,
           ].concat(on ? walk(l, depth + 1, key) : []);
         });
     };
     body = levels.length ? walk(rows, 0, '') : rows.map((r) => leaf(r, 0, 0));
   }
-  const lv = (i) => (
+  const lv = (i: number) => (
     <Pick
       id={id + i}
       label={i ? 'then by' : 'Nest by'}
@@ -1345,7 +1424,7 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
           Reset
         </Btn>
       </div>
-      {rows.length ? <ul className="tree">{body}</ul> : <NoRows t={t} />}
+      {rows.length ? <ul className="tree">{body as ReactNode}</ul> : <NoRows t={t} />}
     </>
   );
 }

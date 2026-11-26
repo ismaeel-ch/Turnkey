@@ -1,4 +1,3 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
 import { toStyle } from '@/platform/dom';
 import { S, U, arr, brief, commit, cx, fmtDate, fmtMs, fmtNum, label, notify, online, snake, str, toast, liveModelOn } from './core';
 import { VIEW_ICON, accOf, apiCall, chk, colOf, roleName, tableOf, tourValues } from './engine';

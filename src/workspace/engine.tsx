@@ -40,7 +40,7 @@ import {
   topoOrder,
 } from './db';
 import { canRunTeam, normTeam } from './team';
-import { AppPane } from './runtime';
+import { AppPane, newPane } from './runtime';
 
 /* ===== Turnkey prototype · engine: definitions, station checks, the role-guarded API, acceptance runner ===== */
 export const TYPES: readonly string[] = ['text', 'longtext', 'number', 'money', 'date', 'datetime', 'bool', 'select', 'ref', 'user'];
@@ -1502,14 +1502,11 @@ export function renderTest(app: AppRecord) {
           <AppPane
             app={app}
             pane={{
+              ...newPane(9),
               uid: u.id,
               screen: scr.id,
-              flt: {},
-              q: '',
-              month: 0,
               test: true,
             }}
-            solo={false}
           />,
           host,
         );
