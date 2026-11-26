@@ -20,9 +20,38 @@ const run = (cmd, args, opts = {}) =>
     child.on('exit', (code) => resolve(code ?? 1));
   });
 
+/** True if something already answers on this address. A leftover server would serve an old build to the checks. */
+async function answers(url) {
+  try {
+    await fetch(url + '/api/health', { signal: AbortSignal.timeout(1500) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function main() {
   let url = process.env.TK_URL;
   let server = null;
+  // `next start` runs the real server as a child process. Stop the whole group, or that child lives on,
+  // keeps the port, and the next run would test whatever build it was started with.
+  const stop = () => {
+    if (!server) return;
+    try {
+      process.kill(-server.pid, 'SIGTERM');
+    } catch {
+      // already gone
+    }
+    server = null;
+  };
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(signal, () => {
+      stop();
+      process.exit(130);
+    });
+  }
+  process.on('exit', stop);
+
   if (!url) {
     if (!fs.existsSync(path.join(root, '.next', 'BUILD_ID'))) {
       const built = await run('npm', ['run', 'build']);
@@ -30,26 +59,31 @@ async function main() {
     }
     const port = Number(process.env.PORT) || 3100 + (process.pid % 700);
     url = 'http://localhost:' + port;
+    if (await answers(url)) {
+      console.error('Port ' + port + ' is already in use. Stop what is running there, or pick another: PORT=<number> npm run test:e2e');
+      return 1;
+    }
     // No model is configured for the checks: Live is exercised with a stand-in the checks inject into the page.
     const env = { ...process.env, PORT: String(port), LLM_PROVIDER: '', LITELLM_API_KEY: '', OPENAI_API_KEY: '' };
-    server = spawn(path.join(root, 'node_modules', '.bin', 'next'), ['start', '-p', String(port)], { cwd: root, env, stdio: ['ignore', 'ignore', 'inherit'] });
+    server = spawn(path.join(root, 'node_modules', '.bin', 'next'), ['start', '-p', String(port)], {
+      cwd: root,
+      env,
+      stdio: ['ignore', 'ignore', 'inherit'],
+      detached: true,
+    });
     let up = false;
     for (let i = 0; i < 80 && !up; i++) {
       await sleep(250);
-      try {
-        up = (await fetch(url + '/api/health')).ok;
-      } catch {
-        // not listening yet
-      }
+      up = await answers(url);
     }
     if (!up) {
-      server.kill();
+      stop();
       console.error('The app did not start on ' + url);
       return 1;
     }
   }
   const code = await run('node', [path.join(root, 'tests', 'e2e', 'flows.cjs'), flows], { env: { ...process.env, TK_URL: url } });
-  if (server) server.kill();
+  stop();
   return code;
 }
 
