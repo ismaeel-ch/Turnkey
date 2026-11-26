@@ -1,0 +1,31 @@
+# ADR 8: The workspace is ordinary code
+
+Status: accepted. Replaces the first version of this decision ("the legacy modules are not rewritten"). Implementation:
+Built for the move to ES modules; typing module by module is in progress.
+
+## Context
+
+The prototype was 26 plain-script modules (about 900 KB) that held the whole product and were verified by 286 browser
+checks. The first decision was to run them unchanged in the Next.js app through a compatibility layer
+(`src/platform/compat`) and a build step (`scripts/build-legacy.mjs`), so that nothing broke on day one. That worked:
+every check passed on React from the first pull request. But the layer hid the code from the type checker, from lint
+and from imports, and the owner asked for legacy code to be removed.
+
+## Decision
+
+The modules became ES modules with JSX in `src/workspace`, one file per former module, loaded by the page as ordinary
+code (pull request #42). The compatibility layer and the build step were deleted. Each file is then typed on its own
+(remove `// @ts-nocheck` only when that file type-checks), split into components, and its mutable store is moved to
+an external store. New behaviour still reaches the outside world through the seams in `docs/PLAN.md` section 6.
+
+## Consequences
+
+- The type checker, lint and the bundler see the whole product. No second build step.
+- The browser flows are what protect the behaviour while the code changes: every change keeps the flows that exercise
+  it green (`CLAUDE.md` rule 5). There are now 297 checks in 9 flows.
+- At the time of writing, 26 of the 29 files still start with `// @ts-nocheck`. That is visible debt, paid off module
+  by module (workstream 8).
+- Some names (the `formwork:v1:` storage prefix, `window.__formwork`) come from the product's earlier name and are kept
+  so saved data stays readable.
+
+Where to look: `CLAUDE.md` rule 5, `docs/PLAN.md` decision 8 and section 6, `src/workspace`.

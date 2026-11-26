@@ -10,8 +10,19 @@ Anthropic, then, on a developer's machine only, the Claude Code command if it is
 production with nothing configured there is no provider: the app works on its saved builds and Live says that no
 model is connected.
 
-Sonnet is used for planning and building roles (`default`), Haiku for fast and validator roles (`quick`). `temperature`
-is never sent: current Claude models reject any value but the default. Tools are always `auto`; nothing forces a tool.
+Sonnet is used for planning and building roles (`default`), Haiku for fast and validator roles (`quick`).
+
+## Claude features (features.ts)
+
+| Feature         | What the gateway does                                                                                                                                                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Effort per tier | `default` thinks at `medium`, `quick` at `low`; `ChatRequest.effort` overrides it for one call (say `high` for the planner). LiteLLM: `reasoning_effort` (dropped and remembered if the gateway refuses it). Anthropic: `output_config.effort`. Claude Code: `--effort`. |
+| Prompt caching  | The system prompt (role prompt, catalog, tool list) is marked `cache_control: ephemeral`; the conversation after it is not. Put the stable part in the system prompt and the canvas state in the last user message. `cache: false` turns it off for a one-off call.      |
+| No sampling     | `temperature`, `top_p`, `top_k` are never sent: current Claude models refuse them.                                                                                                                                                                                       |
+| Tool choice     | Always `auto`. Opus 5.5 and Sonnet 5.5 refuse a forced choice, so `toolChoice: 'required'` is said in the system prompt instead.                                                                                                                                         |
+| Usage and cost  | Every call ends with `usage: { input, output, cacheRead, cacheWrite, costUsd }` (`input` is the uncached part). One line per call goes to the server log, and `/api/health` shows `spend` against the $25 budget. See below.                                             |
+
+Effort and caching are sent to OpenAI-compatible endpoints only for Claude model names, so OpenAI itself is unaffected.
 
 | To run with                                | Set                                                                                                                                                                                                                     |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -49,6 +60,20 @@ calling it is used; otherwise the tools are described in the system prompt and t
 sees the same thing either way. `LLM_TOOL_MODE=auto` (default) probes once per provider and model and remembers;
 `native` and `json` force one way.
 
+## Token and cost logging (usage.ts)
+
+Every provider from `resolveProvider()` is wrapped by `withUsage`. When a call ends it is priced (the Claude Code
+command's own `total_cost_usd`, else the price table in features.ts), logged, and added to running totals:
+
+```
+[llm] litellm claude-sonnet-5-5 default/medium in=812 out=240 cache_read=3100 cache_write=0 $0.004290 1820ms
+```
+
+The line never holds the prompt, the answer, a key or an address. `LLM_LOG_USAGE=0` turns it off. `GET /api/health`
+returns `spend: { calls, input, output, cacheRead, cacheWrite, costUsd, unpriced, budgetUsd, since }`; the totals are
+per server instance (on Vercel, since that instance started) and are for watching, not enforcing: the guard does that.
+`LLM_BUDGET_USD` changes the budget shown (default 25).
+
 ## Retries and limits
 
 A 429 or a 5xx is retried with backoff (0.5 s, 1 s), honouring `Retry-After`, at most three tries in all. A request
@@ -57,7 +82,7 @@ pacer keeps one server instance under the gateway's 60 requests a minute. The pe
 
 ## Tests
 
-No network. Providers are tested with recorded streams; the Claude Code command with a fake child process. The mock's saved
+No network. `tests/unit/llm-features.test.ts` covers each Claude feature above. Providers are tested with recorded streams; the Claude Code command with a fake child process. The mock's saved
 answers are checked by running a whole build through the workspace's own checks (`tests/unit/mock-roles.test.ts`).
 
 ## The Claude Code provider
@@ -65,4 +90,6 @@ answers are checked by running a whole build through the workspace's own checks 
 `providers/claude-code.ts` runs `claude -p --output-format stream-json` with no built-in tools, the prompt on standard input
 and at most three attempts per step. Requests with tools use `--json-schema`: the model answers `{tool_calls}` or
 `{text}` and the result becomes normal `tool_call` chunks. `--bare` is added only when `ANTHROPIC_API_KEY` is set (bare
-mode ignores the Claude login). `maxTokens` cannot be set through the command and is not applied.
+mode ignores the Claude login). `maxTokens` cannot be set through the command and is not applied. The command caches
+the system prompt itself. To see it, run `LLM_LIVE=1 npx vitest run tests/unit/llm-live.test.ts`: two real calls on
+Haiku with the same long system prompt; the second reads it from the cache (about a tenth of a US cent in all).

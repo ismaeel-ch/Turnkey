@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { complete, resolveProvider, withTools, type ChatChunk, type ChatRequest, type Provider, type ToolDef } from '@/server/llm';
+import { MUST_CALL_A_TOOL } from '@/server/llm/features';
 import { createPacer, retryAfterMs, scrub, withRetries } from '@/server/llm/http';
 import { anthropic, toAnthropicMessages } from '@/server/llm/providers/anthropic';
 import { mockProvider, sampleArgs } from '@/server/llm/providers/mock';
@@ -97,7 +98,9 @@ describe('openAiCompatible tool calls', () => {
       { type: 'tool_call', call: { id: 'call_1', name: 'add_note', args: { title: 'Hello' } } },
       { type: 'done', truncated: false, usage: { input: 11, output: 7 } },
     ]);
-    expect(body.tool_choice).toBe('required');
+    // Never forced (Opus 5.5 and Sonnet 5.5 refuse it): `required` becomes `auto` plus a line in the system prompt.
+    expect(body.tool_choice).toBe('auto');
+    expect((body.messages as { role: string; content: string }[])[0]).toEqual({ role: 'system', content: MUST_CALL_A_TOOL });
     expect(body.tools).toEqual([
       { type: 'function', function: { name: 'add_note', description: 'Add a note', parameters: NOTE.parameters } },
     ]);
@@ -178,8 +181,9 @@ describe('anthropic provider', () => {
     expect(seen!.body).toMatchObject({
       model: 'claude-y',
       max_tokens: 100,
-      system: 'Be brief.',
+      system: [{ type: 'text', text: 'Be brief.', cache_control: { type: 'ephemeral' } }],
       stream: true,
+      output_config: { effort: 'low' },
       tool_choice: { type: 'auto' },
     });
     expect((seen!.body.tools as { input_schema: unknown }[])[0].input_schema).toEqual(NOTE.parameters);
