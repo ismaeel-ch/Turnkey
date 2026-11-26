@@ -75,7 +75,17 @@ export const NOTE_HINT = {
   views: 'Example: always include a calendar when there is a date',
   ui: 'Example: keep page names to two words',
 };
-export const REVIEWERS = {
+/** A reviewer agent from the library: the station it follows, how it looks, and what it reads. */
+export interface Reviewer {
+  name: string;
+  short: string;
+  after: string;
+  icon: string;
+  acc: string;
+  reads: string;
+  job: string;
+}
+export const REVIEWERS: Record<string, Reviewer> = {
   data: {
     name: 'Data reviewer',
     short: 'Data review',
@@ -1885,7 +1895,7 @@ export function tryFix(app, fix) {
     block: p.steps.some((s) => s.destructive) ? 'It deletes data, so you will be asked to approve it.' : '',
   };
 }
-export async function verifyFindings(app, only) {
+export async function verifyFindings(app, only?) {
   // once the whole app exists, every proposed fix is tried out and put back, so Apply is never a surprise
   const out = {
     n: 0,
@@ -2146,7 +2156,7 @@ export function customRules(app, rv) {
     });
   return out;
 }
-export function applyAuto(app, run, only, own) {
+export function applyAuto(app, run, only?, own?) {
   // steps set to apply: every proposed change goes through the same checked pipeline as a change asked for in chat
   const f = flowOf(app),
     out = {

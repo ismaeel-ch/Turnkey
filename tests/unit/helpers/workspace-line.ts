@@ -40,8 +40,8 @@ export async function startLine(respond: (prompt: string) => Promise<string>): P
     calls,
     build: async (request) => {
       const app = line.newApp({ request, mode: 'live' });
-      await line.runBuild(app, undefined);
-      return app as LineApp;
+      await line.runBuild(app as Parameters<typeof line.runBuild>[0], undefined);
+      return app as unknown as LineApp;
     },
     say: async (app, text) => {
       await changes.handleChat(app as unknown as Parameters<typeof changes.handleChat>[0], text, undefined);
