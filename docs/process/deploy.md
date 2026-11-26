@@ -5,6 +5,9 @@
 - Production deploys only through `.github/workflows/release.yml`, which runs when a release is made. It checks that
   the commit is on `main`, runs `npm run check` on it, builds it with the Vercel CLI and deploys that exact build to
   production. Then it calls `/api/health` on the production address.
+- `vercel.json` fixes the framework (`nextjs`) and the install, build and output settings, so the build does not
+  depend on the Vercel project's own settings. The workflow stops before deploying if the build has no server
+  routes.
 - Nothing else deploys. `vercel.json` sets `git.deploymentEnabled` to `false`, so Vercel's Git integration does not
   deploy merges, pushes or pull requests. The repository can stay connected to Vercel; it just never starts a build.
 
