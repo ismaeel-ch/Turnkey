@@ -244,9 +244,11 @@ export interface ViewState {
   ob: Loose;
   si: Loose;
   tv: Dict<Loose>;
-  flowPos: Dict<Loose>;
+  /** where the owner dragged each node of the workflow canvas, by app id (plus ':v' for the narrow layout) */
+  flowPos: Dict<Dict<{ x: number; y: number }>>;
   flowN: number;
-  flowMap: Loose;
+  /** the canvas map is shown; null follows the layout */
+  flowMap: boolean | null;
   solo: Loose;
   /** the open bottom sheet of the phone layout */
   sheet: PhoneSheet | null;
