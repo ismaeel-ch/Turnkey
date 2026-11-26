@@ -14,11 +14,12 @@ import { limiter, limitsFrom } from '@/server/guard/limits';
 import { checkPrompt } from '@/server/guard/prompt';
 import { resolveProvider } from '@/server/llm';
 import { parseStepInput } from '@/shared/agent-contract';
+import { withRequestLog } from '@/server/log';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   const provider = resolveProvider();
   if (!provider) return refuse(503, 'not_configured', 'No model is configured on this deployment.');
   const limits = limitsFrom();
@@ -77,3 +78,5 @@ export async function POST(request: Request) {
     },
   });
 }
+
+export const POST = withRequestLog('agent.step', post);

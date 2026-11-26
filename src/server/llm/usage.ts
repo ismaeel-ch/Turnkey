@@ -4,8 +4,9 @@
  * `withUsage(provider)` wraps a provider: when a call ends it fills in `usage.costUsd` (from the price table when the
  * provider did not report a cost), logs one line, and adds the call to running totals that `/api/health` shows.
  *
- * The line carries the provider, model, tier, effort, token counts, cache hits, cost and time. Never the prompt, the
- * answer, a key or an address:
+ * The line is a structured `model_call` event (src/server/log.ts) with the provider, model, tier, effort, token
+ * counts, cache hits, cost and time. Never the prompt, the answer, a key or an address. A caller that passes its own
+ * `log` gets the short text form instead:
  *
  *   [llm] litellm claude-sonnet-5-5 default/medium in=812 out=240 cache_read=3100 cache_write=0 $0.004290 1820ms
  *
@@ -15,6 +16,7 @@
  * The totals live in this server instance's memory: on Vercel each instance counts its own calls since it started.
  * They are for watching spend, not for enforcing it (src/server/guard does that).
  */
+import { log as serverLog, noteModelCall } from '../log';
 import { costOf, effortFor } from './features';
 import type { ChatChunk, ChatRequest, Provider, Usage } from './types';
 
@@ -84,7 +86,8 @@ function shouldLog(env: Env): boolean {
 }
 
 /** Adds one finished call to the totals and logs it. */
-export function recordUsage(r: UsageRecord, env: Env = process.env, log: (line: string) => void = console.info) {
+export function recordUsage(r: UsageRecord, env: Env = process.env, log?: (line: string) => void) {
+  noteModelCall(r.usage); // the request's own log line (src/server/log.ts) carries its calls' tokens and cost
   totals.calls += 1;
   totals.input += r.usage.input ?? 0;
   totals.output += r.usage.output ?? 0;
@@ -92,7 +95,21 @@ export function recordUsage(r: UsageRecord, env: Env = process.env, log: (line: 
   totals.cacheWrite += r.usage.cacheWrite ?? 0;
   if (r.usage.costUsd === undefined) totals.unpriced += 1;
   else totals.costUsd += r.usage.costUsd;
-  if (shouldLog(env)) log(usageLine(r));
+  if (!shouldLog(env)) return;
+  if (log) log(usageLine(r));
+  else
+    serverLog('info', 'model_call', {
+      provider: r.provider,
+      model: r.model,
+      tier: r.tier,
+      effort: r.effort,
+      inputTokens: r.usage.input ?? 0,
+      outputTokens: r.usage.output ?? 0,
+      cacheReadTokens: r.usage.cacheRead ?? 0,
+      cacheWriteTokens: r.usage.cacheWrite ?? 0,
+      costUsd: r.usage.costUsd ?? null,
+      ms: r.ms,
+    });
 }
 
 /** Wraps a provider so every call that ends is priced, logged and counted. Keeps every property the gateway reads. */

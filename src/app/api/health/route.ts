@@ -11,11 +11,12 @@ import { limiter, lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
 import { refuseVerdict, visitorKey } from '@/server/guard/http';
 import { EFFORT_BY_TIER, backendLabel, LlmError, resolveProvider, usageTotals, type Provider } from '@/server/llm';
 import pkg from '../../../../package.json';
+import { withRequestLog } from '@/server/log';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-export async function GET(request: Request) {
+async function get(request: Request) {
   const light = lightLimiter.take(visitorKey(request), lightLimitsFrom());
   if (!light.ok) return refuseVerdict(light);
   const provider = resolveProvider();
@@ -91,3 +92,5 @@ async function toolProbe(provider: Provider) {
     return { ok: false, model, code: error.code, error: error.message, ms: Date.now() - started };
   }
 }
+
+export const GET = withRequestLog('health', get);

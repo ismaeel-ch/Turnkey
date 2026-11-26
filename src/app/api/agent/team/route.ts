@@ -12,11 +12,12 @@ import { parseBody, refuse, refuseVerdict, visitorKey } from '@/server/guard/htt
 import { limiter, limitsFrom } from '@/server/guard/limits';
 import { LlmError } from '@/server/llm';
 import type { BaseEvent } from '@ag-ui/core';
+import { withRequestLog } from '@/server/log';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   const limits = limitsFrom();
   if (limits.off) return refuse(503, 'not_configured', 'Live builds are switched off on this deployment. Saved builds still run.');
   // The prompts are built here from the team definition, so the prompt policy does not apply; the body is read with a
@@ -65,3 +66,5 @@ export async function POST(request: Request) {
     headers: { 'content-type': encoder.getContentType(), 'cache-control': 'no-store, no-transform', 'x-accel-buffering': 'no' },
   });
 }
+
+export const POST = withRequestLog('agent.team', post);

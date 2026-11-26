@@ -141,7 +141,7 @@ describe('the routes', () => {
     delete process.env.BLOB_READ_WRITE_TOKEN;
     const { POST, GET } = await import('@/app/api/share/route');
     expect((await POST(post({ code: CODE, name: 'x' }))).status).toBe(503);
-    expect(await GET(new Request('http://localhost/api/share')).json()).toEqual({ enabled: false });
+    expect(await (await GET(new Request('http://localhost/api/share'))).json()).toEqual({ enabled: false });
   });
 
   it('save and read back an app', async () => {

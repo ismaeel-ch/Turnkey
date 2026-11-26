@@ -7,6 +7,7 @@
  */
 import { Command } from '@langchain/langgraph';
 import { LlmError } from '../../llm';
+import { errorText, log } from '../../log';
 import { checkTeamPolicy } from './policy';
 import { Budget, buildTeamGraph, nodeNames, RunFailure, type TeamContext, type TeamState } from './graph';
 import { TeamRequestSchema, type AgentOutput, type Snapshot, type TeamRequest, type TeamStatus } from './types';
@@ -94,7 +95,7 @@ export async function runTeamGraph(input: TeamRequest | unknown, ctx: TeamContex
   } catch (e) {
     if (ctx.signal?.aborted) return finish('stopped', 'The run was stopped.', {});
     const { message, code } = plain(e);
-    if (code === 'failed') console.error('[team]', e);
+    if (code === 'failed') log('error', 'team_failed', { error: errorText(e) });
     sink.emit({ type: 'RUN_ERROR', message, code });
     return { status: 'failed', reason: message, outputs: {}, steps: budget.steps, modelCalls: budget.calls };
   }
