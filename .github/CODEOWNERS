@@ -14,7 +14,7 @@
 
 # Folders under src
 /src/app/               @ismaeel-ch
-/src/legacy/            @ismaeel-ch
+/src/workspace/         @ismaeel-ch
 /src/platform/          @ismaeel-ch
 /src/server/            @ismaeel-ch
 /src/shared/            @ismaeel-ch

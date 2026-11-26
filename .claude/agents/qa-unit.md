@@ -18,12 +18,12 @@ in your issue.
 ## What to do
 
 1. Add coverage reporting to vitest and a `test:coverage` script.
-2. Test the foundation code thoroughly: `src/platform/compat/html.ts` (every alias, style parsing edge cases, children that are objects), `field.ts` and `render.ts` with jsdom (value sync, native change, errors reaching the caller), `model-client.ts` (stream parsing, error codes, abort), `src/app/api/llm/route.ts` and `health/route.ts` (call the handlers directly with the mock provider).
+2. Test the foundation code thoroughly: `src/platform/dom.tsx` (`toStyle`, `render`, `createEagerRoot`, `NativeField`: style parsing edge cases, children that are objects) with jsdom (value sync, native change, errors reaching the caller), `model-client.ts` (stream parsing, error codes, abort), `src/app/api/llm/route.ts` and `health/route.ts` (call the handlers directly with the mock provider).
 3. Then follow the other agents' pull requests and add tests where they are thin. Put shared helpers in `tests/unit/helpers`.
 
 ## Done means
 
-- Statement coverage of `src/platform` (outside `generated`) and `src/server` above 80 percent.
+- Statement coverage of `src/platform`  and `src/server` above 80 percent.
 - Tests run in under 30 seconds and need no network.
 - `npm run check` passes, CI is green on your pull request, and the pull request says how you verified each item.
 
