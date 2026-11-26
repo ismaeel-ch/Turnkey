@@ -1,7 +1,7 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
 import { useState, useSyncExternalStore } from 'react';
 import { ACC_HEX } from '@/styles/theme.generated';
-import { toStyle, NativeField } from '@/platform/dom';
+import { toStyle } from '@/platform/dom';
 import { ICONS } from './icons';
 import {
   NARROW,
@@ -33,7 +33,7 @@ import { buildDatabase } from './engine';
 import { TEAMS } from './team';
 import { runTestsSync, testStats } from './tests';
 import { RUNS, STATIONS, pushChat } from './line';
-import { Btn, Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner } from './ui';
+import { Btn, Card, Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner, Textarea } from './ui';
 import { appFromPack, framed, openShare, openShared, packOf, readPack, squeeze, unsqueeze } from './share';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 
@@ -801,7 +801,7 @@ export function ReleaseView({ app }) {
     <div className="release scroll" data-tour="release">
       <div className="release-in">
         <Journey app={app} />
-        <section className="card rel-now">
+        <Card className="card rel-now">
           <AppLogo app={app} size={72} />
           <div className="col gap4 grow">
             <span className="row wrap gap8">
@@ -846,9 +846,9 @@ export function ReleaseView({ app }) {
               </Btn>
             </span>
           </div>
-        </section>
+        </Card>
         {(!rel || dirty) && (
-          <section className="card rel-form">
+          <Card className="card rel-form">
             <h3 className="widget-h">{rel ? 'Release the draft as version ' + v : 'Release version 1.0'}</h3>
             {rel && (
               <Field
@@ -882,8 +882,8 @@ export function ReleaseView({ app }) {
                   : 'One line each. People see these in About this app.'
               }
             >
-              <NativeField
-                as="textarea"
+              <Textarea
+                native
                 className="textarea"
                 id="rel-notes"
                 rows={Math.min(8, Math.max(3, text.split('\n').length + 1))}
@@ -922,9 +922,9 @@ export function ReleaseView({ app }) {
               </Btn>
               <span className="t-cap muted">Every test runs once more first. If one fails, nothing is released.</span>
             </div>
-          </section>
+          </Card>
         )}
-        <section className="card rel-share">
+        <Card className="card rel-share">
           <h3 className="widget-h">Share and install</h3>
           <div className="rel-share-grid">
             <div className="col gap8">
@@ -982,8 +982,8 @@ export function ReleaseView({ app }) {
               </div>
             </div>
           </div>
-        </section>
-        <section className="card rel-hist">
+        </Card>
+        <Card className="card rel-hist">
           <h3 className="widget-h">
             Versions
             {relList(app).length ? (
@@ -1045,7 +1045,7 @@ export function ReleaseView({ app }) {
           ) : (
             <p className="muted">No version yet. The first release is 1.0.</p>
           )}
-        </section>
+        </Card>
       </div>
     </div>
   );
@@ -1162,13 +1162,7 @@ export function InstallAppDialog({ p }) {
                 Install
               </Btn>
             ) : (
-              <Btn
-                className="btn primary"
-                data-autofocus
-                id="inst-go"
-                data-install={inFrame ? 'shown' : 'menu'}
-                onClick={() => set(true)}
-              >
+              <Btn className="btn primary" data-autofocus id="inst-go" data-install={inFrame ? 'shown' : 'menu'} onClick={() => set(true)}>
                 <Icon n="install" s="16" />
                 {inFrame ? 'Install' : 'I have installed it'}
               </Btn>

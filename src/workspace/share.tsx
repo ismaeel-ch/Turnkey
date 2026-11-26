@@ -1,6 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
 import { useEffect } from 'react';
-import { NativeField } from '@/platform/dom';
 import {
   S,
   U,
@@ -27,7 +26,7 @@ import { REC } from './builds';
 import { runTestsSync, testStats } from './tests';
 import { APPLY, STATIONS, blankDef, blankLine, deleteApp, newRun, pushChat, resetAppData } from './line';
 import { normCases } from './tester';
-import { Btn, Dialog, Field, Icon, MBar, Seg, Spinner } from './ui';
+import { Btn, Dialog, Field, Icon, Input, MBar, Seg, Select, Spinner, Textarea } from './ui';
 import { AppPane, newPane } from './runtime';
 import {
   AppLogo,
@@ -750,7 +749,7 @@ export function ShareDialog({ p }) {
           />
         </Field>
         <Field id="sh-as" label="They open it as" hint="A person skips the sign-in screen. They can still switch.">
-          <NativeField as="select" className="select" id="sh-as" value={sh.as} onChange={(e) => set('as', e.target.value)}>
+          <Select native className="select" id="sh-as" value={sh.as} onChange={(e) => set('as', e.target.value)}>
             <option value="">The sign-in screen</option>
             {users.map((u) => (
               <option key={u.id} value={u.username}>
@@ -759,14 +758,14 @@ export function ShareDialog({ p }) {
                 {roleName(app.def, u.role)}
               </option>
             ))}
-          </NativeField>
+          </Select>
         </Field>
       </div>
       {(sh.short || sh.shortBusy) && (
         <Field id="sh-short" label="Short link" hint="Opens the newest version you share. Anyone with it can open the app.">
           <div className="row">
-            <NativeField
-              as="input"
+            <Input
+              native
               className="input grow mono"
               id="sh-short"
               readOnly
@@ -802,8 +801,8 @@ export function ShareDialog({ p }) {
         }
       >
         <div className="row">
-          <NativeField
-            as="input"
+          <Input
+            native
             className="input grow mono"
             id="sh-link"
             readOnly
@@ -869,8 +868,8 @@ export function OpenLinkDialog({ p }) {
       <form className="col gap12" onSubmit={go}>
         <p className="muted">Paste a Turnkey app link. The app opens on its own, with its own copy of the data in this browser.</p>
         <Field id="ol-text" label="Link" error={p.err || null}>
-          <NativeField
-            as="textarea"
+          <Textarea
+            native
             className="textarea mono"
             id="ol-text"
             rows="4"

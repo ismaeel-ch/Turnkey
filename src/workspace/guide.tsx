@@ -1,7 +1,6 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
-import { NativeField } from '@/platform/dom';
 import { NARROW, S, U, activeTab, chatShown, closeDialog, commit, cx, notify, openTab, setChat, str, toast } from './core';
-import { Btn, Dialog, Empty, Icon } from './ui';
+import { Btn, Chip, Dialog, Empty, Icon, Input } from './ui';
 import { openShare } from './share';
 import { startTour } from './shell-c';
 
@@ -540,8 +539,8 @@ export function GuideDialog({ p }) {
       <div className="guide-bar">
         <div className="search grow">
           <Icon n="search" s="16" />
-          <NativeField
-            as="input"
+          <Input
+            native
             className="input"
             id="guide-q"
             aria-label="Search the guide"
@@ -563,9 +562,9 @@ export function GuideDialog({ p }) {
         ]
           .concat(GUIDE_GROUPS)
           .map((x) => (
-            <button
+            <Chip
               key={x.id}
-              className={cx('chip', g === x.id && 'on')}
+              on={!!(g === x.id)}
               aria-pressed={g === x.id}
               onClick={() => {
                 p.g = x.id;
@@ -574,7 +573,7 @@ export function GuideDialog({ p }) {
             >
               {x.icon && <Icon n={x.icon} s="16" />}
               {x.name}
-            </button>
+            </Chip>
           ))}
       </div>
       <div className="guide-list">
