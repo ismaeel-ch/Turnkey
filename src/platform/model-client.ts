@@ -53,7 +53,7 @@ export class ModelError extends Error {
 
 /** Maps a step error code (or an HTTP status from the route's limiter) to the workspace's codes. */
 export function codeFor(code: string | undefined, status = 0): string {
-  if (code === 'not_configured' || code === 'unauthorized' || status === 401 || status === 403 || (status === 503 && !code)) return 'not_granted';
+  if (code === 'not_configured' || code === 'off' || code === 'unauthorized' || status === 401 || status === 403 || (status === 503 && !code)) return 'not_granted';
   if (code === 'budget') return 'budget';
   if (code === 'rate_limited' || status === 429) return 'rate_limited';
   if (code === 'aborted') return 'aborted';
@@ -75,7 +75,7 @@ const isStepResult = (v: unknown): v is StepResultLike =>
 
 /** The route refuses a run before it starts with a JSON body and a status; the client reports it as `HTTP <status>: <body>`. */
 function refusal(message: string): { status: number; code?: string; message: string } | null {
-  const m = /HTTP (\d{3})[^{]*(\{.*\})?/s.exec(message);
+  const m = /HTTP (\d{3})[^{]*(\{[\s\S]*\})?/.exec(message);
   if (!m) return null;
   let body: { code?: string; message?: string } = {};
   try {
