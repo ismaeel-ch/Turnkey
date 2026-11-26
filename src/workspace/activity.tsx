@@ -25,17 +25,13 @@ import {
 } from '@fluentui/react-components';
 import { deriveActivity, subscribeAgentEvents } from '@/platform/agui/activity';
 import type { ActivityItem, ActivityKind, ActivityModel, AgentState, AgentStatus, RawAgentEvent } from '@/platform/agui/activity';
-import type { AppRecord, AppFlow, Dict, ReviewerInfo } from '@/shared/types/workspace';
+import type { AppRecord, Dict } from '@/shared/types/workspace';
 import { EV, PHONE, S, cap, cx, emit, fmtClock } from './core';
 import { AGENTS } from './agents';
 import { STATIONS } from './line';
 import { REVIEWERS, flowOf } from './custom';
 import { isDark } from './flow';
 import { Icon } from './ui';
-
-// custom.tsx is not typed yet; these say what its exports hold
-const REVS = REVIEWERS as Dict<ReviewerInfo>;
-const flowOfApp = (app: AppRecord): AppFlow => flowOf(app);
 
 /** What the panel shows for one agent. */
 export interface AgentCard {
@@ -137,7 +133,7 @@ const stepName = (it: StepRef): string => {
   const st = STATIONS.find((x) => x.id === it.step);
   if (st) return st.name;
   if (it.step === 'tests') return 'Tests';
-  if (it.step.startsWith('review_')) return REVS[it.step.slice(7)]?.short || 'a review';
+  if (it.step.startsWith('review_')) return REVIEWERS[it.step.slice(7)]?.short || 'a review';
   return cap(it.step.replace(/_/g, ' '));
 };
 // "the Research station", "the security review", "Tests": how a step reads in a sentence
@@ -501,7 +497,7 @@ function rosterOf(app: AppRecord | null, model: ActivityModel): { info: AgentCar
   if (app) {
     STATIONS.forEach((s) => add(s.agent));
     if (AGENTS.tester) add('tester');
-    const f = flowOfApp(app);
+    const f = flowOf(app);
     (f.reviewers || []).forEach((r) => add('rv_' + r));
     if (app.def && app.def.team) app.def.team.agents.forEach((a) => add(a.id));
   }
@@ -517,7 +513,7 @@ function rosterOf(app: AppRecord | null, model: ActivityModel): { info: AgentCar
 /* ---------- how it works ---------- */
 
 function HowItWorks({ app, model, c }: { app: AppRecord | null; model: ActivityModel; c: Styles }) {
-  const f = app ? flowOfApp(app) : null;
+  const f = app ? flowOf(app) : null;
   const attempts = f && f.attempts >= 1 && f.attempts <= 3 ? f.attempts : 3;
   const team = app && app.def && app.def.team;
   const stateOf = (id: string): AgentState => (model.agents[id] ? model.agents[id].state : 'idle');
@@ -551,7 +547,7 @@ function HowItWorks({ app, model, c }: { app: AppRecord | null; model: ActivityM
           {stations.map((st, i) => {
             const info = agentInfo(st.agent, app);
             const s = stateOf(st.agent);
-            const reviewers = f ? (f.reviewers || []).filter((r) => REVS[r] && REVS[r].after === st.id) : [];
+            const reviewers = f ? (f.reviewers || []).filter((r) => REVIEWERS[r] && REVIEWERS[r].after === st.id) : [];
             const asks = f && f.approve && f.approve[st.id];
             const byRules = f && f.by && f.by[st.id] === 'rules';
             return (
@@ -579,8 +575,8 @@ function HowItWorks({ app, model, c }: { app: AppRecord | null; model: ActivityM
                     {(reviewers.length > 0 || asks) && (
                       <div className={c.chips}>
                         {reviewers.map((r) => (
-                          <Badge key={r} appearance="outline" size="small" icon={<Icon n={REVS[r].icon} s="12" />}>
-                            {'Then ' + REVS[r].name}
+                          <Badge key={r} appearance="outline" size="small" icon={<Icon n={REVIEWERS[r].icon} s="12" />}>
+                            {'Then ' + REVIEWERS[r].name}
                           </Badge>
                         ))}
                         {asks && (

@@ -83,7 +83,6 @@ export const TeamRequestSchema = z.object({
   resume: z.object({ snapshot: SnapshotSchema, note: NoteSchema.nullish() }).nullish(),
 });
 export type TeamRequest = z.infer<typeof TeamRequestSchema>;
-export type TeamSpec = z.infer<typeof TeamSpecSchema>;
 export type AgentSpec = z.infer<typeof AgentSpecSchema>;
 export type TableSpec = z.infer<typeof TableSchema>;
 export type Note = z.infer<typeof NoteSchema>;

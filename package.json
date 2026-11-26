@@ -25,7 +25,8 @@
     "check": "npm run check:secrets && npm run lint && npm run typecheck && npm run test",
     "icons": "node scripts/gen-icons.cjs",
     "icons:pwa": "node scripts/gen-pwa-icons.mjs",
-    "theme": "node scripts/generate-theme.mjs"
+    "theme": "node scripts/generate-theme.mjs",
+    "knip": "knip"
   },
   "dependencies": {
     "@ag-ui/client": "^1.0.5",
@@ -59,9 +60,11 @@
     "eslint-config-next": "16.4.6",
     "fake-indexeddb": "^6.2.8",
     "jsdom": "^31.0.1",
+    "knip": "^6.48.0",
     "playwright": "1.63.0",
     "prettier": "^3.10.1",
     "typescript": "^5",
+    "undici": "^6.29.1",
     "vitest": "^5.1.2"
   },
   "repository": {

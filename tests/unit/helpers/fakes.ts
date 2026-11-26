@@ -1,17 +1,5 @@
 /** Small stand-ins for the browser and server pieces the unit tests need. No network: every response is made here. */
 
-/** A Response whose body arrives in the given pieces, so tests can split a line or a character between them. */
-export function streamResponse(parts: Array<string | Uint8Array>, status = 200): Response {
-  const encoder = new TextEncoder();
-  const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (const part of parts) controller.enqueue(typeof part === 'string' ? encoder.encode(part) : part);
-      controller.close();
-    },
-  });
-  return new Response(body, { status, headers: { 'content-type': 'application/x-ndjson' } });
-}
-
 /** Sets environment variables for one test. `undefined` removes a variable. Returns the function that puts them back. */
 export function setEnv(vars: Record<string, string | undefined>): () => void {
   const before = new Map<string, string | undefined>();
