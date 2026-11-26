@@ -47,7 +47,8 @@ import { TeamAv } from './team';
 import { StationTests, TestsView, suiteOf, testable } from './tests';
 import { BuildSummary, FlowView } from './flow';
 import { type Station, AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp, rebuild, startBuild, stopRun } from './line';
-import { CustomTab, FlowChips, REVIEWERS, ReviewPanel, answerGate, flowList, flowOf, reviewerAt } from './custom';
+import { CustomTab, FlowChips, ReviewPanel, answerGate, flowList, flowOf, reviewerAt } from './custom';
+import { REVIEWERS } from './reviewers';
 import { TesterPanel } from './tester';
 import {
   AgentAv,

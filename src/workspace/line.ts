@@ -72,7 +72,8 @@ import { CONNECTORS, REC, allConnectors, callConnector, connOn } from './builds'
 import { TEAMS, checkTeam, stopTeam, teamNeeds } from './team';
 import { checkBoard, normBoard } from './room';
 import { SUITES, TESTS, runTestsSync } from './tests';
-import { REVIEWERS, applyAuto, flowDefault, flowList, flowOf, runReview, showGate, stepAfter, verifyFindings } from './custom';
+import { applyAuto, flowDefault, flowList, flowOf, runReview, showGate, stepAfter, verifyFindings } from './custom';
+import { REVIEWERS } from './reviewers';
 import { testerSteps } from './tester';
 import { StoppedError, createRun, workflowFromFlow } from '@/platform/orchestrator';
 import { SHARE } from './share';
