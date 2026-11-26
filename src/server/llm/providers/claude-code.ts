@@ -12,10 +12,24 @@
  *   this file turns that back into the gateway's `tool_call` chunks. No real Claude Code tool is ever enabled.
  * - At most three attempts per step, and only for failures worth repeating (a timeout, a crash, unreadable output).
  * - `--bare` skips the user's login and reads only ANTHROPIC_API_KEY, so it is added only when that variable is set.
+ * - `--effort` follows the tier (`default` → medium, `quick` → low) unless the request or the config names one.
+ * - The command caches the system prompt itself; usage reports cache reads and writes, and `total_cost_usd` is
+ *   passed on as the call's cost.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { effortFor } from '../features';
 import { parseToolReply } from '../tools';
-import { LlmError, type ChatChunk, type ChatMessage, type ChatRequest, type Provider, type Tier, type ToolDef } from '../types';
+import {
+  LlmError,
+  type ChatChunk,
+  type ChatMessage,
+  type ChatRequest,
+  type Effort,
+  type Provider,
+  type Tier,
+  type ToolDef,
+  type Usage,
+} from '../types';
 
 export type ClaudeCodeConfig = {
   /** Model alias for the command: `sonnet`, `haiku`, `opus` or a full name. */
@@ -26,7 +40,8 @@ export type ClaudeCodeConfig = {
   timeoutMs?: number;
   /** Highest spend for one step, in US dollars. Default 0.50. */
   maxBudgetUsd?: number;
-  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  /** One effort for every call. Unset: each request's own, else its tier's (see features.ts). */
+  effort?: Effort;
   /** Force `--bare` on or off. Default: on when ANTHROPIC_API_KEY is set (bare mode cannot use a login). */
   bare?: boolean;
   env?: Record<string, string | undefined>;
@@ -144,8 +159,19 @@ type ResultLine = {
   subtype?: string;
   terminal_reason?: string;
   stop_reason?: string;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+  total_cost_usd?: number;
 };
+
+/** The result line's usage in the gateway's terms, with the command's own cost. */
+export function resultUsage(r: ResultLine): Usage | undefined {
+  if (!r.usage) return undefined;
+  const u: Usage = { input: r.usage.input_tokens, output: r.usage.output_tokens };
+  if (r.usage.cache_read_input_tokens) u.cacheRead = r.usage.cache_read_input_tokens;
+  if (r.usage.cache_creation_input_tokens) u.cacheWrite = r.usage.cache_creation_input_tokens;
+  if (typeof r.total_cost_usd === 'number' && Number.isFinite(r.total_cost_usd)) u.costUsd = r.total_cost_usd;
+  return u;
+}
 
 /** One line of the command's output. Returns the text delta, or the final result, or nothing. */
 export function readLine(line: string): { delta: string } | { result: ResultLine } | null {
@@ -261,7 +287,7 @@ export function claudeCode(config: ClaudeCodeConfig): Provider {
         schema: tools ? toolReplySchema(tools) : undefined,
         bare: config.bare ?? Boolean(env.ANTHROPIC_API_KEY),
         maxBudgetUsd: config.maxBudgetUsd ?? 0.5,
-        effort: config.effort ?? 'low',
+        effort: config.effort ?? effortFor(request),
       });
       const prompt = renderPrompt(request.messages);
 
@@ -281,7 +307,7 @@ export function claudeCode(config: ClaudeCodeConfig): Provider {
           }
           const r = step.value;
           if (r.is_error || (typeof r.result !== 'string' && r.structured_output === undefined)) throw failure(r);
-          const usage = r.usage ? { input: r.usage.input_tokens, output: r.usage.output_tokens } : undefined;
+          const usage = resultUsage(r);
           const truncated = r.stop_reason === 'max_tokens';
           if (!tools) {
             if (!sent && r.result) yield { type: 'delta', text: r.result };
