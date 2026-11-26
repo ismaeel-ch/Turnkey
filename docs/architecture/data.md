@@ -335,6 +335,25 @@ possible from outside, because `LS` is a `const` inside the bundle's scope; it n
 `src/legacy/core.js`, for example `const LS = window.__turnkeyLS || { … }`, which integration owns. `lsCompat()` returns an
 object with the exact `LS` surface for this.
 
+**C. In `src/workspace` (the ES-module workspace that replaces `src/legacy`).** `core.ts` exports `LS` as a plain
+object (`ok`, `why`, `full`, `probe`, `get`, `set`, `del`, `keys`, `size`) that reads the bare global `localStorage`
+with the prefix `BRAND.ns` (`formwork:v1:`). `db.ts` only calls `LS.get('db:' + id)`, `LS.set`, `LS.del`, `LS.keys` and
+`LS.size`, and `core.ts` calls `LS.get('state')` and `LS.set('state', ...)`. Nothing else in `src/workspace` touches
+`localStorage` (checked on the `refactor/remove-legacy` branch). Because these are ES modules, there are now two
+clean ways, and neither changes a stored format:
+
+1. Keep option A. The global `localStorage` is read at call time, not at import time, so defining it before the
+   workspace component first renders is enough. `Workspace.tsx` (or the boot code) awaits `openStorage()`, defines
+   `localStorage`, then renders.
+2. Better, and no global override: add one exported function to `core.ts`, `export const useStorage = (s) => Object.defineProperties(LS, Object.getOwnPropertyDescriptors(s.lsCompat()))`
+   (not `Object.assign`, which would freeze the live `ok`, `why` and `full` getters as plain values). Boot calls it after
+   `await openStorage()` and before the first render. `lsCompat()` already has the exact `LS` surface, including the
+   key prefix handling, `ok`, `why` and `full`. Then `shell-b.tsx` can read `storage.status()` for the settings page.
+
+Either way, the same three follow-ups: call `flushOnHide(storage)` once, change the sentence in `shell-b.tsx` that
+says "localStorage" to say IndexedDB, and add buttons for `files.ts` (export one `.sqlite`, import one, backup, restore).
+`src/workspace` is not edited by this package.
+
 **Order of events.** `openStorage()` (reads IndexedDB, migrates) → define `localStorage` → `bootLegacy()` →
 `loadState()` reads `state` from the mirror. The workspace's own `LS.probe()` call (in `shell-c.js`) runs against the
 adapter and returns true.
