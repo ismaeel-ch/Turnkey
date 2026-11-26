@@ -1416,6 +1416,10 @@ function ownerAnswer(app, run, ctl, wf, ask) {
 export async function runBuild(app, from) {
   // from: a station id to start at. The stations before it are kept as they are.
   if (RUNS[app.id]) return;
+  // LangGraph loads on first use (usually already fetched while the page was idle). Load it before anything changes,
+  // so the app never shows a half-started build while the code downloads.
+  const { createRun } = await import('@/platform/orchestrator/run');
+  if (RUNS[app.id]) return;
   const i0 = from ? Math.max(0, stationIdx(from)) : 0,
     part = i0 > 0,
     live = app.mode === 'live',
@@ -1521,7 +1525,6 @@ export async function runBuild(app, from) {
             workflow: flowList(flow).map((x) => x.text),
           },
     });
-    const { createRun } = await import('@/platform/orchestrator/run');
     const wf = (ctl.wf = createRun(def, ports, { app: app.id, runId: run.id, threadId: app.id + ':' + run.id }));
     res = await wf.start();
     while (res.status === 'waiting') {
