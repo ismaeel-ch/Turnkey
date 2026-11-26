@@ -7,39 +7,37 @@
  *
  * This is the plain-HTTP twin of agent `step` in the CopilotKit runtime, kept until the AG-UI route carries it.
  */
+import { z } from 'zod';
 import { createStepAgent } from '@/server/graph/step';
-import { limiter, limitsFrom, visitorOf } from '@/server/guard/limits';
+import { parseBody, refuse, refuseVerdict, visitorKey } from '@/server/guard/http';
+import { limiter, limitsFrom } from '@/server/guard/limits';
+import { checkPrompt } from '@/server/guard/prompt';
 import { resolveProvider } from '@/server/llm';
 import { parseStepInput } from '@/shared/agent-contract';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-const refuse = (status: number, code: string, message: string, headers?: Record<string, string>) =>
-  Response.json({ code, message }, { status, headers: { 'cache-control': 'no-store', ...headers } });
-
 export async function POST(request: Request) {
   const provider = resolveProvider();
   if (!provider) return refuse(503, 'not_configured', 'No model is configured on this deployment.');
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return refuse(400, 'bad_request', 'The request body must be JSON.');
-  }
   const limits = limitsFrom();
-  const parsed = parseStepInput(body);
+  if (limits.off) return refuse(503, 'not_configured', 'Live builds are switched off on this deployment. Saved builds still run.');
+  // The body is read with a size limit first (the prompt limit plus room for the other fields), then checked.
+  const body = await parseBody(request, z.unknown(), limits.maxPromptChars * 4 + 1000);
+  if (!body.ok) return body.response;
+  const parsed = parseStepInput(body.data);
   if (!parsed.ok) return refuse(400, 'bad_request', parsed.message);
-  if (parsed.input.prompt.length > limits.maxPromptChars) return refuse(413, 'bad_request', 'The prompt is too long.');
+  if (parsed.input.prompt.length > limits.maxPromptChars) return refuse(413, 'too_large', 'The prompt is too long.');
+  // Only Turnkey's own agents may use the model: checked before anything is counted or sent.
+  const policy = checkPrompt(parsed.input.prompt);
+  if (!policy.ok) return refuse(400, policy.code, policy.message);
 
   // every model call counts against the visitor's limits; the first is checked here so a refusal is a plain 429
-  const who = visitorOf(request);
+  const who = visitorKey(request);
   const take = () => limiter.take(who, limits);
   const first = take();
-  if (!first.ok) {
-    const headers = first.retryAfter ? { 'retry-after': String(first.retryAfter) } : undefined;
-    return refuse(first.code === 'off' ? 503 : 429, first.code === 'off' ? 'not_configured' : first.code, first.message, headers);
-  }
+  if (!first.ok) return refuseVerdict(first);
   const agent = createStepAgent({
     provider,
     maxTokens: limits.maxOutputTokens,
