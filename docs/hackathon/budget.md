@@ -80,10 +80,11 @@ is why the mix is the default.
 
 ### When the day's allowance is used up
 
-A build stops at the next model call and the chat says, in the Orchestrator's words: "Today's allowance for live model
-calls is used up, so Live builds are paused until midnight UTC. Saved builds, Demo and every app you already built keep
-working." A team run says the same. Checked on 26 Nov with `LLM_DAILY_SPEND_USD=0.001`: the Researcher's call went
-through, the Database call was refused, and the build ended with that sentence.
+The server refuses the next model call with code `budget` and says: "Today's allowance for live model calls is used up,
+so Live builds are paused until midnight UTC. Saved builds, Demo and every app you already built keep working." The
+build stops at that call and the chat says so in plain words (the wording is in `src/shared/api-error.ts`); a team run
+does the same. Checked on 26 Nov with `LLM_DAILY_SPEND_USD=0.001`: the Researcher's call went through, the Database
+call was refused, and the build ended with the allowance message.
 
 ## Fixes that came out of the runs
 

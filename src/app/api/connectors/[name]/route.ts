@@ -10,6 +10,7 @@ import { lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
 import { visitorKey } from '@/server/guard/http';
 import { getConnector } from '@/server/connectors';
 import type { ConnectorErrorCode } from '@/server/connectors/types';
+import { withRequestLog } from '@/server/log';
 
 export const runtime = 'nodejs';
 
@@ -25,7 +26,7 @@ const STATUS: Record<ConnectorErrorCode, number> = {
 const json = (status: number, body: unknown, headers?: Record<string, string>) =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store', ...headers } });
 
-export async function GET(request: Request, { params }: { params: Promise<{ name: string }> }) {
+async function get(request: Request, { params }: { params: Promise<{ name: string }> }) {
   const verdict = lightLimiter.take(visitorKey(request), lightLimitsFrom());
   if (!verdict.ok) {
     const headers = verdict.retryAfter ? { 'retry-after': String(verdict.retryAfter) } : undefined;
@@ -45,3 +46,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ name
   if (result.ok) return json(200, result);
   return json(STATUS[result.code], result);
 }
+
+export const GET = withRequestLog('connectors', get);

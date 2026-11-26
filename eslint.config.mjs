@@ -69,6 +69,32 @@ const eslintConfig = defineConfig([
       'prefer-const': 'off',
     },
   },
+  {
+    // CLAUDE.md rule 2: server code (model calls, keys, guard rails) never reaches the browser bundle. Browser-side
+    // and shared code may not import it. Server components under src/app may.
+    files: ['src/platform/**', 'src/workspace/**', 'src/shared/**', 'src/app/(workspace)/WorkspaceLoader.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@/server',
+                '@/server/**',
+                '@/lib/model',
+                '**/src/server/**',
+                '../server/**',
+                '../../server/**',
+                '../../../server/**',
+              ],
+              message: 'Browser and shared code may not import server code (CLAUDE.md rule 2). Call an API route instead.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

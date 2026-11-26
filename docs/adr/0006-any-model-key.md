@@ -1,6 +1,6 @@
 # ADR 6: Any model key
 
-Status: accepted. Implementation: Built. Five providers: LiteLLM, OpenAI-compatible, Anthropic, the Claude Code CLI (development only) and the mock.
+Status: accepted. Implementation: Built. Five providers: Anthropic (a Claude API key), LiteLLM, OpenAI-compatible, the Claude Code CLI (development only) and the mock. On 26 Nov the owner chose the Claude API key for the live site and the Claude Code CLI for local work; LiteLLM stays one environment change away.
 
 ## Context
 

@@ -22,7 +22,8 @@ import { ACCENTS, LIMITS, VIEW_ICON, VIEW_LABEL, VIEW_TYPES, accOf, appUsers, ch
 import { canRunTeam } from './team';
 import { suggestBoard } from './room';
 import { STATIONS, blankLine } from './line';
-import { REVIEWERS, normFlow } from './custom';
+import { normFlow } from './custom';
+import { REVIEWERS } from './reviewers';
 import { newPane } from './runtime';
 import { Explorer } from './views-a';
 import { Dash } from './views-b';

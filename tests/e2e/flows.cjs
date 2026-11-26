@@ -132,8 +132,13 @@ async function flowDemo(browser, url) {
   await shot(page, '20-api');
   await page.getByRole('tab', { name: 'Permission matrix' }).click(); await sleep(100); await shot(page, '21-api-matrix');
   await view(page, 'Connections'); await page.waitForSelector('.conn-card');
-  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await sleep(100);
-  check('connection test shows a sample response', await page.locator('.conn-detail .json').count() === 1);
+  await page.route('**/api/connectors/**', (route) => route.fulfill({ json: { ok: true, items: [{ title: 'Appointment (scheduling)', url: 'https://en.wikipedia.org/wiki/Appointment', text: 'A made-up answer from the server route.', source: 'Wikipedia' }] } }));
+  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await page.waitForSelector('.conn-detail .badge.b-success');
+  check('connection test calls the source through the server route and shows its live answer', await page.locator('.conn-detail .json').count() === 1 && /Live response/.test(await page.locator('.conn-detail').innerText()) && /items \[1\]/.test(await page.locator('.conn-detail .json').innerText()), await page.locator('.conn-detail').innerText());
+  await page.route('**/api/connectors/**', (route) => route.fulfill({ json: { ok: false, code: 'upstream', message: 'Wikipedia did not answer.' } }));
+  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await page.waitForFunction(() => /did not answer/.test((document.querySelector('.conn-detail .json') || {}).innerText || ''));
+  check('when the source fails, the test says why and shows the labelled sample beside it', /Sample response/.test(await page.locator('.conn-detail').innerText()), await page.locator('.conn-detail').innerText());
+  await page.unroute('**/api/connectors/**');
   await shot(page, '22-connections');
   await page.locator('.titlebar .net').click(); await sleep(200);
   check('offline disables connection tests', await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().isDisabled());
@@ -149,6 +154,12 @@ async function flowDemo(browser, url) {
   await say(page, 'Add an insurance provider field to patients'); await waitIdle(page); a = await appState(page);
   check('add field ran a migration', a.cols.patients.includes('insurance_provider') && a.mig === 1, [a.cols.patients, a.mig, a.last]);
   await sleep(100); await shot(page, '27-change-applied');
+  const touch = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), a = s.apps[t.app]; return { col: a.touched && a.touched['col:patients.insurance_provider'], table: a.touched && a.touched['table:patients'], phone: a.touched && a.touched['col:patients.phone'] }; });
+  check('who touched what: the new field is marked as the Database agent\'s change at your request, the fields from the build keep their maker', touch.col && touch.col.by === 'database' && touch.col.via === 'change' && touch.phone && touch.phone.by === 'database' && touch.phone.via === 'build', touch);
+  await view(page, 'Data'); await page.locator('.split .side-i', { hasText: 'patients' }).first().click(); await page.getByRole('tab', { name: 'Columns' }).click(); await sleep(100);
+  const head = await page.locator('.main-head .touch-note').innerText(), madeBy = await page.locator('.main-body tr', { hasText: 'insurance_provider' }).innerText();
+  check('who touched what: the Data page says who made the table and who changed it last, and each field says who made it', /^Made by the Database agent/.test(head) && /Last change: changed by the Database agent at your request/.test(head) && /Database agent, your request/.test(madeBy), [head, madeBy]);
+  await page.getByRole('tab', { name: 'Rows' }).click(); await view(page, 'Build');
   await say(page, 'Remove the front desk note field from patients'); await page.waitForSelector('.gcard.ask .btn.danger', { timeout: 8000 }); await shot(page, '28-approval');
   await page.locator('.gcard.ask .btn.danger').click(); await waitIdle(page); a = await appState(page);
   check('remove field needed approval and dropped the column', !a.cols.patients.includes('front_desk_note') && a.mig === 2, [a.cols.patients, a.mig]);
@@ -268,6 +279,8 @@ async function flowLive(browser, url) {
         if (/STANDING INSTRUCTION FROM THE OWNER/.test(input)) (window.__noted = window.__noted || []).push(who + ': ' + input.split('STANDING INSTRUCTION FROM THE OWNER')[1].split('\\n')[1]);
         if (/reviewer$/.test(who)) { await new Promise((r) => setTimeout(r, 60)); return { text: JSON.stringify({ findings: window.__findings || [] }), truncated: false }; }
         if (window.__mode === 'deny') { const e = new Error('not granted'); e.code = 'not_granted'; throw e; }
+        if (window.__mode === 'drop') { const e = new Error('the connection to the server was lost'); e.code = 'network'; throw e; }
+        if (window.__mode === 'budget') { const e = new Error('used up'); e.code = 'budget'; throw e; }
         if (window.__mode === 'badjson' && who === 'Researcher') return { text: 'Sorry, I would rather chat about it.', truncated: false };
         if (who === 'Tester') { const sc = G.screens.screens.find((s) => s.roles && s.roles.length); return { text: JSON.stringify({ cases: [{ name: 'The first page opens for its role', why: 'Every role needs a way in.', steps: [{ role: sc.roles[0], do: 'open', screen: sc.name, say: 'Opens the page.' }] }, { name: 'Opening a page twice is safe', why: 'Reading changes nothing.', steps: [{ role: sc.roles[0], do: 'open', screen: sc.name }, { role: sc.roles[0], do: 'open', screen: sc.name }] }] }), truncated: false }; }
         if (who === 'Researcher') out = G.research;
@@ -355,8 +368,13 @@ async function flowLive(browser, url) {
   check('live team: the agent could not set the status itself, the workflow did', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Checked', await page.locator('.team-log .badge').first().innerText());
   await shot(page, '54-live-team');
   await st(page, () => { window.__formwork.view().calls = 0; }); // this flow now makes more model calls than one session's cap allows, so start the count again for the last case
+  c = await build('drop', 'A gym whose connection drops halfway');
+  check('live: a connection lost during a call fails the run and says what to do', c.status === 'failed' && JSON.stringify(c.last || '').includes('could not reach its server'), [c.status, c.last]);
+  c = await build('budget', 'A gym built after the allowance ran out');
+  check("live: a spent daily allowance says so, and that saved builds still work", c.status === 'failed' && JSON.stringify(c.last || '').includes('allowance') && JSON.stringify(c.last || '').includes('Saved builds'), [c.status, c.last]);
   c = await build('deny', 'A gym nobody granted access to');
   check('live: a refused permission stops the run and switches Live off', c.status === 'failed' && (await st(page, () => window.__formwork.view().live)) === 'none', [c.status, c.last]);
+  check('live: the failed run says plainly that no model is connected', JSON.stringify(c.last || '').includes('No model is connected'), c.last);
   await ctx.close();
   await liveOnStepAgent(browser, url);
 }
@@ -492,6 +510,25 @@ async function flowMisc(browser, url) {
   await p2.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 20000 }); await p2.locator('.gcard.ask .opt').first().click(); await waitReady(p2); const m = await appState(p2);
   check('without browser storage the app still builds and says nothing will be kept', m.status === 'ready' && (await p2.locator('.mbar.bar').first().innerText()).includes('not available'), m.status);
   await blocked.ctx.close();
+  // storage that fills up: the next save is refused, a banner and a toast say so plainly, and both go once saving works again
+  const full = await newPage(browser, { init: "window.__turnkeyOptions = { storage: 'localstorage' };" });
+  const p3 = full.page; await enter(p3, url);
+  await st(p3, () => { window.__realSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); }; });
+  await p3.locator('.newtab').click();
+  const fullBar = await p3.waitForSelector('.storage-problem', { timeout: 10000 }).then(() => true, () => false);
+  check('a full browser storage shows a plain banner and a toast with a way forward', fullBar && (await p3.locator('.storage-problem').innerText()).includes('storage is full') && (await p3.locator('.toasts').innerText()).includes('Delete an app'), fullBar);
+  await st(p3, () => { Storage.prototype.setItem = window.__realSetItem; });
+  await p3.locator('.newtab').click();
+  check('the storage banner goes once saving works again', await p3.waitForSelector('.storage-problem', { state: 'detached', timeout: 10000 }).then(() => true, () => false));
+  await full.ctx.close();
+  // the SQLite engine cannot be downloaded: the start screen says why and offers a reload, never a blank page
+  const noSql = await newPage(browser);
+  await noSql.ctx.route('**/vendor/sql-wasm.js*', (route) => route.abort());
+  await noSql.page.goto(url);
+  const sqlMsg = await noSql.page.waitForSelector('.splash[role=alert]', { timeout: 20000 }).then((el) => el.innerText(), () => '');
+  check('when the SQLite engine does not load, the page says so and offers a reload', /could not start/.test(sqlMsg) && /check the connection/.test(sqlMsg) && (await noSql.page.getByRole('button', { name: 'Reload the page' }).count()) === 1, sqlMsg);
+  errors.splice(0, errors.length, ...errors.filter((e) => !/sql-wasm|SQLite engine|Failed to load resource|ERR_FAILED/i.test(e)));
+  await noSql.ctx.close();
 }
 
 async function flowViews(browser, url) {
@@ -790,6 +827,10 @@ async function flowCustom(browser, url) {
   check('the connection returns: Live switches itself back on', m.on && m.sw.on && !m.sw.off && /Live is on again/.test(await toasts()), [m, await toasts()]);
   const evs = await st(page, () => window.__formwork.logs.EV.filter((e) => e.type === 'CUSTOM' && e.name === 'connectivity').map((e) => e.value.online + '/' + e.value.live));
   check('each change of the connection is one AG-UI custom event', evs.slice(-2).join(' ') === 'false/false true/true' && evs.length === 4, evs);
+  await st(page, () => { const f = window.fetch; window.__realFetch = f; window.fetch = (u, o) => (String(u).includes('/api/health') ? Promise.reject(new TypeError('Failed to fetch')) : f(u, o)); return window.__formwork.wf.reach(); }); m = await mode();
+  check('the browser says online but the server cannot be reached: Live pauses as if offline', !m.on && m.sw.off && m.id === 'offline', m);
+  await st(page, () => { window.fetch = window.__realFetch; return window.__formwork.wf.reach(); }); m = await mode();
+  check('the server answers again: Live switches itself back on', m.on && !m.sw.off && m.id !== 'offline', m);
   await page.locator('.titlebar .net').click(); await sleep(250); m = await mode();
   check('the offline test button pauses Live in the same way', !m.on && m.sw.off && m.id === 'offline', m);
   await page.locator('.titlebar .net').click(); await sleep(250); m = await mode();
@@ -988,6 +1029,19 @@ async function flowRound6(browser, url) {
   check('release: a built app is a draft until it is released, and the notes are drafted for it', /Draft · not released yet/.test(await page.locator('#rel-state').innerText()) && /^First release: \d+ pages for 3 roles, with a team of 3 agents inside\./.test(await page.inputValue('#rel-notes')) && /Release version 1\.0/.test(await page.locator('#rel-go').innerText()) && await page.locator('#rel-share').isDisabled(), await page.inputValue('#rel-notes'));
   await page.locator('#rel-go').click(); await page.waitForFunction(() => /Version 1\.0 · up to date/.test((document.getElementById('rel-state') || {}).innerText || '')); a = await appFull(page);
   check('release 1.0: every test ran first, the version is kept, and the app says so', a.rel.join() === '1.0' && !a.dirty && /Version 1\.0/.test(await page.locator('#app-state').innerText()) && a.chat.some((m) => m.card === 'released') && await page.locator('.rel-item').count() === 1, [a.rel, a.dirty]); await shot(page, 'r6-03-release');
+  // ----- the deliverable: one document from the app's state, in each format -----
+  const xtmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'tk-export-')), grab = async (id) => { const [d] = await Promise.all([page.waitForEvent('download'), page.locator(id).click()]); const p = path.join(xtmp, d.suggestedFilename()); await d.saveAs(p); return { name: d.suggestedFilename(), buf: fs.readFileSync(p) }; };
+  await page.locator('#rel-export').scrollIntoViewIfNeeded(); await shot(page, 'r6-03b-export');
+  const xmd = await grab('#exp-md'), md = xmd.buf.toString('utf8');
+  check('export: the document downloads as Markdown with the brief, tables, tests, who made what and the run timeline', /-deliverable\.md$/.test(xmd.name) && /^# .+ · deliverable/.test(md) && /## Brief/.test(md) && /CREATE TABLE "tenders"/.test(md) && /## Who made what/.test(md) && /\| Research \| Researcher \| Brief \|/.test(md) && /## Tests/.test(md) && /## Run timeline/.test(md) && /## Versions/.test(md), [xmd.name, md.slice(0, 160)]);
+  const xhtml = await grab('#exp-html'), html = xhtml.buf.toString('utf8');
+  check('export: the printable page downloads as HTML with print styles and real tables', /-deliverable\.html$/.test(xhtml.name) && /^<!doctype html>/.test(html) && /@media print/.test(html) && /<h2 id="who-made-what">/.test(html) && /<table>/.test(html) && !/<script/i.test(html), xhtml.name);
+  await page.locator('#exp-pdf').click(); await page.waitForFunction(() => { const f = document.getElementById('tk-print-frame'); return !!(f && f.contentDocument && /Who made what/.test(f.contentDocument.body.innerText)); }, null, { timeout: 5000 }).catch(() => {});
+  check('export: PDF prints the same document from a hidden frame', await page.evaluate(() => { const f = document.getElementById('tk-print-frame'); return !!(f && f.contentDocument && /@media print/.test(f.contentDocument.head.innerHTML) && /Run timeline/.test(f.contentDocument.body.innerText)); }));
+  const xdb = await grab('#exp-sqlite');
+  check('export: the database downloads as a SQLite file', /\.sqlite$/.test(xdb.name) && xdb.buf.subarray(0, 15).toString() === 'SQLite format 3', xdb.name);
+  const xzip = await grab('#exp-zip'), zs = xzip.buf.toString('latin1');
+  check('export: the zip holds the document, the page, the database and the definition', /-build-pack\.zip$/.test(xzip.name) && xzip.buf.subarray(0, 4).toString('hex') === '504b0304' && /\/deliverable\.md/.test(zs) && /\/deliverable\.html/.test(zs) && /\/app\.json/.test(zs) && /\/README\.txt/.test(zs) && zs.includes('SQLite format 3') && xzip.buf.subarray(-22, -18).toString('hex') === '504b0506', xzip.name);
   await page.locator('#rel-share').click(); await page.waitForSelector('.dialog.share'); await page.waitForFunction(() => /#app=1\./.test((document.getElementById('sh-link') || {}).value || '')); const link10 = await page.inputValue('#sh-link'); await page.waitForFunction(() => /^https?:\/\/[^/]+\/[a-z0-9-]+$/.test((document.getElementById('sh-short') || {}).value || ''), null, { timeout: 15000 }).catch(() => {}); const short10 = await page.inputValue('#sh-short').catch(() => '');
   check('Share also gives a short link named after the app', /\/biddesk$/.test(short10), short10);
   check('share: the link carries version 1.0 and the dialog shows the app\'s own icon', /Version 1\.0/.test(await page.locator('#sh-ver').innerText()) && await page.locator('.dialog.share .applogo svg').count() === 1, await page.locator('#sh-ver').innerText()); await page.locator('.dialog .dhead .btn[aria-label="Close"]').click(); await sleep(150);

@@ -1,6 +1,6 @@
 {
   "name": "turnkey",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": true,
   "description": "Turnkey: describe the app your work needs and a team of agents builds its database, backend, views, pages and tests on a workflow you can watch and change.",
   "license": "MIT",
@@ -22,6 +22,7 @@
     "format": "prettier --write \"src/{app,platform,server,shared,workspace,styles}/**/*.{ts,tsx,css}\" \"tests/unit/**/*.ts\" \"scripts/*.mjs\" \"*.{json,md,mjs,ts}\" \"docs/**/*.md\"",
     "format:check": "prettier --check \"src/{app,platform,server,shared,workspace,styles}/**/*.{ts,tsx,css}\" \"tests/unit/**/*.ts\" \"scripts/*.mjs\"",
     "check:secrets": "node scripts/check-secrets.mjs",
+    "check:bundle": "node scripts/check-bundle.mjs",
     "check": "npm run check:secrets && npm run lint && npm run typecheck && npm run test",
     "icons": "node scripts/gen-icons.cjs",
     "icons:pwa": "node scripts/gen-pwa-icons.mjs",
