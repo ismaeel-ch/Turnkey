@@ -11,7 +11,7 @@
  */
 import { z } from 'zod';
 import { answerMeter, limiter, limitsFrom } from '@/server/guard/limits';
-import { parseBody, refuse, visitorKey } from '@/server/guard/http';
+import { parseBody, refuse, refuseCrossSite, visitorKey } from '@/server/guard/http';
 import { checkPrompt } from '@/server/guard/prompt';
 import { LlmError, resolveProvider, type Tier } from '@/server/llm';
 import { errorText, log, withRequestLog } from '@/server/log';
@@ -27,6 +27,8 @@ const SYSTEM =
 const Body = z.object({ prompt: z.string().min(1, 'A prompt is required.'), tier: z.enum(['default', 'quick']).catch('default') });
 
 async function post(request: Request) {
+  const foreign = refuseCrossSite(request);
+  if (foreign) return foreign;
   const provider = resolveProvider();
   if (!provider) return refuse(503, 'not_configured', 'No model is configured on this deployment.');
 

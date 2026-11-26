@@ -5,6 +5,14 @@
 - Production deploys only through `.github/workflows/release.yml`, which runs when a release is made. It checks that
   the commit is on `main`, runs `npm run check` on it, builds it with the Vercel CLI and deploys that exact build to
   production. Then it calls `/api/health` on the production address.
+- After the deploy, the **smoke test the live site** job runs `scripts/smoke-live.mjs` on the production address. It
+  checks that `/api/health` reports the version just released, that the page loads and the workspace opens with no
+  uncaught error, that Share makes a short link (named `release-check`) that opens the app in a fresh browser, and,
+  when a model is configured, makes one tool call through `/api/health?probe=1`. The app is built from a saved
+  template in Demo mode, so that one call is the only model spend. With no model configured, the model check is a
+  warning, not a failure. The job does not hold back the tag and release: the build is already live, so a failure
+  shows as a red run with a table in its summary. To roll back, run the workflow by hand with the previous tag. To run
+  the same checks yourself: `node scripts/smoke-live.mjs https://turnkey-bay.vercel.app`.
 - `vercel.json` fixes the framework (`nextjs`) and the install, build and output settings, so the build does not
   depend on the Vercel project's own settings. The workflow stops before deploying if the build has no server
   routes.

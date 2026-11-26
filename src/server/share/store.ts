@@ -1,6 +1,7 @@
 /**
- * Where short links are kept. On Vercel: a private Vercel Blob store (BLOB_READ_WRITE_TOKEN, added when a Blob store
- * is connected to the project). On a computer: a folder (SHARE_STORE_DIR), used by `npm run dev` and the browser
+ * Where short links are kept. On Vercel: a private Vercel Blob store. Connecting a store to the project sets
+ * BLOB_STORE_ID, and the SDK signs in with the deployment's own OIDC token (VERCEL_OIDC_TOKEN), so no key is stored
+ * anywhere; older connections set BLOB_READ_WRITE_TOKEN instead, which still works. On a computer: a folder (SHARE_STORE_DIR), used by `npm run dev` and the browser
  * checks. With neither, short links are off and the workspace shares the long "#app=" link as before.
  */
 import { promises as fs } from 'node:fs';
@@ -26,12 +27,18 @@ const parse = (text: string): ShareRecord | null => {
   }
 };
 
-export function blobStore(token: string): ShareStore {
+/** How the Blob SDK signs in: a read-write token, or the deployment's OIDC token with the store id. */
+export type BlobAuth = { token: string } | { storeId: string };
+
+/** A string is a read-write token. */
+export function blobStore(auth: BlobAuth | string): ShareStore {
+  // With a store id and no token, the SDK reads the OIDC token from the Vercel request (or VERCEL_OIDC_TOKEN).
+  const creds = typeof auth === 'string' ? { token: auth } : 'token' in auth ? { token: auth.token } : { storeId: auth.storeId };
   const key = (slug: string) => 'share/' + slug + '.json';
   return {
     kind: 'blob',
     async read(slug) {
-      const res = await get(key(slug), { access: 'private', token, useCache: false });
+      const res = await get(key(slug), { access: 'private', ...creds, useCache: false });
       if (!res || !res.stream) return null;
       return parse(await new Response(res.stream).text());
     },
@@ -39,7 +46,7 @@ export function blobStore(token: string): ShareStore {
       try {
         await put(key(record.slug), JSON.stringify(record), {
           access: 'private',
-          token,
+          ...creds,
           addRandomSuffix: false,
           allowOverwrite: !create,
           contentType: 'application/json',
@@ -80,7 +87,8 @@ export function folderStore(dir: string): ShareStore {
 
 /** The store this deployment uses, or null when short links are off. Never throws on missing settings. */
 export function resolveShareStore(env: Env = process.env): ShareStore | null {
-  if (env.BLOB_READ_WRITE_TOKEN) return blobStore(env.BLOB_READ_WRITE_TOKEN);
+  if (env.BLOB_READ_WRITE_TOKEN) return blobStore({ token: env.BLOB_READ_WRITE_TOKEN });
+  if (env.BLOB_STORE_ID) return blobStore({ storeId: env.BLOB_STORE_ID });
   if (env.SHARE_STORE_DIR) return folderStore(path.resolve(env.SHARE_STORE_DIR));
   return null;
 }

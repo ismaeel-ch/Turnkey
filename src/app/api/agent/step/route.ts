@@ -9,7 +9,7 @@
  */
 import { z } from 'zod';
 import { createStepAgent } from '@/server/graph/step';
-import { parseBody, refuse, refuseVerdict, visitorKey } from '@/server/guard/http';
+import { parseBody, refuse, refuseCrossSite, refuseVerdict, visitorKey } from '@/server/guard/http';
 import { limiter, limitsFrom } from '@/server/guard/limits';
 import { checkPrompt } from '@/server/guard/prompt';
 import { resolveProvider } from '@/server/llm';
@@ -20,6 +20,8 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 async function post(request: Request) {
+  const foreign = refuseCrossSite(request);
+  if (foreign) return foreign;
   const provider = resolveProvider();
   if (!provider) return refuse(503, 'not_configured', 'No model is configured on this deployment.');
   const limits = limitsFrom();

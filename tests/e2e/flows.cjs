@@ -47,7 +47,7 @@ async function flowDemo(browser, url) {
   await shot(page, '01-onboarding');
   await page.getByRole('button', { name: 'Get started' }).click();
   await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
-  check('live choice is offered whenever the device is online, wherever the page runs', !(await page.locator('.choice').nth(1).isDisabled()) && /You are connected/.test(await page.locator('.choice').nth(1).innerText()));
+  check('live choice is offered whenever the device is online, wherever the page runs', !(await page.locator('.choice').nth(1).isDisabled()) && /Model connected|No model connected|Checking the model/.test(await page.locator('.choice').nth(1).innerText()));
   await page.getByRole('button', { name: 'Continue' }).click();
   await shot(page, '02-onboarding-pick');
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -149,6 +149,12 @@ async function flowDemo(browser, url) {
   await say(page, 'Add an insurance provider field to patients'); await waitIdle(page); a = await appState(page);
   check('add field ran a migration', a.cols.patients.includes('insurance_provider') && a.mig === 1, [a.cols.patients, a.mig, a.last]);
   await sleep(100); await shot(page, '27-change-applied');
+  const touch = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), a = s.apps[t.app]; return { col: a.touched && a.touched['col:patients.insurance_provider'], table: a.touched && a.touched['table:patients'], phone: a.touched && a.touched['col:patients.phone'] }; });
+  check('who touched what: the new field is marked as the Database agent\'s change at your request, the fields from the build keep their maker', touch.col && touch.col.by === 'database' && touch.col.via === 'change' && touch.phone && touch.phone.by === 'database' && touch.phone.via === 'build', touch);
+  await view(page, 'Data'); await page.locator('.split .side-i', { hasText: 'patients' }).first().click(); await page.getByRole('tab', { name: 'Columns' }).click(); await sleep(100);
+  const head = await page.locator('.main-head .touch-note').innerText(), madeBy = await page.locator('.main-body tr', { hasText: 'insurance_provider' }).innerText();
+  check('who touched what: the Data page says who made the table and who changed it last, and each field says who made it', /^Made by the Database agent/.test(head) && /Last change: changed by the Database agent at your request/.test(head) && /Database agent, your request/.test(madeBy), [head, madeBy]);
+  await page.getByRole('tab', { name: 'Rows' }).click(); await view(page, 'Build');
   await say(page, 'Remove the front desk note field from patients'); await page.waitForSelector('.gcard.ask .btn.danger', { timeout: 8000 }); await shot(page, '28-approval');
   await page.locator('.gcard.ask .btn.danger').click(); await waitIdle(page); a = await appState(page);
   check('remove field needed approval and dropped the column', !a.cols.patients.includes('front_desk_note') && a.mig === 2, [a.cols.patients, a.mig]);
@@ -310,8 +316,8 @@ async function flowLive(browser, url) {
   check('live: applying a tried-out fix runs exactly what was tested, with no further model call', L1.reviews.security.f[0].state === 'applied' && L1.cols.members.includes('locker_number') && (await st(page, () => window.__calls)).join() === 'Security reviewer' && L1.run.kind === 'change' && L1.run.status === 'ok', [L1.cols.members, await st(page, () => window.__calls), L1.run]);
   // Live: a standing instruction reaches the agent, and a run from a later station calls the model for those stations only
   await say(page, 'Tell the UI agent to keep page names to two words'); await sleep(300); L1 = await appFull(page);
-  check('live: an instruction for an agent of a model-built app offers a run from that agent\'s station', L1.flow.notes.ui === 'Keep page names to two words' && !/takes effect in Live builds/.test(L1.chat[L1.chat.length - 1].text) && (await page.locator('.gcard').last().innerText()).includes('Run again from Screens'), [L1.flow, L1.chat]);
-  await st(page, () => { window.__calls = []; window.__noted = []; }); const keepL = L1; await page.locator('.gcard .btn', { hasText: 'Run again from Screens' }).last().click(); await confirmYes(page); L1 = (await drive(page)).a;
+  check('live: an instruction for an agent of a model-built app queues a run from that agent\'s station', L1.flow.notes.ui === 'Keep page names to two words' && !/takes effect in Live builds/.test(L1.chat[L1.chat.length - 1].text) && /Screens and Walkthrough run again in \d s/.test(await page.locator('.gcard').last().innerText()), [L1.flow, L1.chat]);
+  await st(page, () => { window.__calls = []; window.__noted = []; }); const keepL = L1; await page.locator('.gcard .rerun-wait .btn', { hasText: 'Run now' }).last().click(); L1 = (await drive(page)).a;
   check('live: running again from Screens makes one model call, carries the instruction, and keeps the four stations before it', L1.status === 'ready' && L1.run.kind === 'rerun' && L1.run.status === 'ok' && (await st(page, () => window.__calls)).join() === 'UI,Tester' && (await st(page, () => window.__noted)).join() === 'UI: Keep page names to two words' && ['research', 'database', 'backend', 'views'].every((k) => L1.line[k].note === 'Kept') && L1.rows === keepL.rows && L1.cols.members.includes('locker_number') && L1.tests.failed === 0, [L1.status, L1.run, await st(page, () => window.__calls), await st(page, () => window.__noted), L1.line]);
   await page.locator('.titlebar .net').click(); await sleep(250); const pm = await st(page, () => { const m = window.__formwork.wf.mode(), sw = document.getElementById('sw-live'); return [m.id, sw.checked, sw.disabled]; }); await page.locator('.titlebar .net').click(); await sleep(250); const bm = await st(page, () => { const m = window.__formwork.wf.mode(), sw = document.getElementById('sw-live'); return [m.id, sw.checked, sw.disabled]; });
   check('live: with a model connected, Live still pauses with the connection and comes back with it', pm.join() === 'offline,false,true' && bm.join() === 'live,true,false', [pm, bm]);
@@ -497,7 +503,7 @@ async function flowMisc(browser, url) {
 async function flowViews(browser, url) {
   const { ctx, page } = await newPage(browser);
   await enter(page, url); await shot(page, '70-home-library');
-  check('home lists three quests and four business apps', await page.locator('.tpl').count() === 7 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
+  check('home lists three quests and six business apps', await page.locator('.tpl').count() === 9 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
   await page.locator('[data-tpl="clinic"] .tpl-build').click(); await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').first().click(); await waitReady(page);
   let a = await appState(page);
   check('six stations, and the Views station passed', Object.keys(a.line).length === 6 && a.line.views === 'ok', a.line);
@@ -892,8 +898,13 @@ async function flowCustom(browser, url) {
   await page.locator('.fl-node.station').nth(4).locator('.fl-opt').click(); await sleep(300);
   check('canvas: the options button on an agent opens that station\'s Customize tab', (await page.locator('.inspector .tab.on').innerText()).includes('Customize') && await page.locator('.inspector .cust .cust-row').count() === 4 && /Wording reviewer/.test(await page.locator('.inspector .cust').innerText()), await page.locator('.inspector .cust').innerText());
   await page.locator('.inspector .cust .seg[aria-label="Who does this step"] button', { hasText: 'Rules' }).click(); await sleep(250); a = await appFull(page);
-  check('Customize: handing Screens to the rules offers a run from that station', a.flow.by.screens === 'rules' && /Screens will be built by the built-in rules/.test(a.chat[a.chat.length - 1].text) && a.chat[a.chat.length - 1].card === 'flow', [a.flow, a.chat]);
-  await page.locator('.gcard .btn', { hasText: 'Run again from Screens' }).last().click(); await confirmYes(page); r = await drive(page); a = r.a;
+  check('Customize: handing Screens to the rules queues a run from that station', a.flow.by.screens === 'rules' && /Screens will be built by the built-in rules/.test(a.chat[a.chat.length - 1].text) && a.chat[a.chat.length - 1].card === 'flow', [a.flow, a.chat]);
+  const n0 = a.run.n, waitBar = await page.locator('.build .rerun-wait').innerText().catch(() => '');
+  check('re-run after a canvas edit: the Build view says which stations run again after a short wait, and nothing has started yet', /Screens and Walkthrough run again in \d s/.test(waitBar) && /Research, Database, Backend, Views stay as they are/.test(waitBar) && (await appFull(page)).run.n === n0, waitBar);
+  await page.locator('.inspector .cust .seg[aria-label="Who does this step"] button', { hasText: 'Agent' }).click(); await sleep(150);
+  await page.locator('.inspector .cust .seg[aria-label="Who does this step"] button', { hasText: 'Rules' }).click(); await sleep(150);
+  check('re-run after a canvas edit: a burst of edits waits for one run, not one per edit', await page.locator('.build .rerun-wait').count() === 1 && (await appFull(page)).run.n === n0, (await appFull(page)).run);
+  await page.locator('.build .rerun-wait .btn', { hasText: 'Run now' }).click(); r = await drive(page); a = r.a;
   check('rules instead of the agent: Screens and the Walkthrough ran again, the four stations before them were kept, and the tests pass', a.status === 'ready' && a.run.kind === 'rerun' && a.run.status === 'ok' && a.line.screens.rules && ['research', 'database', 'backend', 'views'].every((k) => a.line[k].note === 'Kept') && a.screens !== keep.screens && a.rows === keep.rows && a.tests.failed === 0, [a.run, a.line, a.screens, a.tests]);
   await page.evaluate(() => { const b = document.querySelector('.build'); if (b) b.scrollTop = 0; }); await sleep(200); await page.locator('.fl-node.station').nth(4).locator('.fl-opt').click(); await sleep(300);
   await page.evaluate(() => { const el = document.querySelector('.inspector'); if (el) el.scrollIntoView({ block: 'center' }); }); await page.fill('.inspector .cust textarea', 'Use short labels'); await page.locator('.inspector .cust .btn', { hasText: 'Save instruction' }).click(); await sleep(200); a = await appFull(page);
@@ -944,7 +955,7 @@ async function flowCustom(browser, url) {
 /* ---------- round 6: plain navigation, the Tester's repair loop, agent rooms, an agent step that changes the schema, releases, the app on its own ---------- */
 async function flowRound6(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
-  check('home: four plain steps, and four business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 7 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
+  check('home: four plain steps, and six business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 9 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
   await buildTpl(page, 'biddesk'); a = await appFull(page);
   check('workspace: three plain steps and one Details tab', (await page.locator('.views .tab').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim().split(' ')[0]).join() === 'Build,App,Release,Details', await page.locator('.views .tab').allInnerTexts());
   check('bidding desk: every station passed first time, with four tables and its own team of agents', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'tenders,score_lines,price_options,risks', [a.status, a.line]);
@@ -1027,6 +1038,30 @@ async function flowRound6(browser, url) {
   await page.reload(); await page.waitForSelector('.work-head'); await sleep(300);
   check('a finished app reopens on the app itself, not on its build', await page.locator('.views .tab.on').innerText() === 'App' || /^App/.test(await page.locator('.views .tab.on').innerText()), await page.locator('.views .tab.on').innerText());
   await ctx.close();
+  await samplesChecks(browser, url);
+}
+/* ---------- The two more business apps on Home: a grant desk with its own agent team, and purchase requests ---------- */
+async function samplesChecks(browser, url) {
+  const { ctx, page } = await newPage(browser); await enter(page, url); let a;
+  check('home: the grant desk and purchase requests are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('.tpl').count() === 9);
+  await page.fill('#home-prompt', 'a community foundation that reviews grant applications'); await page.locator('.prompt .btn.primary').click(); await page.waitForFunction(() => { const s = window.__formwork.state(), t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]); return t && t.app; }); await waitReady(page); a = await appFull(page);
+  check('Demo: a sentence about grants is built from the grant desk\'s saved build', a.tpl === 'grants' && a.mode === 'demo', [a.tpl, a.mode]);
+  check('grant desk: every station passed first time, with four tables and its own team of three agents', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'applications,score_lines,award_options,checks' && a.tests.failed === 0 && a.tests.fresh, [a.status, a.line, a.tests]);
+  await view(page, 'App'); await page.locator('.persona-btn').first().click(); await land(page); await page.waitForSelector('.team.room');
+  await page.locator('.team-start .chip', { hasText: 'Reading club for care homes' }).click(); await sleep(60); await page.locator('.team-start button[type=submit]').click(); await page.waitForSelector('.team-log .gcard.ask', { timeout: 20000 });
+  check('review room: scores and award options fill in, and the run pauses for a person before Due diligence', await page.locator('.bdp-scores .bd-srows li').count() === 5 && await page.locator('.bdp-options .bd-opt').count() === 3 && await page.locator('.verdict').count() === 0, [await page.locator('.bdp-scores .bd-srows li').count(), await page.locator('.bdp-options .bd-opt').count()]);
+  await page.fill('.team-log .gcard.ask input', 'Ask for a safeguarding policy'); await page.locator('.team-log .gcard.ask .btn', { hasText: 'Add' }).click(); await sleep(100); await page.locator('.team-log .gcard.ask .btn.primary').click(); await waitTeam(page); await sleep(300);
+  const room = (await page.locator('.team-log').innerText()).replace(/\s+/g, ' ');
+  check('review room: weighted score, the full request recommended, the condition from the team, and the verdict on top', /80 out of 100/.test(room) && await page.locator('.bdp-options .bd-opt.best').count() === 1 && /Full request/.test(await page.locator('.bd-opt.best').innerText()) && /From the team: Ask for a safeguarding policy/.test(room) && /Fund/.test(await page.locator('.verdict').innerText()) && /82/.test(await page.locator('.verdict .ring').textContent()) && (await page.locator('.team-log .badge').first().innerText()).trim() === 'Awaiting decision', room.slice(0, 900));
+  check('review room: a programme officer is not offered the award', await page.locator('.verdict .btn', { hasText: 'Award the grant' }).count() === 0);
+  await page.selectOption('select[aria-label="Preview as"]', { label: 'Rukhsana Baig · Board chair' }); await sleep(250); await nav(page, 'Review room'); await page.waitForSelector('.verdict');
+  await page.locator('.verdict .btn', { hasText: 'Award the grant' }).click(); await sleep(250);
+  check('review room: the board chair awards the grant from the same page, through the workflow', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Awarded', await page.locator('.team-log .badge').first().innerText());
+  await page.locator('.brand').click(); await page.waitForSelector('.home'); await buildTpl(page, 'purchasing'); a = await appFull(page);
+  const pr = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), d = s.apps[t.app].def; return { confirm: d.process.transitions.find((x) => x.id === 'confirm_delivery').roles.join(), approve: d.process.transitions.find((x) => x.id === 'approve').roles.join(), order: d.process.transitions.find((x) => x.id === 'place_order').roles.join(), mine: d.access.purchase_requests.requester.list, budgets: d.access.budgets.requester.list }; });
+  check('purchase requests: every station passed first time, with three tables, and the tests pass', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'purchase_requests,suppliers,budgets' && a.tests.failed === 0 && a.tests.fresh, [a.status, a.line, a.tests]);
+  check('purchase requests: only the budget holder approves, only the buyer orders, staff see only their own requests, and the answer let the person who asked confirm delivery', pr.approve === 'approver' && pr.order === 'buyer' && pr.mine === 'own' && pr.budgets === 'none' && pr.confirm === 'requester,buyer', pr);
+  await ctx.close();
 }
 /* ---------- What only React can get wrong: warnings, carets, handlers fired twice, focus, the other pages ---------- */
 // Counts how often a handler that was added straight to a form field for its `change` event runs. NativeField
@@ -1094,7 +1129,86 @@ async function flowReact(browser, url) {
   check('with window.__turnkeyOptions = { canvas: false } the plain line of stations is drawn', fb.rf === 0 && fb.line === 6, fb);
   await n2.ctx.close();
 }
-const FLOWS = { demo: flowDemo, live: flowLive, misc: flowMisc, views: flowViews, quests: flowQuests, new: flowNew, custom: flowCustom, round6: flowRound6, react: flowReact };
+// ----- phone and tablet widths, light and dark -----
+const SIZES = [{ w: 360, h: 740 }, { w: 390, h: 844 }, { w: 768, h: 1024 }, { w: 1024, h: 768 }];
+/** What does not fit the screen: sideways page scroll, things that stick out past the right edge, touch targets under 24px (WCAG 2.5.8). The zoomable workflow canvas is left out: its nodes grow with zoom. */
+const fitNow = (page) => st(page, () => {
+  const W = innerWidth, H = innerHeight;
+  const shown = (el) => { const cs = getComputedStyle(el); if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const clipped = (el) => { for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(p).overflowX) && p.getBoundingClientRect().right <= W + 1) return true; return false; };
+  const name = (el) => el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).filter((c) => !/^(f|r|_)[a-z0-9_]{5,}$/.test(c)).slice(0, 3).join('.') : '') + ' "' + (el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 24) + '"';
+  const out = [], small = [];
+  for (const el of document.body.querySelectorAll('*')) { const r = el.getBoundingClientRect(); if (!r.width || r.right <= W + 1 || r.left >= W || el.closest('[data-tabster-dummy]') || !shown(el) || clipped(el)) continue; out.push(name(el) + ' right=' + Math.round(r.right)); }
+  for (const el of document.querySelectorAll('button, a[href], [role=button], [role=tab], [role=menuitem], [role=switch], select, summary')) {
+    if (el.closest('.react-flow, [data-tabster-dummy]') || !shown(el)) continue;
+    const r = el.getBoundingClientRect(); if (r.bottom < 0 || r.top > H) continue;
+    if (r.height < 24 || (r.width < 24 && !el.classList.contains('hb-seg'))) small.push(name(el) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)); // a bar segment is as wide as its share of the total
+  }
+  return { scroll: document.documentElement.scrollWidth - W, out: out.slice(0, 6), small: small.slice(0, 6) };
+});
+const fitsOk = (f) => f.scroll <= 0 && !f.out.length && !f.small.length;
+/** Checks one screen in the light theme, then again in the dark one. */
+async function fitBoth(page, label) {
+  for (const scheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme: scheme }); await sleep(150);
+    const f = await fitNow(page);
+    check(label + ' (' + scheme + '): fits the width, nothing sticks out, every target is at least 24px', fitsOk(f), f);
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+}
+async function flowSizes(browser, url) {
+  let link = '', short = '';
+  for (const { w, h } of SIZES) {
+    const at = w + 'px: ', phone = w <= 640;
+    const { ctx, page } = await newPage(browser, { viewport: { width: w, height: h } });
+    await page.goto(url); await page.waitForSelector('.ob-card', { timeout: 20000 }); await sleep(200);
+    await fitBoth(page, at + 'onboarding');
+    await enter(page, url); await fitBoth(page, at + 'home');
+    if (phone) {
+      const b = await st(page, () => { const r = (s) => document.querySelector(s).getBoundingClientRect(), a = r('.act-launch'), ws = r('.ws-btn'), ac = r('.acct'), bar = r('.titlebar.phone'); const hit = (x, y) => x.left < y.right && y.left < x.right && x.top < y.bottom && y.top < x.bottom; return { inBar: a.top >= bar.top && a.bottom <= bar.bottom, overWs: hit(a, ws), overAcct: hit(a, ac), w: a.width, h: a.height }; });
+      check(at + 'the Agents button sits in the title bar, 44px, and covers neither the workspace switcher nor the account', b.inBar && !b.overWs && !b.overAcct && b.w >= 44 && b.h >= 44, b);
+    }
+    await buildTpl(page, 'clinic'); await sleep(400);
+    await fitBoth(page, at + 'a built app in the builder');
+    if (!phone) {
+      if (!(await page.locator('.chat').count())) { await page.getByRole('button', { name: 'Chat' }).click(); await page.waitForSelector('.chat'); }
+      const top = await st(page, () => ['[data-tour="share"]', '.views .tab'].map((sel) => { const e = document.querySelector(sel), r = e.getBoundingClientRect(), x = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!x && e.contains(x); }));
+      check(at + 'with the chat open, the view tabs and Share stay in reach above it', top.every(Boolean), top);
+      await page.locator('.views .tab', { hasText: 'App' }).first().click(); await sleep(400); await fitBoth(page, at + 'the App view');
+      await page.locator('[data-tour="share"]').click();
+    } else {
+      await page.locator('.phone-nav .tab-i', { hasText: 'App' }).click(); await page.getByRole('button', { name: 'Open the app' }).click(); await page.waitForSelector('.solo .app');
+      if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click();
+      await page.waitForSelector('.app-tabs'); await sleep(300); await fitBoth(page, at + 'the app full screen');
+      await page.locator('.app-head .persona').click(); await page.waitForSelector('.sheet'); await page.locator('.sheet-i', { hasText: 'Back to Turnkey' }).click(); await page.waitForSelector('.phone-nav');
+      await page.locator('.phone-nav .tab-i', { hasText: 'More' }).click(); await page.waitForSelector('.sheet'); await page.locator('.sheet .sheet-i', { hasText: 'Share by link' }).click();
+    }
+    await page.waitForSelector('.dialog.share'); await page.locator('#sh-release').click(); await page.waitForFunction(() => /#app=1\./.test((document.getElementById('sh-link') || {}).value || '')); await sleep(200);
+    await fitBoth(page, at + 'the share dialog');
+    if (!link) { link = await page.inputValue('#sh-link'); await page.waitForFunction(() => /^https?:\/\/[^/]+\/[a-z0-9-]+$/.test((document.getElementById('sh-short') || {}).value || ''), null, { timeout: 15000 }).catch(() => {}); short = await page.inputValue('#sh-short').catch(() => ''); }
+    await shot(page, 'sz-' + w + '-share'); await ctx.close();
+
+    // the app on its own: from a link, installed, and from a short link
+    const g = await newPage(browser, { viewport: { width: w, height: h } }), gp = g.page;
+    await gp.goto(url + '#app=' + link.split('#app=')[1]); await gp.waitForSelector('.solo .app', { timeout: 30000 }); await sleep(300);
+    const card = await st(gp, () => { const l = document.querySelector('.app-login'), c = document.querySelector('.login-card'); l.scrollTop = 0; return { card: Math.round(c.getBoundingClientRect().top), box: Math.round(l.getBoundingClientRect().top) }; });
+    check(at + 'a shared app\'s sign-in card starts in view, even when it is taller than the screen', card.card >= card.box, card);
+    await fitBoth(gp, at + 'a shared app\'s sign-in');
+    if (await gp.locator('#solo-install').count()) { await gp.locator('#solo-install').click(); await gp.waitForSelector('.dialog'); await sleep(200); await fitBoth(gp, at + 'the install dialog'); await gp.locator('#inst-go').click(); await sleep(200); }
+    await gp.locator('.persona-btn').first().click(); await sleep(400); await fitBoth(gp, at + 'a shared app, signed in');
+    const uid = await st(gp, () => { const x = Object.values(window.__formwork.state().apps).find((y) => y.shared); return x && x.shared.uid; });
+    await gp.goto('about:blank'); await gp.goto(url + '#app=i.' + uid); await gp.waitForSelector('.solo .app', { timeout: 30000 }); await sleep(300);
+    await fitBoth(gp, at + 'the installed app');
+    await shot(gp, 'sz-' + w + '-installed'); await g.ctx.close();
+    if (short) {
+      const s = await newPage(browser, { viewport: { width: w, height: h } });
+      await s.page.goto(short.replace(/^https?:\/\/[^/]+\//, url)); await s.page.waitForSelector('.solo .app', { timeout: 30000 }); await sleep(300);
+      await fitBoth(s.page, at + 'an app from a short link'); await s.ctx.close();
+    }
+  }
+  check('the share dialog gave a short link to try', !!short, short);
+}
+const FLOWS = { demo: flowDemo, live: flowLive, misc: flowMisc, views: flowViews, quests: flowQuests, new: flowNew, custom: flowCustom, round6: flowRound6, react: flowReact, sizes: flowSizes };
 (async () => {
   const url = (process.env.TK_URL || '').replace(/\/?$/, '/');
   if (!/^https?:/.test(url)) { console.error('TK_URL is not set. Run the checks with: npm run test:e2e'); process.exit(2); }

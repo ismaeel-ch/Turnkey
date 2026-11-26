@@ -13,8 +13,12 @@
  *   LLM_LOG_USAGE   `0` turns the line off (the totals still count). Off by default under vitest.
  *   LLM_BUDGET_USD  the budget shown next to the totals (default 25, the hackathon's).
  *
+ * A call that stops before the provider reports its usage (the visitor left, or the answer hit the size limit) is
+ * still paid for, so it is counted from an estimate: about four characters to a token, for the prompt and for the
+ * text that came back.
+ *
  * The totals live in this server instance's memory: on Vercel each instance counts its own calls since it started.
- * They are for watching spend, not for enforcing it (src/server/guard does that).
+ * `spentToday()` is what src/server/guard/limits.ts checks against LLM_DAILY_SPEND_USD.
  */
 import { log as serverLog, noteModelCall } from '../log';
 import { costOf, effortFor } from './features';
@@ -55,9 +59,24 @@ const fresh = () => ({
   since: new Date().toISOString(),
 });
 let totals = fresh();
+/** Cost of this instance's calls since midnight UTC. */
+let today = { day: '', costUsd: 0 };
+const dayOf = (t: number) => new Date(t).toISOString().slice(0, 10);
 
 export function resetUsageTotals() {
   totals = fresh();
+  today = { day: '', costUsd: 0 };
+}
+
+/** Dollars this server instance has spent on model calls since midnight UTC. */
+export function spentToday(now: number = Date.now()): number {
+  return today.day === dayOf(now) ? today.costUsd : 0;
+}
+
+/** Tokens of a call that ended before the provider said, from the text sizes: about four characters to a token. */
+export function estimateUsage(request: ChatRequest, outputChars: number): Usage {
+  const inputChars = request.messages.reduce((n, m) => n + (m.content?.length ?? 0), 0);
+  return { input: Math.ceil(inputChars / 4), output: Math.ceil(outputChars / 4) };
 }
 
 export function usageTotals(env: Env = process.env): UsageTotals {
@@ -94,7 +113,12 @@ export function recordUsage(r: UsageRecord, env: Env = process.env, log?: (line:
   totals.cacheRead += r.usage.cacheRead ?? 0;
   totals.cacheWrite += r.usage.cacheWrite ?? 0;
   if (r.usage.costUsd === undefined) totals.unpriced += 1;
-  else totals.costUsd += r.usage.costUsd;
+  else {
+    totals.costUsd += r.usage.costUsd;
+    const day = dayOf(Date.now());
+    if (today.day !== day) today = { day, costUsd: 0 };
+    today.costUsd += r.usage.costUsd;
+  }
   if (!shouldLog(env)) return;
   if (log) log(usageLine(r));
   else
@@ -122,22 +146,47 @@ export function withUsage(inner: Provider, env: Env = process.env, log?: (line: 
     async *stream(request: ChatRequest): AsyncGenerator<ChatChunk> {
       const started = Date.now();
       const model = inner.model(request.tier);
-      for await (const chunk of inner.stream(request)) {
-        if (chunk.type !== 'done') {
-          yield chunk;
-          continue;
+      let settled = false;
+      let outChars = 0;
+      let failed = false;
+      try {
+        for await (const chunk of inner.stream(request)) {
+          if (chunk.type !== 'done') {
+            if (chunk.type === 'delta') outChars += chunk.text.length;
+            else outChars += JSON.stringify(chunk.call.args ?? '').length + chunk.call.name.length;
+            yield chunk;
+            continue;
+          }
+          settled = true;
+          const usage: Usage = { ...chunk.usage };
+          if (usage.costUsd === undefined) {
+            const cost = costOf(model, usage);
+            if (cost !== null && chunk.usage) usage.costUsd = cost;
+          }
+          recordUsage(
+            { provider: inner.id, model, tier: request.tier, effort: effortFor(request), usage, ms: Date.now() - started },
+            env,
+            log,
+          );
+          yield { ...chunk, usage: chunk.usage ? usage : undefined };
         }
-        const usage: Usage = { ...chunk.usage };
-        if (usage.costUsd === undefined) {
+      } catch (e) {
+        failed = true;
+        throw e;
+      } finally {
+        // Stopped early (the caller left the loop, the visitor went away, or the call failed): the tokens sent and
+        // received so far are still billed, so they are counted from an estimate.
+        // A call that failed before any answer came back is not billed, so it is not counted.
+        if (!settled && (!failed || outChars > 0)) {
+          const usage = estimateUsage(request, outChars);
           const cost = costOf(model, usage);
-          if (cost !== null && chunk.usage) usage.costUsd = cost;
+          if (cost !== null) usage.costUsd = cost;
+          recordUsage(
+            { provider: inner.id, model, tier: request.tier, effort: effortFor(request), usage, ms: Date.now() - started },
+            env,
+            log,
+          );
         }
-        recordUsage(
-          { provider: inner.id, model, tier: request.tier, effort: effortFor(request), usage, ms: Date.now() - started },
-          env,
-          log,
-        );
-        yield { ...chunk, usage: chunk.usage ? usage : undefined };
       }
     },
   };

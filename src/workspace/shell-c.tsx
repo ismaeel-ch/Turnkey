@@ -1,8 +1,10 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
 import { modelHost } from '@/platform/model-client';
-import { useState, useLayoutEffect } from 'react';
+import { type ReactNode, useState, useLayoutEffect } from 'react';
+import type { BackedDef } from '@/shared/types/app';
+import type { SqlValue } from '@/shared/types/sqljs';
+import type { AppRecord, Dict, Downloader, OnboardingForm, ProductTourStep, Settings, SignInForm } from '@/shared/types/workspace';
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
-import { render, toStyle } from '@/platform/dom';
+import { toStyle } from '@/platform/dom';
 import {
   APILOG,
   BRAND,
@@ -32,7 +34,6 @@ import {
   myApps,
   netChanged,
   netInfo,
-  netWas,
   notify,
   online,
   openDialog,
@@ -86,61 +87,63 @@ import {
 } from './share';
 import { InstallAppDialog, isDirty, logoOf, relOf, releaseApp } from './release';
 import { GUIDE, GuideDialog } from './guide';
-import { Home, Titlebar, Workspace } from './shell-a';
+import { Home, Titlebar, Workspace, lineApp } from './shell-a';
 import { DebugDrawer } from './shell-b';
 
 /* ===== Turnkey prototype · shell: first-run onboarding, sign-in, dialogs, guided tour, boot ===== */
+/* The forms below keep their state in the view store (U), so it outlives a re-render. Components read it through a
+   getter and change it only through these actions, never by writing to the store while rendering. */
+const OB_START: OnboardingForm = { step: 0, name: '', user: '', pass: '', demo: true, dev: false, pick: 'clinic', tour: true, err: '' };
+const obForm = (): OnboardingForm => U.ob || OB_START;
+function setOb(patch: Partial<OnboardingForm> | null) {
+  U.ob = patch ? { ...obForm(), ...patch } : null;
+  notify();
+}
+const SI_START: SignInForm = { u: '', p: '', name: '', err: '', create: false };
+const siForm = (): SignInForm => U.si || SI_START;
+function setSi(patch: Partial<SignInForm> | null) {
+  U.si = patch ? { ...siForm(), ...patch } : null;
+  notify();
+}
+/** Create the account from the onboarding form, apply its choices, and start the first build and the tour. */
+function finishOnboarding(o: OnboardingForm) {
+  const a = createAccount(o.name || 'Demo user', o.user || 'demo', o.pass || 'demo');
+  S.session = a.id;
+  S.onboarded = true;
+  S.settings.demo = o.demo;
+  S.settings.debug = o.dev;
+  commit();
+  const pick = o.pick,
+    tour = o.tour;
+  setOb(null);
+  if (pick)
+    startBuild({
+      request: REC[pick].sentence,
+      tpl: pick,
+    });
+  if (tour) setTimeout(startTour, 900);
+  notify();
+}
 export function Onboarding() {
-  const o =
-      U.ob ||
-      (U.ob = {
-        step: 0,
-        name: '',
-        user: '',
-        pass: '',
-        demo: true,
-        dev: false,
-        pick: 'clinic',
-        tour: true,
-        err: '',
-      }),
+  const o = obForm(),
     steps = ['Welcome', 'Your account', 'How to run', 'First app', 'Ready'],
     liveOK = online();
   const next = () => {
     if (o.step === 1) {
       const u = snake(o.user);
       if (!str(o.name) || !u) {
-        o.err = 'Enter a name and a username, or skip to use the demo account.';
-        return notify();
+        setOb({ err: 'Enter a name and a username, or skip to use the demo account.' });
+        return;
       }
       if (str(o.pass).length < 4) {
-        o.err = 'Use at least 4 characters for the password.';
-        return notify();
+        setOb({ err: 'Use at least 4 characters for the password.' });
+        return;
       }
-      o.user = u;
+      setOb({ user: u });
     }
-    o.err = '';
-    o.step = Math.min(steps.length - 1, o.step + 1);
-    notify();
+    setOb({ err: '', step: Math.min(steps.length - 1, o.step + 1) });
   };
-  const finish = () => {
-    const a = createAccount(o.name || 'Demo user', o.user || 'demo', o.pass || 'demo');
-    S.session = a.id;
-    S.onboarded = true;
-    S.settings.demo = o.demo;
-    S.settings.debug = o.dev;
-    commit();
-    const pick = o.pick,
-      tour = o.tour;
-    U.ob = null;
-    if (pick)
-      startBuild({
-        request: REC[pick].sentence,
-        tpl: pick,
-      });
-    if (tour) setTimeout(startTour, 900);
-    notify();
-  };
+  const finish = () => finishOnboarding(o);
   const body = [
     () => (
       <>
@@ -149,7 +152,7 @@ export function Onboarding() {
           {'A turnkey job is one that is handed over finished: you turn the key and it works. '}
           {BRAND.name}
           {
-            ' turns one sentence into a complete, working app for any domain: SQLite tables, role-guarded endpoints, switchable views, a dashboard and a guided tour. You watch five agents build it, and code checks every handoff.'
+            ' turns one sentence into a complete, working app for any domain: SQLite tables, role-guarded endpoints, switchable views, a dashboard and a guided tour. You watch five builder agents and a Tester make it, and code checks every handoff.'
           }
         </p>
         <div className="ob-line" aria-hidden="true">
@@ -204,7 +207,7 @@ export function Onboarding() {
               autoComplete="off"
               value={o.name}
               onInput={(e) => {
-                o.name = e.target.value;
+                setOb({ name: e.currentTarget.value });
               }}
             />
           </Field>
@@ -216,7 +219,7 @@ export function Onboarding() {
               autoComplete="off"
               value={o.user}
               onInput={(e) => {
-                o.user = e.target.value;
+                setOb({ user: e.currentTarget.value });
               }}
             />
           </Field>
@@ -229,7 +232,7 @@ export function Onboarding() {
               autoComplete="off"
               value={o.pass}
               onInput={(e) => {
-                o.pass = e.target.value;
+                setOb({ pass: e.currentTarget.value });
               }}
             />
           </Field>
@@ -238,12 +241,7 @@ export function Onboarding() {
         <Btn
           className="btn subtle"
           onClick={() => {
-            o.name = 'Demo user';
-            o.user = 'demo';
-            o.pass = 'demo';
-            o.err = '';
-            o.step = 2;
-            notify();
+            setOb({ name: 'Demo user', user: 'demo', pass: 'demo', err: '', step: 2 });
           }}
         >
           Skip and use the demo account (demo / demo)
@@ -259,8 +257,7 @@ export function Onboarding() {
             className={cx('choice', o.demo && 'on')}
             aria-pressed={o.demo}
             onClick={() => {
-              o.demo = true;
-              notify();
+              setOb({ demo: true });
             }}
           >
             <span className="row">
@@ -278,8 +275,7 @@ export function Onboarding() {
             aria-pressed={!o.demo}
             disabled={!liveOK}
             onClick={() => {
-              o.demo = false;
-              notify();
+              setOb({ demo: false });
             }}
           >
             <span className="row">
@@ -287,8 +283,12 @@ export function Onboarding() {
               <strong>Live</strong>
               {!liveOK ? (
                 <span className="badge b-warning">Needs internet</span>
+              ) : U.live === 'ready' ? (
+                <span className="badge b-success">Model connected</span>
+              ) : U.live === 'unknown' ? (
+                <span className="badge b-info">Checking the model</span>
               ) : (
-                <span className="badge b-success">You are connected</span>
+                <span className="badge b-warning">No model connected</span>
               )}
             </span>
             <span className="muted">
@@ -302,8 +302,7 @@ export function Onboarding() {
           id="ob-dev"
           on={o.dev}
           onChange={(v) => {
-            o.dev = v;
-            notify();
+            setOb({ dev: v });
           }}
           text="Show developer tools (debug mode): AG-UI events, tool calls, model usage, SQL"
         />
@@ -322,8 +321,7 @@ export function Onboarding() {
                 className={cx('choice', o.pick === id && 'on')}
                 aria-pressed={o.pick === id}
                 onClick={() => {
-                  o.pick = id;
-                  notify();
+                  setOb({ pick: id });
                 }}
               >
                 <span className="row">
@@ -346,8 +344,7 @@ export function Onboarding() {
         <Btn
           className={cx('btn subtle', !o.pick && 'on')}
           onClick={() => {
-            o.pick = null;
-            notify();
+            setOb({ pick: '' });
           }}
         >
           Start with an empty workspace instead
@@ -381,8 +378,7 @@ export function Onboarding() {
           id="ob-tour"
           on={o.tour}
           onChange={(v) => {
-            o.tour = v;
-            notify();
+            setOb({ tour: v });
           }}
           text="Show me around with a short guided tour"
         />
@@ -410,7 +406,7 @@ export function Onboarding() {
               </li>
             ))}
           </ol>
-          <p className="t-cap muted">A prototype of the hackathon entry. People and records in it are made up.</p>
+          <p className="t-cap muted">An entry for the SSI Agent-A-Thon 2026. People and records in it are made up.</p>
         </aside>
         <main className="ob-main">
           <div className="ob-body" key={o.step}>
@@ -421,9 +417,7 @@ export function Onboarding() {
               <Btn
                 className="btn"
                 onClick={() => {
-                  o.step--;
-                  o.err = '';
-                  notify();
+                  setOb({ step: o.step - 1, err: '' });
                 }}
               >
                 Back
@@ -446,41 +440,31 @@ export function Onboarding() {
   );
 }
 export function SignIn() {
-  const f =
-      U.si ||
-      (U.si = {
-        u: '',
-        p: '',
-        name: '',
-        err: '',
-        create: false,
-      }),
+  const f = siForm(),
     apps = Object.keys(S.apps).length,
     bytes = LS.keys().reduce((n, k) => n + LS.size(k), 0);
-  const submit = (e) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (f.create) {
       const u = snake(f.u);
       if (!str(f.name) || !u || str(f.p).length < 4) {
-        f.err = 'Enter a name, a username and a password of at least 4 characters.';
-        return notify();
+        setSi({ err: 'Enter a name, a username and a password of at least 4 characters.' });
+        return;
       }
       if (S.accounts.some((a) => a.username === u)) {
-        f.err = 'That username is taken in this browser.';
-        return notify();
+        setSi({ err: 'That username is taken in this browser.' });
+        return;
       }
       const a = createAccount(f.name, u, f.p);
       S.session = a.id;
-      U.si = null;
+      setSi(null);
       commit();
       return;
     }
     if (signIn(f.u, f.p)) {
-      U.si = null;
-      notify();
+      setSi(null);
     } else {
-      f.err = 'Wrong username or password.';
-      notify();
+      setSi({ err: 'Wrong username or password.' });
     }
   };
   return (
@@ -511,7 +495,7 @@ export function SignIn() {
               autoComplete="off"
               value={f.name}
               onInput={(e) => {
-                f.name = e.target.value;
+                setSi({ name: e.currentTarget.value });
               }}
             />
           </Field>
@@ -529,7 +513,7 @@ export function SignIn() {
             autoComplete="off"
             value={f.u}
             onInput={(e) => {
-              f.u = e.target.value;
+              setSi({ u: e.currentTarget.value });
             }}
           />
         </Field>
@@ -542,7 +526,7 @@ export function SignIn() {
             autoComplete="off"
             value={f.p}
             onInput={(e) => {
-              f.p = e.target.value;
+              setSi({ p: e.currentTarget.value });
             }}
           />
         </Field>
@@ -555,9 +539,7 @@ export function SignIn() {
             type="button"
             className="btn subtle sm"
             onClick={() => {
-              f.create = !f.create;
-              f.err = '';
-              notify();
+              setSi({ create: !f.create, err: '' });
             }}
           >
             {f.create ? 'Back to sign in' : 'Create another account'}
@@ -585,16 +567,16 @@ export function resetEverything() {
   Object.keys(DBX.open).forEach((id) => {
     try {
       DBX.open[id].close();
-    } catch (e) {}
+    } catch {}
   });
-  Object.keys(DBX.timers).forEach((id) => clearTimeout(DBX.timers[id]));
+  Object.keys(DBX.timers).forEach((id) => clearTimeout(DBX.timers[id] ?? undefined));
   DBX.open = {};
   DBX.size = {};
   DBX.savedAt = {};
   DBX.timers = {};
   DBX.hold = {};
   LS.keys().forEach((k) => LS.del(k));
-  clearTimeout(saveTimer);
+  if (saveTimer) clearTimeout(saveTimer);
   setSaveTimer(null);
   const live = U.live,
     dl = U.dl;
@@ -613,7 +595,7 @@ export function resetEverything() {
   applyTheme();
   notify();
 }
-export function SetRow({ title, text, children }) {
+export function SetRow({ title, text, children }: { title: ReactNode; text: ReactNode; children?: ReactNode }) {
   return (
     <div className="set-row">
       <div className="col gap0 grow">
@@ -624,13 +606,20 @@ export function SetRow({ title, text, children }) {
     </div>
   );
 }
+/** Change one setting and save. */
+function setSetting<K extends keyof Settings>(k: K, v: Settings[K]) {
+  S.settings[k] = v;
+  if (k === 'theme') applyTheme();
+  commit();
+}
+/** Change fields of the open dialog's props (its form), keeping the rest. */
+function patchDialog(patch: Dict<unknown>) {
+  if (U.dialog) U.dialog = { ...U.dialog, props: { ...U.dialog.props, ...patch } };
+  notify();
+}
 export function SettingsDialog() {
   const s = S.settings,
-    set = (k, v) => {
-      s[k] = v;
-      if (k === 'theme') applyTheme();
-      commit();
-    },
+    set = setSetting,
     mode = modeNow(),
     on = online(),
     net = netInfo();
@@ -663,7 +652,7 @@ export function SettingsDialog() {
               },
             ]}
             value={s.theme}
-            onChange={(v) => set('theme', v)}
+            onChange={(v) => set('theme', v as Settings['theme'])}
           />
         </SetRow>
         <SetRow
@@ -826,7 +815,7 @@ export function InstallDialog() {
 export function ResetDialog() {
   const apps = S.session ? myApps() : [],
     out = !S.session;
-  const act = (kind) => {
+  const act = (kind: string) => {
     if (kind === 'data') {
       let n = 0;
       apps.forEach((a) => {
@@ -899,10 +888,14 @@ export function ResetDialog() {
     </Dialog>
   );
 }
-export function PackDialog({ p }) {
+/** An app picked by id, for the dialogs that work on one app. */
+export type AppPick = { app: string };
+/** The app's definition is complete once it can be packed, renamed or changed: these dialogs open on ready apps. */
+const backed = (app: AppRecord) => app as AppRecord & { def: BackedDef };
+export function PackDialog({ p }: { p: AppPick }) {
   const app = S.apps[p.app];
   if (!app) return null;
-  const md = buildPack(app);
+  const md = buildPack(backed(app));
   return (
     <Dialog
       wide
@@ -931,14 +924,14 @@ export function PackDialog({ p }) {
     </Dialog>
   );
 }
-export function RenameDialog({ p }) {
+export function RenameDialog({ p }: { p: AppPick & { name: string } }) {
   const app = S.apps[p.app];
   if (!app) return null;
-  const save = (e) => {
+  const save = (e: React.FormEvent) => {
     e.preventDefault();
     const name = str(p.name);
     if (!name || name === app.name) return closeDialog();
-    const pl = planOps(app, [
+    const pl = planOps(backed(app), [
       {
         op: 'rename_app',
         name,
@@ -947,7 +940,7 @@ export function RenameDialog({ p }) {
     closeDialog();
     if (pl.steps.length) {
       pushChat(app, 'user', 'Rename the app to ' + name);
-      runChange(app, pl.steps, 'Rename the app');
+      runChange(backed(app), pl.steps, 'Rename the app');
     }
   };
   return (
@@ -961,7 +954,7 @@ export function RenameDialog({ p }) {
             data-autofocus
             value={p.name}
             onInput={(e) => {
-              p.name = e.target.value;
+              patchDialog({ name: e.currentTarget.value });
             }}
           />
         </Field>
@@ -977,36 +970,40 @@ export function RenameDialog({ p }) {
     </Dialog>
   );
 }
-export function AddConnDialog({ p }) {
-  if (!p.kind)
-    Object.assign(p, {
-      kind: 'MCP server',
-      name: '',
-      url: '',
-      auth: 'none',
-      err: '',
-    });
-  const add = (e) => {
+/** The Add a connection form. */
+export interface AddConnForm {
+  kind?: string;
+  name: string;
+  url: string;
+  auth: string;
+  err: string;
+}
+const ADD_CONN_START: AddConnForm = { kind: 'MCP server', name: '', url: '', auth: 'none', err: '' };
+export function AddConnDialog({ p }: { p: AddConnForm }) {
+  // a dialog opened without a form starts from the empty one
+  const f: AddConnForm = p.kind ? p : ADD_CONN_START,
+    set = (patch: Partial<AddConnForm>) => patchDialog({ ...f, ...patch });
+  const add = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!str(p.name) || !/^https:\/\/\S+\.\S+/.test(str(p.url))) {
-      p.err = 'Give it a name and an https:// address.';
-      return notify();
+    if (!str(f.name) || !/^https:\/\/\S+\.\S+/.test(str(f.url))) {
+      set({ err: 'Give it a name and an https:// address.' });
+      return;
     }
     const id = uid('c');
     S.custom.push({
       id,
       custom: true,
-      name: str(p.name),
-      kind: p.kind,
-      url: str(p.url),
-      auth: p.auth === 'key' ? 'API key on the server' : 'No key needed',
+      name: str(f.name),
+      kind: f.kind || 'MCP server',
+      url: str(f.url),
+      auth: f.auth === 'key' ? 'API key on the server' : 'No key needed',
       icon: 'plug',
       acc: 'steel',
       about: 'Added by you.',
       usedBy: 'Not used yet',
       tools: [
         {
-          name: p.kind === 'MCP server' ? 'tools/list' : 'GET /',
+          name: f.kind === 'MCP server' ? 'tools/list' : 'GET /',
           desc: 'Placeholder. The real build discovers the tools from the server.',
           args: {},
         },
@@ -1016,7 +1013,7 @@ export function AddConnDialog({ p }) {
     U.conn = id;
     commit();
     closeDialog();
-    toast(str(p.name) + ' added', 'success');
+    toast(str(f.name) + ' added', 'success');
   };
   return (
     <Dialog title="Add a connection" onClose={closeDialog}>
@@ -1026,10 +1023,9 @@ export function AddConnDialog({ p }) {
             native
             className="select"
             id="ac-kind"
-            value={p.kind}
+            value={f.kind}
             onChange={(e) => {
-              p.kind = e.target.value;
-              notify();
+              set({ kind: e.currentTarget.value });
             }}
           >
             <option value="MCP server">MCP server (HTTP)</option>
@@ -1042,25 +1038,25 @@ export function AddConnDialog({ p }) {
             className="input"
             id="ac-name"
             data-autofocus
-            value={p.name}
+            value={f.name}
             onInput={(e) => {
-              p.name = e.target.value;
+              set({ name: e.currentTarget.value });
             }}
           />
         </Field>
         <Field
           id="ac-url"
           label="Address"
-          hint={p.kind === 'MCP server' ? "The server's streamable HTTP endpoint." : 'The base address of the API.'}
+          hint={f.kind === 'MCP server' ? "The server's streamable HTTP endpoint." : 'The base address of the API.'}
         >
           <Input
             native
             className="input mono"
             id="ac-url"
             placeholder="https://"
-            value={p.url}
+            value={f.url}
             onInput={(e) => {
-              p.url = e.target.value;
+              set({ url: e.currentTarget.value });
             }}
           />
         </Field>
@@ -1073,17 +1069,16 @@ export function AddConnDialog({ p }) {
             native
             className="select"
             id="ac-auth"
-            value={p.auth}
+            value={f.auth}
             onChange={(e) => {
-              p.auth = e.target.value;
-              notify();
+              set({ auth: e.currentTarget.value });
             }}
           >
             <option value="none">No key needed</option>
             <option value="key">API key, stored on the server</option>
           </Select>
         </Field>
-        {p.err && <MBar tone="warning">{p.err}</MBar>}
+        {f.err && <MBar tone="warning">{f.err}</MBar>}
         <div className="row end">
           <Btn type="button" className="btn" onClick={closeDialog}>
             Cancel
@@ -1097,7 +1092,7 @@ export function AddConnDialog({ p }) {
   );
 }
 export function AboutDialog() {
-  const li = (items) => (
+  const li = (items: string[]) => (
     <ul className="plain dots">
       {items.map((x, i) => (
         <li key={i}>{x}</li>
@@ -1174,30 +1169,42 @@ export function AboutDialog() {
     </Dialog>
   );
 }
+/** What confirmBox puts in the dialog. */
+interface ConfirmProps {
+  title: string;
+  body: ReactNode;
+  yes?: string;
+  no?: string;
+  danger?: boolean;
+  done: (ok: boolean) => void;
+}
 export function DialogHost() {
   const d = U.dialog;
   if (!d) return null;
-  const p = d.props;
+  // openDialog's callers give each dialog the fields it reads; the dialog's props type says which
+  const p = d.props as never;
   switch (d.type) {
-    case 'confirm':
+    case 'confirm': {
+      const c: ConfirmProps = p;
       return (
         <Dialog
-          title={p.title}
-          onClose={() => p.done(false)}
+          title={c.title}
+          onClose={() => c.done(false)}
           foot={
             <>
-              <Btn className="btn" onClick={() => p.done(false)}>
-                {p.no || 'Cancel'}
+              <Btn className="btn" onClick={() => c.done(false)}>
+                {c.no || 'Cancel'}
               </Btn>
-              <Btn className={cx('btn', p.danger ? 'danger' : 'primary')} data-autofocus onClick={() => p.done(true)}>
-                {p.yes || 'OK'}
+              <Btn className={cx('btn', c.danger ? 'danger' : 'primary')} data-autofocus onClick={() => c.done(true)}>
+                {c.yes || 'OK'}
               </Btn>
             </>
           }
         >
-          <p>{p.body}</p>
+          <p>{c.body}</p>
         </Dialog>
       );
+    }
     case 'settings':
       return <SettingsDialog />;
     case 'install':
@@ -1257,10 +1264,10 @@ export function Toasts() {
 export function tourSteps() {
   const tab = activeTab(),
     app = tab && tab.app ? S.apps[tab.app] : null,
-    view = (v) => () => {
-      U.view[app.id] = v;
+    view = (v: string) => () => {
+      if (app) U.view[app.id] = v;
     },
-    s = [];
+    s: ProductTourStep[] = [];
   s.push({
     target: 'tabs',
     title: 'Workspaces are tabs',
@@ -1390,14 +1397,21 @@ export function startTour() {
   };
   notify();
 }
+/** Move the running tour to step i. */
+function setTourStep(i: number) {
+  if (U.tour) U.tour = { ...U.tour, i };
+  notify();
+}
 export function TourLayer() {
   const T = U.tour,
-    st = useState(null),
+    st = useState<{ x: number; y: number; w: number; h: number } | null>(null),
     rect = st[0],
     setRect = st[1],
-    step = T ? T.steps[T.i] : null;
+    step = T ? T.steps[T.i] : null,
+    tourId = T && T.id,
+    tourStep = T && T.i;
   useLayoutEffect(() => {
-    if (!T) return undefined;
+    if (!T || !step) return undefined;
     let alive = true;
     if (NARROW() && step.target !== 'chat' && U.peek) U.peek = false;
     if (step.prep) step.prep();
@@ -1407,7 +1421,7 @@ export function TourLayer() {
       if (!alive) return;
       const el = step.target ? document.querySelector('[data-tour="' + step.target + '"]') : null;
       let r = el ? el.getBoundingClientRect() : null;
-      if (r && !moved && (r.top < 0 || r.bottom > window.innerHeight) && el.scrollIntoView && !el.closest('.react-flow')) {
+      if (el && r && !moved && (r.top < 0 || r.bottom > window.innerHeight) && el.scrollIntoView && !el.closest('.react-flow')) {
         moved = true;
         el.scrollIntoView({
           block: r.height > window.innerHeight * 0.6 ? 'start' : 'center',
@@ -1434,8 +1448,8 @@ export function TourLayer() {
       clearInterval(iv);
       window.removeEventListener('resize', measure);
     };
-  }, [T && T.id, T && T.i]);
-  if (!T) return null;
+  }, [tourId, tourStep]); // eslint-disable-line react-hooks/exhaustive-deps -- runs once per tour step; T and step are that step's
+  if (!T || !step) return null;
   const W = window.innerWidth,
     H = window.innerHeight,
     pw = Math.min(340, W - 24),
@@ -1444,14 +1458,13 @@ export function TourLayer() {
       S.settings.tourDone = true;
       commit();
     },
-    go = (d) => {
+    go = (d: number) => {
       const i = T.i + d;
       if (i < 0) return;
       if (i >= T.steps.length) return end();
-      T.i = i;
-      notify();
+      setTourStep(i);
     };
-  let style = {
+  let style: { left: string; top?: string; bottom?: string; width: string } = {
     left: (W - pw) / 2 + 'px',
     top: Math.max(40, H / 2 - 110) + 'px',
     width: pw + 'px',
@@ -1519,13 +1532,13 @@ export function TourLayer() {
         role="dialog"
         aria-label={step.title}
         style={toStyle(style)}
-        tabIndex="-1"
+        tabIndex={-1}
         ref={(el) => {
           if (el && el.dataset.i !== String(T.i)) {
             el.dataset.i = String(T.i);
             try {
               el.focus();
-            } catch (e) {}
+            } catch {}
           }
         }}
       >
@@ -1643,12 +1656,13 @@ export function Root() {
     </FluentProvider>
   );
 }
-export function probeClaude(tries) {
+export function probeClaude(tries: number) {
   const c = modelHost();
   if (c && typeof c.use === 'function') {
     Promise.resolve(c.use('sample')).then(
       (fn) => {
-        LIVE.fn = typeof fn === 'function' ? fn : null;
+        // the host hands back the model client's sample function, or nothing
+        LIVE.fn = typeof fn === 'function' ? (fn as typeof LIVE.fn) : null;
         U.live = LIVE.fn ? 'ready' : 'none';
         notify();
       },
@@ -1659,7 +1673,7 @@ export function probeClaude(tries) {
     );
     Promise.resolve(c.use('downloads')).then(
       (d) => {
-        U.dl = d && typeof d.save === 'function' ? d : null;
+        U.dl = d && typeof (d as Downloader).save === 'function' ? (d as Downloader) : null;
         notify();
       },
       () => {},
@@ -1723,16 +1737,18 @@ export function boot() {
       Object.keys(DBX.timers).forEach((id) => {
         if (DBX.timers[id]) dbFlush(id);
       });
-    } catch (e) {}
+    } catch {}
   };
   setNetWas(online()); // Live follows the connection: listen for it coming and going
   window.addEventListener('online', netChanged);
   window.addEventListener('offline', netChanged);
   window.addEventListener('resize', notify);
   try {
-    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    // the Network Information API is not in every browser, nor in the DOM types
+    const n = navigator as Navigator & { connection?: EventTarget; mozConnection?: EventTarget; webkitConnection?: EventTarget },
+      c = n.connection || n.mozConnection || n.webkitConnection;
     if (c && c.addEventListener) c.addEventListener('change', netChanged);
-  } catch (e) {}
+  } catch {}
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush();
@@ -1742,7 +1758,7 @@ export function boot() {
       Object.keys(S.apps).forEach((id) => {
         try {
           if (dbExists(id)) dbSave(id);
-        } catch (e) {}
+        } catch {}
       });
       saveNow();
     },
@@ -1761,7 +1777,7 @@ export function boot() {
     },
     flow: () => FLOW,
     dbCount,
-    sql: (id, text, params) => sqlRun(id, text, params || null, 'test'),
+    sql: (id: string, text: string, params?: SqlValue[]) => sqlRun(id, text, params || null, 'test'),
     guide: () => GUIDE.length,
     wf: {
       parse: parseFlow,
@@ -1771,7 +1787,7 @@ export function boot() {
       rules: REVIEW_RULES,
       reviewers: REVIEWERS,
       tryFix,
-      rerun: (app, st) => runBuild(app, st),
+      rerun: (app: AppRecord, st: string) => runBuild(lineApp(app), st),
       review: reviewNow,
       mode: modeNow,
       runs: () => RUNS,
@@ -1782,9 +1798,9 @@ export function boot() {
       cases: suggestCases,
       keepFix,
     },
-    activity: (appId) => activityNow(appId),
-    runTests: (app) => runTestsSync(app),
-    suite: (id) =>
+    activity: (appId: string) => activityNow(appId),
+    runTests: (app: AppRecord) => runTestsSync(app),
+    suite: (id: string) =>
       suiteOf(S.apps[id]).map((x) => ({
         id: x.id,
         n: x.tests.length,
@@ -1797,4 +1813,11 @@ export function boot() {
       APILOG,
     },
   };
+}
+
+declare global {
+  interface Window {
+    /** hooks the browser tests read and drive (tests/e2e) */
+    __formwork?: unknown;
+  }
 }

@@ -90,7 +90,7 @@ describe('fact-check team', () => {
     const m = await teamGraphMermaid(factRequest());
     for (const n of ['agent_extractor', 'agent_researchers', 'tools_researchers', 'check_verifier', 'finish']) expect(m).toContain(n);
     expect(m).not.toContain('tools_extractor');
-    if (process.env.DRAW_GRAPH) console.log(m);
+    if (process.env.DRAW_GRAPH) console.info(m);
   });
 });
 

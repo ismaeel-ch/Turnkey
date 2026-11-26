@@ -117,6 +117,8 @@ describe('resolveShareStore', () => {
     expect(resolveShareStore({})).toBeNull();
     expect(resolveShareStore({ SHARE_STORE_DIR: '/tmp/x' })?.kind).toBe('folder');
     expect(resolveShareStore({ BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_x_y' })?.kind).toBe('blob');
+    // the way Vercel connects a store now: a store id, signed in with the deployment's OIDC token
+    expect(resolveShareStore({ BLOB_STORE_ID: 'store_abc123' })?.kind).toBe('blob');
   });
 });
 
@@ -139,6 +141,7 @@ describe('the routes', () => {
   it('say plainly when short links are off', async () => {
     delete process.env.SHARE_STORE_DIR;
     delete process.env.BLOB_READ_WRITE_TOKEN;
+    delete process.env.BLOB_STORE_ID;
     const { POST, GET } = await import('@/app/api/share/route');
     expect((await POST(post({ code: CODE, name: 'x' }))).status).toBe(503);
     expect(await (await GET(new Request('http://localhost/api/share'))).json()).toEqual({ enabled: false });

@@ -3,6 +3,41 @@
 All notable changes to Turnkey. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 versions are semantic versions. Each release lists the pull requests merged into it.
 
+## [0.3.2] - 2026-11-26
+
+Short links work with Vercel's new Blob connection, the agent route has more guard rails, and each release is
+smoke-tested on the live site.
+
+### Fixed
+
+- Short links turn on with Vercel's new Blob connection (`BLOB_STORE_ID`, signed in with the deployment's token).
+  ([#101](https://github.com/ismaeel-ch/Turnkey/pull/101))
+- The workspace no longer crashes on load in development. ([#99](https://github.com/ismaeel-ch/Turnkey/pull/99))
+
+### Changed
+
+- The agent route applies the prompt policy, refuses cross-site calls and caps run bodies. ([#79](https://github.com/ismaeel-ch/Turnkey/pull/79))
+- Each release is smoke-tested on the live site after it deploys. ([#92](https://github.com/ismaeel-ch/Turnkey/pull/92))
+- The judges' first run is smoother, and a demo video script is added. ([#88](https://github.com/ismaeel-ch/Turnkey/pull/88))
+- Dead exports, files and two unused dependencies are removed, with knip to find more. ([#90](https://github.com/ismaeel-ch/Turnkey/pull/90)) ([#100](https://github.com/ismaeel-ch/Turnkey/pull/100)) ([#102](https://github.com/ismaeel-ch/Turnkey/pull/102))
+- More types in tests and share, with fewer casts. ([#95](https://github.com/ismaeel-ch/Turnkey/pull/95))
+
+### Tests
+
+- Short links against a fake Blob service; model gateway edge paths, team runner stops and routes with no model.
+  ([#97](https://github.com/ismaeel-ch/Turnkey/pull/97)) ([#103](https://github.com/ismaeel-ch/Turnkey/pull/103))
+
+## [0.3.1] - 2026-11-26
+
+Picks up the production settings for the Claude API key and the short-link store, with typing and Fluent UI work.
+
+### Changed
+
+- More workspace modules are typed: the engine, the app definition, view specs, changes, UI, tester, activity and
+  guide. ([#70](https://github.com/ismaeel-ch/Turnkey/pull/70)) ([#74](https://github.com/ismaeel-ch/Turnkey/pull/74)) ([#75](https://github.com/ismaeel-ch/Turnkey/pull/75)) ([#76](https://github.com/ismaeel-ch/Turnkey/pull/76))
+- More of the workspace uses Fluent UI inputs, selects, text areas, chips and cards. ([#71](https://github.com/ismaeel-ch/Turnkey/pull/71)) ([#72](https://github.com/ismaeel-ch/Turnkey/pull/72))
+- The deploy log lists the names of the production settings Vercel provides. ([#73](https://github.com/ismaeel-ch/Turnkey/pull/73))
+
 ## [0.3.0] - 2026-11-26
 
 Live builds run on the server through the agent workflow, the workspace moves to Fluent UI, and shared apps get

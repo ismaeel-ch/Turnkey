@@ -2,6 +2,9 @@ import { useSyncExternalStore } from 'react';
 import { downloadFile } from '@/platform/files';
 import type {
   Account,
+  ApiLogRecord,
+  ModelCallRecord,
+  SqlLogRecord,
   AppRecord,
   Dialog,
   Dict,
@@ -407,9 +410,9 @@ export const EV: LoggedEvent[] = [];
 export let evSeq = 0,
   toolSeq = 0;
 export const TOOLCALLS: ToolCallRecord[] = [],
-  MODELCALLS: Dict<unknown>[] = [],
-  SQLLOG: Dict<unknown>[] = [],
-  APILOG: Dict<unknown>[] = [];
+  MODELCALLS: ModelCallRecord[] = [],
+  SQLLOG: SqlLogRecord[] = [],
+  APILOG: ApiLogRecord[] = [];
 export function ring<T>(a: T[], item: T, max: number) {
   a.push(item);
   if (a.length > max) a.splice(0, Math.ceil(max / 3));

@@ -5,6 +5,9 @@ import { codeFor, ModelError, sample, type StepProgress } from '@/platform/model
 
 /* Live builds: the browser's `sample` runs every agent prompt on the server's step agent over AG-UI. */
 
+/** The opening the workspace writes (HEAD() in src/workspace/line.ts): the route's prompt policy only relays these. */
+const head = (name: string) => 'You are the ' + name + ' agent on Turnkey, a line of agents that builds small record-keeping web apps (tables, roles, one status workflow, screens) from one sentence. Code checks your answer and sends it back if it fails, so follow the format exactly. Reply with ONE JSON object and nothing else: no prose, no code fences.\n\n';
+
 const origin = 'http://localhost:3109';
 let ip = 0;
 /** The real route, called in process: the browser client's fetch goes straight to the handler. */
@@ -35,7 +38,7 @@ describe('sample() on the step agent, through the real route with the mock provi
   it('returns the checked JSON and reports draft and format check in order', async () => {
     const steps: string[] = [];
     let streamed = '';
-    const out = await sample('You are the Researcher agent on Turnkey. Request: a dental clinic books patients.', {
+    const out = await sample(head('Researcher') + 'Request: a dental clinic books patients.', {
       fetch: viaRoute,
       onStep: (s: StepProgress) => steps.push(`${s.phase}:${s.name}:${s.attempt}${s.ok === false ? ':bad' : ''}`),
       onText: (p) => (streamed = p.text),
@@ -63,7 +66,7 @@ describe('sample() on the step agent, through the real route with the mock provi
       Object.assign(seen, JSON.parse(String(init.body)));
       return viaRoute(url, init);
     }) as unknown as typeof fetch;
-    await sample('You are the Database agent on Turnkey. Tables for a clinic.', { fetch: spy, modelTier: 'quick' });
+    await sample(head('Database') + 'Tables for a clinic.', { fetch: spy, modelTier: 'quick' });
     expect(seen.forwardedProps).toMatchObject({ maxAttempts: 1, tier: 'quick' });
   });
 });

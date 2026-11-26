@@ -1,6 +1,6 @@
 {
   "name": "turnkey",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "private": true,
   "description": "Turnkey: describe the app your work needs and a team of agents builds its database, backend, views, pages and tests on a workflow you can watch and change.",
   "license": "MIT",
@@ -13,7 +13,7 @@
     "prebuild": "node scripts/copy-sqlite.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings 0",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -25,16 +25,15 @@
     "check": "npm run check:secrets && npm run lint && npm run typecheck && npm run test",
     "icons": "node scripts/gen-icons.cjs",
     "icons:pwa": "node scripts/gen-pwa-icons.mjs",
-    "theme": "node scripts/generate-theme.mjs"
+    "theme": "node scripts/generate-theme.mjs",
+    "knip": "knip"
   },
   "dependencies": {
     "@ag-ui/client": "^1.0.5",
     "@ag-ui/core": "^1.0.5",
     "@ag-ui/encoder": "^1.0.5",
-    "@ai-sdk/openai": "^3.0.147",
     "@ai-sdk/provider": "^3.0.19",
     "@copilotkit/react-core": "^1.90.2",
-    "@copilotkit/react-ui": "^1.90.2",
     "@copilotkit/runtime": "^1.90.2",
     "@fluentui/react-components": "^9.75.3",
     "@langchain/core": "^1.5.1",
@@ -61,9 +60,11 @@
     "eslint-config-next": "16.4.6",
     "fake-indexeddb": "^6.2.8",
     "jsdom": "^31.0.1",
+    "knip": "^6.48.0",
     "playwright": "1.63.0",
     "prettier": "^3.10.1",
     "typescript": "^5",
+    "undici": "^6.29.1",
     "vitest": "^5.1.2"
   },
   "repository": {
