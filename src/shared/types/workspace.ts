@@ -442,32 +442,53 @@ export interface StationLine {
   [field: string]: Loose;
 }
 
-/** An app's build workflow: stations, approvals, added agents and reviewers. */
-export interface AppFlow {
-  /** 1 to 3 attempts per station */
-  attempts: number;
-  /** stations the line stops after for the owner's approval */
-  approve: Dict<boolean>;
-  /** a standing instruction per agent */
-  notes: Dict<string>;
-  /** stations the built-in rules build instead of the agent */
-  by: Dict<string>;
-  /** added steps, in order: library reviewers and the owner's own agents */
-  reviewers: string[];
-  agents: FlowAgent[];
-  /** where a library step sits when it was moved, and whether it applies its changes */
-  at: Dict<string>;
-  auto: Dict<boolean>;
-}
-/** An agent the owner described in a sentence, added to the workflow. */
-export interface FlowAgent {
+/** A step the owner added to the workflow: an agent of their own that runs after a station. */
+export interface AddedAgent {
   id: string;
   name: string;
   job: string;
+  /** the station it runs after */
   after: string;
-  mode: 'advise' | 'apply';
+  /** `apply` changes the app; `advise` only reports */
+  mode: 'apply' | 'advise';
   icon: string;
   acc: string;
+}
+
+/** An app's build workflow: stations, approvals, added agents and reviewers (custom.tsx `normFlow` makes it valid). */
+export interface AppFlow {
+  /** attempts per station, 1 to 3 */
+  attempts: number;
+  /** station id to true: stop for the owner's approval after it */
+  approve: Dict<boolean>;
+  /** agent id to a note the owner left for it */
+  notes: Dict<string>;
+  /** station id to 'rules': built by rules, no model */
+  by: Dict<string>;
+  /** reviewer ids, in the order they run */
+  reviewers: string[];
+  agents: AddedAgent[];
+  /** reviewer id to the station it runs after, when moved from its usual place */
+  at: Dict<string>;
+  /** reviewer id to whether it applies its own changes, when that differs from its default */
+  auto: Dict<boolean>;
+}
+
+/** A reviewer or added step that can run after a station (custom.tsx REVIEWERS). */
+export interface ReviewerInfo {
+  id?: string;
+  name: string;
+  short: string;
+  /** the station it runs after by default */
+  after: string;
+  icon: string;
+  acc: string;
+  reads: string;
+  job: string;
+  /** applies its own changes instead of asking */
+  auto?: boolean;
+  /** added by the owner, not one of the library's */
+  custom?: boolean;
 }
 
 /** A reviewer agent's review of an app, with its findings. */

@@ -1,7 +1,7 @@
 import { NativeField } from '@/platform/dom';
 import type { AppTable, BackedDef, BriefedDef, ColumnDef, Untrusted } from '@/shared/types/app';
 import type { FormEvent, ReactNode } from 'react';
-import type { AppFlow, AppRecord, ChatMessage, Dict, FlowAgent, Review, ReviewFinding, Run } from '@/shared/types/workspace';
+import type { AppFlow, AppRecord, ChatMessage, Dict, AddedAgent, Review, ReviewFinding, ReviewerInfo, Run } from '@/shared/types/workspace';
 import type { Station } from './line';
 import {
   NARROW,
@@ -81,21 +81,8 @@ export const NOTE_HINT: Dict<string> = {
   views: 'Example: always include a calendar when there is a date',
   ui: 'Example: keep page names to two words',
 };
-/** A reviewer agent from the library: the station it follows, how it looks, and what it reads. */
-export interface Reviewer {
-  name: string;
-  short: string;
-  after: string;
-  icon: string;
-  acc: string;
-  reads: string;
-  job: string;
-  id?: string;
-  /** an agent the owner described, not one from the library */
-  custom?: boolean;
-  /** applies its changes by default */
-  auto?: boolean;
-}
+/** A reviewer agent from the library, or one the owner described. */
+export type Reviewer = ReviewerInfo;
 export const REVIEWERS: Record<string, Reviewer> = {
   data: {
     name: 'Data reviewer',
@@ -176,7 +163,7 @@ export const reviewerAt = (stId: string) => ['data', 'security', 'insight', 'wor
 export const stepAfter = (f: AppFlow, id: string): string => (f.at && f.at[id]) || REVIEWERS[id]?.after;
 export const stepAuto = (f: AppFlow, id: string) => (f.auto && id in f.auto ? !!f.auto[id] : !!REVIEWERS[id]?.auto);
 export const stepsAt = (f: AppFlow, stId: string) => f.reviewers.filter((id) => REVIEWERS[id] && stepAfter(f, id) === stId);
-export const normAgent = (a: Untrusted, i: number): FlowAgent | null => {
+export const normAgent = (a: Untrusted, i: number): AddedAgent | null => {
   a = a || {};
   const name = str(a.name).replace(/\s+/g, ' ').slice(0, 32),
     job = str(a.job).replace(/\s+/g, ' ').slice(0, JOB_MAX),
@@ -513,7 +500,7 @@ export const FLOW_TOOLS: Dict<(app: AppRecord, a: Untrusted) => FlowResult> = {
     if (!rv.custom && stationIdx(to) < stationIdx(rv.after))
       throw new Error(rv.short + ' reads ' + rv.reads + ', so it cannot sit before ' + stName(rv.after) + '.');
     if (rv.custom) {
-      (f.agents.find((x) => x.id === id) as FlowAgent).after = to;
+      (f.agents.find((x) => x.id === id) as AddedAgent).after = to;
       rv.after = to;
     } else if (to === rv.after) delete f.at[id];
     else f.at[id] = to;
@@ -538,7 +525,7 @@ export const FLOW_TOOLS: Dict<(app: AppRecord, a: Untrusted) => FlowResult> = {
         text: rv.short + (auto ? ' already applies its changes.' : ' already only advises.'),
       };
     if (rv.custom) {
-      (f.agents.find((x) => x.id === id) as FlowAgent).mode = auto ? 'apply' : 'advise';
+      (f.agents.find((x) => x.id === id) as AddedAgent).mode = auto ? 'apply' : 'advise';
       rv.auto = auto;
     } else if (auto === !!rv.auto) delete f.auto[id];
     else f.auto[id] = auto;
