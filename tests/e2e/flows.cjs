@@ -70,6 +70,19 @@ async function flowDemo(browser, url) {
   check('database was sent back once', a.retries[0] === 1, a.retries);
   check('3 tables, 8 screens', a.tables.length === 3 && a.screens.length === 8, [a.tables, a.screens]);
   check('acceptance test passed', a.tour.length === 7 && a.tour.every(Boolean), a.tour);
+  // the agent activity panel: who worked, the hand-offs, the send-back, and the workflow they ran on
+  await page.locator('.act-launch').click(); await page.waitForSelector('.act-panel .act-agent');
+  const act = await st(page, (aid) => ({ agents: [...document.querySelectorAll('.act-panel .act-agent')].map((x) => x.dataset.agent + ':' + x.dataset.state), kinds: [...document.querySelectorAll('.act-panel .act-item')].map((x) => x.dataset.kind), model: (({ items, agents }) => ({ handoffs: items.filter((i) => i.kind === 'handoff').map((i) => i.from + '>' + i.agent), back: agents.database.sentBack }))(window.__formwork.activity(aid)) }), a.id);
+  check('agent panel lists every builder agent as done', act.agents.join(',') === 'researcher:done,database:done,backend:done,views:done,ui:done,tester:done', act.agents);
+  check('agent panel shows the hand-offs in order and the send-back to the Database agent', act.model.handoffs.join(',') === 'researcher>database,database>backend,backend>views,views>ui,ui>tester' && act.model.back === 1 && act.kinds.includes('sent_back') && act.kinds.includes('tool_call') && act.kinds.includes('checks'), act.model);
+  await shot(page, '07a-agent-activity');
+  await page.locator('.act-panel [role=tab]', { hasText: 'Tool calls' }).click(); await page.locator('.act-panel .act-more').first().click();
+  check('a tool call opens to show its input and result', (await page.locator('.act-panel pre').count()) >= 1 && (await page.locator('.act-panel .act-item').evaluateAll((l) => l.every((x) => x.dataset.kind === 'tool_call'))));
+  await page.locator('.act-tab-how').click(); await page.waitForSelector('.act-how');
+  const how = await st(page, () => [...document.querySelectorAll('.act-how .hiw-station')].map((x) => x.dataset.station + (x.dataset.state ? ':' + x.dataset.state : '')));
+  check('"How it works" draws the workflow: you, seven stations, the app', how.join(',') === 'request,research:done,database:done,backend:done,views:done,screens:done,walkthrough:done,tests:done,app', how);
+  await shot(page, '07b-how-it-works');
+  await page.locator('.act-launch').click(); await page.waitForSelector('.act-panel', { state: 'detached' });
   await sleep(300); await shot(page, '07-built-line');
   await page.locator('.station').nth(1).click(); await page.getByRole('tab', { name: /^Attempts/ }).click(); await sleep(150); await shot(page, '08-attempts');
   await page.getByRole('button', { name: 'Timeline' }).click(); await sleep(150); await shot(page, '09-timeline');
@@ -526,6 +539,13 @@ async function flowQuests(browser, url) {
   check('the check moved through the workflow and has a summary', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Checked' && (await page.locator('.team-done').innerText()).includes('Two of three claims hold'));
   const ev = await st(page, () => { const L = window.__formwork.logs; return { steps: L.EV.filter((e) => e.type === 'STEP_STARTED' && ['extractor', 'researchers', 'verifier'].includes(e.agent)).length, tools: L.TOOLCALLS.filter((x) => x.agent === 'researchers' && x.kind === 'connector').length, api: L.APILOG.filter((x) => x.src === 'team').length }; });
   check('the run is visible as AG-UI events, connector calls and API calls', ev.steps === 3 && ev.tools === 3 && ev.api >= 11, ev);
+  await page.locator('.act-launch').click(); await page.waitForSelector('.act-panel .act-agent');
+  const tact = await st(page, () => ({ agents: [...document.querySelectorAll('.act-panel .act-agent')].map((x) => x.dataset.agent + ':' + x.dataset.state).filter((x) => /^(extractor|researchers|verifier):/.test(x)), tools: [...document.querySelectorAll('.act-panel .act-item[data-kind=tool_call]')].filter((x) => x.dataset.agent === 'researchers').length }));
+  check('agent panel shows the app team at work: three agents done, the researchers\' connector calls', tact.agents.join(',') === 'extractor:done,researchers:done,verifier:done' && tact.tools >= 3, tact);
+  await page.locator('.act-tab-how').click(); await page.waitForSelector('.act-how .hiw-team');
+  check('"How it works" shows the app\'s own team and the sources it calls', await page.locator('.act-how .hiw-team').count() === 3 && (await page.locator('.act-how').innerText()).includes('worldbank'));
+  await shot(page, '81a-team-activity');
+  await page.locator('.act-launch').click(); await page.waitForSelector('.act-panel', { state: 'detached' });
   await page.locator('.team-done .btn', { hasText: 'See the claims' }).click(); await sleep(120);
   check('"See the claims" opens them filtered to this check', await page.locator('.vx .tbl tbody tr').count() === 3 && (await page.locator('.vx .tbl').innerText()).includes('Unverifiable'), await page.locator('.vx .tbl tbody tr').count());
   await vtab(page, 'Board'); check('claims as a board by verdict', await page.locator('.kb-col').count() === 5); await vtab(page, 'Tree'); check('claims as a tree', await page.locator('.tree-row').count() >= 2); await shot(page, '82-factcheck-tree');
