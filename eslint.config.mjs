@@ -26,6 +26,7 @@ const eslintConfig = defineConfig([
       'src/workspace/team-stream.ts',
       'src/workspace/ui.tsx',
       'src/workspace/tester.tsx',
+      'src/workspace/shell-a.tsx',
       'src/workspace/team.tsx',
       'src/workspace/line.ts',
       'src/workspace/release.tsx',
