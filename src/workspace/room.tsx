@@ -1,11 +1,11 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
-import { toStyle, NativeField } from '@/platform/dom';
+import { toStyle } from '@/platform/dom';
 import { S, U, arr, brief, commit, cx, fmtDate, fmtMs, fmtNum, label, notify, online, snake, str, toast, liveModelOn } from './core';
 import { VIEW_ICON, accOf, apiCall, chk, colOf, roleName, tableOf, tourValues } from './engine';
 import { DATA_VIEWS } from './viewspec';
 import { REC, allConnectors, connOn } from './builds';
 import { TEAMS, TeamAv, canRunTeam, runTeam, sameText, stopTeam, teamBlock, teamCase, teamJump } from './team';
-import { Btn, Avatar, Empty, Icon, MBar, Proto, Spinner } from './ui';
+import { Avatar, Btn, Card, Empty, Icon, Input, MBar, Proto, Spinner } from './ui';
 import { FieldInput, cellText, fetchApi, formCols, isStatusCol, optLabel, rowTitle, saveForm, stateLabel, stateTone } from './runtime';
 import { vxState } from './views-a';
 
@@ -991,7 +991,7 @@ export function TeamConsole({ app, user, pane, scr }) {
               </span>
             </div>
           </form>
-          <section className="card room-cases">
+          <Card className="card room-cases">
             <h3 className="widget-h">{it.label}</h3>
             {all.length ? (
               <ul className="rel">
@@ -1040,9 +1040,9 @@ export function TeamConsole({ app, user, pane, scr }) {
                 {' yet.'}
               </p>
             )}
-          </section>
+          </Card>
         </div>
-        <section className="card team-log room-case" aria-live="polite">
+        <Card className="card team-log room-case" aria-live="polite">
           {!row ? (
             <Empty
               icon="bot"
@@ -1091,7 +1091,7 @@ export function TeamConsole({ app, user, pane, scr }) {
                   <p>{T.wait.text}</p>
                   {team.jump && (
                     <form className="row" onSubmit={jump}>
-                      <NativeField as="input" className="input grow" aria-label={team.jump.label} placeholder={team.jump.label} />
+                      <Input native className="input grow" aria-label={team.jump.label} placeholder={team.jump.label} />
                       <Btn className="btn sm" type="submit">
                         Add
                       </Btn>
@@ -1219,12 +1219,7 @@ export function TeamConsole({ app, user, pane, scr }) {
                 ))}
               {mine && team.jump && running && !T.wait && (
                 <form className="row" onSubmit={jump}>
-                  <NativeField
-                    as="input"
-                    className="input grow"
-                    aria-label={team.jump.label}
-                    placeholder={team.jump.label + ' while they work'}
-                  />
+                  <Input native className="input grow" aria-label={team.jump.label} placeholder={team.jump.label + ' while they work'} />
                   <Btn className="btn sm" type="submit">
                     Add
                   </Btn>
@@ -1320,7 +1315,7 @@ export function TeamConsole({ app, user, pane, scr }) {
               )}
             </>
           )}
-        </section>
+        </Card>
       </div>
     </div>
   );

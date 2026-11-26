@@ -1,5 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
-import { render, NativeField } from '@/platform/dom';
+import { render } from '@/platform/dom';
 import { S, U, ago, arr, commit, cx, emit, fmtMs, label, notify, sleep, str, toast, toolCall } from './core';
 import { dbRollback, dbSavepoint, qi, ql, sqlRun } from './db';
 import {
@@ -21,7 +21,7 @@ import { REC } from './builds';
 import { TEAMS, canRunTeam, checkTeam, teamApply } from './team';
 import { RUNS, SPEED, STATIONS } from './line';
 import { CASE_EXPECT } from './tester';
-import { Btn, AgentAv, Empty, Icon, Seg, Spinner } from './ui';
+import { AgentAv, Btn, Card, Empty, Icon, Input, Seg, Spinner } from './ui';
 import { AppPane, newPane, stateLabel } from './runtime';
 import { Explorer } from './views-a';
 import { Dash } from './views-b';
@@ -961,8 +961,8 @@ export function TestsView({ app }) {
         />
         <div className="search">
           <Icon n="search" s="16" />
-          <NativeField
-            as="input"
+          <Input
+            native
             className="input"
             id={'tq' + app.id}
             aria-label="Search tests"
@@ -982,7 +982,7 @@ export function TestsView({ app }) {
           shut = tv.shut[s.id] != null ? tv.shut[s.id] : !(bad || q || tv.only) && s.tests.length > 14;
         if (tv.only && !bad) return null;
         return (
-          <section key={s.id} className={cx('card suite', bad && 'has-bad')}>
+          <Card key={s.id} className={cx('card suite', bad && 'has-bad')}>
             <header className="suite-h">
               <button
                 className="suite-t"
@@ -1009,7 +1009,7 @@ export function TestsView({ app }) {
               </Btn>
             </header>
             {!shut && <TestRows app={app} suite={s} only={tv.only} q={q} />}
-          </section>
+          </Card>
         );
       })}
     </div>

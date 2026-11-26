@@ -363,7 +363,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 /* ---------- the generated test suite ---------- */
 .tests-view{flex:1;min-height:0;padding:16px;display:flex;flex-direction:column;gap:12px}.tests-head{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
 .kpis.tk .kpi{cursor:default}.kpi-v.ok{color:var(--colorStatusSuccessForeground1)}.kpi-v.bad{color:var(--colorStatusDangerForeground1)}.kpi-v.sm{font-size:18px;line-height:36px}
-.suite{padding:0;flex:none}.suite.has-bad{border-color:var(--colorStatusDangerBorder1)}.suite-h{display:flex;align-items:center;gap:10px;padding:8px 12px}
+.suite,.fui-Card.suite{padding:0;flex:none}.suite.has-bad{border-color:var(--colorStatusDangerBorder1)}.suite-h{display:flex;align-items:center;gap:10px;padding:8px 12px}
 .suite-t{display:flex;align-items:center;gap:8px;flex:1;min-width:0;border:0;background:none;text-align:left;padding:4px;border-radius:4px;color:inherit}.suite-t:hover{background:var(--colorSubtleBackgroundHover)}
 .tests{list-style:none;margin:0;padding:0;border-top:1px solid var(--colorNeutralStroke2)}.suite .tests{max-height:420px;overflow:auto}
 .test{display:grid;grid-template-columns:16px minmax(0,1.4fr) minmax(0,1fr);gap:10px;align-items:center;padding:6px 14px;border-bottom:1px solid var(--colorNeutralStroke3);font-size:13px;line-height:18px}.test:last-child{border-bottom:0}
@@ -544,7 +544,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 /* ---------- the agent room: cases on the left, one case's board on the right ---------- */
 .room .team-grid{grid-template-columns:minmax(250px,320px) minmax(0,1fr)}.room-side{min-width:0}
 .room-cases .rel li.on{background:var(--colorNeutralBackground1Selected);box-shadow:inset 2px 0 0 var(--acc)}.room-cases .rel li.on .rel-open{font-weight:600}.room-cases .rel-i{padding:8px 6px}
-.room-case{gap:14px!important}.case-head{display:flex;align-items:flex-start;gap:8px}.case-title{margin:0;word-break:break-word}
+.room-case,.fui-Card.room-case{gap:14px!important}.case-head{display:flex;align-items:flex-start;gap:8px}.case-title{margin:0;word-break:break-word}
 .case-text{margin:0;font-size:13px;line-height:20px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .case-now{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:var(--colorBrandBackground2);color:var(--colorBrandForeground2);font-size:13px}
 .case-new{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;border-radius:8px;border:1px dashed var(--colorNeutralStroke1);background:var(--colorNeutralBackground2)}
@@ -598,12 +598,12 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .jstep+.jstep::before{content:"";position:absolute;left:-8px;top:20px;width:16px;height:2px;background:var(--colorNeutralStroke1)}.jstep.done+.jstep::before{background:var(--colorStatusSuccessBorder2)}
 .jdot{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:none;font-size:12px;font-weight:600;background:var(--colorNeutralBackground5);color:var(--colorNeutralForeground2)}.jstep.done .jdot{background:var(--colorStatusSuccessBackground3,#107c10);color:#fff}.jstep.bad .jdot{background:var(--colorStatusWarningBackground1);color:var(--colorStatusWarningForeground1)}.jstep.now .jdot{background:var(--colorBrandBackground2)}
 .jtext{display:flex;flex-direction:column;min-width:0;text-align:left;border:0;background:none;padding:0;color:inherit;font:inherit}button.jtext{cursor:pointer}button.jtext:hover strong{text-decoration:underline}.jtext .t-cap{overflow:hidden;text-overflow:ellipsis}
-.rel-now{display:flex;gap:16px;align-items:flex-start}.rel-now h2{margin:0}.rel-form{display:flex;flex-direction:column;gap:12px}.rel-form .textarea{width:100%}
+.rel-now,.fui-Card.rel-now{display:flex;gap:16px;align-items:flex-start}.rel-now h2{margin:0}.rel-form,.fui-Card.rel-form{display:flex;flex-direction:column;gap:12px}.rel-form .textarea{width:100%}
 .rel-share-grid{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:start;margin-top:8px}.rel-icon{display:flex;flex-direction:column;gap:8px;max-width:300px;padding:12px;border-radius:8px;background:var(--colorNeutralBackground2);border:1px solid var(--colorNeutralStroke2)}.rel-icons{align-items:flex-end}
 .rel-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column}.rel-item{padding:12px 0;border-top:1px solid var(--colorNeutralStroke2);display:flex;flex-direction:column;gap:6px}.rel-item:first-child{border-top:0;padding-top:4px}
 .rel-notes{margin:0;padding-left:18px;font-size:13px;line-height:20px}.rel-hist h3,.rel-share h3,.rel-form h3{margin:0}
 .solo-note.ok{background:var(--colorStatusSuccessBackground1);color:var(--colorStatusSuccessForeground1);border-bottom:1px solid var(--colorStatusSuccessBorder1)}.solo-note.install{background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground1);border-bottom:1px solid var(--colorNeutralStroke2);font-size:13px;padding:8px 12px}
-@media (max-width:720px){.how{grid-template-columns:repeat(2,minmax(0,1fr))}.journey{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:4px}.jstep:nth-child(3)::before{display:none}.rel-share-grid{grid-template-columns:minmax(0,1fr)}.rel-icon{max-width:none}.rel-now{flex-direction:column}.release-in{padding:12px 12px 32px}.details-bar{padding:0 4px}}
+@media (max-width:720px){.how{grid-template-columns:repeat(2,minmax(0,1fr))}.journey{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:4px}.jstep:nth-child(3)::before{display:none}.rel-share-grid{grid-template-columns:minmax(0,1fr)}.rel-icon{max-width:none}.rel-now,.fui-Card.rel-now{flex-direction:column}.release-in{padding:12px 12px 32px}.details-bar{padding:0 4px}}
 
 /* ---------- the workflow as a flow you extend: a plus on every gate, steps and approvals as nodes, the Tester ---------- */
 .fl-gate{padding-bottom:10px}.fl-add{position:absolute;right:10px;bottom:-14px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);color:var(--colorBrandForeground1);box-shadow:var(--shadow4);cursor:pointer;z-index:2;padding:0}
