@@ -255,7 +255,7 @@ export function buildTeamGraph(req: TeamRequest, ctx: TeamContext, budget: Budge
     sink.emit({ type: 'TEXT_MESSAGE_END', messageId: mid });
     const written: Rows = {};
     if (a.writes && draft.rows.length) {
-      const fixed = a.fixed as Record<string, unknown>;
+      const fixed = a.fixed;
       written[a.writes] = draft.rows.map((r) => ({ ...r, ...fixed }));
       for (const r of written[a.writes]) sink.emit({ type: 'STATE_DELTA', delta: [{ op: 'add', path: `/work/${a.writes}/-`, value: r }] });
     }

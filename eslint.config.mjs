@@ -7,8 +7,7 @@ const eslintConfig = defineConfig([
   ...nextTs,
   globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts', 'public/vendor/**', 'tests/e2e/**', 'scripts/gen-icons.cjs']),
   {
-    // Stricter than Next's defaults for all typed code. The block below still turns some of these off for workspace
-    // modules that have not been typed yet.
+    // Stricter than Next's defaults, for all source and unit tests, workspace modules included.
     files: ['src/**/*.{ts,tsx}', 'tests/unit/**/*.ts'],
     rules: {
       eqeqeq: ['error', 'smart'],
@@ -21,58 +20,6 @@ const eslintConfig = defineConfig([
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none', ignoreRestSiblings: true },
       ],
-    },
-  },
-  {
-    // The workspace modules came from the prototype by an automatic conversion. They keep one mutable store
-    // (core.ts: S, U, notify) that components read and write directly, which these rules forbid. Each module moves to
-    // typed code and a proper store; remove a rule from this list once no module needs it.
-    files: ['src/workspace/**'],
-    // Modules that are typed and pass every rule. Add a module here when its `// @ts-nocheck` goes.
-    ignores: [
-      'src/workspace/agents.ts',
-      'src/workspace/builds.ts',
-      'src/workspace/core.ts',
-      'src/workspace/db.ts',
-      'src/workspace/engine.tsx',
-      'src/workspace/icons.ts',
-      'src/workspace/quests.ts',
-      'src/workspace/registry.ts',
-      'src/workspace/viewspec.tsx',
-      'src/workspace/changes.ts',
-      'src/workspace/team-stream.ts',
-      'src/workspace/ui.tsx',
-      'src/workspace/tester.tsx',
-      'src/workspace/shell-a.tsx',
-      'src/workspace/shell-b.tsx',
-      'src/workspace/shell-c.tsx',
-      'src/workspace/team.tsx',
-      'src/workspace/line.ts',
-      'src/workspace/release.tsx',
-      'src/workspace/custom.tsx',
-      'src/workspace/tests.tsx',
-      'src/workspace/share.tsx',
-      'src/workspace/activity.tsx',
-      'src/workspace/guide.tsx',
-      'src/workspace/mobile.tsx',
-      'src/workspace/flow.tsx',
-      'src/workspace/runtime.tsx',
-      'src/workspace/views-a.tsx',
-      'src/workspace/views-b.tsx',
-      'src/workspace/room.tsx',
-      'src/workspace/history.ts',
-      'src/workspace/history-ui.tsx',
-    ],
-    rules: {
-      '@typescript-eslint/ban-ts-comment': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
-      'react-hooks/immutability': 'off',
-      'react-hooks/refs': 'off',
-      'react-hooks/purity': 'off',
-      'react-hooks/exhaustive-deps': 'off',
-      'react/no-unescaped-entities': 'off',
-      'prefer-spread': 'off',
-      'prefer-const': 'off',
     },
   },
   {

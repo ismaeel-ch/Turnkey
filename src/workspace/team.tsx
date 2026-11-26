@@ -247,7 +247,7 @@ export function teamCase(app: TeamApp, text: string) {
 
 /* ---------- running a team ---------- */
 export async function tpace(T: TeamRun, ms: number) {
-  const end = Date.now() + Math.max(0, ms * ((SPEED as Dict<number>)[S.settings.speed] || 1));
+  const end = Date.now() + Math.max(0, ms * (SPEED[S.settings.speed] || 1));
   for (;;) {
     if (T.stop) throw new TeamStop();
     const left = end - Date.now();

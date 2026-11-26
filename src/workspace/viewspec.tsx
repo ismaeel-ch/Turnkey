@@ -3,7 +3,6 @@ import type {
   AppDef,
   AppTable,
   BackedDef,
-  Board,
   BriefedDef,
   Check,
   ColumnDef,
@@ -250,7 +249,7 @@ export function normViews(o: Untrusted, def: AppDef): ViewsDraft {
       date:
         dc && isDate(dc)
           ? {
-              table: (dt as AppTable).name,
+              table: dt.name,
               column: dc.name,
             }
           : null,
@@ -433,7 +432,7 @@ export function migrateApp(app: AppRecord) {
     if (!app.line[s.id]) app.line[s.id] = blankLine();
   });
   if (def.team === undefined) def.team = null;
-  if (def.team && !def.board && def.tables.length && def.process) def.board = suggestBoard(def) as Board;
+  if (def.team && !def.board && def.tables.length && def.process) def.board = suggestBoard(def);
   if (!def.team) def.board = null;
   if (!def.theme.density) def.theme.density = 'comfortable';
   if (!def.views) def.views = {};
@@ -663,7 +662,7 @@ export function normUI(o: Untrusted, def: BackedDef): UIDraft {
     screens.push(dash);
   }
   roleIds.forEach((r) => {
-    if (!screens.some((s) => s.type === 'dashboard' && s.roles.includes(r))) (dash as Screen).roles.push(r);
+    if (!screens.some((s) => s.type === 'dashboard' && s.roles.includes(r))) dash.roles.push(r);
   });
   screens.sort((a, b) => Number(b.type === 'dashboard') - Number(a.type === 'dashboard')); // the overview comes first, for everyone
   const tour: TourStep[] = arr(o.tour)

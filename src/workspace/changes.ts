@@ -464,7 +464,7 @@ export function renameEverywhere(app: AppRecord & { def: BackedDef }, t: AppTabl
         if (s[k] === old) s[k] = nn;
       });
     }
-    ((s.widgets || []) as Dict<Untrusted>[]).forEach((w) => {
+    (s.widgets || []).forEach((w) => {
       if (w.table === t.name) {
         if (w.column === old) w.column = nn;
         mv(w.where);
@@ -512,7 +512,7 @@ export interface PlannedStep {
 type BackedApp = AppRecord & { def: BackedDef };
 const need = <X>(x: X, msg: string): NonNullable<X> => {
   if (!x) throw new Error(msg);
-  return x as NonNullable<X>;
+  return x;
 };
 export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
   const def = app.def,

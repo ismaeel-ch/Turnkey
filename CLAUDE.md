@@ -44,8 +44,8 @@ docs/           plan, architecture, decisions, hackathon checklist
 4. **No direct pushes to `main`.** Work on a branch, open a pull request that names its issue, merge when CI is green.
 5. **`src/workspace` is ordinary code.** It began as the prototype's plain-script modules and is now typed module by
    module, split into components, with its mutable store moved to an external store. Keep each change covered by the
-   browser flows in `tests/e2e` that exercise it, and keep them green. Remove `// @ts-nocheck` from a file only when
-   that file type-checks.
+   browser flows in `tests/e2e` that exercise it, and keep them green. Every file type-checks under strict settings
+   and passes the same lint rules as the rest of `src`; keep it that way (no `// @ts-nocheck`, no lint exemptions).
 6. **The app must work with no model configured.** With no key, every saved build and every screen still works, and
    Live says plainly that no model is connected. Nothing may crash on a missing environment variable.
 7. **Stay in your folders.** `docs/PLAN.md` lists what each agent owns. To change a file you do not own, ask in your

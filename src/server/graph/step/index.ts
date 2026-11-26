@@ -1,4 +1,4 @@
-import { STEP_AGENT_ID, type StepAgent, type StepError, type StepEvent, type StepInput, type StepResult } from '@/shared/agent-contract';
+import { STEP_AGENT_ID, type StepAgent, type StepError, type StepEvent, type StepInput } from '@/shared/agent-contract';
 import { createStepGraph, type StepGraphOptions } from './graph';
 
 /** The agent for the runtime registry. agui-stream wraps `run` in its AG-UI agent class; tests call it directly. */
@@ -19,8 +19,8 @@ export function createStepAgent(options: StepGraphOptions = {}): StepAgent {
       try {
         const out = await graph.invoke({ input }, { signal, configurable: { sink: emit } });
         if (out.result) {
-          emit({ type: 'result', result: out.result as StepResult });
-          return { result: out.result as StepResult };
+          emit({ type: 'result', result: out.result });
+          return { result: out.result };
         }
         return stop(out.error ?? { code: 'upstream', message: 'The step ended without an answer.', attempts: out.attempt, issues: [] });
       } catch (e) {

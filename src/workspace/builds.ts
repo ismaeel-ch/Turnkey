@@ -4110,7 +4110,7 @@ export const CONNECTORS: Connector[] = [
     ],
   },
 ];
-export const allConnectors = (): Connector[] => CONNECTORS.concat((S.custom || []) as Connector[]);
+export const allConnectors = (): Connector[] => CONNECTORS.concat(S.custom || []);
 export const connOn = (id: string) => (S.conns[id] !== undefined ? !!S.conns[id] : true);
 export const WIKI = [
   ['Appointment scheduling software', 'Software that lets organisations manage bookings and appointments.'],
