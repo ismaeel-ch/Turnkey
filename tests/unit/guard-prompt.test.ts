@@ -91,8 +91,8 @@ describe('prompt policy against the workspace sources', () => {
   it.each([
     ['changes.ts', /export function changePrompt\([^)]*\) \{[\s\S]*?\n\}/],
     ['custom.tsx', /export function reviewPrompt\([^)]*\) \{[\s\S]*?\n\}/],
-    ['tester.tsx', /export const testerPrompt = \(app\) =>\s*\S+/],
-    ['tester.tsx', /export const repairPrompt = \(app, fails\) =>\s*\S+/],
+    ['tester.tsx', /export const testerPrompt = \([^)]*\) =>\s*\S+/],
+    ['tester.tsx', /export const repairPrompt = \([^)]*\) =>\s*\S+/],
   ])('%s builder starts with HEAD()', (file, re) => {
     const src = re.exec(read(file));
     expect(src, String(re)).not.toBeNull();

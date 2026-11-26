@@ -215,9 +215,13 @@ export interface TourStep {
   [field: string]: Loose;
 }
 /** A saved test: tour steps played against the app's API. */
+/** A test case the Tester wrote from the brief, in the tour's step vocabulary. */
 export interface TestCase {
+  id: string;
+  name: string;
+  /** the rule or user story it protects */
+  why: string;
   steps: TourStep[];
-  [field: string]: Loose;
 }
 export interface Theme {
   accent: string;
