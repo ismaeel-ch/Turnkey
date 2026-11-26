@@ -1,13 +1,17 @@
-// Smoke test for a deployed Turnkey site. The release workflow runs it once, after each production deploy.
+// Smoke test that is safe to run against production. The release workflow runs it after each production deploy, and
+// the "Live site check" workflow runs it by hand.
 //
-//   node scripts/smoke-live.mjs https://turnkey-bay.vercel.app
-//   SMOKE_URL=https://… EXPECT_VERSION=v0.3.1 node scripts/smoke-live.mjs
+//   TK_URL=https://turnkey-bay.vercel.app node tests/e2e/smoke.cjs
+//   TK_URL=https://… EXPECT_VERSION=v0.3.1 node tests/e2e/smoke.cjs
+//   npm run test:e2e -- smoke          against a local production build, like the other flows
 //
 // What it checks, in order:
-//   1. /api/health answers ok, and its version is the one just released (EXPECT_VERSION, when given).
+//   1. /api/health answers ok, and its version is the one just released (EXPECT_VERSION, when given). The page is
+//      sent with the security headers, the web manifest is served, and an unknown short link answers 404 (or 503
+//      when short links are off).
 //   2. The page loads in a real browser and the workspace opens, with no uncaught error on the page.
-//   3. Share makes a short link, and that link opens the app on its own in a fresh browser.
-//      The app is built from a saved template in Demo mode, so this spends nothing on the model.
+//   3. A sample app builds from its saved build with every generated test passing, Share makes a short link, and that
+//      link opens the app on its own in a fresh browser. Demo mode is on, so none of this calls the model.
 //   4. When a model is configured, one tool call through /api/health?probe=1. That is the only model call, on the
 //      quick tier, and it goes through the site's own rate limits and spend cap. With no model configured the app
 //      still works (that is a project rule), so this is reported as a warning, not a failure.
@@ -15,15 +19,15 @@
 // Every share leaves one small record in the short-link store, named "release-check" (then -2 … -5, then random).
 // Exits 1 if any check fails. Writes a table to $GITHUB_STEP_SUMMARY when that is set. Prints no secrets: it reads
 // only public routes.
-import fs from 'node:fs';
-import { chromium } from 'playwright';
+const fs = require('node:fs');
+const { chromium } = require('playwright');
 
-const base = String(process.env.SMOKE_URL || process.argv[2] || '').replace(/\/+$/, '');
+const base = String(process.env.TK_URL || process.env.SMOKE_URL || process.argv[2] || '').replace(/\/+$/, '');
 const expectVersion = String(process.env.EXPECT_VERSION || '').replace(/^v/, '');
 const SHARE_NAME = 'Release check';
 
 if (!/^https?:\/\/[^/\s]+$/.test(base)) {
-  console.error('Give the site address, for example: node scripts/smoke-live.mjs https://turnkey-bay.vercel.app');
+  console.error('Give the site address, for example: node tests/e2e/smoke.cjs https://turnkey-bay.vercel.app');
   process.exit(2);
 }
 
@@ -67,6 +71,33 @@ async function checkHealth() {
   } catch (e) {
     record('health route answers', 'fail', String(e && e.message ? e.message : e));
     return null;
+  }
+}
+
+async function checkHttp() {
+  try {
+    const res = await fetch(base + '/', { signal: AbortSignal.timeout(20000) });
+    const missing = ['content-security-policy', 'x-content-type-options', 'x-frame-options', 'referrer-policy'].filter(
+      (h) => !res.headers.get(h),
+    );
+    if (res.ok && !missing.length) record('page is served with the security headers', 'pass');
+    else record('page is served with the security headers', 'fail', res.ok ? 'missing ' + missing.join(', ') : `HTTP ${res.status}`);
+  } catch (e) {
+    record('page is served with the security headers', 'fail', firstLine(e));
+  }
+  try {
+    const m = await getJson('/manifest.webmanifest');
+    if (m.name === 'Turnkey' && Array.isArray(m.icons) && m.icons.length) record('web manifest is served', 'pass');
+    else record('web manifest is served', 'fail', 'unexpected manifest');
+  } catch (e) {
+    record('web manifest is served', 'fail', firstLine(e));
+  }
+  try {
+    const res = await fetch(base + '/api/share/no-such-app-' + Date.now().toString(36), { signal: AbortSignal.timeout(20000) });
+    if (res.status === 404 || res.status === 503) record('an unknown short link answers plainly', 'pass', `HTTP ${res.status}`);
+    else record('an unknown short link answers plainly', 'fail', `HTTP ${res.status}`);
+  } catch (e) {
+    record('an unknown short link answers plainly', 'fail', firstLine(e));
   }
 }
 
@@ -132,6 +163,13 @@ async function checkBrowser() {
         await sleep(150);
       }
       await page.waitForFunction(() => !document.querySelector('.work-head .spin'), null, { timeout: 30000 });
+      const tests = await page.evaluate(() => {
+        const s = window.__formwork.state();
+        const t = s.tabs[s.session].find((x) => x.id === s.active[s.session]);
+        return s.apps[t.app].tests || null;
+      });
+      if (tests && tests.total > 0 && tests.failed === 0) record('a sample app builds and its tests pass', 'pass', `${tests.total} tests`);
+      else record('a sample app builds and its tests pass', 'fail', JSON.stringify(tests));
       // a name of its own, so the check never takes a short name a person would want, such as /clinic
       await page.evaluate((name) => {
         const s = window.__formwork.state();
@@ -208,13 +246,24 @@ function summary() {
   return [`### Smoke test of ${base}`, '', '| | Check | Detail |', '| - | - | - |', ...rows, ''].join('\n');
 }
 
-const health = await checkHealth();
-if (health) {
-  await checkBrowser();
-  await checkLive(health);
+async function main() {
+  const health = await checkHealth();
+  if (health) {
+    await checkHttp();
+    await checkBrowser();
+    await checkLive(health);
+  }
+  const failed = results.filter((r) => r.status === 'fail').length;
+  const warned = results.filter((r) => r.status === 'warn').length;
+  console.log(`\n${results.length - failed - warned} passed, ${failed} failed, ${warned} warnings.`);
+  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary());
+  return failed ? 1 : 0;
 }
-const failed = results.filter((r) => r.status === 'fail').length;
-const warned = results.filter((r) => r.status === 'warn').length;
-console.log(`\n${results.length - failed - warned} passed, ${failed} failed, ${warned} warnings.`);
-if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary());
-process.exit(failed ? 1 : 0);
+
+main().then(
+  (code) => process.exit(code),
+  (e) => {
+    console.error(e);
+    process.exit(1);
+  },
+);
