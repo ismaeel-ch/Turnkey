@@ -58,6 +58,10 @@ export type SpawnFn = (
 
 export const MAX_ATTEMPTS = 3;
 
+/** The system prompt when a request brings none: the command's own prompt is for a coding agent, not for an app. */
+export const PLAIN_SYSTEM =
+  'You answer requests sent by a web application. Follow the request exactly and reply in the format it asks for.';
+
 /** Throws when this looks like a deployment: the command runs as whoever started the server. */
 export function assertLocal(env: Record<string, string | undefined> = process.env) {
   if (env.VERCEL || env.NODE_ENV === 'production')
@@ -283,7 +287,8 @@ export function claudeCode(config: ClaudeCodeConfig): Provider {
         .join('\n\n');
       const args = buildArgs({
         model: model(request.tier),
-        system,
+        // always replace Claude Code's own coding-agent prompt, so a call sees what it would see on the API
+        system: system || PLAIN_SYSTEM,
         schema: tools ? toolReplySchema(tools) : undefined,
         bare: config.bare ?? Boolean(env.ANTHROPIC_API_KEY),
         maxBudgetUsd: config.maxBudgetUsd ?? 0.5,

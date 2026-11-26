@@ -1,26 +1,31 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
-import { useState, useLayoutEffect, useRef } from 'react';
+import { useState, useLayoutEffect, useRef, type FocusEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import type { AppTable, AppUser, ColumnDef, Dash as DashDef, DashWidget, Screen, StoredRow } from '@/shared/types/app';
+import type { AppRecord, Dict, Pane, ViewFilter, ViewOptions } from '@/shared/types/workspace';
 import { toStyle } from '@/platform/dom';
 import { DOW, MON, cap, cx, fmtDate, fmtNum, fmtTime, isoDate, notify, parseISO, toast, today } from './core';
 import { accOf, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isNum } from './viewspec';
 import { Btn, Card, Empty, FilterChip, Icon, Seg, Switch } from './ui';
 import { cellText, fetchApi, rowTitle, stateLabel, stateTone } from './runtime';
-import { NoRows, Pick, choices, passes, vxState } from './views-a';
+import { NoRows, Pick, asText, choices, passes, vxState, type DrillPair, type ViewProps } from './views-a';
 
 /* ===== Turnkey prototype · charts, pivot, timeline and the dashboard =====
    Chart rules followed here: colour follows the value, never its rank; one axis; a legend for two or more series;
    labels and numbers in text colours; every mark has a hover tip; a data table is one click away. */
 export const SERIES_MAX = 8;
-export const cvar = (i) => 'var(--c' + (i == null || i < 0 ? 0 : (i % SERIES_MAX) + 1) + ')';
-export const measureOf = (t, m) => {
+/** A column's label, or its name when it has none. */
+export const colName = (c: ColumnDef) => c.label || c.name;
+export const cvar = (i: number | null | undefined) => 'var(--c' + (i == null || i < 0 ? 0 : (i % SERIES_MAX) + 1) + ')';
+/** What a chart counts: rows, or the total or average of a number column. */
+export type Measure = { fn: 'count'; col: null; label: string } | { fn: 'sum' | 'avg'; col: ColumnDef; label: string };
+export const measureOf = (t: AppTable, m: string | null | undefined): Measure => {
   const x = /^(sum|avg):(.+)$/.exec(m || ''),
     c = x && colOf(t, x[2]);
-  return c && isNum(c)
+  return x && c && isNum(c)
     ? {
-        fn: x[1],
+        fn: x[1] === 'sum' ? 'sum' : 'avg',
         col: c,
-        label: (x[1] === 'sum' ? 'Total ' : 'Average ') + c.label.toLowerCase(),
+        label: (x[1] === 'sum' ? 'Total ' : 'Average ') + colName(c).toLowerCase(),
       }
     : {
         fn: 'count',
@@ -28,24 +33,33 @@ export const measureOf = (t, m) => {
         label: 'Count',
       };
 };
-export const aggOf = (M, list) => {
+export const aggOf = (M: Measure, list: StoredRow[]) => {
   if (M.fn === 'count') return list.length;
+  const col = M.col.name;
   const v = list
-      .map((r) => r[M.col.name])
+      .map((r) => r[col])
       .filter((x) => x != null && x !== '')
       .map(Number)
       .filter((x) => !isNaN(x)),
     s = v.reduce((a, b) => a + b, 0);
   return M.fn === 'sum' ? Math.round(s * 100) / 100 : v.length ? Math.round((s / v.length) * 10) / 10 : 0;
 };
-export const keyStr = (v) => (v == null || v === '' ? '' : String(v));
-export function groupsOf(app, user, t, c, rows, fold) {
+export const keyStr = (v: unknown) => (v == null || v === '' ? '' : String(v));
+/** One value of a category column found in the rows; `ci` is its colour slot. `keys` marks the folded "Other". */
+export interface Group {
+  key: string;
+  label: string;
+  ci: number;
+  val?: unknown;
+  keys?: Dict<number>;
+}
+export function groupsOf(app: AppRecord, user: AppUser, t: AppTable, c: ColumnDef, rows: StoredRow[], fold: boolean): Group[] {
   // the values of a category column found in these rows, in a stable order; ci is the colour slot
   const all = choices(app, user, t, c),
-    seen = {},
-    known = {},
-    out = [];
-  let other = null;
+    seen: Dict<unknown> = {},
+    known: Dict<number> = {},
+    out: Group[] = [];
+  let other: (Group & { keys: Dict<number> }) | null = null;
   rows.forEach((r) => {
     const k = keyStr(r[c.name]);
     if (!(k in seen)) seen[k] = r[c.name];
@@ -90,9 +104,9 @@ export function groupsOf(app, user, t, c, rows, fold) {
     });
   return out;
 }
-export const inGroup = (g, r, c) => (g.keys ? !!g.keys[keyStr(r[c.name])] : keyStr(r[c.name]) === g.key);
-export function bucketOf(v, b) {
-  const d = parseISO(v);
+export const inGroup = (g: Group, r: StoredRow, c: ColumnDef) => (g.keys ? !!g.keys[keyStr(r[c.name])] : keyStr(r[c.name]) === g.key);
+export function bucketOf(v: unknown, b: string) {
+  const d = parseISO(asText(v));
   if (!d) return null;
   return isoDate(
     b === 'month'
@@ -102,26 +116,26 @@ export function bucketOf(v, b) {
         : d,
   );
 }
-export function bucketsFor(rows, col, b) {
+export function bucketsFor(rows: StoredRow[], col: string, b: string): { b: string; list: string[] } {
   // an unbroken run from the first date to the last, so quiet days show as zero
   const keys = rows
     .map((r) => bucketOf(r[col], b))
-    .filter(Boolean)
+    .filter((k): k is string => !!k)
     .sort();
   if (!keys.length)
     return {
       b,
       list: [],
     };
-  const step = (k) => {
-    const d = parseISO(k);
+  const step = (k: string) => {
+    const d = parseISO(k) || today();
     return isoDate(
       b === 'month'
         ? new Date(d.getFullYear(), d.getMonth() + 1, 1)
         : new Date(d.getFullYear(), d.getMonth(), d.getDate() + (b === 'week' ? 7 : 1)),
     );
   };
-  const list = [],
+  const list: string[] = [],
     last = keys[keys.length - 1];
   let k = keys[0],
     n = 0;
@@ -136,42 +150,60 @@ export function bucketsFor(rows, col, b) {
         list,
       };
 }
-export const bucketEnd = (k, b) => {
-  const d = parseISO(k);
+export const bucketEnd = (k: string, b: string) => {
+  const d = parseISO(k) || today();
   return isoDate(
     b === 'month'
       ? new Date(d.getFullYear(), d.getMonth() + 1, 0)
       : new Date(d.getFullYear(), d.getMonth(), d.getDate() + (b === 'week' ? 6 : 0)),
   );
 };
-export const dayText = (k) => {
+export const dayText = (k: string) => {
   const d = parseISO(k);
   return d ? d.getDate() + ' ' + MON[d.getMonth()] : '';
 };
-export const bucketLabel = (k, b) => {
+export const bucketLabel = (k: string, b: string) => {
   const d = parseISO(k);
-  return b === 'month' ? MON[d.getMonth()] + ' ' + d.getFullYear() : dayText(k);
+  return b === 'month' && d ? MON[d.getMonth()] + ' ' + d.getFullYear() : dayText(k);
 };
-export const bucketLong = (k, b) =>
+export const bucketLong = (k: string, b: string) =>
   b === 'month'
     ? bucketLabel(k, b)
     : b === 'week'
       ? dayText(k) + ' to ' + dayText(bucketEnd(k, b))
-      : DOW[parseISO(k).getDay()] + ' ' + dayText(k);
-export function niceTicks(max, whole) {
+      : DOW[(parseISO(k) || today()).getDay()] + ' ' + dayText(k);
+export function niceTicks(max: number, whole?: boolean) {
   if (!(max > 0)) return [0, 1];
   const raw = max / 4,
     p = Math.pow(10, Math.floor(Math.log10(raw))),
     f = raw / p;
   let step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
   if (whole) step = Math.max(1, Math.round(step));
-  const out = [];
+  const out: number[] = [];
   for (let v = 0; v < max + step - 1e-9; v += step) out.push(Math.round(v * 1e6) / 1e6);
   return out;
 }
-export function catData(app, user, t, rows, xc, sp, M) {
+/** One bar of a category chart: its group, the measure for each series, and the total. */
+export interface CatBar {
+  key: string;
+  label: string;
+  val: unknown;
+  fold: boolean;
+  total: number;
+  n: number;
+  vals: Dict<number>;
+}
+export function catData(
+  app: AppRecord,
+  user: AppUser,
+  t: AppTable,
+  rows: StoredRow[],
+  xc: ColumnDef,
+  sp: ColumnDef | null,
+  M: Measure,
+): { cats: CatBar[]; series: Group[] } {
   const gx = groupsOf(app, user, t, xc, rows, false),
-    gs = sp
+    gs: Group[] = sp
       ? groupsOf(app, user, t, sp, rows, true)
       : [
           {
@@ -180,9 +212,9 @@ export function catData(app, user, t, rows, xc, sp, M) {
             ci: 0,
           },
         ];
-  const cats = gx.map((g) => {
+  const cats = gx.map((g): CatBar => {
     const list = rows.filter((r) => inGroup(g, r, xc)),
-      vals = {};
+      vals: Dict<number> = {};
     gs.forEach((s) => {
       vals[s.key] = sp
         ? aggOf(
@@ -207,9 +239,20 @@ export function catData(app, user, t, rows, xc, sp, M) {
     series: gs,
   };
 }
-export function timeData(app, user, t, rows, xc, sp, M, bucket) {
-  const B = bucketsFor(rows, xc.name, bucket),
-    gs = sp
+/** A series of a time chart: its group and one value per bucket. */
+export type TimeSeries = Group & { vals: number[] };
+export function timeData(
+  app: AppRecord,
+  user: AppUser,
+  t: AppTable,
+  rows: StoredRow[],
+  xc: ColumnDef,
+  sp: ColumnDef | null,
+  M: Measure,
+  bucket: string | null | undefined,
+): { b: string; buckets: string[]; series: TimeSeries[] } {
+  const B = bucketsFor(rows, xc.name, bucket || 'day'),
+    gs: Group[] = sp
       ? groupsOf(app, user, t, sp, rows, true)
       : [
           {
@@ -218,11 +261,11 @@ export function timeData(app, user, t, rows, xc, sp, M, bucket) {
             ci: 0,
           },
         ],
-    idx = {};
+    idx: Dict<number> = {};
   B.list.forEach((k, i) => {
     idx[k] = i;
   });
-  const lists = gs.map(() => B.list.map(() => []));
+  const lists = gs.map(() => B.list.map((): StoredRow[] => []));
   rows.forEach((r) => {
     const k = bucketOf(r[xc.name], B.b);
     if (k == null || idx[k] == null) return;
@@ -242,17 +285,24 @@ export function timeData(app, user, t, rows, xc, sp, M, bucket) {
 }
 
 /* ---------- hover tips and measuring ---------- */
+/** A hover tip: an optional heading, one line per series, and a footnote. */
+export interface TipContent {
+  head?: string | null;
+  rows: { ci?: number | null; v: string; l: string }[];
+  foot?: string | null;
+}
+type TipAt = TipContent & { x: number; y: number };
 export function useTip() {
-  const ref = useRef(),
-    s = useState(null);
-  const show = (e, tip) => {
+  const ref = useRef<HTMLDivElement>(null),
+    s = useState<TipAt | null>(null);
+  const show = (e: MouseEvent<Element> | FocusEvent<Element>, tip: TipContent) => {
     const el = ref.current;
     if (!el) return;
     const b = el.getBoundingClientRect(),
       tg = e.currentTarget && e.currentTarget.getBoundingClientRect ? e.currentTarget.getBoundingClientRect() : b,
-      mouse = e.clientX != null && e.type !== 'focus';
-    const x = mouse ? e.clientX - b.left : tg.left + tg.width / 2 - b.left,
-      y = mouse ? e.clientY - b.top : tg.top - b.top;
+      pt = 'clientX' in e && e.type !== 'focus' ? e : null;
+    const x = pt ? pt.clientX - b.left : tg.left + tg.width / 2 - b.left,
+      y = pt ? pt.clientY - b.top : tg.top - b.top;
     s[1](
       Object.assign(
         {
@@ -270,7 +320,7 @@ export function useTip() {
     hide: () => s[1](null),
   };
 }
-export const Tip = ({ tip }) =>
+export const Tip = ({ tip }: { tip: TipAt | null }) =>
   tip ? (
     <div
       className="ctip"
@@ -298,24 +348,24 @@ export const Tip = ({ tip }) =>
       {tip.foot && <div className="ctip-f">{tip.foot}</div>}
     </div>
   ) : null;
-export function useWidth(ref) {
-  const s = useState(0);
+export function useWidth(ref: RefObject<HTMLElement | null>) {
+  const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
     const fit = () => {
       const w = el.clientWidth;
-      s[1]((old) => (w && w !== old ? w : old));
+      setWidth((old) => (w && w !== old ? w : old));
     };
     fit();
     if (typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
-  return s[0] || 640;
+  }, [ref]);
+  return width || 640;
 }
-export const Legend = ({ series }) =>
+export const Legend = ({ series }: { series: Group[] }) =>
   series.length > 1 ? (
     <div className="lg" role="list" aria-label="Legend">
       {series.map((s) => (
@@ -333,18 +383,27 @@ export const Legend = ({ series }) =>
   ) : null;
 
 /* ---------- bars for categories: one hue for one series, stacked segments with a gap for a split ---------- */
-export function HBars({ cats, series, unit, onPick, picked }) {
-  const T = useTip(),
+export function HBars({
+  cats,
+  series,
+  unit,
+  onPick,
+  picked,
+}: {
+  cats: CatBar[];
+  series: Group[];
+  unit: string;
+  onPick?: (c: CatBar, s: Group) => void;
+  picked?: string | null;
+}) {
+  const { ref: tipRef, ...T } = useTip(),
     many = series.length > 1,
     max =
-      Math.max.apply(
-        null,
-        cats.map((c) => (many ? series.reduce((a, s) => a + Math.max(0, c.vals[s.key] || 0), 0) : Math.max(0, c.total))).concat([0]),
-      ) || 1,
+      Math.max(...cats.map((c) => (many ? series.reduce((a, s) => a + Math.max(0, c.vals[s.key] || 0), 0) : Math.max(0, c.total))), 0) || 1,
     sum = cats.reduce((a, c) => a + c.total, 0);
   if (!cats.length) return <p className="muted t-cap">Nothing to plot for these filters.</p>;
   return (
-    <div className="cwrap" ref={T.ref}>
+    <div className="cwrap" ref={tipRef}>
       <Legend series={series} />
       <div className="hb" role="list">
         {cats.map((c) => {
@@ -383,7 +442,7 @@ export function HBars({ cats, series, unit, onPick, picked }) {
                       }}
                       aria-label={c.label + (many ? ', ' + s.label : '') + ': ' + fmtNum(v)}
                       onClick={() => {
-                        if (can) onPick(c, s);
+                        if (can && onPick) onPick(c, s);
                       }}
                       onMouseMove={(e) => T.show(e, tip)}
                       onMouseLeave={T.hide}
@@ -409,9 +468,27 @@ export function HBars({ cats, series, unit, onPick, picked }) {
 }
 
 /* ---------- time on the x axis: a line, an area, or columns ---------- */
-export function TimePlot({ buckets, b, series, kind, unit, whole, onPick, about }) {
-  const T = useTip(),
-    w = useWidth(T.ref),
+export function TimePlot({
+  buckets,
+  b,
+  series,
+  kind,
+  unit,
+  whole,
+  onPick,
+  about,
+}: {
+  buckets: string[];
+  b: string;
+  series: TimeSeries[];
+  kind: string;
+  unit: string;
+  whole: boolean;
+  onPick?: (i: number) => void;
+  about: string;
+}) {
+  const { ref: tipRef, ...T } = useTip(),
+    w = useWidth(tipRef),
     s0 = useState(-1),
     hov = s0[0],
     n = buckets.length,
@@ -429,21 +506,16 @@ export function TimePlot({ buckets, b, series, kind, unit, whole, onPick, about 
     iw = Math.max(60, w - m.l - m.r),
     ih = h - m.t - m.b,
     band = iw / n,
-    cxi = (i) => m.l + band * (i + 0.5);
+    cxi = (i: number) => m.l + band * (i + 0.5);
   const tops = buckets.map((_, i) =>
-      bar
-        ? series.reduce((a, s) => a + Math.max(0, s.vals[i] || 0), 0)
-        : Math.max.apply(
-            null,
-            series.map((s) => s.vals[i] || 0),
-          ),
+      bar ? series.reduce((a, s) => a + Math.max(0, s.vals[i] || 0), 0) : Math.max(...series.map((s) => s.vals[i] || 0)),
     ),
-    ticks = niceTicks(Math.max.apply(null, tops.concat([0])), whole),
+    ticks = niceTicks(Math.max(...tops, 0), whole),
     ymax = ticks[ticks.length - 1] || 1,
-    y = (v) => m.t + ih - (Math.max(0, v) / ymax) * ih;
+    y = (v: number) => m.t + ih - (Math.max(0, v) / ymax) * ih;
   const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(iw / 62)))),
     bw = Math.max(2, Math.min(24, band * 0.68));
-  const tipFor = (i) => ({
+  const tipFor = (i: number): TipContent => ({
     head: bucketLong(buckets[i], b),
     rows: series.map((s) => ({
       ci: many ? s.ci : null,
@@ -452,7 +524,7 @@ export function TimePlot({ buckets, b, series, kind, unit, whole, onPick, about 
     })),
     foot: many && bar ? 'Total ' + fmtNum(tops[i]) : null,
   });
-  const over = (e, i) => {
+  const over = (e: MouseEvent<Element>, i: number) => {
       if (hov !== i) s0[1](i);
       T.show(e, tipFor(i));
     },
@@ -475,7 +547,7 @@ export function TimePlot({ buckets, b, series, kind, unit, whole, onPick, about 
     const lim = m.t + ih - (ends.length - 1 - i) * 15;
     if (ends[i].y > lim) ends[i].y = lim;
   }
-  const col = (i) => {
+  const col = (i: number) => {
     let acc = 0;
     const live = series.filter((s) => (s.vals[i] || 0) > 0),
       x = cxi(i) - bw / 2;
@@ -525,7 +597,7 @@ export function TimePlot({ buckets, b, series, kind, unit, whole, onPick, about 
     });
   };
   return (
-    <div className="cwrap" ref={T.ref}>
+    <div className="cwrap" ref={tipRef}>
       <Legend series={series} />
       <svg className="plot" width={w} height={h} role="img" aria-label={about}>
         {ticks.map((v) => (
@@ -591,7 +663,7 @@ export function TimePlot({ buckets, b, series, kind, unit, whole, onPick, about 
     </div>
   );
 }
-export function DataTable({ head, rows }) {
+export function DataTable({ head, rows }: { head: string[]; rows: (string | number)[][] }) {
   return (
     <div className="tbl-wrap">
       <table className="tbl compact">
@@ -619,7 +691,7 @@ export function DataTable({ head, rows }) {
     </div>
   );
 }
-export const measureOpts = (t) => {
+export const measureOpts = (t: AppTable) => {
   const nums = t.columns.filter(isNum);
   return [
     {
@@ -629,15 +701,15 @@ export const measureOpts = (t) => {
   ].concat(
     nums.map((c) => ({
       name: 'sum:' + c.name,
-      label: 'Total ' + c.label.toLowerCase(),
+      label: 'Total ' + colName(c).toLowerCase(),
     })),
     nums.map((c) => ({
       name: 'avg:' + c.name,
-      label: 'Average ' + c.label.toLowerCase(),
+      label: 'Average ' + colName(c).toLowerCase(),
     })),
   );
 };
-export const pickPair = (xc, sp, c, s) => [
+export const pickPair = (xc: ColumnDef, sp: ColumnDef | null, c: CatBar, s: Group | null): (DrillPair | null)[] => [
   c.fold
     ? null
     : {
@@ -651,28 +723,30 @@ export const pickPair = (xc, sp, c, s) => [
       }
     : null,
 ];
-export function VChart({ app, user, pane, scr, t, rows, cfg, setCfg, drill }) {
+export function VChart({ app, user, pane, scr, t, rows, cfg, setCfg, drill }: ViewProps) {
   const xc = colOf(t, cfg.x),
     M = measureOf(t, cfg.measure),
     id = 'ch' + scr.id + pane.n;
   if (!xc) return <Empty icon="dashboard" title="Nothing to plot by" text="This table has no category or date field." />;
   const time = isDate(xc),
-    kind = time ? (['line', 'area', 'bar'].includes(cfg.kind) ? cfg.kind : 'line') : 'bar',
+    kind = time ? (cfg.kind && ['line', 'area', 'bar'].includes(cfg.kind) ? cfg.kind : 'line') : 'bar',
     noStack = M.fn === 'avg' && (!time || kind === 'bar');
-  const sp = cfg.split && cfg.split !== xc.name && !noStack ? colOf(t, cfg.split) : null,
-    D = time ? timeData(app, user, t, rows, xc, sp, M, cfg.bucket) : catData(app, user, t, rows, xc, sp, M);
+  const sp = (cfg.split && cfg.split !== xc.name && !noStack ? colOf(t, cfg.split) : null) || null,
+    TD = time ? timeData(app, user, t, rows, xc, sp, M, cfg.bucket) : null,
+    CD = TD ? null : catData(app, user, t, rows, xc, sp, M),
+    series: Group[] = TD ? TD.series : CD ? CD.series : [];
   const about =
-    M.label + ' of ' + t.label.toLowerCase() + ' by ' + xc.label.toLowerCase() + (sp ? ', split by ' + sp.label.toLowerCase() : '');
-  const head = [xc.label].concat(
-      D.series.map((s) => s.label),
-      D.series.length > 1 && !time ? ['Total'] : [],
+    M.label + ' of ' + t.label.toLowerCase() + ' by ' + colName(xc).toLowerCase() + (sp ? ', split by ' + colName(sp).toLowerCase() : '');
+  const head = [colName(xc)].concat(
+      series.map((s) => s.label),
+      series.length > 1 && !time ? ['Total'] : [],
     ),
-    table = time
-      ? D.buckets.map((k, i) => [bucketLong(k, D.b)].concat(D.series.map((s) => s.vals[i] || 0)))
-      : D.cats.map((c) =>
-          [c.label].concat(
-            D.series.map((s) => c.vals[s.key] || 0),
-            D.series.length > 1 ? [c.total] : [],
+    table: (string | number)[][] = TD
+      ? TD.buckets.map((k, i) => [bucketLong(k, TD.b) as string | number].concat(TD.series.map((s) => s.vals[i] || 0)))
+      : (CD ? CD.cats : []).map((c) =>
+          [c.label as string | number].concat(
+            series.map((s) => c.vals[s.key] || 0),
+            series.length > 1 ? [c.total] : [],
           ),
         );
   return (
@@ -699,7 +773,7 @@ export function VChart({ app, user, pane, scr, t, rows, cfg, setCfg, drill }) {
             <Pick
               id={id + 'b'}
               label="every"
-              value={D.b}
+              value={TD ? TD.b : null}
               opts={[
                 {
                   name: 'day',
@@ -733,21 +807,21 @@ export function VChart({ app, user, pane, scr, t, rows, cfg, setCfg, drill }) {
                 },
               ]}
               value={kind}
-              onChange={(v) => setCfg('kind', v)}
+              onChange={(v: string) => setCfg('kind', v)}
             />
           </>
         )}
         <span className="grow" />
-        <Switch id={id + 't'} on={!!cfg.table} onChange={(v) => setCfg('table', v)} text="Data table" />
+        <Switch id={id + 't'} on={!!cfg.table} onChange={(v: boolean) => setCfg('table', v)} text="Data table" />
       </div>
       {noStack && cfg.split ? <p className="t-cap muted">Averages cannot be stacked, so the split is off for this shape.</p> : null}
       <Card className="card chart-card">
         <h3 className="widget-h">{cap(about)}</h3>
-        {time ? (
+        {TD ? (
           <TimePlot
-            buckets={D.buckets}
-            b={D.b}
-            series={D.series}
+            buckets={TD.buckets}
+            b={TD.b}
+            series={TD.series}
             kind={kind}
             unit={M.label}
             whole={M.fn === 'count'}
@@ -757,13 +831,13 @@ export function VChart({ app, user, pane, scr, t, rows, cfg, setCfg, drill }) {
                 {
                   col: xc.name,
                   op: 'between',
-                  val: [D.buckets[i], bucketEnd(D.buckets[i], D.b)],
+                  val: [TD.buckets[i], bucketEnd(TD.buckets[i], TD.b)],
                 },
               ])
             }
           />
         ) : (
-          <HBars cats={D.cats} series={D.series} unit={M.label} onPick={(c, s) => drill(pickPair(xc, sp, c, s))} />
+          <HBars cats={CD ? CD.cats : []} series={series} unit={M.label} onPick={(c, s) => drill(pickPair(xc, sp, c, s))} />
         )}
         <p className="t-cap muted">Select a mark to see the records behind it.</p>
       </Card>
@@ -771,7 +845,7 @@ export function VChart({ app, user, pane, scr, t, rows, cfg, setCfg, drill }) {
     </>
   );
 }
-export function VPivot({ app, user, pane, scr, t, rows, cfg, setCfg, set, drill }) {
+export function VPivot({ app, user, pane, scr, t, rows, cfg, setCfg, set, drill }: ViewProps) {
   const rc = colOf(t, cfg.rows),
     cc = colOf(t, cfg.cols),
     M = measureOf(t, cfg.measure),
@@ -795,14 +869,8 @@ export function VPivot({ app, user, pane, scr, t, rows, cfg, setCfg, set, drill 
         }),
       };
     });
-  const max = Math.max.apply(
-      null,
-      [1].concat.apply(
-        [1],
-        grid.map((g) => g.cells.map((x) => x.v)),
-      ),
-    ),
-    shade = (x) =>
+  const max = Math.max(1, ...grid.flatMap((g) => g.cells.map((x) => x.v))),
+    shade = (x: { n: number; v: number }) =>
       x.n && x.v > 0
         ? {
             background: 'color-mix(in srgb, var(--c1) ' + Math.round(8 + 50 * (x.v / max)) + '%, transparent)',
@@ -875,7 +943,7 @@ export function VPivot({ app, user, pane, scr, t, rows, cfg, setCfg, set, drill 
                   <tr key={g.a.key}>
                     <th scope="row">{g.a.label}</th>
                     {g.cells.map((x, j) => (
-                      <td key={j} className="num pv-c" style={toStyle(shade(x))}>
+                      <td key={j} className="num pv-c" style={toStyle(shade(x) || undefined)}>
                         {x.n ? (
                           <button
                             className="pv-b"
@@ -936,7 +1004,7 @@ export function VPivot({ app, user, pane, scr, t, rows, cfg, setCfg, set, drill 
     </>
   );
 }
-export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, open }) {
+export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, open }: ViewProps) {
   const def = app.def,
     sc = colOf(t, cfg.start),
     ec = cfg.end ? colOf(t, cfg.end) : null,
@@ -946,40 +1014,41 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
   if (!sc) return <Empty icon="timeline" title="No date field" />;
   const day = 864e5,
     base = today(),
-    dates = rows.map((r) => parseISO(r[sc.name])).filter(Boolean),
-    reach = dates.length
-      ? Math.max.apply(
-          null,
-          dates.map((d) => Math.abs(d - base) / day),
-        )
-      : 0,
+    dates = rows.map((r) => parseISO(asText(r[sc.name]))).filter((d): d is Date => !!d),
+    reach = dates.length ? Math.max(...dates.map((d) => Math.abs(d.getTime() - base.getTime()) / day)) : 0,
     zoom = cfg.zoom || (reach <= 8 ? 'w2' : reach <= 30 ? 'w6' : 'q');
-  const span = {
-      w2: 14,
-      w6: 42,
-      q: 91,
-    }[zoom],
+  const span =
+      (
+        {
+          w2: 14,
+          w6: 42,
+          q: 91,
+        } as Dict<number>
+      )[zoom] || 91,
     ws = new Date(base.getFullYear(), base.getMonth(), base.getDate() - Math.round(span * (zoom === 'w2' ? 0.45 : 0.3)) + (st.tlOff || 0)),
-    pct = (d) => ((d - ws) / (span * day)) * 100;
+    pct = (d: Date) => ((d.getTime() - ws.getTime()) / (span * day)) * 100;
+  /** a record on the timeline: from `a` to `b`, on sub-row `row` of its lane */
+  type Item = { r: StoredRow; a: Date; b: Date; row: number };
   const items = rows
-    .map((r) => {
-      const a = parseISO(r[sc.name]);
+    .map((r): Item | null => {
+      const a = parseISO(asText(r[sc.name]));
       if (!a) return null;
-      const b0 = ec && r[ec.name] ? parseISO(r[ec.name]) : null,
+      const b0 = ec && r[ec.name] ? parseISO(asText(r[ec.name])) : null,
         b =
-          b0 && b0 >= a
+          ec && b0 && b0 >= a
             ? new Date(b0.getTime() + (ec.type === 'date' ? day : 0))
             : new Date(a.getTime() + (sc.type === 'date' ? day : 36e5));
       return {
         r,
         a,
         b,
+        row: 0,
       };
     })
-    .filter(Boolean)
-    .sort((x, y) => x.a - y.a);
+    .filter((x): x is Item => !!x)
+    .sort((x, y) => x.a.getTime() - y.a.getTime());
   const inWin = items.filter((x) => pct(x.b) > 0 && pct(x.a) < 100),
-    lanes = lane
+    lanes: { k: { key: unknown; label: string }; list: Item[]; n: number }[] = lane
       ? choices(app, user, t, lane)
           .concat([
             {
@@ -992,6 +1061,7 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
             list: inWin.filter((x) =>
               k.key == null ? x.r[lane.name] == null || x.r[lane.name] === '' : String(x.r[lane.name]) === String(k.key),
             ),
+            n: 1,
           }))
           .filter((l) => l.list.length)
       : [
@@ -1001,10 +1071,11 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
               label: t.label,
             },
             list: inWin,
+            n: 1,
           },
         ];
   lanes.forEach((l) => {
-    const ends = [];
+    const ends: number[] = [];
     l.list.forEach((x) => {
       const from = Math.max(0, pct(x.a)),
         to = Math.max(pct(x.b), from + 15);
@@ -1018,7 +1089,7 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
     });
     l.n = Math.max(1, ends.length);
   });
-  const ticks = [];
+  const ticks: { d: Date; major: boolean }[] = [];
   for (let i = 0; i <= span; i++) {
     const d = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + i);
     if (span <= 14 || (span <= 42 ? d.getDay() === 1 : d.getDate() === 1 || (d.getDay() === 1 && d.getDate() > 4 && d.getDate() < 26)))
@@ -1027,7 +1098,7 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
         major: span <= 42 || d.getDate() === 1,
       });
   }
-  const move = (n) =>
+  const move = (n: number) =>
       set((s) => {
         s.tlOff = n;
       }),
@@ -1036,23 +1107,23 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
       const first = items[0].a;
       set((s) => {
         s.tlOff =
-          Math.round((new Date(first.getFullYear(), first.getMonth(), first.getDate()) - base) / day) +
+          Math.round((new Date(first.getFullYear(), first.getMonth(), first.getDate()).getTime() - base.getTime()) / day) +
           Math.round(span * (zoom === 'w2' ? 0.45 : 0.3)) -
           1;
       });
     },
     now = pct(new Date());
-  const bar = (x) => {
+  const bar = (x: Item) => {
     const l = Math.max(0, pct(x.a)),
       w = Math.max(0.6, Math.min(100, pct(x.b)) - l),
       tone = P ? stateTone(def, t, colOf(t, P.column), x.r[P.column]) : 'info',
       name = rowTitle(app, user, t, x.r, scr.label),
       when =
-        fmtDate(x.r[sc.name]) +
+        fmtDate(asText(x.r[sc.name])) +
         (ec && x.r[ec.name] && x.r[ec.name] !== x.r[sc.name]
-          ? ' to ' + fmtDate(x.r[ec.name])
+          ? ' to ' + fmtDate(asText(x.r[ec.name]))
           : sc.type === 'datetime'
-            ? ', ' + fmtTime(x.r[sc.name])
+            ? ', ' + fmtTime(asText(x.r[sc.name]))
             : '');
     return (
       <button
@@ -1107,7 +1178,7 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
             },
           ]}
           value={zoom}
-          onChange={(v) => setCfg('zoom', v)}
+          onChange={(v: string) => setCfg('zoom', v)}
         />
         <span className="grow" />
         <Pick
@@ -1227,15 +1298,21 @@ export const DASH_RANGES = [
   ['month', 'This month'],
   ['week', 'Next 7 days'],
 ];
-export function goRecords(app, user, pane, tn, o) {
+export function goRecords(
+  app: AppRecord,
+  user: AppUser,
+  pane: Pane,
+  tn: string,
+  o: { view?: string; filters?: (ViewFilter | null | undefined)[]; cfg?: ViewOptions },
+) {
   // from a number or a mark to the records behind it
   const def = app.def,
     t = tableOf(def, tn),
     scr = def.screens.find((s) => s.table === tn && DATA_VIEWS.includes(s.type) && s.roles.includes(user.role));
-  if (!scr) return toast(roleName(def, user.role) + ' has no page for ' + t.label.toLowerCase() + '.', 'info');
+  if (!scr) return toast(roleName(def, user.role) + ' has no page for ' + (t ? t.label : tn).toLowerCase() + '.', 'info');
   const st = vxState(pane, scr, app, user);
   st.view = o.view || 'table';
-  st.filters = (o.filters || []).filter(Boolean);
+  st.filters = (o.filters || []).filter((f): f is ViewFilter => !!f);
   st.q = '';
   st.page = 0;
   st.group = '';
@@ -1244,45 +1321,64 @@ export function goRecords(app, user, pane, tn, o) {
   pane.rec = null;
   notify();
 }
-export function Dash({ app, user, pane, scr, test }) {
+/** A dashboard widget this user may see, with its table. */
+type Shown = { w: DashWidget; i: number; t: AppTable };
+type DashState = NonNullable<Pane['ds']>;
+/** The dashboard's date range and picked filters for this pane, made on first use. */
+export function dashOf(pane: Pane): DashState {
+  return pane.ds || (pane.ds = { range: 'all', f: [] });
+}
+/** Changes the dashboard's range or filters and redraws. */
+export function setDash(ds: DashState, patch: Partial<DashState>) {
+  Object.assign(ds, patch);
+  notify();
+}
+export function Dash({
+  app,
+  user,
+  pane,
+  scr,
+  test,
+}: {
+  app: AppRecord;
+  user: AppUser;
+  pane: Pane;
+  /** a check draws the dashboard from a page made up on the spot */
+  scr: Pick<Screen, 'id' | 'name'> & Partial<Screen>;
+  test?: boolean;
+}) {
   const def = app.def,
-    D = def.dash || {
+    D: DashDef = def.dash || {
       title: 'Dashboard',
       date: null,
       widgets: [],
     },
-    ds =
-      pane.ds ||
-      (pane.ds = {
-        range: 'all',
-        f: [],
-      }),
+    ds = dashOf(pane),
     src = test || pane.test ? 'check' : 'app',
-    cache = {};
+    cache: Dict<StoredRow[]> = {};
   const W = D.widgets
     .map((w, i) => ({
       w,
       i,
       t: tableOf(def, w.table),
     }))
-    .filter((x) => x.t && accOf(def, user.role, x.t.name).list !== 'none');
-  const dt =
-      D.date && tableOf(def, D.date.table) && accOf(def, user.role, D.date.table).list !== 'none' ? tableOf(def, D.date.table) : null,
-    dc = dt ? colOf(dt, D.date.column) : null;
-  const filtersFor = (tn) =>
-    (dc && dt.name === tn && ds.range !== 'all'
-      ? [
+    .filter((x): x is Shown => !!x.t && accOf(def, user.role, x.t.name).list !== 'none');
+  const dt = (D.date && accOf(def, user.role, D.date.table).list !== 'none' ? tableOf(def, D.date.table) : null) || null,
+    dc = (dt && D.date ? colOf(dt, D.date.column) : null) || null;
+  const filtersFor = (tn: string): ViewFilter[] =>
+    (dc && dt && dt.name === tn && ds.range !== 'all'
+      ? ([
           {
             col: dc.name,
             op: 'range',
             val: ds.range,
           },
-        ]
+        ] as ViewFilter[])
       : []
     ).concat(
       ds.f
         .filter((f) => f.table === tn)
-        .map((f) =>
+        .map((f): ViewFilter =>
           f.val == null
             ? {
                 col: f.col,
@@ -1296,30 +1392,31 @@ export function Dash({ app, user, pane, scr, test }) {
               },
         ),
     );
-  const rowsOf = (tn, skip) => {
+  const rowsOf = (tn: string, skip?: string | null) => {
     const key = tn + '|' + (skip || '');
     if (cache[key]) return cache[key];
     const r = fetchApi(app, user, '/api/' + tn, null, src);
-    let rows = r.status === 200 ? r.data : [];
+    let rows: StoredRow[] = r.status === 200 ? r.data : [];
     filtersFor(tn).forEach((f) => {
       if (f.col !== skip) rows = rows.filter((x) => passes(f, x[f.col]));
     });
     return (cache[key] = rows);
   };
-  const whereRows = (x, skip) => {
+  const whereRows = (x: Shown, skip?: string | null) => {
     let rows = rowsOf(x.t.name, skip);
-    Object.keys(x.w.where || {}).forEach((k) => {
-      rows = rows.filter((r) => String(r[k]) === String(x.w.where[k]));
+    const where = x.w.where || {};
+    Object.keys(where).forEach((k) => {
+      rows = rows.filter((r) => String(r[k]) === String(where[k]));
     });
     return rows;
   }; // a chart is not filtered by its own selection, so the other bars stay visible
-  const whereF = (x) =>
+  const whereF = (x: Shown): ViewFilter[] =>
     Object.keys(x.w.where || {}).map((k) => ({
       col: k,
       op: 'is',
-      val: x.w.where[k],
+      val: (x.w.where || {})[k],
     }));
-  const toggle = (tn, col, val) => {
+  const toggle = (tn: string, col: string, val: unknown) => {
     const i = ds.f.findIndex((f) => f.table === tn && f.col === col),
       same = i >= 0 && String(ds.f[i].val) === String(val);
     if (i >= 0) ds.f.splice(i, 1);
@@ -1331,15 +1428,16 @@ export function Dash({ app, user, pane, scr, test }) {
       });
     notify();
   };
-  const pickedOf = (tn, col) => {
+  const pickedOf = (tn: string, col: string) => {
     const f = ds.f.find((x) => x.table === tn && x.col === col);
     return f ? keyStr(f.val) : null;
   };
   const tiles = W.filter((x) => x.w.kind === 'kpi'),
     cards = W.filter((x) => x.w.kind !== 'kpi');
-  const chip = (f, i) => {
+  const chip = (f: { table: string; col: string; val: unknown }, i: number) => {
     const t = tableOf(def, f.table),
       c = colOf(t, f.col);
+    if (!t || !c) return null;
     return (
       <FilterChip
         key={i}
@@ -1355,12 +1453,12 @@ export function Dash({ app, user, pane, scr, test }) {
       </FilterChip>
     );
   };
-  const card = (x) => {
+  const card = (x: Shown) => {
     const t = x.t,
       w = x.w,
       M = measureOf(t, w.measure),
       xc = colOf(t, w.x),
-      sp = w.split ? colOf(t, w.split) : null,
+      sp = (w.split ? colOf(t, w.split) : null) || null,
       rows = whereRows(x, w.kind === 'bar' || w.kind === 'stack' ? w.x : null),
       base = filtersFor(t.name).concat(whereF(x));
     const openChart = () =>
@@ -1375,7 +1473,7 @@ export function Dash({ app, user, pane, scr, test }) {
           kind: w.kind === 'line' ? 'line' : 'bar',
         },
       });
-    let body;
+    let body: ReactNode;
     if (w.kind === 'recent') {
       const P = def.process && def.process.table === t.name ? def.process : null;
       body = rows.length ? (
@@ -1405,6 +1503,8 @@ export function Dash({ app, user, pane, scr, test }) {
       ) : (
         <p className="muted t-cap">Nothing for these filters.</p>
       );
+    } else if (!xc) {
+      body = <p className="muted t-cap">Nothing to plot by.</p>;
     } else if (w.kind === 'line') {
       const T = timeData(app, user, t, rows, xc, sp, M, w.bucket);
       body = (
@@ -1485,23 +1585,13 @@ export function Dash({ app, user, pane, scr, test }) {
                 label: r[1],
               }))}
               value={ds.range}
-              onChange={(v) => {
-                ds.range = v;
-                notify();
-              }}
+              onChange={(v: string) => setDash(ds, { range: v })}
             />
           </>
         )}
         {ds.f.map(chip)}
         {(ds.f.length > 0 || ds.range !== 'all') && (
-          <Btn
-            className="btn subtle sm"
-            onClick={() => {
-              ds.f = [];
-              ds.range = 'all';
-              notify();
-            }}
-          >
+          <Btn className="btn subtle sm" onClick={() => setDash(ds, { f: [], range: 'all' })}>
             Clear
           </Btn>
         )}

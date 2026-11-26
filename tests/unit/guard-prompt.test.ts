@@ -77,7 +77,7 @@ describe('prompt policy against the workspace sources', () => {
         'custom.tsx reviewPrompt(app, id)',
         "line.ts PROMPTS[st.id](app, feedback) + (note ? '\\n\\nSTANDING INSTRUCTION FROM THE OWNER OF THIS APP. Follow it wherever it does not break the format or the rules above:\\n' + note : '')",
         'tester.tsx testerPrompt(app)',
-        'tester.tsx repairPrompt(app, fails)',
+        'tester.tsx repairPrompt(app, fails, tried)',
       ].sort(),
     );
   });

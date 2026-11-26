@@ -8,10 +8,11 @@
 - After the deploy, the **smoke test the live site** job runs `tests/e2e/smoke.cjs` on the production address. It
   checks that `/api/health` reports the version just released, that the page has its security headers and the web
   manifest is served, that the page loads and the workspace opens with no uncaught error, that a sample app builds
-  with every generated test passing, that Share makes a short link (named `release-check`) that opens the app in a fresh browser, and,
-  when a model is configured, makes one tool call through `/api/health?probe=1`. The app is built from a saved
-  template in Demo mode, so that one call is the only model spend. With no model configured, the model check is a
-  warning, not a failure. The job does not hold back the tag and release: the build is already live, so a failure
+  with every generated test passing, that Share makes a short link (named `release-check`) that opens the app in a fresh browser, and
+  that the first-run screen says "Model connected" (or "No model connected" when there is none). When a model is
+  configured it also runs one Live build of the clinic sample from its sentence (about ten model calls) and one tool
+  call through `/api/health?probe=1`. That is all the model spend of a release; everything else uses saved builds in
+  Demo mode. With no model configured, the model check is a warning, not a failure. The job does not hold back the tag and release: the build is already live, so a failure
   shows as a red run with a table in its summary. To roll back, run the workflow by hand with the previous tag. To run
   the same checks between releases, run the **Live site check** workflow from the Actions tab, or
   `TK_URL=https://turnkey-bay.vercel.app node tests/e2e/smoke.cjs` from a machine that can reach the site.

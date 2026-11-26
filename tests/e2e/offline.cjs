@@ -2,6 +2,7 @@
 //   - the manifest is linked and passes Chrome's installability checks
 //   - the service worker registers and takes control; API routes are not in its cache
 //   - after one visit with a saved build, a reload with the network off shows the workspace and the build still runs
+//   - offline, the top bar says so, Live is switched off, and a new Demo build runs and draws its workflow canvas
 //   - an app's own manifest and icon come from /a/manifest and /a/icon
 //   - a shared app, open on its own, links its own manifest: Chrome finds it installable under the app's name, and its
 //     start address reopens the saved copy (no second copy); leaving the app links Turnkey's manifest again
@@ -88,6 +89,23 @@ const check = (name, ok, detail) => {
   check('the saved build runs offline (SQLite works)', rows && typeof rows !== 'string', rows);
   const opened = await page.evaluate((id) => !!window.__formwork.state().apps[id], appId);
   check('the saved build is still there offline', opened);
+  const net = await page.evaluate(() => ({ live: !!document.querySelector('#sw-live')?.disabled, shown: !!document.querySelector('.net.is-offline') }));
+  check('offline, the top bar says so and Live cannot be switched on', net.live && net.shown, net);
+  // a new Demo build, offline: every chunk it loads on demand (the build, the workflow canvas) was kept at install
+  await page.evaluate(() => { window.__formwork.state().settings.speed = 'instant'; });
+  await page.locator('.newtab').click();
+  await page.locator('[data-tpl="clinic"] .tpl-build').click();
+  let offStatus = null;
+  for (let i = 0; i < 300; i++) {
+    offStatus = await page.evaluate(() => { const s = window.__formwork.state(); const t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]); const a = t && t.app ? s.apps[t.app] : null; return a && a.status; });
+    if (offStatus === 'ready' || offStatus === 'failed') break;
+    const o = page.locator('.gcard.ask .opt:not([disabled])');
+    if (await o.count()) await o.first().click().catch(() => {});
+    await sleep(120);
+  }
+  check('offline, a new Demo build runs to the end', offStatus === 'ready', offStatus);
+  const offCanvas = await page.waitForFunction(() => document.querySelectorAll('.react-flow__node').length > 0, null, { timeout: 15000 }).then(() => true, () => false);
+  check('offline, the workflow canvas draws the build', offCanvas);
 
   // per-app manifest and icon, online again
   await ctx.setOffline(false);

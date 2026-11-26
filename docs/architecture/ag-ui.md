@@ -52,6 +52,13 @@ A work function receives an `AgentSink`. Every call below is ignored once the ru
 | work throws                       | `RUN_ERROR` with code `agent_error` and the error's message                     | No stack trace is sent.                                            |
 | caller disconnects                | nothing more is sent; `sink.signal` aborts                                      | Pass `sink.signal` to model calls so they stop.                    |
 
+Every model call that ends inside the work, however deep, also sends `CUSTOM` named `usage`. Its value is the
+model, the tier, the token counts (fresh prompt, output, cache read, cache write), the cost in dollars (`null` when
+the model has no price) and whether the tokens are an estimate (the call was cut off). Never the prompt or the
+answer. GraphAgent sets this up with `meterCalls` from `src/server/llm/usage.ts`. The browser adds these up per run
+and per agent (`src/platform/agui/usage.ts`) and shows them in the run timeline, the agent panel and the debug
+drawer, beside today's spend against the daily cap from `/api/health`.
+
 A LangGraph run is mapped by the graph's own module: it calls the sink from its node and stream callbacks (node start
 and end become `step`, model tokens become `text`, tool nodes become `toolCall` and `toolResult`, state updates
 become `state`).
