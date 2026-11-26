@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flow: [demo, live, misc, views, quests, new, custom, round6, react, sizes, offline, a11y]
+        flow: [demo, live, misc, views, quests, new, custom, round6, react, sizes, offline, a11y, visual]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -86,7 +86,7 @@ jobs:
             echo "Result: $OUTCOME. Failure screenshots, if any, are in the artifact shots-$FLOW."
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Keep screenshots when a flow fails
-        if: failure()
+        if: failure() || matrix.flow == 'visual'
         uses: actions/upload-artifact@v7
         with:
           name: shots-${{ matrix.flow }}

@@ -6,6 +6,7 @@
 //   npm run test:e2e -- offline      install and offline (tests/e2e/offline.cjs, a fresh browser with a service worker)
 //   npm run test:e2e -- smoke        the production smoke test (tests/e2e/smoke.cjs); safe against the live site with TK_URL
 //   npm run test:e2e -- a11y         accessibility: axe on every main screen, light and dark, plus keyboard checks (tests/e2e/a11y.cjs)
+//   npm run test:e2e -- visual       screenshots of the main screens compared with baselines (tests/e2e/visual.cjs)
 //   TK_URL=https://… npm run test:e2e -- demo    against a server that is already running (no build, no start)
 //   PORT=3105 npm run test:e2e       pick the port (set a different one per worktree when several run at once)
 import { spawn } from 'node:child_process';
@@ -98,15 +99,17 @@ async function main() {
     }
   }
   // The offline check runs on its own: it needs a service worker and a browser that has never seen the app.
-  const names = flows === 'all' ? ['all', 'offline', 'a11y'] : flows.split(',');
+  const names = flows === 'all' ? ['all', 'offline', 'a11y', 'visual'] : flows.split(',');
   const offline = names.includes('offline');
   const a11y = names.includes('a11y');
+  const visual = names.includes('visual');
   const smoke = names.includes('smoke');
-  const rest = names.filter((n) => n !== 'offline' && n !== 'a11y' && n !== 'smoke');
+  const rest = names.filter((n) => n !== 'offline' && n !== 'a11y' && n !== 'visual' && n !== 'smoke');
   let code = 0;
   if (rest.length) code = await run('node', [path.join(root, 'tests', 'e2e', 'flows.cjs'), rest.join(',')], { env: { ...process.env, TK_URL: url } });
   if (offline) code = (await run('node', [path.join(root, 'tests', 'e2e', 'offline.cjs')], { env: { ...process.env, TK_URL: url } })) || code;
   if (a11y) code = (await run('node', [path.join(root, 'tests', 'e2e', 'a11y.cjs')], { env: { ...process.env, TK_URL: url } })) || code;
+  if (visual) code = (await run('node', [path.join(root, 'tests', 'e2e', 'visual.cjs')], { env: { ...process.env, TK_URL: url } })) || code;
   if (smoke) code = (await run('node', [path.join(root, 'tests', 'e2e', 'smoke.cjs')], { env: { ...process.env, TK_URL: url } })) || code;
   stop();
   return code;
