@@ -665,7 +665,7 @@ export function SettingsDialog() {
                 : 'Off: Demo is on. Saved builds and made-up data, no model calls.'
           }
         >
-          <Switch id="set-live" on={mode.on} disabled={!on} onChange={setLive} />
+          <Switch id="set-live" label="Live" on={mode.on} disabled={!on} onChange={setLive} />
         </SetRow>
         <SetRow title="Replay speed" text="How fast saved builds and changes play.">
           <Seg
@@ -706,13 +706,13 @@ export function SettingsDialog() {
           />
         </SetRow>
         <SetRow title="Debug mode" text="AG-UI events, tool calls, model usage, SQL, API calls, state, storage.">
-          <Switch id="set-debug" on={s.debug} onChange={(v) => set('debug', v)} />
+          <Switch id="set-debug" label="Debug mode" on={s.debug} onChange={(v) => set('debug', v)} />
         </SetRow>
         <SetRow title="Simulate offline" text="Pretend the connection is gone, to see Live pause and what keeps working.">
-          <Switch id="set-off" on={s.offline} onChange={setOffline} />
+          <Switch id="set-off" label="Simulate offline" on={s.offline} onChange={setOffline} />
         </SetRow>
         <SetRow title="Agents panel" text="Show the chat beside the canvas.">
-          <Switch id="set-chat" on={s.chat} onChange={(v) => set('chat', v)} />
+          <Switch id="set-chat" label="Agents panel" on={s.chat} onChange={(v) => set('chat', v)} />
         </SetRow>
       </div>
       <p className="muted t-cap" id="set-net">
