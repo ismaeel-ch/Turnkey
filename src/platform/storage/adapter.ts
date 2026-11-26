@@ -63,6 +63,13 @@ const DB_VERSION = 1;
 const KV = 'kv';
 const META = 'meta';
 const MIGRATED = 'migrated-from-localstorage';
+/**
+ * localStorage prefix of the write-ahead journal. IndexedDB cannot be awaited while a page unloads, so on hide the
+ * values not yet saved are also written here, synchronously; the next open puts them back. Outside the namespace, so
+ * migration and localStorage mode never mistake them for data.
+ */
+export const JOURNAL = 'turnkey-journal:';
+const TOMBSTONE = '\u0000deleted';
 
 const isQuota = (e: unknown) => {
   const x = e as { name?: string; code?: number; message?: string } | null;
@@ -142,6 +149,7 @@ export class TurnkeyStorage {
         await this.load();
         this.mode = 'indexeddb';
         await this.migrate();
+        await this.replayJournal();
       } catch (e) {
         this.db = null;
         this.mirror.clear();
@@ -266,6 +274,65 @@ export class TurnkeyStorage {
     }
   }
 
+  /**
+   * Puts back what a page wrote to the journal when it was hidden and could not finish saving to IndexedDB, saves it,
+   * and clears the journal once it is in IndexedDB.
+   */
+  private async replayJournal(): Promise<void> {
+    if (!this.ls) return;
+    const found: Array<[string, string]> = [];
+    try {
+      for (let i = 0; i < this.ls.length; i++) {
+        const j = this.ls.key(i);
+        if (j && j.startsWith(JOURNAL + this.ns)) found.push([j, this.ls.getItem(j) ?? TOMBSTONE]);
+      }
+    } catch {
+      return;
+    }
+    if (!found.length) return;
+    for (const [j, v] of found) {
+      const key = j.slice(JOURNAL.length);
+      if (v === TOMBSTONE) {
+        this.mirror.delete(key);
+        this.dirty.set(key, null);
+      } else {
+        this.mirror.set(key, v);
+        this.dirty.set(key, v);
+      }
+    }
+    await this.flush(); // clears the journal entries it saved
+  }
+
+  /**
+   * Writes every value not yet in IndexedDB to the localStorage journal, synchronously. Called when the page is hidden
+   * or unloading, where an IndexedDB transaction may be cut off. A value too big for localStorage is skipped: it then
+   * depends on the IndexedDB save, as before. Returns how many were journaled.
+   */
+  journal(): number {
+    if (this.mode !== 'indexeddb' || !this.ls || !this.dirty.size) return 0;
+    let n = 0;
+    for (const [k, v] of this.dirty) {
+      try {
+        this.ls.setItem(JOURNAL + k, v === null ? TOMBSTONE : v);
+        n++;
+      } catch {
+        /* full: this one relies on IndexedDB */
+      }
+    }
+    return n;
+  }
+
+  private clearJournal(keys: Iterable<string>): void {
+    if (!this.ls) return;
+    for (const k of keys) {
+      try {
+        this.ls.removeItem(JOURNAL + k);
+      } catch {
+        /* nothing to do */
+      }
+    }
+  }
+
   /** @internal */
   recount(): void {
     let n = 0;
@@ -379,6 +446,8 @@ export class TurnkeyStorage {
         }
         await done(tx);
         for (const [k, v] of batch) if (this.dirty.get(k) === v) this.dirty.delete(k); // a newer write stays queued
+        // saved, so a later open must not put an older journaled value back (a key written again since keeps its entry)
+        this.clearJournal([...batch.keys()].filter((k) => !this.dirty.has(k)));
         this.full = false;
       } catch (e) {
         const quota = isQuota(e);
@@ -572,18 +641,24 @@ export async function openStorage(options: StorageOptions = {}): Promise<Turnkey
 }
 
 /**
- * Saves when the page is hidden or about to go. IndexedDB cannot be awaited during unload, so the 150 ms delay is the
- * window in which a very quick close could lose the last edit; `visibilitychange` to hidden fires earlier on mobile and
- * on tab switches, which covers most closes.
+ * Saves when the page is hidden or about to go. IndexedDB cannot be awaited during unload, and a reload or close can cut
+ * the transaction off, so the unsaved values are first written to the localStorage journal (synchronous), which the
+ * next open replays. Register it after the workspace's own pagehide save, so that save is included.
  */
 export function flushOnHide(
   s: TurnkeyStorage,
   win: Pick<Window, 'addEventListener' | 'removeEventListener'> & { document?: Document } = window,
 ): () => void {
   const hide = () => {
-    if (!win.document || win.document.visibilityState === 'hidden') void s.flush();
+    if (!win.document || win.document.visibilityState === 'hidden') {
+      s.journal();
+      void s.flush();
+    }
   };
-  const pageHide = () => void s.flush();
+  const pageHide = () => {
+    s.journal();
+    void s.flush();
+  };
   win.addEventListener('visibilitychange', hide);
   win.addEventListener('pagehide', pageHide);
   return () => {
