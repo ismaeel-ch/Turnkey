@@ -27,7 +27,8 @@ export async function startLine(respond: (prompt: string) => Promise<string>): P
   const line = await import('@/workspace/line');
   const changes = await import('@/workspace/changes');
   const calls: string[] = [];
-  line.LIVE.fn = async (input: string) => {
+  // src/workspace is not typed yet, so its inferred types are narrower than how the modules are used.
+  (line.LIVE as { fn: unknown }).fn = async (input: string) => {
     calls.push((/^You are the ([\w ]+?) agent/.exec(input) || /^You are (\w+), one of/.exec(input) || [])[1] || '?');
     return { text: await respond(input), truncated: false };
   };
@@ -39,11 +40,11 @@ export async function startLine(respond: (prompt: string) => Promise<string>): P
     calls,
     build: async (request) => {
       const app = line.newApp({ request, mode: 'live' });
-      await line.runBuild(app);
+      await line.runBuild(app, undefined);
       return app as LineApp;
     },
     say: async (app, text) => {
-      await changes.handleChat(app, text);
+      await changes.handleChat(app, text, undefined);
     },
   };
 }
