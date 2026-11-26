@@ -3,79 +3,127 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { checkPrompt } from '@/server/guard/prompt';
 
-const legacyDir = path.resolve(__dirname, '../../src/legacy');
-const read = (f: string) => fs.readFileSync(path.join(legacyDir, f), 'utf8');
-const files = fs.readdirSync(legacyDir).filter((f) => f.endsWith('.js'));
+const workspaceDir = path.resolve(__dirname, '../../src/workspace');
+const read = (f: string) => fs.readFileSync(path.join(workspaceDir, f), 'utf8');
+const files = fs.readdirSync(workspaceDir).filter((f) => /\.tsx?$/.test(f));
+/** Source text with every run of whitespace made one space, so formatting changes do not break a match. */
+const flat = (text: string) => text.replace(/\s+/g, ' ');
 
-/** HEAD() as written in src/legacy/line.js, evaluated here so the test never keeps its own copy of the wording. */
-function legacyHead(): (who: string) => string {
-  const m = /^const HEAD = (\(who\) => .*);$/m.exec(read('line.js'));
-  if (!m) throw new Error('HEAD() was not found in src/legacy/line.js; update the prompt policy and this test');
+/** HEAD() as written in src/workspace/line.ts, evaluated here so the test never keeps its own copy of the wording. */
+function workspaceHead(): (who: string) => string {
+  const m = /^export const HEAD = (\(who\) =>[\s\S]*?);\n/m.exec(read('line.ts'));
+  if (!m) throw new Error('HEAD() was not found in src/workspace/line.ts; update the prompt policy and this test');
   return new Function('return ' + m[1])() as (who: string) => string;
 }
 
-describe('prompt policy against the legacy sources', () => {
-  const HEAD = legacyHead();
+/**
+ * The arguments of every call `name(...)` in a source text, split at top-level commas. Skips strings, template
+ * literals and nested brackets, so a prompt argument that spans lines comes back whole.
+ */
+function callArgs(text: string, name: string): string[][] {
+  const out: string[][] = [];
+  const re = new RegExp('(?<![\\w.])' + name + '\\(', 'g');
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    if (/function\s*$/.test(text.slice(Math.max(0, m.index - 12), m.index))) continue;
+    const args: string[] = [];
+    let depth = 0,
+      cur = '',
+      i = m.index + m[0].length;
+    for (; i < text.length; i++) {
+      const c = text[i];
+      if (c === "'" || c === '"' || c === '`') {
+        let j = i + 1;
+        while (j < text.length && text[j] !== c) j += text[j] === '\\' ? 2 : 1;
+        cur += text.slice(i, j + 1);
+        i = j;
+        continue;
+      }
+      if (c === '(' || c === '[' || c === '{') depth++;
+      if (c === ')' || c === ']' || c === '}') {
+        if (depth === 0) break;
+        depth--;
+      }
+      if (c === ',' && depth === 0) {
+        args.push(cur.trim());
+        cur = '';
+        continue;
+      }
+      cur += c;
+    }
+    if (cur.trim()) args.push(cur.trim());
+    out.push(args);
+  }
+  return out;
+}
+
+describe('prompt policy against the workspace sources', () => {
+  const HEAD = workspaceHead();
 
   it('accepts what HEAD() builds, for every builder, reviewer and added step name', () => {
     const names = ['Researcher', 'Database', 'Backend', 'View advisor', 'UI', 'Tester', 'Orchestrator'];
-    const custom = read('custom.js');
-    for (const m of custom.matchAll(/name: '([^']+)', (?:short|after)/g)) names.push(m[1]);
+    for (const m of read('custom.tsx').matchAll(/name: '([^']+)',\s*short:/g)) names.push(m[1]);
     expect(names.length).toBeGreaterThan(9);
     for (const n of names) expect(checkPrompt(HEAD(n) + 'BRIEF: {}'), n).toEqual({ ok: true, kind: 'line' });
   });
 
   it('knows every place that asks the model, and each one builds its prompt from HEAD() or the team opening', () => {
     const sites: string[] = [];
-    for (const f of files)
-      for (const m of read(f).matchAll(/(?<!function )callModel\(app, [^,]+, [^,]+, ((?:[^,()]|\([^()]*\)|\[[^\]]*\])+)/g))
-        sites.push(f + ' ' + m[1].replace(/\s+/g, ' '));
+    for (const f of files) for (const args of callArgs(read(f), 'callModel')) sites.push(f + ' ' + flat(args[3] ?? ''));
     // A new call site, or a changed prompt argument, fails here: check the new prompt against checkPrompt and add it.
     expect(sites.sort()).toEqual(
       [
-        'changes.js changePrompt(app, text)',
-        'custom.js reviewPrompt(app, id)',
-        "line.js PROMPTS[st.id](app, feedback) + (note ? '\\n\\nSTANDING INSTRUCTION FROM THE OWNER OF THIS APP. Follow it wherever it does not break the format or the rules above:\\n' + note : '')",
-        'team.js prompt',
-        "team.js prompt + '\\n\\nYour last answer was not usable: ' + e.message + '. Reply with the JSON object only.'",
-        'tester.js testerPrompt(app)',
-        'tester.js repairPrompt(app, fails)',
+        'changes.ts changePrompt(app, text)',
+        'custom.tsx reviewPrompt(app, id)',
+        "line.ts PROMPTS[st.id](app, feedback) + (note ? '\\n\\nSTANDING INSTRUCTION FROM THE OWNER OF THIS APP. Follow it wherever it does not break the format or the rules above:\\n' + note : '')",
+        'team.tsx prompt',
+        "team.tsx prompt + '\\n\\nYour last answer was not usable: ' + e.message + '. Reply with the JSON object only.'",
+        'tester.tsx testerPrompt(app)',
+        'tester.tsx repairPrompt(app, fails)',
       ].sort(),
     );
   });
 
+  it('the workspace asks the model only through callModel', () => {
+    // LIVE.fn is the one bridge to /api/llm; it is called from callModel alone.
+    const users = files.filter((f) => /\bLIVE\.fn\(/.test(read(f)));
+    expect(users).toEqual(['line.ts']);
+    expect(callArgs(read('line.ts'), 'LIVE\\.fn').length).toBe(1);
+  });
+
   it.each([
-    ['changes.js', /function changePrompt\(app, text\) \{[\s\S]*?\n\}/],
-    ['custom.js', /function reviewPrompt\(app, id\) \{[\s\S]*?\n\}/],
-    ['tester.js', /const testerPrompt = [^\n]*/],
-    ['tester.js', /const repairPrompt = [^\n]*/],
+    ['changes.ts', /export function changePrompt\(app, text\) \{[\s\S]*?\n\}/],
+    ['custom.tsx', /export function reviewPrompt\(app, id\) \{[\s\S]*?\n\}/],
+    ['tester.tsx', /export const testerPrompt = \(app\) =>\s*\S+/],
+    ['tester.tsx', /export const repairPrompt = \(app, fails\) =>\s*\S+/],
   ])('%s builder starts with HEAD()', (file, re) => {
     const src = re.exec(read(file));
     expect(src, String(re)).not.toBeNull();
-    const body = src![0];
-    expect(body).toMatch(/return HEAD\(|=> HEAD\(/);
+    const body = flat(src![0]);
+    expect(body).toMatch(/return \(? ?HEAD\(|=> HEAD\(/);
     // nothing is placed in front of HEAD()
-    expect(body).not.toMatch(/return (?!HEAD\()['"`]/);
+    expect(body).not.toMatch(/return \(? ?['"`]/);
   });
 
-  it('every entry of PROMPTS in line.js starts with HEAD()', () => {
-    const block = /const PROMPTS = \{\n([\s\S]*?)\n\};/.exec(read('line.js'));
+  it('every entry of PROMPTS in line.ts starts with HEAD()', () => {
+    const block = /^export const PROMPTS = \{\n([\s\S]*?)\n\};/m.exec(read('line.ts'));
     expect(block).not.toBeNull();
-    const entries = block![1].split('\n').filter((l) => /^ {2}\w+: \(app, f\) =>/.test(l));
-    expect(entries.length).toBe(block![1].split('\n').filter((l) => l.trim()).length);
+    const lines = block![1].split('\n');
+    const keys = lines.filter((l) => /^ {2}\S/.test(l));
+    const entries = lines.flatMap((l, i) => (/^ {2}\w+: \(app, f\) =>$/.test(l) ? [lines[i + 1]] : []));
+    expect(entries.length).toBe(keys.length);
     expect(entries.length).toBeGreaterThanOrEqual(6);
-    for (const e of entries) expect(e).toMatch(/=> HEAD\('[^']+'\) \+/);
+    for (const e of entries) expect(e).toMatch(/^ {4}HEAD\('[^']+'\) \+$/);
   });
 
   it('only these files use HEAD(), so a new prompt builder cannot slip in unchecked', () => {
     const users = files.filter((f) => /\bHEAD\(/.test(read(f))).sort();
-    expect(users).toEqual(['changes.js', 'custom.js', 'line.js', 'tester.js']);
+    expect(users).toEqual(['changes.ts', 'custom.tsx', 'line.ts', 'tester.tsx']);
   });
 
-  it('accepts the opening that team.js builds for an app agent', () => {
-    const src = read('team.js');
+  it('accepts the opening that team.tsx builds for an app agent', () => {
+    const src = flat(read('team.tsx'));
     const opening = "'You are ' + a.name + ', one of ' + team.agents.length + ' agents inside the app \"' + app.name + '\". ' + team.about";
-    expect(src).toContain('return ' + opening);
+    expect(src).toContain('return ( ' + opening + ' +');
     const a = { name: 'The Checker' };
     const team = { agents: [1, 2, 3], about: 'Checks claims against public sources.' };
     const app = { name: 'Claim Desk' };
@@ -84,13 +132,13 @@ describe('prompt policy against the legacy sources', () => {
     expect(checkPrompt(prompt + '\nYOUR JOB: check')).toEqual({ ok: true, kind: 'team' });
   });
 
-  it('team.js builds its prompt only through teamPrompt()', () => {
-    expect(read('team.js')).toMatch(/const prompt = teamPrompt\(app, user, T, a\);/);
+  it('team.tsx builds its prompt only through teamPrompt()', () => {
+    expect(read('team.tsx')).toMatch(/const prompt = teamPrompt\(app, user, T, a\);/);
   });
 });
 
 describe('prompt policy: abuse cases', () => {
-  const HEAD = legacyHead();
+  const HEAD = workspaceHead();
   const bad = (p: unknown) => expect(checkPrompt(p).ok).toBe(false);
 
   it('refuses things that are not a prompt', () => {

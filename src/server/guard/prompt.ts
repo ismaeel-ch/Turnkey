@@ -1,20 +1,20 @@
 /**
  * Prompt policy: the model route relays only prompts that Turnkey's own agents write.
  *
- * The workspace builds every prompt itself. Two shapes exist (see src/legacy):
+ * The workspace builds every prompt itself. Two shapes exist (see src/workspace):
  *
  *   1. Builder agents, review steps, the tester, the repair step and the change-from-chat step all begin with the
- *      text that HEAD() builds in src/legacy/line.js: "You are the <Name> agent on Turnkey, a line of agents that
+ *      text that HEAD() builds in src/workspace/line.ts: "You are the <Name> agent on Turnkey, a line of agents that
  *      builds small record-keeping web apps ... Reply with ONE JSON object and nothing else: no prose, no code
  *      fences." followed by a blank line.
  *   2. An app's own team agents begin: You are <name>, one of <n> agents inside the app "<app>". <about>
  *
  * Anything else is refused, so the public route cannot be used as a free general-purpose chat. The shapes are matched
- * on the fixed wording, not on a loose keyword, and tests/unit/guard-prompt.test.ts reads src/legacy to prove that
- * every prompt builder there starts with one of them. If the wording in src/legacy changes, that test fails.
+ * on the fixed wording, not on a loose keyword, and tests/unit/guard-prompt.test.ts reads src/workspace to prove that
+ * every prompt builder there starts with one of them. If the wording in src/workspace changes, that test fails.
  */
 
-/** The fixed text of HEAD() in src/legacy/line.js, after the agent's name. */
+/** The fixed text of HEAD() in src/workspace/line.ts, after the agent's name. */
 const LINE_TAIL =
   ' agent on Turnkey, a line of agents that builds small record-keeping web apps (tables, roles, one status workflow, screens) from one sentence. Code checks your answer and sends it back if it fails, so follow the format exactly. Reply with ONE JSON object and nothing else: no prose, no code fences.\n\n';
 const LINE_HEAD = 'You are the ';

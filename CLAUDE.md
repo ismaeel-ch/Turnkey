@@ -17,7 +17,6 @@ git rules, the shared machine, and the flow of one work package.
 | `npm run build`            | production build; also what Vercel runs                                                       |
 | `npm run check`            | secrets scan, lint, typecheck, unit tests. **Run before every push.**                         |
 | `npm run test:e2e -- demo` | one browser flow (`demo live misc views quests new custom round6`), about 2 to 4 minutes each |
-| `npm run build:legacy`     | rebuild the workspace bundle after editing `src/legacy`                                       |
 
 Run with a stand-in model, no key needed: `LLM_PROVIDER=mock npm run dev`.
 
@@ -25,8 +24,8 @@ Run with a stand-in model, no key needed: `LLM_PROVIDER=mock npm run dev`.
 
 ```
 src/app/        Next.js App Router: the page and the API routes (server code)
-src/legacy/     the workspace UI: 26 plain-script modules ported from the prototype, concatenated by scripts/build-legacy.mjs
-src/platform/   React-side code: the compatibility layer, boot, model client, and new browser features
+src/workspace/  the workspace UI: ES modules with JSX, ported from the prototype (one file per former module)
+src/platform/   browser-side helpers: DOM rendering, sql.js loader, model client, and new browser features
 src/server/     server-only code: model gateway, guard rails, LangGraph graphs, AG-UI stream, connectors
 src/shared/     types and zod schemas used by both sides
 tests/unit/     vitest
@@ -40,12 +39,13 @@ docs/           plan, architecture, decisions, hackathon checklist
    a key into code, tests, docs, commit messages, logs or screenshots. Never create a `NEXT_PUBLIC_` variable.
    `npm run check:secrets` must pass.
 2. **The browser never calls a model provider.** Model calls happen only in `src/app/api/**` and `src/server/**`.
-   Nothing in `src/server` may be imported from `src/platform`, `src/legacy` or a client component.
+   Nothing in `src/server` may be imported from `src/platform`, `src/workspace` or a client component.
 3. **Public or made-up data only.** No client, customer or internal company data, not even in a test fixture.
 4. **No direct pushes to `main`.** Work on a branch, open a pull request that names its issue, merge when CI is green.
-5. **Do not rewrite `src/legacy`.** It is the tested prototype, kept byte for byte. If a feature needs a change there,
-   make the smallest possible one, never reformat or rename, and run the browser flows that cover it. Only the
-   integration agent and the supervisor change it; everyone else builds beside it in `src/platform`.
+5. **`src/workspace` is ordinary code.** It began as the prototype's plain-script modules and is now typed module by
+   module, split into components, with its mutable store moved to an external store. Keep each change covered by the
+   browser flows in `tests/e2e` that exercise it, and keep them green. Remove `// @ts-nocheck` from a file only when
+   that file type-checks.
 6. **The app must work with no model configured.** With no key, every saved build and every screen still works, and
    Live says plainly that no model is connected. Nothing may crash on a missing environment variable.
 7. **Stay in your folders.** `docs/PLAN.md` lists what each agent owns. To change a file you do not own, ask in your

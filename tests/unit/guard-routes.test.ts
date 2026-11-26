@@ -8,7 +8,7 @@ import { GET as health } from '@/app/api/health/route';
 import { GET as connector } from '@/app/api/connectors/[name]/route';
 import { POST as copilot } from '@/app/api/copilotkit/[[...slug]]/route';
 
-// A prompt exactly as the workspace builds it (the HEAD() text of src/legacy/line.js).
+// A prompt exactly as the workspace builds it (the HEAD() text of src/workspace/line.ts).
 const GOOD =
   'You are the Researcher agent on Turnkey, a line of agents that builds small record-keeping web apps (tables, roles, one status workflow, screens) from one sentence. Code checks your answer and sends it back if it fails, so follow the format exactly. Reply with ONE JSON object and nothing else: no prose, no code fences.\n\nBRIEF: a clinic';
 
