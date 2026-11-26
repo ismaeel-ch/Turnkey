@@ -1,5 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
-import { BRAND, U, arr, confirmBox, cx, fmtDate, fmtDateTime, fmtNum, label, needNet, notify, online, toast } from './core';
+import { BRAND, U, arr, confirmBox, cx, fmtDate, fmtDateTime, fmtNum, initials, label, needNet, notify, online, toast } from './core';
 import { DBX, dbExists } from './db';
 import { accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec } from './engine';
 import { REC, allConnectors, callConnector, connOn } from './builds';
@@ -198,7 +198,7 @@ export function AppPane({ app, pane, solo }) {
           <button
             className="persona"
             aria-haspopup="dialog"
-            aria-label={'Signed in as ' + user.name + '. People and account'}
+            aria-label={'Account ' + initials(user.name) + ', signed in as ' + user.name}
             onClick={() => {
               pane.sheet = 'me';
               notify();
@@ -212,7 +212,6 @@ export function AppPane({ app, pane, solo }) {
             title="Switch user or sign out"
             btn={{
               cls: 'persona',
-              label: 'Signed in as ' + user.name,
               body: (
                 <>
                   <Avatar name={user.name} size="sm" />

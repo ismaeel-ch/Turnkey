@@ -13,6 +13,7 @@ import {
   commit,
   confirmBox,
   cx,
+  initials,
   me,
   modeNow,
   notify,
@@ -359,7 +360,7 @@ export function PhoneBar({ tabs, tab }: { tabs: Tab[]; tab: Tab | null }) {
       <button
         className="ws-btn"
         aria-haspopup="dialog"
-        aria-label={'Open workspaces. Current: ' + (app ? app.name : 'Home')}
+        aria-label={(app ? app.name : 'Home') + ', ' + tabs.length + ' open workspaces'}
         data-tour="tabs"
         onClick={() => sheetOpen('tabs')}
       >
@@ -370,14 +371,19 @@ export function PhoneBar({ tabs, tab }: { tabs: Tab[]; tab: Tab | null }) {
         ) : (
           <Icon n="home" s="16" />
         )}
-        <span className="ellipsis">{app ? app.name : 'Home'}</span>
-        <span className="tab-n">{tabs.length}</span>
+        <span className="ellipsis">{app ? app.name : 'Home'}</span> <span className="tab-n">{tabs.length}</span>
         <Icon n="chevDown" s="16" />
       </button>
       <span className="grow" />
       {!online() && <span className="badge b-warning">Offline</span>}
       <span className="act-slot" aria-hidden="true" />
-      <button className="acct" aria-haspopup="dialog" aria-label="Menu" data-tour="account" onClick={() => sheetOpen('menu')}>
+      <button
+        className="acct"
+        aria-haspopup="dialog"
+        aria-label={'Menu ' + initials(acct ? acct.name : '')}
+        data-tour="account"
+        onClick={() => sheetOpen('menu')}
+      >
         <Avatar name={acct ? acct.name : ''} size="sm" acc="blue" />
       </button>
     </header>
