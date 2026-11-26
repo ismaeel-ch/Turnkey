@@ -166,6 +166,106 @@ export interface ChatCard {
   [field: string]: Loose;
 }
 
+/* The cards the build line, the change planner and the Tester put under their chat messages (`ChatCard.type`). */
+export interface BriefCard {
+  type: 'brief';
+  summary: string;
+  roles: string[];
+  records: string[];
+  states: string[];
+  stories: number;
+}
+export interface TablesCard {
+  type: 'tables';
+  tables: { name: string; cols: number; rows: number }[];
+  users: number;
+}
+export interface AccessCard {
+  type: 'access';
+  endpoints: number;
+  actions: string[];
+  calls: number;
+  refused: number;
+  team: string[] | null;
+}
+export interface TestsCard {
+  type: 'tests';
+  total: number;
+  passed: number;
+  failed: number;
+  suites: { name: string; n: number }[];
+}
+export interface ViewPlanCard {
+  type: 'viewplan';
+  tables: { name: string; views: string[] }[];
+  widgets: number;
+}
+export interface ScreensCard {
+  type: 'screens';
+  screens: { name: string; type: string }[];
+  accent: string;
+  nav: string;
+}
+export interface AcceptanceCard {
+  type: 'acceptance';
+  steps: { say?: string; ok: boolean; detail: string }[];
+}
+export interface QuestionCard {
+  type: 'question';
+  options: string[];
+  recommended: number;
+  answered: number | null;
+}
+export interface ApprovalCard {
+  type: 'approval';
+  items: string[];
+  decided?: string | null;
+}
+export interface PlanCard {
+  type: 'plan';
+  steps: { text: string; sql?: string }[];
+  rerun: string[];
+  skip: string[];
+}
+export interface SentBackCard {
+  type: 'sentback';
+  attempt: number;
+  issues: string[];
+}
+export interface ChangedCard {
+  type: 'changed';
+  items: string[];
+  reran: string[];
+}
+export interface ReadyCard {
+  type: 'ready';
+}
+export interface ErrorCard {
+  type: 'error';
+  issues?: string[];
+}
+/** Cards drawn by the workflow (custom.tsx) and release (release.tsx) modules, which read them themselves. */
+export interface OtherCard {
+  type: 'flow' | 'gate' | 'review' | 'flowinfo' | 'released';
+  [field: string]: Loose;
+}
+export type BuilderCard =
+  | BriefCard
+  | TablesCard
+  | AccessCard
+  | TestsCard
+  | ViewPlanCard
+  | ScreensCard
+  | AcceptanceCard
+  | QuestionCard
+  | ApprovalCard
+  | PlanCard
+  | SentBackCard
+  | ChangedCard
+  | ReadyCard
+  | ErrorCard
+  | OtherCard;
+
 export interface ChatMessage {
   id: string;
   t: number;
@@ -196,7 +296,7 @@ export interface State {
   /** connector id to on/off */
   conns: Dict<boolean>;
   /** connectors the owner added */
-  custom: Loose[];
+  custom: Connector[];
 }
 
 export type ToastTone = 'info' | 'success' | 'warning' | 'danger';
@@ -254,9 +354,12 @@ export interface ViewState {
   /** whether the selection follows the working station, per app */
   follow: Dict<boolean>;
   stage: Dict<Stage>;
-  data: Dict<Loose>;
-  api: Dict<Loose>;
-  conn: Loose;
+  /** the Data page's state, per app */
+  data: Dict<DataPanel>;
+  /** the API page's state, per app */
+  api: Dict<ApiPanel>;
+  /** the connector open on the Connections page */
+  conn: string | null;
   dbg: DebugPanel;
   live: LiveStatus;
   dl: Downloader | null;
@@ -266,12 +369,14 @@ export interface ViewState {
   home: { text: string; note: string };
   /** the handoff being animated between stations, per app */
   handoff: Dict<number | null>;
-  chatDraft: Dict<Loose>;
+  chatDraft: Dict<string>;
   /** characters received so far from the model, per app */
   stream: Dict<number>;
   showSql: Dict<boolean>;
-  busy: Loose;
-  connOut: Loose;
+  /** the app whose chat message the orchestrator is reading */
+  busy: string | null;
+  /** the last connector tool tried on the Connections page */
+  connOut: { id: string; tool: string; r: { ok: boolean; result: Loose } } | null;
   ob: Loose;
   si: Loose;
   tv: Dict<Loose>;
@@ -289,6 +394,71 @@ export interface ViewState {
   /** the chat peek on narrow screens */
   peek?: boolean;
   share?: Loose;
+}
+
+/** The Data page of one app: the open table and tab, the SQL console and its last result. */
+export interface DataPanel {
+  table: string | null;
+  tab: string;
+  sql: string;
+  out: { rows?: Dict<Loose>[]; msg?: string; err?: string } | null;
+}
+
+/** The API page of one app: the endpoint being tried, as whom, and the last response. */
+export interface ApiPanel {
+  ep: string | null;
+  tab: string;
+  /** the built app's user id to call as */
+  uid: number | null;
+  /** the record id for paths with :id */
+  id: string;
+  body: string;
+  out: { path?: string; status: number; data?: Loose; error?: string; fields?: Dict<string>; ms?: number } | null;
+}
+
+/** One model call in the Debug log: live, or replayed from a saved build. */
+export interface ModelCallRecord {
+  t: number;
+  app: string;
+  run: string;
+  agent: string;
+  mode: 'live' | 'replay';
+  model: string;
+  tokIn: number;
+  tokOut: number;
+  /** live token counts are estimated from the text length */
+  est?: boolean;
+  ms: number;
+  attempt: number;
+}
+
+/** One SQL statement in the Debug log. */
+export interface SqlLogRecord {
+  t: number;
+  app: string;
+  sql: string;
+  params: Loose[] | null;
+  /** a batch insert: how many rows it wrote */
+  many?: number;
+  ms: number;
+  rows: number | null;
+  changes: number;
+  by: string;
+  err: string | null;
+}
+
+/** One call to a built app's API in the Debug log. */
+export interface ApiLogRecord {
+  t: number;
+  app: string;
+  user: string;
+  role: string;
+  method: string;
+  path: string;
+  status: number;
+  ms: number;
+  /** who called: the app, a check, the tour or the API page */
+  src: string;
 }
 
 /** One AG-UI event in the Debug log. */
@@ -397,7 +567,7 @@ export interface SavedCase {
 export interface ConnectorTool {
   name: string;
   desc: string;
-  args: Dict<Loose>;
+  args: Dict<string | number | undefined>;
 }
 
 /** A public data source agents can call. */
