@@ -244,11 +244,14 @@ export interface ViewState {
   ob: Loose;
   si: Loose;
   tv: Dict<Loose>;
-  flowPos: Dict<Loose>;
+  /** where the owner dragged each node of the workflow canvas, by app id (plus ':v' for the narrow layout) */
+  flowPos: Dict<Dict<{ x: number; y: number }>>;
   flowN: number;
-  flowMap: Loose;
+  /** the canvas map is shown; null follows the layout */
+  flowMap: boolean | null;
   solo: Loose;
-  sheet: Loose;
+  /** the open bottom sheet of the phone layout */
+  sheet: PhoneSheet | null;
   told: Dict<Loose>;
   noteDraft: Dict<Loose>;
   /** release form, per app */
@@ -406,6 +409,12 @@ export interface StationLine {
   /** the walkthrough's result for each tour step */
   results: { ok?: boolean; detail?: string; [field: string]: Loose }[];
   [field: string]: Loose;
+}
+
+/** A bottom sheet of the builder's phone layout (mobile.tsx), and the app it is about. */
+export interface PhoneSheet {
+  kind: 'tabs' | 'menu' | 'more' | 'inspector';
+  app?: string;
 }
 
 /** A step the owner added to the workflow: an agent of their own that runs after a station. */
