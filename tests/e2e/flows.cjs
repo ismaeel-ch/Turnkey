@@ -211,6 +211,9 @@ async function flowDemo(browser, url) {
   check('leave build ready, no send-backs, second answer applied', a.status === 'ready' && a.name === 'TimeOff' && a.retries[0] === 0 && a.tour.every(Boolean), [a.status, a.name, a.retries, a.tour, a.last]);
   await view(page, 'App'); await page.locator('.persona-btn').nth(4).click(); await land(page); await page.waitForSelector('.kb-col'); await shot(page, '33-leave-board');
   await page.locator('.app-nav .nav-i', { hasText: 'Team calendar' }).click(); await page.waitForSelector('.cal-grid'); await shot(page, '34-leave-calendar');
+  await page.locator('.app-head .persona').first().click(); await page.locator('.menu .mi', { hasText: 'Fatima' }).click(); await nav(page, 'My balance'); await page.waitForSelector('.app .tbl tfoot');
+  const bal = await st(page, () => ({ year: document.querySelector('.app .tbl tbody td:nth-child(2)').innerText.trim(), foot: [...document.querySelectorAll('.app .tbl tfoot td')].map((x) => x.innerText.trim()) }));
+  check('a year reads as 2026, not 2,026, and the total row does not add years up', bal.year === '2026' && bal.foot[1] === '' && /^Total of 3$/.test(bal.foot[0]), bal);
   await page.locator('.newtab').click(); await page.waitForSelector('.home'); await page.locator('[data-tpl="helpdesk"] .tpl-build').click();
   await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').first().click(); await waitReady(page); a = await appState(page);
   check('helpdesk build ready', a.status === 'ready' && a.name === 'DeskLine' && a.tour.length === 8 && a.tour.every(Boolean), [a.status, a.name, a.tour, a.last]);
