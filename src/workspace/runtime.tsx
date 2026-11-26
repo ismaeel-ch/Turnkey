@@ -53,14 +53,7 @@ export const stateTone = (def: AppDef, t: TableName, c: ColumnDef | null | undef
   return 'neutral';
 };
 /** A value as the app shows it in text: dates written out, choices by their label, references by the record's name. */
-export function cellText(
-  app: AppRecord,
-  user: AppUser,
-  t: TableName,
-  c: ColumnDef | null | undefined,
-  v: unknown,
-  depth?: number,
-): string {
+export function cellText(app: AppRecord, user: AppUser, t: TableName, c: ColumnDef | null | undefined, v: unknown, depth?: number): string {
   if (v == null || v === '' || !c) return '';
   switch (c.type) {
     case 'date':
@@ -524,8 +517,7 @@ export function saveForm(app: AppRecord, user: AppUser, t: AppTable, f: PaneForm
 export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUser; pane: Pane; f: PaneForm }) {
   const t = tableOf(app.def, f.table);
   if (!t) return null;
-  const
-    cols = formCols(app, user, t, !f.id),
+  const cols = formCols(app, user, t, !f.id),
     close = () => {
       pane.form = null;
       notify();
@@ -905,7 +897,21 @@ export function RecordDrawer({
     </aside>
   );
 }
-export function Related({ app, user, pane, t, k, row }: { app: AppRecord; user: AppUser; pane: Pane; t: AppTable; k: AppTable; row: StoredRow }) {
+export function Related({
+  app,
+  user,
+  pane,
+  t,
+  k,
+  row,
+}: {
+  app: AppRecord;
+  user: AppUser;
+  pane: Pane;
+  t: AppTable;
+  k: AppTable;
+  row: StoredRow;
+}) {
   const def = app.def,
     c = k.columns.find((x) => x.type === 'ref' && x.ref === t.name);
   if (!c) return null;

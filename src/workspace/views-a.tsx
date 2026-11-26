@@ -177,7 +177,8 @@ export function vxState(pane: Pane, scr: PageRef, app: AppRecord, user: AppUser,
   // how this person left this page: view, filters, sorting and options are kept with the app
   const all = pane.vs || (pane.vs = {});
   if (!all[scr.id]) {
-    const saved = !test && !pane.test && app && user && S.prefs ? (S.prefs[prefKey(app, user, scr)] as Partial<ExplorerState> | undefined) : null;
+    const saved =
+      !test && !pane.test && app && user && S.prefs ? (S.prefs[prefKey(app, user, scr)] as Partial<ExplorerState> | undefined) : null;
     all[scr.id] = Object.assign(
       {
         view: scr.type,
@@ -532,12 +533,12 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
     V = (
       {
         table: VTable,
-      board: VBoard,
-      calendar: VCalendar,
-      cards: VCards,
-      tree: VTree,
-      chart: VChart,
-      pivot: VPivot,
+        board: VBoard,
+        calendar: VCalendar,
+        cards: VCards,
+        tree: VTree,
+        chart: VChart,
+        pivot: VPivot,
         timeline: VTimeline,
       } as Dict<FunctionComponent<ViewProps>>
     )[view];
@@ -1350,28 +1351,30 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
           const key = path + '/' + k.key,
             on = isOpen(key, depth);
           return [
-            (<li key={key}>
-              <div
-                className="tree-row grp"
-                style={{
-                  paddingLeft: depth * 20 + 'px',
-                }}
-              >
-                <button className="tree-tog" aria-label="Expand or collapse" aria-expanded={on} onClick={() => tog(key, depth)}>
-                  <Icon n={on ? 'chevDown' : 'chevRight'} s="16" />
-                </button>
-                <button className="tree-leaf" onClick={() => tog(key, depth)}>
-                  <span className="muted t-cap">{c.label}</span>
-                  <strong className="ellipsis">{k.label}</strong>
-                  <span className="tab-n">{l.length}</span>
-                  {num ? (
-                    <span className="muted t-cap">
-                      {num.label} {fmtNum(total(l))}
-                    </span>
-                  ) : null}
-                </button>
-              </div>
-            </li>) as Tree,
+            (
+              <li key={key}>
+                <div
+                  className="tree-row grp"
+                  style={{
+                    paddingLeft: depth * 20 + 'px',
+                  }}
+                >
+                  <button className="tree-tog" aria-label="Expand or collapse" aria-expanded={on} onClick={() => tog(key, depth)}>
+                    <Icon n={on ? 'chevDown' : 'chevRight'} s="16" />
+                  </button>
+                  <button className="tree-leaf" onClick={() => tog(key, depth)}>
+                    <span className="muted t-cap">{c.label}</span>
+                    <strong className="ellipsis">{k.label}</strong>
+                    <span className="tab-n">{l.length}</span>
+                    {num ? (
+                      <span className="muted t-cap">
+                        {num.label} {fmtNum(total(l))}
+                      </span>
+                    ) : null}
+                  </button>
+                </div>
+              </li>
+            ) as Tree,
           ].concat(on ? walk(l, depth + 1, key) : []);
         });
     };

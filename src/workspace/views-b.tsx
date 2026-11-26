@@ -362,7 +362,6 @@ export function useWidth(ref: RefObject<HTMLElement | null>) {
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- measured once per element, as before
   }, []);
   return s[0] || 640;
 }
@@ -400,8 +399,7 @@ export function HBars({
   const T = useTip(),
     many = series.length > 1,
     max =
-      Math.max(...cats.map((c) => (many ? series.reduce((a, s) => a + Math.max(0, c.vals[s.key] || 0), 0) : Math.max(0, c.total))), 0) ||
-      1,
+      Math.max(...cats.map((c) => (many ? series.reduce((a, s) => a + Math.max(0, c.vals[s.key] || 0), 0) : Math.max(0, c.total))), 0) || 1,
     sum = cats.reduce((a, c) => a + c.total, 0);
   if (!cats.length) return <p className="muted t-cap">Nothing to plot for these filters.</p>;
   return (
@@ -510,9 +508,7 @@ export function TimePlot({
     band = iw / n,
     cxi = (i: number) => m.l + band * (i + 0.5);
   const tops = buckets.map((_, i) =>
-      bar
-        ? series.reduce((a, s) => a + Math.max(0, s.vals[i] || 0), 0)
-        : Math.max(...series.map((s) => s.vals[i] || 0)),
+      bar ? series.reduce((a, s) => a + Math.max(0, s.vals[i] || 0), 0) : Math.max(...series.map((s) => s.vals[i] || 0)),
     ),
     ticks = niceTicks(Math.max(...tops, 0), whole),
     ymax = ticks[ticks.length - 1] || 1,
@@ -1362,8 +1358,7 @@ export function Dash({
       t: tableOf(def, w.table),
     }))
     .filter((x): x is Shown => !!x.t && accOf(def, user.role, x.t.name).list !== 'none');
-  const dt =
-      (D.date && accOf(def, user.role, D.date.table).list !== 'none' ? tableOf(def, D.date.table) : null) || null,
+  const dt = (D.date && accOf(def, user.role, D.date.table).list !== 'none' ? tableOf(def, D.date.table) : null) || null,
     dc = (dt && D.date ? colOf(dt, D.date.column) : null) || null;
   const filtersFor = (tn: string): ViewFilter[] =>
     (dc && dt && dt.name === tn && ds.range !== 'all'
