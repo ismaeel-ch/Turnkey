@@ -625,3 +625,6 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .gcard .flow-chips{min-width:0}.gcard .flow-chips>*{white-space:normal;max-width:100%;text-align:left;height:auto}
 #boot{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center}
 .fl-provider{height:100%;background:transparent;color:inherit;font:inherit;line-height:inherit}
+/* 10: the wide canvas is sized to show node text at a readable size, so it can be taller than the window; its
+   controls (zoom, Fit, Map, Reset layout) stay in view at the bottom while any of it is on screen */
+.flow-wrap>.flow-foot{position:sticky;bottom:0;z-index:5;background:var(--colorNeutralBackground1);padding:8px 0;margin-bottom:-8px}
