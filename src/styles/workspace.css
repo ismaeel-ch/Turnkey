@@ -240,6 +240,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .ob-main{display:flex;flex-direction:column;min-width:0}.ob-body{flex:1;padding:36px 36px 24px;display:flex;flex-direction:column;gap:16px;overflow:auto;align-items:flex-start}.ob-body>.choices,.ob-body>.form-grid,.ob-body>.mbar{width:100%}
 .ob-foot{display:flex;gap:8px;padding:16px 36px;border-top:1px solid var(--colorNeutralStroke2)}
 .ob-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px;color:var(--colorNeutralForeground3)}.ob-pair{display:inline-flex;align-items:center;gap:6px}.ob-st{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border:1px solid var(--colorNeutralStroke1);border-radius:16px;color:var(--colorNeutralForeground1);font-size:13px}
+.ob-quick{gap:8px;flex-wrap:wrap;margin:4px 0 0}.ob-quick-note{margin:0}
 .choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.choices.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 .choice{display:flex;flex-direction:column;gap:8px;text-align:left;padding:14px;border:1px solid var(--colorNeutralStroke1);border-radius:8px;background:var(--colorNeutralBackground1);min-width:0}.choice:hover:not(:disabled){border-color:var(--colorNeutralStroke1Hover);box-shadow:var(--shadow4)}
 .choice.on{border-color:var(--colorBrandStroke1);box-shadow:0 0 0 1px var(--colorBrandStroke1);background:var(--colorBrandBackground2)}.choice:disabled{cursor:not-allowed;background:var(--colorNeutralBackground2)}
