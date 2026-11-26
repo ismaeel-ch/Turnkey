@@ -473,8 +473,9 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
   .toasts{left:12px;right:12px;width:auto;bottom:calc(76px + env(safe-area-inset-bottom))}
   .work.phone .chat{position:static;width:auto;flex:1;border-left:0;box-shadow:none;z-index:auto}.work.phone .chat-head .btn.icon{display:none}
   .home-in{padding:20px 12px 40px;gap:10px}.tpl-grid{grid-template-columns:minmax(0,1fr)}.app-row,.fui-Card.app-row{flex-wrap:wrap;gap:6px}.app-open{flex:1 1 100%}.prompt-bar .btn.primary{flex:1}
-  .build{padding:12px;gap:10px}.build-sum{display:flex;overflow-x:auto;scrollbar-width:none;margin:0 -12px;padding:0 12px;scroll-snap-type:x proximity}.build-sum::-webkit-scrollbar{display:none}.build-sum .kpi{flex:0 0 132px;scroll-snap-align:start}
-  .build-bar{gap:8px}.flow-wrap{padding:8px;gap:8px}.flow-canvas.narrow{height:calc(100dvh - 420px);min-height:320px}.flow-foot{gap:8px}.fl-key{font-size:11px}.orch{display:none}
+  .build{padding:12px;gap:10px}.build-sum{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.build-sum .kpi.mini{padding:6px 8px;gap:0}.build-sum .kpi.mini .kpi-v{font-size:17px;line-height:24px;white-space:nowrap}.build-sum .kpi-s{display:none}
+  .build-bar{gap:8px;flex-wrap:nowrap}.build-bar .seg .fui-Button__icon{display:none}.build-bar .seg button.fui-Button{padding:0 10px}.build-bar>.btn{flex:none}
+  .home::after,.build::after,.release-in::after,.tests-view::after,.launch::after{content:"";display:block;flex:none;height:var(--toasts-h,0px)} /* room to scroll the last item clear of the toasts */.flow-wrap{padding:8px;gap:8px}.flow-canvas.narrow{height:calc(100dvh - 420px);min-height:320px}.flow-foot{gap:8px}.fl-key{font-size:11px}.orch{display:none}
   .tests-view{padding:12px}.tests-head{flex-direction:column;align-items:stretch}.kpis.tk{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.suite-h{flex-wrap:wrap;padding:8px}.suite-t{flex:1 1 100%}.test{grid-template-columns:16px minmax(0,1fr);padding:8px 12px}.test-x{grid-column:2;text-align:left;white-space:normal}
   .stage{padding:0;gap:0}.stage-bar{padding:8px;overflow-x:auto;flex-wrap:nowrap}.debug{height:60%}.signin{padding:24px 16px;border-radius:16px}.ob{padding:0;place-items:stretch}.ob-card{min-height:100%;border-radius:0;width:100%}
   .split>.side,.split>.side.wide{max-height:132px}
