@@ -10,7 +10,10 @@ import { fakeBlobToken, startFakeBlob, type FakeBlob } from './helpers/blob-fake
 import { setEnv } from './helpers/fakes';
 
 const codeOf = (name: string) =>
-  '1.' + deflateRawSync(Buffer.from(JSON.stringify({ f: 'formwork-app', v: 1, name, research: {}, database: { tables: [] } }))).toString('base64url');
+  '1.' +
+  deflateRawSync(Buffer.from(JSON.stringify({ f: 'formwork-app', v: 1, name, research: {}, database: { tables: [] } }))).toString(
+    'base64url',
+  );
 
 let n = 0;
 /** A fresh visitor for each test: the route's counters live for the whole file. */
