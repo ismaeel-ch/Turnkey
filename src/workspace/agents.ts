@@ -1,5 +1,7 @@
+import type { AgentInfo, Dict } from '@/shared/types/workspace';
+
 // The builder agents. Other modules add to this registry (tester.tsx adds the Tester).
-export const AGENTS = {
+export const AGENTS: Dict<AgentInfo> = {
   orchestrator: {
     name: 'Orchestrator',
     icon: 'flow',
