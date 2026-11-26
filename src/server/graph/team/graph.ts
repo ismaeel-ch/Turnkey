@@ -314,7 +314,7 @@ export async function teamGraphMermaid(req: TeamRequest): Promise<string> {
   const graph = buildTeamGraph(
     req,
     {
-      provider: { id: 'none', model: () => '', stream: async function* () {} },
+      provider: { id: 'none', model: () => '', async *stream() {} },
       tools: { info: () => null, run: async () => ({ ok: false, text: '' }) },
       sink: { emit: () => {} },
     },
