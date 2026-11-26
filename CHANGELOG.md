@@ -3,6 +3,17 @@
 All notable changes to Turnkey. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 versions are semantic versions. Each release lists the pull requests merged into it.
 
+## [0.3.1] - 2026-11-26
+
+Picks up the production settings for the Claude API key and the short-link store, with typing and Fluent UI work.
+
+### Changed
+
+- More workspace modules are typed: the engine, the app definition, view specs, changes, UI, tester, activity and
+  guide. ([#70](https://github.com/ismaeel-ch/Turnkey/pull/70)) ([#74](https://github.com/ismaeel-ch/Turnkey/pull/74)) ([#75](https://github.com/ismaeel-ch/Turnkey/pull/75)) ([#76](https://github.com/ismaeel-ch/Turnkey/pull/76))
+- More of the workspace uses Fluent UI inputs, selects, text areas, chips and cards. ([#71](https://github.com/ismaeel-ch/Turnkey/pull/71)) ([#72](https://github.com/ismaeel-ch/Turnkey/pull/72))
+- The deploy log lists the names of the production settings Vercel provides. ([#73](https://github.com/ismaeel-ch/Turnkey/pull/73))
+
 ## [0.3.0] - 2026-11-26
 
 Live builds run on the server through the agent workflow, the workspace moves to Fluent UI, and shared apps get
