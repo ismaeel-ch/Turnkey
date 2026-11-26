@@ -56,6 +56,8 @@ const eslintConfig = defineConfig([
       'src/workspace/guide.tsx',
       'src/workspace/mobile.tsx',
       'src/workspace/flow.tsx',
+      'src/workspace/history.ts',
+      'src/workspace/history-ui.tsx',
     ],
     rules: {
       '@typescript-eslint/ban-ts-comment': 'off',
