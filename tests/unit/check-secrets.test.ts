@@ -59,7 +59,7 @@ describe('check-secrets', () => {
     git('add', '-A');
     const res = scan();
     expect(res.status).toBe(1);
-    expect(res.out).toContain('notes.txt:2: a key assigned a value');
+    expect(res.out).toContain('notes.txt:2: a key or token assigned a value');
   });
 
   it('fails on a private key and on a public variable that holds a secret', () => {
@@ -78,16 +78,23 @@ describe('check-secrets', () => {
     git('add', '-A');
     const res = scan();
     expect(res.status).toBe(1);
-    expect(res.out).toContain('.env.local: an environment file is tracked');
+    expect(res.out).toContain('.env.local: an environment file is in the repo');
     expect(res.out).not.toContain('.env.example:');
   });
 
-  it('ignores a line that is marked as allowed, and files that are not tracked', () => {
+  it('ignores a line that is marked as allowed, and files git ignores', () => {
     write('doc.md', `example: ${fakeSk} check-secrets: allow\n`);
-    write('untracked.ts', `export const k = "${fakeSk}";\n`);
-    git('add', 'doc.md');
+    write('.gitignore', 'ignored.ts\n');
+    write('ignored.ts', `export const k = "${fakeSk}";\n`);
+    git('add', 'doc.md', '.gitignore');
+    expect(scan().status).toBe(0);
+  });
+
+  it('also scans files that are new and not ignored, before they are added', () => {
+    write('fresh.ts', `export const k = "${fakeSk}";\n`);
     const res = scan();
-    expect(res.status).toBe(0);
+    expect(res.status).toBe(1);
+    expect(res.out).toContain('fresh.ts:1: something shaped like an API key');
   });
 
   it('skips binary and lockfile names by pattern', () => {
