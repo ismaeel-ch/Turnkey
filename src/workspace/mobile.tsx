@@ -375,6 +375,7 @@ export function PhoneBar({ tabs, tab }: { tabs: Tab[]; tab: Tab | null }) {
       </button>
       <span className="grow" />
       {!online() && <span className="badge b-warning">Offline</span>}
+      <span className="act-slot" aria-hidden="true" />
       <button className="acct" aria-haspopup="dialog" aria-label="Menu" data-tour="account" onClick={() => sheetOpen('menu')}>
         <Avatar name={acct ? acct.name : ''} size="sm" acc="blue" />
       </button>

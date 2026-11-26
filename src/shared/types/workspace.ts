@@ -184,6 +184,106 @@ export interface ChatCard {
   [field: string]: Loose;
 }
 
+/* The cards the build line, the change planner and the Tester put under their chat messages (`ChatCard.type`). */
+export interface BriefCard {
+  type: 'brief';
+  summary: string;
+  roles: string[];
+  records: string[];
+  states: string[];
+  stories: number;
+}
+export interface TablesCard {
+  type: 'tables';
+  tables: { name: string; cols: number; rows: number }[];
+  users: number;
+}
+export interface AccessCard {
+  type: 'access';
+  endpoints: number;
+  actions: string[];
+  calls: number;
+  refused: number;
+  team: string[] | null;
+}
+export interface TestsCard {
+  type: 'tests';
+  total: number;
+  passed: number;
+  failed: number;
+  suites: { name: string; n: number }[];
+}
+export interface ViewPlanCard {
+  type: 'viewplan';
+  tables: { name: string; views: string[] }[];
+  widgets: number;
+}
+export interface ScreensCard {
+  type: 'screens';
+  screens: { name: string; type: string }[];
+  accent: string;
+  nav: string;
+}
+export interface AcceptanceCard {
+  type: 'acceptance';
+  steps: { say?: string; ok: boolean; detail: string }[];
+}
+export interface QuestionCard {
+  type: 'question';
+  options: string[];
+  recommended: number;
+  answered: number | null;
+}
+export interface ApprovalCard {
+  type: 'approval';
+  items: string[];
+  decided?: string | null;
+}
+export interface PlanCard {
+  type: 'plan';
+  steps: { text: string; sql?: string }[];
+  rerun: string[];
+  skip: string[];
+}
+export interface SentBackCard {
+  type: 'sentback';
+  attempt: number;
+  issues: string[];
+}
+export interface ChangedCard {
+  type: 'changed';
+  items: string[];
+  reran: string[];
+}
+export interface ReadyCard {
+  type: 'ready';
+}
+export interface ErrorCard {
+  type: 'error';
+  issues?: string[];
+}
+/** Cards drawn by the workflow (custom.tsx) and release (release.tsx) modules, which read them themselves. */
+export interface OtherCard {
+  type: 'flow' | 'gate' | 'review' | 'flowinfo' | 'released';
+  [field: string]: Loose;
+}
+export type BuilderCard =
+  | BriefCard
+  | TablesCard
+  | AccessCard
+  | TestsCard
+  | ViewPlanCard
+  | ScreensCard
+  | AcceptanceCard
+  | QuestionCard
+  | ApprovalCard
+  | PlanCard
+  | SentBackCard
+  | ChangedCard
+  | ReadyCard
+  | ErrorCard
+  | OtherCard;
+
 export interface ChatMessage {
   id: string;
   t: number;
@@ -214,7 +314,7 @@ export interface State {
   /** connector id to on/off */
   conns: Dict<boolean>;
   /** connectors the owner added */
-  custom: Loose[];
+  custom: Connector[];
 }
 
 export type ToastTone = 'info' | 'success' | 'warning' | 'danger';
@@ -245,22 +345,64 @@ export interface DebugPanel {
   all: boolean;
 }
 
+/** One pane of the App view: who is signed in, and the open screen and record. */
+export interface Pane {
+  n: number;
+  /** the built app's user id signed in here */
+  uid: number | null;
+  screen: string | null;
+  rec: Loose;
+  [field: string]: Loose;
+}
+
+/** One step of the product tour: the element it points at (`data-tour`), and what to do before showing it. */
+export interface ProductTourStep {
+  target: string;
+  title: string;
+  body: string;
+  prep?: (() => void) | null;
+}
+
+/** The product tour while it runs. */
+export interface ProductTour {
+  id: string;
+  i: number;
+  steps: ProductTourStep[];
+}
+
+/** The App view of one app: one or two panes, and the walkthrough when one is playing. */
+export interface Stage {
+  split: boolean;
+  panes: Pane[];
+  tour: Loose;
+  [field: string]: Loose;
+}
+
 export interface ViewState {
   boot: 'loading' | 'ready' | 'error' | (string & {});
   bootErr: string;
   toasts: Toast[];
   dialog: Dialog | null;
-  tour: Loose;
-  view: Dict<Loose>;
-  bview: Dict<Loose>;
-  sel: Dict<Loose>;
-  itab: Dict<Loose>;
-  runSel: Dict<Loose>;
-  follow: Dict<Loose>;
-  stage: Dict<Loose>;
-  data: Dict<Loose>;
-  api: Dict<Loose>;
-  conn: Loose;
+  tour: ProductTour | null;
+  /** the workspace view (build, app, release or a Details page), per app */
+  view: Dict<string>;
+  /** how the Build view shows the agents: line, timeline or log, per app */
+  bview: Dict<string>;
+  /** the selected station, per app */
+  sel: Dict<string>;
+  /** the inspector's tab, per app */
+  itab: Dict<string>;
+  /** the run picked in the timeline and log, per app */
+  runSel: Dict<string | null>;
+  /** whether the selection follows the working station, per app */
+  follow: Dict<boolean>;
+  stage: Dict<Stage>;
+  /** the Data page's state, per app */
+  data: Dict<DataPanel>;
+  /** the API page's state, per app */
+  api: Dict<ApiPanel>;
+  /** the connector open on the Connections page */
+  conn: string | null;
   dbg: DebugPanel;
   live: LiveStatus;
   dl: Downloader | null;
@@ -268,14 +410,20 @@ export interface ViewState {
   calls: number;
   savedAt: number;
   home: { text: string; note: string };
-  handoff: Dict<Loose>;
-  chatDraft: Dict<Loose>;
-  stream: Dict<Loose>;
-  showSql: Dict<Loose>;
-  busy: Loose;
-  connOut: Loose;
-  ob: Loose;
-  si: Loose;
+  /** the handoff being animated between stations, per app */
+  handoff: Dict<number | null>;
+  chatDraft: Dict<string>;
+  /** characters received so far from the model, per app */
+  stream: Dict<number>;
+  showSql: Dict<boolean>;
+  /** the app whose chat message the orchestrator is reading */
+  busy: string | null;
+  /** the last connector tool tried on the Connections page */
+  connOut: { id: string; tool: string; r: { ok: boolean; result: Loose } } | null;
+  /** the first-run onboarding form, while it is open */
+  ob: OnboardingForm | null;
+  /** the sign-in form, while it is open */
+  si: SignInForm | null;
   tv: Dict<Loose>;
   /** where the owner dragged each node of the workflow canvas, by app id (plus ':v' for the narrow layout) */
   flowPos: Dict<Dict<{ x: number; y: number }>>;
@@ -293,7 +441,7 @@ export interface ViewState {
   /** the Release view's form, by app id */
   rel: Dict<{ kind: string | null; text: string | null; busy: boolean }>;
   /** last Details tab, per app */
-  detail: Dict<Loose>;
+  detail: Dict<string>;
   /** the chat peek on narrow screens */
   peek?: boolean;
   /** the share dialog's state (share.tsx) */
@@ -353,6 +501,94 @@ export interface ShareState {
   shortNote?: string;
   /** the first release is running */
   rbusy?: boolean;
+}
+
+/** The first-run onboarding: which step, the new account and the first choices. */
+export interface OnboardingForm {
+  step: number;
+  name: string;
+  user: string;
+  pass: string;
+  demo: boolean;
+  dev: boolean;
+  /** the saved build to start with, or '' for none */
+  pick: string;
+  tour: boolean;
+  err: string;
+}
+
+/** The sign-in form, or the new-account form when `create` is on. */
+export interface SignInForm {
+  u: string;
+  p: string;
+  name: string;
+  err: string;
+  create: boolean;
+}
+
+/** The Data page of one app: the open table and tab, the SQL console and its last result. */
+export interface DataPanel {
+  table: string | null;
+  tab: string;
+  sql: string;
+  out: { rows?: Dict<Loose>[]; msg?: string; err?: string } | null;
+}
+
+/** The API page of one app: the endpoint being tried, as whom, and the last response. */
+export interface ApiPanel {
+  ep: string | null;
+  tab: string;
+  /** the built app's user id to call as */
+  uid: number | null;
+  /** the record id for paths with :id */
+  id: string;
+  body: string;
+  out: { path?: string; status: number; data?: Loose; error?: string; fields?: Dict<string>; ms?: number } | null;
+}
+
+/** One model call in the Debug log: live, or replayed from a saved build. */
+export interface ModelCallRecord {
+  t: number;
+  app: string;
+  run: string;
+  agent: string;
+  mode: 'live' | 'replay';
+  model: string;
+  tokIn: number;
+  tokOut: number;
+  /** live token counts are estimated from the text length */
+  est?: boolean;
+  ms: number;
+  attempt: number;
+}
+
+/** One SQL statement in the Debug log. */
+export interface SqlLogRecord {
+  t: number;
+  app: string;
+  sql: string;
+  params: Loose[] | null;
+  /** a batch insert: how many rows it wrote */
+  many?: number;
+  ms: number;
+  rows: number | null;
+  changes: number;
+  by: string;
+  err: string | null;
+}
+
+/** One call to a built app's API in the Debug log. */
+export interface ApiLogRecord {
+  t: number;
+  app: string;
+  user: string;
+  role: string;
+  method: string;
+  path: string;
+  status: number;
+  ms: number;
+  /** who called: the app, a check, the tour or the API page */
+  src: string;
 }
 
 /** One AG-UI event in the Debug log. */
@@ -463,7 +699,7 @@ export interface SavedCase {
 export interface ConnectorTool {
   name: string;
   desc: string;
-  args: Dict<Loose>;
+  args: Dict<string | number | undefined>;
 }
 
 /** A public data source agents can call. */
@@ -496,13 +732,24 @@ export interface AccessRule {
 export interface StationLine {
   status: string;
   attempt: number;
-  attempts: Loose[];
+  attempts: StationAttempt[];
   checks: Check[];
   facts: string[];
   note: string | null;
+  /** why the station is holding: the Researcher's question, or an approval the owner asked for */
+  hold?: string | null;
+  /** the agent failed every attempt and the orchestrator used the safe default */
+  fellBack?: boolean;
   /** the walkthrough's result for each tour step */
   results: { ok?: boolean; detail?: string; [field: string]: Loose }[];
   [field: string]: Loose;
+}
+
+/** One attempt at a station: whether it passed its checks, and the issues it was sent back with. */
+export interface StationAttempt {
+  n: number;
+  ok: boolean;
+  issues: string[];
 }
 
 /** A bottom sheet of the builder's phone layout (mobile.tsx), and the app it is about. */
