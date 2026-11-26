@@ -7,8 +7,9 @@
  * role, and streams each step back. No key, endpoint or model name is ever present in the browser.
  */
 import type { BaseEvent } from '@ag-ui/core';
-import { runAgent, type RunAgentOptions } from '@/platform/agui/client';
-import { STEP_AGENT_ID, type StepErrorCode, type StepInput, type StepRole } from '@/shared/agent-contract';
+// The AG-UI client and the step contract (with zod) load on the first model call, not with the page.
+import type { RunAgentOptions } from '@/platform/agui/client';
+import type { StepErrorCode, StepInput, StepRole } from '@/shared/agent-contract';
 
 /** One step of the server's agent graph as the browser sees it: `draft`, `validate`, `repair` (and `guard`, `finish`). */
 export type StepProgress = { name: string; phase: 'start' | 'end'; attempt: number; ok?: boolean; issues?: string[] };
@@ -55,7 +56,15 @@ export class ModelError extends Error {
 
 /** Maps a step error code (or an HTTP status from the route's limiter) to the workspace's codes. */
 export function codeFor(code: string | undefined, status = 0): string {
-  if (code === 'not_configured' || code === 'off' || code === 'unauthorized' || status === 401 || status === 403 || (status === 503 && !code)) return 'not_granted';
+  if (
+    code === 'not_configured' ||
+    code === 'off' ||
+    code === 'unauthorized' ||
+    status === 401 ||
+    status === 403 ||
+    (status === 503 && !code)
+  )
+    return 'not_granted';
   if (code === 'budget') return 'budget';
   if (code === 'rate_limited' || status === 429) return 'rate_limited';
   if (code === 'aborted') return 'aborted';
@@ -135,6 +144,7 @@ export async function sample(prompt: string, opts: SampleOptions = {}): Promise<
       failed.add(typeof v.attempt === 'number' ? v.attempt : Math.max(1, attempt));
     },
   };
+  const [{ runAgent }, { STEP_AGENT_ID }] = await Promise.all([import('@/platform/agui/client'), import('@/shared/agent-contract')]);
   const run = await runAgent(STEP_AGENT_ID, callbacks);
   // a run cut short (stopped, or the connection dropped) leaves its step open: close it so nothing spins forever
   if (open) opts.onStep?.({ name: open, phase: 'end', attempt: Math.max(1, attempt), ok: false });

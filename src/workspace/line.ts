@@ -74,7 +74,9 @@ import { checkBoard, normBoard } from './room';
 import { SUITES, TESTS, runTestsSync } from './tests';
 import { REVIEWERS, applyAuto, flowDefault, flowList, flowOf, runReview, showGate, stepAfter, verifyFindings } from './custom';
 import { testerSteps } from './tester';
-import { StoppedError, createRun, workflowFromFlow } from '@/platform/orchestrator';
+// Not the orchestrator's index: that pulls in LangGraph (about 800 KB), which loads only when a build starts.
+import { workflowFromFlow } from '@/platform/orchestrator/from-flow';
+import { StoppedError } from '@/platform/orchestrator/types';
 import { SHARE } from './share';
 import { LOGO_FILLS, LOGO_MARKS, LOGO_SHAPES, logChange, normLogo } from './release';
 import { recordTouches, snapshotDef } from './provenance';
@@ -1461,6 +1463,10 @@ function ownerAnswer(app: BuildApp, run: Run, ctl: RunCtl, wf: WorkflowRun, ask:
 
 export async function runBuild(app: BuildApp, from?: string) {
   // from: a station id to start at. The stations before it are kept as they are.
+  if (RUNS[app.id]) return;
+  // LangGraph loads on first use (usually already fetched while the page was idle). Load it before anything changes,
+  // so the app never shows a half-started build while the code downloads.
+  const { createRun } = await import('@/platform/orchestrator/run');
   if (RUNS[app.id]) return;
   const i0 = from ? Math.max(0, stationIdx(from)) : 0,
     part = i0 > 0,
