@@ -8,6 +8,7 @@
 import { createLimiter, lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
 import { parseBody, refuse, refuseCrossSite, refuseVerdict, visitorKey } from '@/server/guard/http';
 import { MAX_CODE, shareRequestSchema } from '@/server/share/records';
+import { shareQuota } from '@/server/share/quota';
 import { saveShare } from '@/server/share/service';
 import { resolveShareStore } from '@/server/share/store';
 
@@ -32,6 +33,9 @@ export async function POST(request: Request) {
   if (!store) return refuse(503, 'not_configured', 'Short links are not set up on this site. The long link works.');
   const body = await parseBody(request, shareRequestSchema, MAX_CODE + 2000);
   if (!body.ok) return body.response;
+  // A newer version under the owner's own name does not take a new name, but it still writes to the store.
+  const quota = shareQuota.take(visitorKey(request), body.data.code.length);
+  if (!quota.ok) return refuse(429, 'rate_limited', quota.message);
   try {
     const r = await saveShare(store, body.data);
     if (!r.ok)
