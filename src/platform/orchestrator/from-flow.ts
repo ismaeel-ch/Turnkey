@@ -28,7 +28,8 @@ export interface StepInfo {
 /**
  * Build the definition of a run from the owner's workflow. Wire it with the workspace's own helpers:
  *
- *   import { flowOf, REVIEWERS } from '@/workspace/custom';
+ *   import { flowOf } from '@/workspace/custom';
+ *   import { REVIEWERS } from '@/workspace/reviewers';
  *   const def = workflowFromFlow(flowOf(app), (id) => REVIEWERS[id], from);
  */
 export function workflowFromFlow(flow: FlowLike, info: (id: string) => StepInfo | undefined, from?: string): WorkflowDefinition {
