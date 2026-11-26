@@ -68,6 +68,7 @@ import { AddStepDialog, REVIEWERS, REVIEW_RULES, WorkflowDialog, flowApply, flow
 import { keepFix, suggestCases } from './tester';
 import { AgentAv, Dialog, Field, Icon, Logo, MBar, Proto, Seg, Spinner, Switch, TONE_ICON } from './ui';
 import { PhoneSheets } from './mobile';
+import { AgentActivity, activityNow } from './activity';
 import { APICACHE, stageOf } from './runtime';
 import {
   AboutAppDialog,
@@ -1579,6 +1580,7 @@ export function Shell() {
       <div className="shell-body">{app ? <Workspace key={app.id} app={app} /> : <Home />}</div>
       {S.settings.debug && <DebugDrawer app={app} />}
       {PHONE() && <PhoneSheets app={app} />}
+      <AgentActivity app={app} />
     </div>
   );
 }
@@ -1761,6 +1763,7 @@ export function boot() {
       cases: suggestCases,
       keepFix,
     },
+    activity: (appId) => activityNow(appId),
     runTests: (app) => runTestsSync(app),
     suite: (id) =>
       suiteOf(S.apps[id]).map((x) => ({
