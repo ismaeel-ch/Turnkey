@@ -6,7 +6,7 @@
  * GET /api/share → { enabled } : whether short links are on here.
  */
 import { createLimiter, lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
-import { parseBody, refuse, refuseVerdict, visitorKey } from '@/server/guard/http';
+import { parseBody, refuse, refuseCrossSite, refuseVerdict, visitorKey } from '@/server/guard/http';
 import { MAX_CODE, shareRequestSchema } from '@/server/share/records';
 import { saveShare } from '@/server/share/service';
 import { resolveShareStore } from '@/server/share/store';
@@ -24,6 +24,8 @@ export function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const foreign = refuseCrossSite(request);
+  if (foreign) return foreign;
   const verdict = saveLimiter.take(visitorKey(request), saveLimits());
   if (!verdict.ok) return refuseVerdict(verdict);
   const store = resolveShareStore();

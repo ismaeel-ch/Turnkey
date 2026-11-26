@@ -2,6 +2,7 @@ import { REC } from './registry';
 import type { AccessRule, AppRecord, Connector, Dict, SavedCase } from '@/shared/types/workspace';
 import { S, isoDate, online, today, toolCall } from './core';
 import { QUESTS } from './quests';
+import { MORE_TEMPLATES } from './samples';
 
 /* ===== Turnkey prototype · saved builds (Demo mode) and connections =====
    A saved build is the recorded output of each agent. Demo mode feeds it through the same checks,
@@ -3953,11 +3954,13 @@ REC.biddesk = {
   ],
 };
 export const TEMPLATES = ['clinic', 'helpdesk', 'leave', 'biddesk'];
+// Home lists every business app; onboarding offers only the first four, so a first-time visitor picks from a short list.
+export const HOME_TEMPLATES = TEMPLATES.concat(MORE_TEMPLATES);
 export function matchTemplate(text: string) {
   const s = ' ' + String(text || '').toLowerCase() + ' ';
   let best = null,
     score = 0;
-  TEMPLATES.concat(QUESTS).forEach((id) => {
+  HOME_TEMPLATES.concat(QUESTS).forEach((id) => {
     const n = REC[id].keys.filter((k) => s.indexOf(k) >= 0).length;
     if (n > score) {
       score = n;
@@ -4120,6 +4123,11 @@ export const WIKI = [
   ['Leave of absence', 'A period away from a job while keeping it.'],
   ['Workflow', 'A repeatable pattern of activity that moves work through steps.'],
   ['Role-based access control', 'Restricting system access by the roles users hold.'],
+  ['Grant (money)', 'Money given by a government, foundation or trust for a project, usually after an application and a review.'],
+  ['Foundation (nonprofit)', 'A charitable organisation that gives grants to other organisations or people.'],
+  ['Due diligence', 'Checking the facts about a person or organisation before an agreement or a payment.'],
+  ['Purchase requisition', 'An internal request asking the purchasing department to buy goods or services.'],
+  ['Purchase order', 'A document a buyer sends a supplier, listing what is ordered, how many and at what price.'],
 ];
 export const LEARN: [RegExp, string, string][] = [
   [/vpn|wi-?fi|network|dns|proxy/i, 'Windows documentation', 'https://learn.microsoft.com/en-us/windows/'],

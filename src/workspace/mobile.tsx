@@ -1,7 +1,7 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import type { KeyboardEvent, MouseEvent, ReactNode, TouchEvent } from 'react';
 import type { AppUser, Screen } from '@/shared/types/app';
-import type { AppFlow, AppRecord, Dict, PhoneSheet, ReviewerInfo, Tab } from '@/shared/types/workspace';
+import type { AppRecord, PhoneSheet, Tab } from '@/shared/types/workspace';
 import {
   BRAND,
   S,
@@ -37,15 +37,6 @@ import { enterSolo, openShare } from './share';
 import { AppLogo, isDirty, relOf } from './release';
 import { Inspector, isDetail, rebuildAsk, viewOf } from './shell-a';
 import { startTour } from './shell-c';
-
-// custom.tsx, release.tsx and tests.tsx are not typed yet; these say what their exports hold
-const REVS = REVIEWERS as Dict<ReviewerInfo>;
-const flowOfApp = (app: AppRecord): AppFlow => flowOf(app);
-const Logo72 = AppLogo as (p: { app: AppRecord; size?: number; cls?: string }) => ReactNode;
-const failedTests = (app: AppRecord): number => {
-  const st = testStats(app) as { failed?: number } | null;
-  return st && st.failed ? st.failed : 0;
-};
 
 /** A row of the built app's account menu: an action, or '-' for a divider. */
 export type SoloItem = '-' | { label: string; icon?: string; on: () => void };
@@ -396,7 +387,7 @@ export function PhoneNav({ app }: { app: AppRecord }) {
     chat = chatShown(),
     rel = relOf(app),
     needs = app.line.research.status === 'waiting' || !!PENDING[app.id],
-    failed = failedTests(app);
+    failed = testStats(app)?.failed || 0;
   const go = (v: string) => phoneGo(app, v, chat);
   const item = (id: string, icon: string, text: string, on: boolean, onClick: () => void, dot?: string | null) => (
     <button key={id} className={cx('tab-i', on && 'on')} aria-current={on ? 'page' : undefined} onClick={onClick}>
@@ -467,7 +458,7 @@ export function AppLauncher({ app }: { app: AppRecord }) {
   return (
     <div className="launch scroll" data-tour="stage">
       <div className={'launch-hero acc-' + def.theme.accent}>
-        <Logo72 app={app} size={72} />
+        <AppLogo app={app} size={72} />
         <h2 className="t-sub1">{app.name}</h2>
         <p className="muted">{def.brief ? def.brief.summary : app.request}</p>
         <Btn className="btn primary lg" onClick={() => open(null)}>
@@ -751,7 +742,7 @@ export function PhoneSheets({ app }: { app: AppRecord | null }) {
   if (sh.kind === 'inspector') {
     const sid = U.sel[app.id] || 'research',
       rid = String(sid).indexOf('rv_') === 0 ? String(sid).slice(3) : null,
-      rv = rid && flowOfApp(app).reviewers.includes(rid) ? REVS[rid] : null,
+      rv = rid && flowOf(app).reviewers.includes(rid) ? REVIEWERS[rid] : null,
       st = STATIONS.find((x) => x.id === sid) || STATIONS[0];
     return rv ? (
       <Sheet cls="fixed" tall title={rv.name} sub={rv.job} onClose={sheetClose}>

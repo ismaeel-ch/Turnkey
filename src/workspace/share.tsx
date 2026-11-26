@@ -1,6 +1,8 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
-import type { AppRecord } from '@/shared/types/workspace';
+import type { FormEvent } from 'react';
 import { useEffect } from 'react';
+import type { BriefedDef, Row, Untrusted } from '@/shared/types/app';
+import type { SqlRow } from '@/shared/types/sqljs';
+import type { AppRecord, Dict, ShareState, SharedInfo, SoloView } from '@/shared/types/workspace';
 import {
   S,
   U,
@@ -10,6 +12,7 @@ import {
   confirmBox,
   copyText,
   emit,
+  errText,
   fmtBytes,
   hashStr,
   me,
@@ -26,6 +29,7 @@ import { appUsers, deriveEndpoints, roleName } from './engine';
 import { REC } from './builds';
 import { runTestsSync, testStats } from './tests';
 import { APPLY, STATIONS, blankDef, blankLine, deleteApp, newRun, pushChat, resetAppData } from './line';
+import type { BuildApp, Station } from './line';
 import { normCases } from './tester';
 import { Btn, Dialog, Field, Icon, Input, MBar, Seg, Select, Spinner, Textarea } from './ui';
 import { AppPane, newPane } from './runtime';
@@ -57,21 +61,24 @@ export const SHARE = {
   maxJson: 5000000,
   maxRows: 400,
 };
-export const b64u = (bytes) => {
+export const b64u = (bytes: Uint8Array) => {
   let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 };
-export const unb64u = (t) => {
+export const unb64u = (t: string) => {
   const s = atob(t.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((t.length + 3) % 4)),
     out = new Uint8Array(s.length);
   for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
   return out;
 };
-export async function pipeBytes(bytes, through, cap) {
+export async function pipeBytes(bytes: Uint8Array<ArrayBuffer>, through: GenericTransformStream, cap?: number) {
   // run bytes through a compression stream, refusing to grow past the cap
-  const reader = new Blob([bytes]).stream().pipeThrough(through).getReader(),
-    parts = [];
+  const reader = new Blob([bytes])
+      .stream()
+      .pipeThrough<Uint8Array>(through as ReadableWritablePair<Uint8Array, Uint8Array>)
+      .getReader(),
+    parts: Uint8Array[] = [];
   let n = 0;
   for (;;) {
     const r = await reader.read();
@@ -80,7 +87,9 @@ export async function pipeBytes(bytes, through, cap) {
     if (cap && n > cap) {
       try {
         reader.cancel();
-      } catch (e) {}
+      } catch {
+        // already closed
+      }
       throw new Error('This link holds more than an app can.');
     }
     parts.push(r.value);
@@ -93,22 +102,24 @@ export async function pipeBytes(bytes, through, cap) {
   });
   return out;
 }
-export async function squeeze(text) {
+export async function squeeze(text: string) {
   const raw = new TextEncoder().encode(text);
   if (typeof CompressionStream === 'function') {
     try {
       return '1.' + b64u(await pipeBytes(raw, new CompressionStream('deflate-raw')));
-    } catch (e) {}
+    } catch {
+      // fall back to the uncompressed form
+    }
   }
   return '0.' + b64u(raw);
 }
-export async function unsqueeze(code) {
+export async function unsqueeze(code: string) {
   const m = /^([01])\.([A-Za-z0-9_-]+)$/.exec(code);
   if (!m) throw new Error('That is not a Turnkey app link.');
-  let bytes;
+  let bytes: Uint8Array<ArrayBuffer>;
   try {
     bytes = unb64u(m[2]);
-  } catch (e) {
+  } catch {
     throw new Error('The link is damaged. Ask for it to be sent again.');
   }
   if (m[1] === '0') return new TextDecoder().decode(bytes);
@@ -116,19 +127,19 @@ export async function unsqueeze(code) {
   try {
     return new TextDecoder().decode(await pipeBytes(bytes, new DecompressionStream('deflate-raw'), SHARE.maxJson));
   } catch (e) {
-    throw new Error(/more than an app/.test(String(e && e.message)) ? e.message : 'The link is damaged. Ask for it to be sent again.');
+    throw new Error(/more than an app/.test(errText(e)) ? errText(e) : 'The link is damaged. Ask for it to be sent again.');
   }
 }
 export const framed = () => {
   try {
     return window.self !== window.top;
-  } catch (e) {
+  } catch {
     return true;
   }
 };
 /* A code is either a whole app ("0." or "1." and the packed app) or "i." and an app's lasting id: the start address
    of an installed app, which reopens the copy already saved in this browser. */
-export const shareCode = (input) => {
+export const shareCode = (input: unknown) => {
   const s = str(input).trim(),
     m =
       /#app=([01]\.[A-Za-z0-9_-]+|[is]\.[A-Za-z0-9_-]{1,40})(?![A-Za-z0-9_-])/.exec(s) ||
@@ -144,14 +155,14 @@ export const linkCode = () => {
   try {
     const slug = slugFromPath(location.pathname);
     return shareCode(location.hash) || (slug ? 's.' + slug : null);
-  } catch (e) {
+  } catch {
     return null;
   }
 };
 /** The saved app an installed app's "i.<id>" start address points at: the newest guest copy with that id, else one
  *  of the owner's own apps. */
-export function installedApp(key) {
-  const ready = (a) => a.status === 'ready' && dbExists(a.id);
+export function installedApp(key: string) {
+  const ready = (a: AppRecord) => a.status === 'ready' && dbExists(a.id);
   const all = Object.values(S.apps);
   return (
     all.find((a) => a.shared && !a.shared.preview && a.shared.uid === key && ready(a)) ||
@@ -159,47 +170,55 @@ export function installedApp(key) {
     null
   );
 }
-export const shareLink = (code) => {
+export const shareLink = (code: string) => {
   let base = '';
   try {
     base = location.origin && location.origin !== 'null' && /^https?:/.test(location.protocol) ? location.origin + location.pathname : '';
-  } catch (e) {}
+  } catch {
+    // no address to build on: use the placeholder
+  }
   return (base || 'https://formwork.example/') + '#app=' + code;
 };
-export function packOf(app, o): Record<string, unknown> {
+/** A share link's contents, as read from untrusted text: every part goes through the station checks. */
+export type Pack = Untrusted;
+export function packOf(app: AppRecord, o: { data: string; as?: string | null }): Pack {
   // everything a browser needs to rebuild the app: what each station wrote, and the rows to start with
   const def = app.def,
     live = o.data === 'live',
-    strip = (c) => {
-      const x = Object.assign({}, c);
+    strip = (c: object) => {
+      const x = { ...c } as Dict<unknown>;
       delete x.by;
       delete x.run;
       return x;
     },
-    rowsOf = {};
+    rowsOf: Dict<Row[]> = {},
+    rows = (text: string) => sqlRun(app.id, text, null, 'share') as SqlRow[];
   if (live) {
-    const pos = {},
-      upos = {},
-      raw = {};
-    sqlRun(app.id, 'SELECT "id" FROM "users" ORDER BY "id"', null, 'share').forEach((u, i) => {
-      upos[u.id] = i + 1;
+    // rows point at each other by position in the link, not by id
+    const pos: Dict<Dict<number>> = {},
+      upos: Dict<number> = {},
+      raw: Dict<SqlRow[]> = {};
+    rows('SELECT "id" FROM "users" ORDER BY "id"').forEach((u, i) => {
+      upos[String(u.id)] = i + 1;
     });
     def.tables.forEach((t) => {
-      raw[t.name] = sqlRun(app.id, 'SELECT * FROM ' + qi(t.name) + ' ORDER BY "id" LIMIT ' + SHARE.maxRows, null, 'share');
+      raw[t.name] = rows('SELECT * FROM ' + qi(t.name) + ' ORDER BY "id" LIMIT ' + SHARE.maxRows);
       pos[t.name] = {};
       raw[t.name].forEach((r, i) => {
-        pos[t.name][r.id] = i + 1;
+        pos[t.name][String(r.id)] = i + 1;
       });
     });
     def.tables.forEach((t) => {
       rowsOf[t.name] = raw[t.name].map((r) => {
-        const x = {};
+        const x: Row = {};
         t.columns.forEach((c) => {
           const v = r[c.name];
           if (v == null || v === '') return;
-          x[c.name] = c.type === 'ref' ? (pos[c.ref] || {})[v] || null : c.type === 'user' ? upos[v] || null : c.type === 'bool' ? !!v : v;
+          const k = String(v);
+          x[c.name] =
+            c.type === 'ref' ? (pos[String(c.ref)] || {})[k] || null : c.type === 'user' ? upos[k] || null : c.type === 'bool' ? !!v : v;
         });
-        if (!t.owner && upos[r.created_by]) x._by = upos[r.created_by];
+        if (!t.owner && upos[String(r.created_by)]) x._by = upos[String(r.created_by)];
         return x;
       });
     });
@@ -207,7 +226,7 @@ export function packOf(app, o): Record<string, unknown> {
     def.tables.forEach((t) => {
       rowsOf[t.name] = ((app.seed && app.seed.rows) || {})[t.name] || [];
     });
-  const brief = Object.assign({}, def.brief);
+  const brief = { ...def.brief } as Dict<unknown>;
   delete brief.sources;
   return {
     f: 'formwork-app',
@@ -217,7 +236,7 @@ export function packOf(app, o): Record<string, unknown> {
     tpl: app.tpl || null,
     data: live ? 'live' : 'demo',
     as: o.as || null,
-    by: me() ? me().name : '',
+    by: me()?.name || '',
     research: brief,
     database: {
       tables: def.tables.map((t) => ({
@@ -242,7 +261,7 @@ export function packOf(app, o): Record<string, unknown> {
     views: {
       views: Object.keys(def.views || {}).map((t) => ({
         table: t,
-        use: def.views[t],
+        use: (def.views || {})[t],
       })),
       dashboard: def.dash,
       board: def.board || null,
@@ -258,18 +277,18 @@ export function packOf(app, o): Record<string, unknown> {
     },
   };
 }
-export function readPack(json) {
-  let p;
+export function readPack(json: string): Pack {
+  let p: Pack;
   try {
     p = JSON.parse(json);
-  } catch (e) {
+  } catch {
     throw new Error('The link is damaged. Ask for it to be sent again.');
   }
   if (!p || p.f !== 'formwork-app' || p.v !== 1 || typeof p.research !== 'object' || typeof p.database !== 'object')
     throw new Error('That link does not hold a Turnkey app.');
   return p;
 }
-export function appFromPack(pack, key, preview?): AppRecord {
+export function appFromPack(pack: Pack, key: string, preview?: boolean): AppRecord {
   // rebuild the app station by station. Each part must pass the same checks an agent's output must pass.
   const id = uid('app'),
     app = {
@@ -280,7 +299,7 @@ export function appFromPack(pack, key, preview?): AppRecord {
         by: str(pack.by).slice(0, 60),
         at: Date.now(),
         as: str(pack.as).slice(0, 40),
-        data: pack.data === 'live' ? 'live' : 'demo',
+        data: (pack.data === 'live' ? 'live' : 'demo') as 'live' | 'demo',
         preview: !!preview,
         ver: /^\d+(\.\d+){0,2}$/.test(str(pack.ver)) ? str(pack.ver) : '',
         uid: /^[A-Za-z0-9_-]{4,40}$/.test(str(pack.uid)) ? str(pack.uid) : '',
@@ -306,13 +325,14 @@ export function appFromPack(pack, key, preview?): AppRecord {
       answers: {},
       rev: 0,
       renamed: true,
-    };
+    } as unknown as BuildApp; // flow and reviews are made the first time something asks for them; the stations fill the definition
+  const shared = app.shared as SharedInfo;
   STATIONS.forEach((s) => {
     app.line[s.id] = blankLine();
   });
   S.apps[id] = app;
   const run = newRun(app, 'open', 'Opened from a link', 'demo'),
-    parts = [
+    parts: [string, Untrusted][] = [
       ['research', pack.research],
       ['database', pack.database],
       ['backend', pack.backend],
@@ -342,12 +362,12 @@ export function appFromPack(pack, key, preview?): AppRecord {
       if (bad.length && st !== 'walkthrough')
         throw new Error(
           'The ' +
-            STATIONS.find((s) => s.id === st).name.toLowerCase() +
+            (STATIONS.find((s) => s.id === st) as Station).name.toLowerCase() +
             ' part of this link did not pass its checks (' +
             bad[0].label +
             ').',
         );
-      if (st === 'research' && pack.research && pack.research.decision && typeof pack.research.decision === 'object')
+      if (st === 'research' && app.def.brief && pack.research && pack.research.decision && typeof pack.research.decision === 'object')
         app.def.brief.decision = {
           text: str(pack.research.decision.text).slice(0, 300),
           answer: str(pack.research.decision.answer).slice(0, 300),
@@ -359,7 +379,7 @@ export function appFromPack(pack, key, preview?): AppRecord {
     delete S.apps[id];
     throw e;
   }
-  app.def.cases = normCases(pack.tests, app.def);
+  app.def.cases = normCases(pack.tests, app.def as BriefedDef);
   app.rev++;
   run.status = 'ok';
   run.t1 = Date.now();
@@ -369,15 +389,22 @@ export function appFromPack(pack, key, preview?): AppRecord {
     app,
     'orchestrator',
     'This app was opened from a share link' +
-      (app.shared.by ? ' sent by ' + app.shared.by : '') +
+      (shared.by ? ' sent by ' + shared.by : '') +
       '. Its definition passed every check again in this browser, and its data is a copy that lives here.',
   );
   dbSave(id);
   return app;
 }
-export async function openShared(input, o?) {
+/** How a link is being opened. */
+interface OpenOpts {
+  preview?: boolean;
+  /** the app tab to go back to */
+  back?: string | null;
+  /** the short link's name, when it came from one */
+  slug?: string;
+}
+export async function openShared(input: unknown, o: OpenOpts = {}): Promise<AppRecord> {
   // from a link, a pasted code, or the owner's preview
-  o = o || {};
   const code = shareCode(input);
   if (!code) throw new Error('That is not a Turnkey app link. A link ends with #app= followed by a long code.');
   if (code.length > SHARE.maxCode) throw new Error('That link is too long to be an app.');
@@ -385,7 +412,7 @@ export async function openShared(input, o?) {
     // a short link: the code is kept on the server under the name; offline, the copy saved here opens
     const slug = code.slice(2),
       got = await loadShortLink(slug);
-    if (got.ok) return openShared(got.code, Object.assign({}, o, { slug }));
+    if (got.ok) return openShared(got.code, { ...o, slug });
     const saved = Object.values(S.apps).find(
       (a) => a.shared && !a.shared.preview && a.shared.slug === slug && a.status === 'ready' && dbExists(a.id),
     );
@@ -407,8 +434,7 @@ export async function openShared(input, o?) {
   }
   if (!S.shared) S.shared = {};
   const key = 'k' + hashStr(code);
-  let app = S.shared[key] ? S.apps[S.shared[key]] : null,
-    fresh = false;
+  let app: AppRecord | null = S.shared[key] ? S.apps[S.shared[key]] : null;
   if (!app || app.status !== 'ready' || !dbExists(app.id)) {
     const pack = readPack(await unsqueeze(code));
     if (app) deleteApp(app);
@@ -416,59 +442,60 @@ export async function openShared(input, o?) {
       Object.values(S.apps)
         .filter((a) => a.shared && a.shared.preview)
         .forEach((a) => {
-          delete S.shared[a.shared.key];
+          delete S.shared[(a.shared as SharedInfo).key];
           deleteApp(a);
         }); // one preview copy at a time
-    app = appFromPack(pack, key, o.preview);
-    S.shared[key] = app.id;
-    fresh = true;
+    const made = appFromPack(pack, key, o.preview),
+      mine = made.shared as SharedInfo;
+    app = made;
+    S.shared[key] = made.id;
     const old =
-      !o.preview && app.shared.uid
+      !o.preview && mine.uid
         ? Object.values(S.apps).find(
             (a) =>
-              a.id !== app.id &&
+              a.id !== made.id &&
               a.owner === 'guest' &&
               a.shared &&
               !a.shared.preview &&
-              a.shared.uid === app.shared.uid &&
+              a.shared.uid === mine.uid &&
               a.status === 'ready' &&
               dbExists(a.id),
           )
         : null;
-    if (old && verCmp(app.shared.ver, old.shared.ver) > 0) {
+    if (old && old.shared && verCmp(mine.ver, old.shared.ver) > 0) {
       // a newer version of an app this browser already has: update it and keep the records
-      const kept = carryData(old, app);
-      app.shared.updated = {
+      const kept = carryData(old, made);
+      mine.updated = {
         from: old.shared.ver || 'an earlier version',
         kept: kept ? kept.rows : null,
         at: Date.now(),
       };
-      if (old.installed) app.installed = old.installed;
+      if (old.installed) made.installed = old.installed;
       deleteApp(old);
       emit('CUSTOM', {
         name: 'app_updated',
-        app: app.id,
+        app: made.id,
         value: {
-          from: app.shared.updated.from,
-          to: app.shared.ver,
+          from: mine.updated.from,
+          to: mine.ver,
           rowsKept: kept ? kept.rows : 0,
         },
       });
     }
   }
-  if (!o.preview && app.shared.preview) app.shared.preview = false; // opened for real: keep the copy
-  if (o.slug && !o.preview) app.shared.slug = o.slug;
+  const sh = app.shared as SharedInfo;
+  if (!o.preview && sh.preview) sh.preview = false; // opened for real: keep the copy
+  if (o.slug && !o.preview) sh.slug = o.slug;
   enterSolo(app, {
     from: o.preview ? 'preview' : 'link',
-    as: app.shared.as,
+    as: sh.as,
     back: o.back || null,
   });
   commit();
   return app;
 }
-export function enterSolo(app, o) {
-  o = o || {};
-  const pane = newPane(7),
+export function enterSolo(app: AppRecord, o: { from?: SoloView['from']; as?: string | null; back?: string | null } = {}) {
+  const pane = newPane(7) as SoloView['pane'],
     u = o.as ? appUsers(app).find((x) => x.username === o.as) : null;
   if (u) pane.uid = u.id;
   U.solo = {
@@ -490,13 +517,15 @@ export function exitSolo() {
   try {
     if (/#app=/.test(location.hash) || slugFromPath(location.pathname))
       history.replaceState(null, '', (slugFromPath(location.pathname) ? '/' : location.pathname) + location.search);
-  } catch (e) {}
+  } catch {
+    // the address could not be changed: leave it
+  }
   if (so && so.back && S.apps[so.back]) {
     openTab(so.back);
   }
   commit();
 }
-export function keepShared(app) {
+export function keepShared(app: AppRecord) {
   // a guest copy becomes one of your own apps
   if (!me() || !app.shared) return;
   let name = app.name,
@@ -519,7 +548,7 @@ export const sharedApps = () =>
     .sort((a, b) => b.updated - a.updated);
 
 /* ---------- the share dialog ---------- */
-export function openShare(app) {
+export function openShare(app: AppRecord) {
   U.share = {
     app: app.id,
     data: 'demo',
@@ -551,14 +580,14 @@ export async function makeShare() {
       return notify();
     } // a link carries a released version
     const dirty = isDirty(app);
-    let pack;
+    let pack: Pack;
     sh.ver = rel.v;
     sh.draft = dirty;
     if (dirty) {
       if (!rel.pack) throw new Error('The snapshot of version ' + rel.v + ' is gone. Release the draft to share it.');
       pack = readPack(await unsqueeze(rel.pack));
       pack.as = sh.as || null;
-      pack.by = me() ? me().name : '';
+      pack.by = me()?.name || '';
     } else {
       pack = packOf(app, sh);
       pack.ver = rel.v;
@@ -570,10 +599,10 @@ export async function makeShare() {
     if (U.share !== sh || tag !== sh.data + '|' + sh.as) return;
     sh.code = code;
     sh.raw = json.length;
-    sh.rows = pack.database.tables.reduce((n, t) => n + t.rows.length, 0);
+    sh.rows = arr(pack.database.tables).reduce((n: number, t: Untrusted) => n + arr(t.rows).length, 0);
   } catch (e) {
     sh.code = null;
-    sh.err = String((e && e.message) || e);
+    sh.err = errText(e);
   }
   sh.busy = false;
   notify();
@@ -582,13 +611,13 @@ export async function makeShare() {
 /* The short link: the code is saved on the server under a name made from the app's name. The first save gives a
    token that stays with the app in this browser; later saves send it back, so the same address gets the newer
    version. When the site keeps no store, or the save fails, the long link is all there is, and it works the same. */
-export async function shortenShare(sh, app) {
+export async function shortenShare(sh: ShareState, app: AppRecord) {
   if (!sh.code || framed()) return;
   const code = sh.code;
   sh.short = '';
   sh.shortBusy = true;
   notify();
-  const prev = app.short || {};
+  const prev: Partial<NonNullable<AppRecord['short']>> = app.short || {};
   let r = await saveShortLink({ code, name: app.name, slug: prev.slug, token: prev.token });
   if (!r.ok && r.reason === 'forbidden') {
     delete app.short; // the name belongs to someone else now: make a new one
@@ -603,19 +632,23 @@ export async function shortenShare(sh, app) {
   } else sh.shortNote = r.reason === 'off' ? '' : r.message;
   notify();
 }
-export function ShareDialog({ p }) {
+/** a choice in the share dialog changed: the link is packed again */
+function setShare(patch: Partial<ShareState>) {
+  if (!U.share) return;
+  Object.assign(U.share, patch, { code: null });
+  makeShare();
+}
+function setShareBusy(busy: boolean) {
+  if (U.share) U.share.rbusy = busy;
+}
+export function ShareDialog({ p }: { p: { app: string } }) {
   const app = S.apps[p.app],
     sh = U.share;
   if (!app || !sh) return null;
   const users = appUsers(app),
     link = sh.code ? shareLink(sh.code) : '',
-    set = (k, v) => {
-      sh[k] = v;
-      sh.code = null;
-      makeShare();
-    },
     seedN = app.def.tables.reduce((n, t) => n + (((app.seed && app.seed.rows) || {})[t.name] || []).length, 0),
-    liveN = app.def.tables.reduce((n, t) => n + dbCount(app.id, t.name), 0);
+    liveN = app.def.tables.reduce((n, t) => n + Number(dbCount(app.id, t.name)), 0);
   const preview = async () => {
     try {
       closeDialog();
@@ -624,17 +657,17 @@ export function ShareDialog({ p }) {
         back: app.id,
       });
     } catch (e) {
-      toast(String((e && e.message) || e), 'danger');
+      toast(errText(e), 'danger');
     }
   };
   const rel = relOf(app),
     dirty = isDirty(app),
     block = releaseBlock(app),
     first = async () => {
-      sh.rbusy = true;
+      setShareBusy(true);
       notify();
       const r = await releaseApp(app, 'first', draftNotes(app));
-      sh.rbusy = false;
+      setShareBusy(false);
       if (r) makeShare();
       else notify();
     };
@@ -745,12 +778,18 @@ export function ShareDialog({ p }) {
             onChange={(v) =>
               dirty && v === 'live'
                 ? toast('Current records fit the draft, not version ' + rel.v + '. Release the draft to share them.', 'info')
-                : set('data', v)
+                : setShare({ data: v as ShareState['data'] })
             }
           />
         </Field>
         <Field id="sh-as" label="They open it as" hint="A person skips the sign-in screen. They can still switch.">
-          <Select native className="select" id="sh-as" value={sh.as} onChange={(e) => set('as', e.target.value)}>
+          <Select
+            native
+            className="select"
+            id="sh-as"
+            value={sh.as}
+            onChange={(e) => setShare({ as: (e.target as HTMLSelectElement).value })}
+          >
             <option value="">The sign-in screen</option>
             {users.map((u) => (
               <option key={u.id} value={u.username}>
@@ -778,7 +817,7 @@ export function ShareDialog({ p }) {
               title="Copy the short link"
               aria-label="Copy the short link"
               disabled={!sh.short}
-              onClick={() => copyText(sh.short, 'Short link')}
+              onClick={() => copyText(sh.short || '', 'Short link')}
             >
               <Icon n="copy" />
             </Btn>
@@ -848,19 +887,26 @@ export function ShareDialog({ p }) {
     </Dialog>
   );
 }
-export function OpenLinkDialog({ p }) {
-  const go = async (e) => {
+/** the dialog's props, which also hold what has been pasted so far */
+interface OpenLinkProps {
+  text?: string;
+  err?: string;
+  busy?: boolean;
+}
+function setOpenLink(p: OpenLinkProps, patch: Partial<OpenLinkProps>) {
+  Object.assign(p, patch);
+}
+export function OpenLinkDialog({ p }: { p: OpenLinkProps }) {
+  const go = async (e: FormEvent) => {
     e.preventDefault();
-    p.err = '';
-    p.busy = true;
+    setOpenLink(p, { err: '', busy: true });
     notify();
     try {
       await openShared(p.text, {
         back: null,
       });
     } catch (er) {
-      p.err = String((er && er.message) || er);
-      p.busy = false;
+      setOpenLink(p, { err: errText(er), busy: false });
       notify();
     }
   };
@@ -873,12 +919,12 @@ export function OpenLinkDialog({ p }) {
             native
             className="textarea mono"
             id="ol-text"
-            rows="4"
+            rows={4}
             data-autofocus
             placeholder="https://…#app=1.xxxxx"
             value={p.text || ''}
             onInput={(e) => {
-              p.text = e.target.value;
+              setOpenLink(p, { text: (e.target as HTMLTextAreaElement).value });
             }}
           />
         </Field>
@@ -894,11 +940,13 @@ export function OpenLinkDialog({ p }) {
     </Dialog>
   );
 }
-export function AboutAppDialog({ p }) {
+export function AboutAppDialog({ p }: { p: { app: string } }) {
   const app = S.apps[p.app];
   if (!app) return null;
   const def = app.def,
-    st = testStats(app);
+    st = testStats(app),
+    rel = relOf(app),
+    notes = app.shared ? arr<string>(app.shared.notes) : rel ? rel.notes : [];
   return (
     <Dialog
       title={'About ' + app.name}
@@ -920,11 +968,11 @@ export function AboutAppDialog({ p }) {
         </div>
       </div>
       <p>{def.brief ? def.brief.summary : app.request}</p>
-      {(app.shared ? arr(app.shared.notes) : relOf(app) ? relOf(app).notes : []).length > 0 && (
+      {notes.length > 0 && (
         <div className="col gap4">
           <strong>What is new in this version</strong>
           <ul className="rel-notes">
-            {(app.shared ? app.shared.notes : relOf(app).notes).map((n, i) => (
+            {notes.map((n, i) => (
               <li key={i}>{n}</li>
             ))}
           </ul>
@@ -939,7 +987,7 @@ export function AboutAppDialog({ p }) {
         <dd>
           {def.tables.length}
           {' tables · '}
-          {def.process ? deriveEndpoints(def).length : 0}
+          {def.process ? deriveEndpoints(def as BriefedDef).length : 0}
           {' endpoints · '}
           {def.screens.length}
           {' pages'}
@@ -971,10 +1019,11 @@ export function AboutAppDialog({ p }) {
 
 /* ---------- the app-only view ---------- */
 export function SoloShell() {
-  const so = U.solo,
+  const so = U.solo as SoloView, // the shell draws this only while an app is open on its own
     app = S.apps[so.app],
+    shared = app.shared,
     signed = !!(S.session && me()),
-    up = app.shared && app.shared.updated && !app.shared.updated.seen ? app.shared.updated : null;
+    up = shared && shared.updated && !shared.updated.seen ? shared.updated : null;
   useEffect(() => {
     setIdentity(app);
     // the browser installs whatever manifest the page links: while the app is open alone, that is the app's own
@@ -984,6 +1033,7 @@ export function SoloShell() {
       clearIdentity();
       setInstallLinks(document, null);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs again when the app's id, name or version changes, not on every store update
   }, [app.id, app.name, app.rev]);
   useEffect(() => {
     // the browser reports an install it made while this app was open alone: mark the app
@@ -994,6 +1044,7 @@ export function SoloShell() {
         commit();
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one listener per app, not one per store update
   }, [app.id]);
   const reset = async () => {
     if (
@@ -1058,7 +1109,7 @@ export function SoloShell() {
           <span className="grow">
             <strong>
               {'Updated to version '}
-              {app.shared.ver}
+              {shared?.ver}
             </strong>
             {' from '}
             {up.from}
@@ -1066,7 +1117,7 @@ export function SoloShell() {
             {up.kept == null
               ? 'Your earlier records could not be carried over, so it starts with sample data.'
               : 'Your ' + up.kept + ' records were kept.'}
-            {app.shared.notes.length ? ' New: ' + app.shared.notes.slice(0, 2).join(' · ') : ''}
+            {shared?.notes.length ? ' New: ' + shared.notes.slice(0, 2).join(' · ') : ''}
           </span>
           <Btn
             className="btn sm"

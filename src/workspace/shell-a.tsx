@@ -38,7 +38,7 @@ import {
 import { DBX, createTableSQL, dbCount, dbTables } from './db';
 import { TYPE_LABEL, VIEW_ICON, VIEW_LABEL, accOf, colOf, deriveEndpoints, roleName, tableOf } from './engine';
 import { DATA_VIEWS, VIEW_WHAT, viewFit, viewsOf } from './viewspec';
-import { REC, TEMPLATES, matchTemplate } from './builds';
+import { HOME_TEMPLATES, REC, matchTemplate } from './builds';
 import { QUESTS } from './quests';
 import { TeamAv } from './team';
 import { StationTests, TestsView, suiteOf, testable } from './tests';
@@ -602,7 +602,7 @@ export function Home() {
           <h2 className="t-sub2">Business apps</h2>
           <span className="t-cap muted">Record-keeping apps with roles and a workflow.</span>
         </div>
-        <div className="tpl-grid">{TEMPLATES.map(card)}</div>
+        <div className="tpl-grid">{HOME_TEMPLATES.map(card)}</div>
         {!apps.length ? mine0 : null}
         {guests.length > 0 && (
           <>
