@@ -59,6 +59,6 @@ describe('mock provider', () => {
 
   it('answers an empty reply with an empty stream and a done event', async () => {
     const chunks = await collect(mockProvider(() => '').stream(request('x')));
-    expect(chunks).toEqual([{ type: 'done', truncated: false, usage: { input: 1, output: 0 } }]);
+    expect(chunks).toEqual([{ type: 'done', truncated: false, usage: { input: 1, output: 0, costUsd: 0 } }]);
   });
 });
