@@ -228,7 +228,7 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
                 }),
             },
             {
-              label: 'What is real in this prototype',
+              label: 'What is real in Turnkey',
               icon: 'info',
               on: () => openDialog('about'),
             },
@@ -298,7 +298,7 @@ export function Home() {
           checking: 'Still connecting to the model. Try again in a moment, or pick a saved build below.',
           nomodel:
             NO_MODEL +
-            ' None of the saved builds matches that sentence, so pick one below. Inside Claude the model comes from the viewer; the hackathon build calls its own server route.',
+            ' None of the saved builds matches that sentence, so pick one below. Live calls the model through Turnkey’s own server route once a model key is set there.',
         };
       if (!tpl) {
         h.note = why[mode.id];
