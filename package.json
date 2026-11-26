@@ -8,22 +8,22 @@
     "node": ">=20"
   },
   "scripts": {
-    "build:legacy": "node scripts/build-legacy.mjs",
-    "predev": "node scripts/build-legacy.mjs",
+    "predev": "node scripts/copy-sqlite.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/build-legacy.mjs",
+    "prebuild": "node scripts/copy-sqlite.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "node scripts/build-legacy.mjs --quiet && next typegen && tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node tests/e2e/run.mjs",
-    "format": "prettier --write \"src/{app,platform,server,shared}/**/*.{ts,tsx,css}\" \"tests/unit/**/*.ts\" \"scripts/*.mjs\" \"*.{json,md,mjs,ts}\" \"docs/**/*.md\"",
-    "format:check": "prettier --check \"src/{app,platform,server,shared}/**/*.{ts,tsx,css}\" \"tests/unit/**/*.ts\" \"scripts/*.mjs\"",
+    "format": "prettier --write \"src/{app,platform,server,shared,workspace,styles}/**/*.{ts,tsx,css}\" \"tests/unit/**/*.ts\" \"scripts/*.mjs\" \"*.{json,md,mjs,ts}\" \"docs/**/*.md\"",
+    "format:check": "prettier --check \"src/{app,platform,server,shared,workspace,styles}/**/*.{ts,tsx,css}\" \"tests/unit/**/*.ts\" \"scripts/*.mjs\"",
     "check:secrets": "node scripts/check-secrets.mjs",
     "check": "npm run check:secrets && npm run lint && npm run typecheck && npm run test",
-    "icons": "node scripts/gen-icons.cjs"
+    "icons": "node scripts/gen-icons.cjs",
+    "theme": "node scripts/generate-theme.mjs"
   },
   "dependencies": {
     "@ag-ui/client": "^1.0.5",
@@ -36,7 +36,6 @@
     "@langchain/core": "^1.5.1",
     "@langchain/langgraph": "^1.7.5",
     "@xyflow/react": "12.12.1",
-    "htm": "3.1.1",
     "next": "16.4.6",
     "openai": "^7.65.0",
     "react": "^19.3.1",

@@ -566,7 +566,7 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   await buildTpl(page, 'clinic'); await sleep(900);
   const appId = (await appState(page)).id, wtab = (name) => view(page, name);
   // the workflow canvas
-  const fl = await st(page, () => ({ rf: !!window.ReactFlow, state: window.__formwork.flow().state, nodes: [...document.querySelectorAll('.react-flow__node')].map((n) => n.getAttribute('data-id')), edges: [...document.querySelectorAll('.react-flow__edge')].map((n) => n.getAttribute('data-id')), stations: document.querySelectorAll('.station').length, gates: document.querySelectorAll('.fl-gate').length, old: document.querySelectorAll('.line > .station').length }));
+  const fl = await st(page, () => ({ rf: document.querySelectorAll('.react-flow').length > 0, state: window.__formwork.flow().state, nodes: [...document.querySelectorAll('.react-flow__node')].map((n) => n.getAttribute('data-id')), edges: [...document.querySelectorAll('.react-flow__edge')].map((n) => n.getAttribute('data-id')), stations: document.querySelectorAll('.station').length, gates: document.querySelectorAll('.fl-gate').length, old: document.querySelectorAll('.line > .station').length }));
   check('the build is drawn as a React Flow workflow: request, 7 stations with the Tester, 7 gates, the app', fl.rf && fl.state === 'ready' && fl.nodes.length === 16 && fl.stations === 7 && fl.gates === 7 && fl.old === 0 && fl.nodes.includes('trigger') && fl.nodes.includes('ready'), fl);
   check('every handoff is an edge, and the send-back of the Database station is drawn', fl.edges.length === 16 && fl.edges.includes('e-b1') && fl.edges.includes('e-trig') && fl.edges.includes('e-ready'), fl.edges);
   await shot(page, '91-workflow');
@@ -932,7 +932,73 @@ async function flowRound6(browser, url) {
   check('a finished app reopens on the app itself, not on its build', await page.locator('.views .tab.on').innerText() === 'App' || /^App/.test(await page.locator('.views .tab.on').innerText()), await page.locator('.views .tab.on').innerText());
   await ctx.close();
 }
-const FLOWS = { demo: flowDemo, live: flowLive, misc: flowMisc, views: flowViews, quests: flowQuests, new: flowNew, custom: flowCustom, round6: flowRound6 };
+/* ---------- What only React can get wrong: warnings, carets, handlers fired twice, focus, the other pages ---------- */
+// Counts how often a handler that was added straight to a form field for its `change` event runs. NativeField
+// adds `onChange` that way, so a number above one per action means a handler fired twice.
+const COUNT_CHANGES = `(() => { window.__changeCalls = 0; const add = EventTarget.prototype.addEventListener;
+  EventTarget.prototype.addEventListener = function (type, fn, opts) {
+    if (type === 'change' && typeof fn === 'function' && this instanceof HTMLElement && /^(INPUT|SELECT|TEXTAREA)$/.test(this.tagName)) {
+      const wrapped = function () { window.__changeCalls++; return fn.apply(this, arguments); };
+      return add.call(this, type, wrapped, opts);
+    }
+    return add.call(this, type, fn, opts);
+  }; })();`;
+async function flowReact(browser, url) {
+  const { ctx, page } = await newPage(browser, { init: COUNT_CHANGES });
+  const noisy = [];
+  page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') noisy.push(m.type() + ': ' + m.text().slice(0, 300)); });
+  page.on('pageerror', (e) => noisy.push('pageerror: ' + String(e.message || e).slice(0, 300)));
+  await enter(page, url);
+
+  // typing in the middle of a text field keeps the caret where it was
+  const box = page.locator('#home-prompt'); await box.click(); await page.keyboard.type('book a patient');
+  await page.keyboard.press('Home'); for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight');
+  await page.keyboard.type('X'); await sleep(60);
+  const c1 = await st(page, () => { const e = document.getElementById('home-prompt'); return { v: e.value, s: e.selectionStart, e: e.selectionEnd, focus: document.activeElement === e }; });
+  check('typing in the middle of a text field puts the letter there and keeps the caret after it', c1.v === 'bookX a patient' && c1.s === 5 && c1.e === 5 && c1.focus, c1);
+  await page.keyboard.type('YZ'); await sleep(60);
+  const c2 = await st(page, () => { const e = document.getElementById('home-prompt'); return { v: e.value, s: e.selectionStart, focus: document.activeElement === e }; });
+  check('several letters in a row keep landing at the caret, and the field keeps focus', c2.v === 'bookXYZ a patient' && c2.s === 7 && c2.focus, c2);
+  await page.keyboard.press('Control+a'); await page.keyboard.press('Backspace'); await sleep(60);
+  check('clearing the field empties it', (await box.inputValue()) === '');
+
+  // a select and a checkbox switch fire their handlers once
+  await buildTpl(page, 'clinic'); await sleep(500);
+  await page.locator('[data-tour="share"]').click(); await page.waitForSelector('.dialog.share');
+  const f = await st(page, () => { const d = document.querySelector('.dialog.share'); const a = document.activeElement; return { inside: !!a && d.contains(a), tag: a && a.tagName }; });
+  check('when a dialog opens, focus is inside it', f.inside, f);
+  await page.locator('#sh-release').click(); await page.waitForSelector('#sh-as');
+  await st(page, () => { window.__changeCalls = 0; });
+  await page.selectOption('#sh-as', { index: 2 }); await sleep(200);
+  const sel = await st(page, () => ({ calls: window.__changeCalls, v: document.getElementById('sh-as').value }));
+  check('choosing from a select runs its handler once, and the field shows the choice', sel.calls === 1 && sel.v !== '', sel);
+  await page.focus('#sh-as'); await page.keyboard.press('Escape'); await sleep(250); // the Release button that had focus is gone from the page, so focus goes back into the dialog first
+  check('Escape closes the dialog', await page.locator('.dialog.share').count() === 0);
+  await page.locator('[data-tour="share"]').click(); await page.waitForSelector('.dialog.share'); await page.locator('.dialog .dhead .btn').click(); await sleep(150);
+  check('the Close button closes it too, and a dialog can be opened again', await page.locator('.dialog').count() === 0);
+  await st(page, () => { window.__changeCalls = 0; });
+  const sw = page.locator('#sw-live'), on0 = await sw.isChecked(), dis = await sw.isDisabled();
+  if (!dis) { await page.locator('label.switch', { has: sw }).click(); await sleep(250); }
+  const swc = await st(page, () => ({ calls: window.__changeCalls, on: document.getElementById('sw-live').checked }));
+  check('a switch runs its handler once and shows its new state', !dis && swc.calls === 1 && swc.on !== on0, { dis, swc, on0 });
+  await ctx.close();
+  const bad = noisy.filter((m) => !/Failed to load resource/.test(m));
+  check('no console errors, warnings or page errors through the sign-in, a full clinic build and a dialog', bad.length === 0, bad.slice(0, 5));
+
+  // the first page that was built with React from the start
+  const sp = await newPage(browser), spn = [];
+  sp.page.on('pageerror', (e) => spn.push(String(e.message || e).slice(0, 300)));
+  await sp.page.goto(url + 'spike'); await sp.page.waitForSelector('[data-testid=canvas]', { timeout: 20000 }); await sleep(800);
+  check('the /spike page draws its canvas with no page errors', await sp.page.locator('[data-testid=canvas]').count() === 1 && spn.length === 0, spn);
+  await sp.ctx.close();
+
+  // the canvas library switched off from outside
+  const n2 = await newPage(browser, { init: NO_CANVAS }); await enter(n2.page, url); await buildTpl(n2.page, 'leave'); await sleep(400);
+  const fb = await st(n2.page, () => ({ rf: document.querySelectorAll('.react-flow').length, line: document.querySelectorAll('.line > .station').length }));
+  check('with window.__turnkeyOptions = { canvas: false } the plain line of stations is drawn', fb.rf === 0 && fb.line === 6, fb);
+  await n2.ctx.close();
+}
+const FLOWS = { demo: flowDemo, live: flowLive, misc: flowMisc, views: flowViews, quests: flowQuests, new: flowNew, custom: flowCustom, round6: flowRound6, react: flowReact };
 (async () => {
   const url = (process.env.TK_URL || '').replace(/\/?$/, '/');
   if (!/^https?:/.test(url)) { console.error('TK_URL is not set. Run the checks with: npm run test:e2e'); process.exit(2); }

@@ -56,7 +56,7 @@ Create `wp` under **Issues**, then **Labels**, then **New label**. The other lab
 
 ## 6. Checks after setup
 
-- A test pull request gets the `legacy-guard`, `check`, eight `e2e` jobs and `ci` checks.
+- A test pull request gets the `check`, eight `e2e` jobs and `ci` checks.
 - The merge button offers squash only, and the head branch is deleted after the merge.
 - Dependabot opens its first grouped pull requests on the next weekly run. Its runs on `main` failed before this
   change; whether these files fix them could not be checked from the agents' access. If the **Dependabot** runs still

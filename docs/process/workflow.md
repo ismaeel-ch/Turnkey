@@ -15,8 +15,6 @@ process in brief. This page says what the repository does to enforce it.
 - Title: `WP-nn: what changed`. For a change outside a work package, a short imperative title.
 - Body: use the template. It lists the definition of done (docs/PLAN.md section 4) and names the issue with
   `Closes #n`.
-- Pull requests that change `src/legacy/**` must have `WP-16` at the start of the title, or `[legacy]` anywhere in it.
-  The `legacy-guard` job in `.github/workflows/ci.yml` fails the pull request otherwise. CLAUDE.md rule 5 explains why.
 - Keep pull requests small. One issue per pull request.
 
 ## Checks
@@ -25,7 +23,6 @@ process in brief. This page says what the repository does to enforce it.
 
 | Job            | What it runs                                                           |
 | -------------- | ---------------------------------------------------------------------- |
-| `legacy-guard` | the `src/legacy` title rule (`scripts/ci/legacy-guard.mjs`)            |
 | `check`        | secrets scan, lint, typecheck, unit tests, production build            |
 | `e2e` (8 jobs) | one browser flow each, with failure screenshots kept for 3 days        |
 | `ci`           | passes only if the three above pass; this is the one required check    |
