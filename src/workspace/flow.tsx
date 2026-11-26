@@ -1687,7 +1687,7 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
       {PHONE() ? null : <StepPalette app={app} />}
       <div
         className={cx('flow-canvas', v && 'narrow')}
-        style={toStyle(v ? null : 'height:clamp(460px,calc(100dvh - 330px),' + Math.min(1040, 660 + 96 * deepNow) + 'px)')}
+        style={toStyle(v ? null : 'height:clamp(460px,calc(100dvh - 370px),' + Math.min(1040, 660 + 96 * deepNow) + 'px)')}
         ref={ref}
         role="group"
         aria-label="The build workflow. Select a node to inspect it, or use its controls to change the workflow."
