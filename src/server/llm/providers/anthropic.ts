@@ -156,6 +156,8 @@ export function anthropic(config: AnthropicConfig): Provider {
           }
         } else if (ev.type === 'message_delta') {
           if (ev.delta?.stop_reason === 'max_tokens') truncated = true;
+          // Current Claude models can decline a request (HTTP 200, stop_reason "refusal"). Say so instead of an empty answer.
+          if (ev.delta?.stop_reason === 'refusal') throw new LlmError('bad_request', 'the model declined this request', 422);
           take(ev.usage);
         }
       }
