@@ -31,6 +31,7 @@ const eslintConfig = defineConfig([
       'src/workspace/release.tsx',
       'src/workspace/custom.tsx',
       'src/workspace/tests.tsx',
+      'src/workspace/share.tsx',
       'src/workspace/activity.tsx',
       'src/workspace/guide.tsx',
       'src/workspace/mobile.tsx',

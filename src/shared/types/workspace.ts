@@ -63,7 +63,10 @@ export interface AppRecord {
   status: string;
   created: number;
   updated: number;
-  shared?: { key: string; uid?: string; ver?: string } | null;
+  /** set on a copy opened from a share link (share.tsx) */
+  shared?: SharedInfo | null;
+  /** the short link this app was saved under, and the token that lets this browser update it */
+  short?: { slug: string; token: string };
   def: AppDef;
   /** the state of each station of the build line, by station id */
   line: Dict<StationLine>;
@@ -279,7 +282,8 @@ export interface ViewState {
   flowN: number;
   /** the canvas map is shown; null follows the layout */
   flowMap: boolean | null;
-  solo: Loose;
+  /** one app open on its own, from a link or the share preview (share.tsx) */
+  solo: SoloView | null;
   /** the open bottom sheet of the phone layout */
   sheet: PhoneSheet | null;
   told: Dict<Loose>;
@@ -292,7 +296,63 @@ export interface ViewState {
   detail: Dict<Loose>;
   /** the chat peek on narrow screens */
   peek?: boolean;
-  share?: Loose;
+  /** the share dialog's state (share.tsx) */
+  share?: ShareState | null;
+}
+
+/** Where an app opened from a share link came from. */
+export interface SharedInfo {
+  /** hash of the link's code, the key of `State.shared` */
+  key: string;
+  /** who shared it, and when it was opened */
+  by: string;
+  at: number;
+  /** the username the link signs in as, or '' for the sign-in screen */
+  as: string;
+  data: 'live' | 'demo';
+  /** the owner's own preview of their link, replaced by the next one */
+  preview: boolean;
+  /** the released version, and the app's lasting id */
+  ver: string;
+  uid: string;
+  /** release notes of that version */
+  notes: string[];
+  /** the short link's name, when it was opened from one */
+  slug?: string;
+  /** set when this copy replaced an older version and carried its records over */
+  updated?: { from: string; kept: number | null; at: number; seen?: boolean };
+}
+
+/** An app open on its own, without the builder around it. */
+export interface SoloView {
+  app: string;
+  /** the runtime's pane: who is signed in and what they look at */
+  pane: { uid: number | null; [field: string]: Loose };
+  /** a link, the owner's share preview, or the owner opening their own app */
+  from: 'link' | 'preview' | 'own';
+  /** the app tab to go back to */
+  back: string | null;
+  noInstall?: boolean;
+}
+
+/** The share dialog: which data and person the link carries, and the link once it is packed. */
+export interface ShareState {
+  app: string;
+  data: 'live' | 'demo';
+  as: string;
+  code: string | null;
+  busy: boolean;
+  err: string;
+  /** size of the packed app before compression, and the rows it carries */
+  raw: number;
+  rows: number;
+  ver?: string;
+  draft?: boolean;
+  short?: string;
+  shortBusy?: boolean;
+  shortNote?: string;
+  /** the first release is running */
+  rbusy?: boolean;
 }
 
 /** One AG-UI event in the Debug log. */
