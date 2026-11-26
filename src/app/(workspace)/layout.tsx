@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
-import assets from '@/platform/generated/assets.json';
+import '@xyflow/react/dist/base.css';
+import '@/styles/fluent-theme.css';
+import '@/styles/workspace.css';
 import PwaRegister from '@/platform/pwa/PwaRegister';
 
 export const metadata: Metadata = {
@@ -25,8 +27,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        {/* The workspace stylesheet is a static file written by scripts/build-legacy.mjs, served byte for byte. */}
-        <link rel="stylesheet" href={assets.css} precedence="default" />
         {children}
         <PwaRegister />
       </body>

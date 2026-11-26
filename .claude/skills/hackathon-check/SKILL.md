@@ -7,7 +7,7 @@ Check each item and report PASS or FAIL with the evidence. Do not fix anything i
 
 1. **No key in the repo.** `npm run check:secrets`. Then `git log -p --all -S'sk-' --oneline | head` and `git ls-files | grep -i '\.env'` (only `.env.example` may appear).
 2. **No public secret variables.** `git grep -n "NEXT_PUBLIC_"` must find nothing in source.
-3. **Model calls only on the server.** `git grep -n "LITELLM\|OPENAI_API_KEY\|ANTHROPIC_API_KEY" -- src` must match only `src/server` and `src/app/api`. `git grep -n "from '@/server" -- src/platform src/legacy` must find nothing.
+3. **Model calls only on the server.** `git grep -n "LITELLM\|OPENAI_API_KEY\|ANTHROPIC_API_KEY" -- src` must match only `src/server` and `src/app/api`. `git grep -n "from '@/server" -- src/platform src/workspace` must find nothing.
 4. **Public or made-up data only.** Read the seed data and fixtures that changed since the last audit. No real people, clients or internal company data.
 5. **Works with no login and with no model.** `LLM_PROVIDER= npm run build && npm run test:e2e -- demo` passes. The first screen needs no account from an outside service.
 6. **Agentic and multi-agent, steps visible.** The workflow canvas shows each agent and its checks; the timeline and the debug drawer list their steps. Name the screens where an evaluator sees them.

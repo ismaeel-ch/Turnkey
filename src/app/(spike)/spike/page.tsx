@@ -1,15 +1,9 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { z } from "zod";
-import {
-  CopilotKit,
-  CopilotSidebar,
-  useAgent,
-  UseAgentUpdate,
-  useFrontendTool,
-} from "@copilotkit/react-core/v2";
-import { EMPTY_CANVAS, NODE_KINDS, STORAGE_KEY, type CanvasNode, type CanvasState } from "@/lib/canvas";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { z } from 'zod';
+import { CopilotKit, CopilotSidebar, useAgent, UseAgentUpdate, useFrontendTool } from '@copilotkit/react-core/v2';
+import { EMPTY_CANVAS, NODE_KINDS, STORAGE_KEY, type CanvasNode, type CanvasState } from '@/lib/canvas';
 
 export default function Page() {
   return (
@@ -28,7 +22,7 @@ function loadCanvas(): CanvasState {
 }
 
 function Workspace() {
-  const { agent } = useAgent({ agentId: "default", updates: [UseAgentUpdate.OnStateChanged] });
+  const { agent } = useAgent({ agentId: 'default', updates: [UseAgentUpdate.OnStateChanged] });
   // React holds the rendered canvas; agent.setState mirrors it into AG-UI
   // shared state so the agent sees it on every run. agent.setState alone
   // does not re-render subscribers, so both are updated together.
@@ -69,12 +63,12 @@ function Workspace() {
 
   // The spike: one tool call from the model that updates canvas state.
   useFrontendTool({
-    name: "add_canvas_node",
-    description: "Add one building block of the app to the shared canvas.",
+    name: 'add_canvas_node',
+    description: 'Add one building block of the app to the shared canvas.',
     parameters: z.object({
-      kind: z.enum(NODE_KINDS).describe("Type of block, from the fixed catalog"),
-      title: z.string().describe("Short title, under 6 words"),
-      detail: z.string().optional().describe("One short sentence"),
+      kind: z.enum(NODE_KINDS).describe('Type of block, from the fixed catalog'),
+      title: z.string().describe('Short title, under 6 words'),
+      detail: z.string().optional().describe('One short sentence'),
     }),
     handler: async ({ kind, title, detail }) => {
       const current = canvasRef.current.nodes;
@@ -83,7 +77,7 @@ function Workspace() {
         kind,
         title,
         detail,
-        by: "Architect",
+        by: 'Architect',
         at: new Date().toISOString(),
       };
       commit({ ...canvasRef.current, nodes: [...current, node] });
@@ -95,10 +89,7 @@ function Workspace() {
     const current = canvasRef.current.nodes;
     commit({
       ...canvasRef.current,
-      nodes: [
-        ...current,
-        { id: crypto.randomUUID(), kind: "note", title: "My note", by: "you", at: new Date().toISOString() },
-      ],
+      nodes: [...current, { id: crypto.randomUUID(), kind: 'note', title: 'My note', by: 'you', at: new Date().toISOString() }],
     });
   };
 
@@ -106,15 +97,17 @@ function Workspace() {
     <div className="shell">
       <header className="topbar">
         <h1>Turnkey</h1>
-        <span style={{ color: "var(--muted)", fontSize: 13 }}>spike: tool call → shared canvas state</span>
+        <span style={{ color: 'var(--muted)', fontSize: 13 }}>spike: tool call → shared canvas state</span>
         <div className="spacer" />
-        <button className="btn" onClick={addManual}>Add note</button>
-        <button className="btn" onClick={() => commit(EMPTY_CANVAS)}>Clear</button>
+        <button className="btn" onClick={addManual}>
+          Add note
+        </button>
+        <button className="btn" onClick={() => commit(EMPTY_CANVAS)}>
+          Clear
+        </button>
       </header>
       <main className="canvas" data-testid="canvas">
-        {canvas.nodes.length === 0 && (
-          <div className="empty">Describe an app in the chat, for example “a clinic appointments app”.</div>
-        )}
+        {canvas.nodes.length === 0 && <div className="empty">Describe an app in the chat, for example “a clinic appointments app”.</div>}
         {canvas.nodes.map((n) => (
           <div key={n.id} className={`node k-${n.kind}`} data-testid="node">
             <div className="kind">{n.kind}</div>

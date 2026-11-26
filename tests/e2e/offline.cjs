@@ -66,7 +66,7 @@ const check = (name, ok, detail) => {
     for (const k of await caches.keys()) for (const r of await (await caches.open(k)).keys()) out.push(new URL(r.url).pathname);
     return out;
   });
-  check('the cache holds the page, the engine and chunks', cached.includes('/') && cached.includes('/vendor/sql-wasm.wasm') && cached.some((p) => p.startsWith('/_next/static/')), cached.length);
+  check('the cache holds the page, the stylesheet, the engine and chunks', cached.includes('/') && cached.includes('/vendor/sql-wasm.wasm') && cached.some((p) => p.startsWith('/_next/static/') && p.endsWith('.js')) && cached.some((p) => p.endsWith('.css')), cached.length);
   check('no API response is in the cache', !cached.some((p) => p.startsWith('/api/')), cached.filter((p) => p.startsWith('/api/')));
 
   // offline

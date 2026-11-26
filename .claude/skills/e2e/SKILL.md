@@ -10,9 +10,9 @@ Run the browser checks for: $ARGUMENTS (all eight flows if empty).
 2. `PORT=<your port> scripts/heavy.sh npm run test:e2e -- $ARGUMENTS`
 3. Each line is `PASS name` or `FAIL name → detail`. The run ends with a count and an `ERRORS` list of console and page errors.
 4. For each failure, find the check by its name in `tests/e2e/flows.cjs` and read what it compares. Then decide:
-   - the page really behaves differently: fix the code (the compat layer in `src/platform/compat` if it is a React difference);
+   - the page really behaves differently: fix the code (in `src/workspace`, or the helpers in `src/platform` if the difference is in the rendering);
    - the page is right but slower than the check expects: make the check wait for the condition;
-   - never change `src/legacy` to make a check pass.
+   - never change `src/workspace` to make a check pass.
 5. Screenshots are in `tests/e2e/shots`. Open the one named in the flow near the failing check.
 6. Run the flow again until it passes twice in a row.
 

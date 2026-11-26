@@ -17,7 +17,7 @@ in your issue.
 
 ## What to do
 
-1. Read `src/legacy/line.js` (`runBuild`), `custom.js` (steps, approvals, own agents) and `tester.js` until you can state the exact order of events in a build. Write that down first in `src/platform/orchestrator/README.md`.
+1. Read `src/workspace/line.ts` (`runBuild`), `custom.tsx` (steps, approvals, own agents) and `tester.tsx` until you can state the exact order of events in a build. Write that down first in `src/platform/orchestrator/README.md`.
 2. Build a compiler: workflow definition in, LangGraph `StateGraph` out. Stations are nodes, each gate is a conditional edge that sends work back with the failures (at most the configured attempts), approvals are interrupts, added steps and the owner's own agents are nodes at their positions, the Tester and its repair loop close the graph.
 3. Use `@langchain/langgraph/web`, the browser entry point. Nodes receive their work through injected functions (run station, run gate, ask owner), so the graph is testable without the workspace.
 4. Emit the same step and event names the workspace already logs, so the canvas and timeline can follow a graph run.
@@ -31,7 +31,7 @@ in your issue.
 
 ## Keep in mind
 
-Do not wire it into `src/legacy`. Integration does that in wave 2, behind a switch.
+Do not wire it into `src/workspace`. Integration does that in wave 2, behind a switch.
 
 ## How you work
 

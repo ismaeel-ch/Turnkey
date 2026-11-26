@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { GET as manifestGET } from '@/app/a/manifest/route';
 import { GET as iconGET } from '@/app/a/icon/route';
 import manifest from '@/app/manifest';
+import { ACC_HEX } from '@/styles/theme.generated';
+import { ICONS } from '@/workspace/icons';
+import glyphs from '@/platform/pwa/glyphs.json';
 import { ACCENT_COLORS, LOGO_FILLS, LOGO_MARKS, LOGO_SHAPES, cleanName, isGlyph, parseIdentity } from '@/platform/pwa/identity';
 import { appInstallLinks } from '@/platform/pwa/app';
 import { logoSvg } from '@/platform/pwa/logo';
@@ -14,17 +17,18 @@ const root = path.join(__dirname, '..', '..');
 const req = (route: string, qs: string) => new Request('http://localhost/a/' + route + '?' + qs);
 
 describe('catalogs', () => {
-  // The workspace keeps its own copy of these lists (src/workspace/release.tsx, or src/legacy/release.js before the
-  // move). Whichever exists must agree with the lists used to draw the installed icon.
-  const file = ['src/workspace/release.tsx', 'src/legacy/release.js'].map((f) => path.join(root, f)).find((f) => fs.existsSync(f));
+  // The workspace keeps its own copy of these lists (src/workspace/release.tsx). They must agree with the lists used
+  // to draw the installed icon, or an installed app would wear a different icon from the one the workspace shows.
+  const file = path.join(root, 'src/workspace/release.tsx');
   it('match the workspace', () => {
-    expect(file).toBeTruthy();
-    const text = fs.readFileSync(file!, 'utf8');
+    const text = fs.readFileSync(file, 'utf8');
     expect(text).toMatch(new RegExp("LOGO_SHAPES = \\['" + LOGO_SHAPES.join("', '") + "'\\]"));
     expect(text).toMatch(new RegExp("LOGO_FILLS = \\['" + LOGO_FILLS.join("', '") + "'\\]"));
     expect(text).toMatch(new RegExp("LOGO_MARKS = \\['" + LOGO_MARKS.join("', '") + "'\\]"));
   });
-  it('have a glyph path for every symbol', () => {
+  it('have the accent colours and symbols of the workspace', () => {
+    expect(ACCENT_COLORS).toEqual(ACC_HEX);
+    expect(glyphs).toEqual(ICONS);
     expect(isGlyph('apps')).toBe(true);
     expect(isGlyph('toString')).toBe(false);
   });
