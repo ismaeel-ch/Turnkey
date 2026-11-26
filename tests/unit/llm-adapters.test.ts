@@ -139,7 +139,7 @@ describe('routes follow LLM_PROVIDER', () => {
   let restore: () => void;
   beforeEach(() => {
     forgetToolModes();
-    restore = withEnv({ LLM_PROVIDER: 'mock', LITELLM_API_KEY: 'test-key-123456', LITELLM_BASE_URL: 'gateway.example.com/v1' });
+    restore = withEnv({ LLM_PROVIDER: 'mock', LITELLM_API_KEY: 'test-key', LITELLM_BASE_URL: 'gateway.example.com/v1' });
   });
   afterEach(() => restore());
 
