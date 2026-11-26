@@ -94,8 +94,8 @@ _The Bid room of the built BidDesk app, with the three agents' results for one t
    The build takes about 30 seconds. Switch between **Workflow**, **Timeline** and **Log** to see the same run three
    ways, and open **Agents** on the left edge for every step, tool call and hand-off.
 3. Open the **App** tab and sign in as Sana Malik (bid manager), then as Omar Farooq (sales director) from **Preview
-   as**: each role sees only what its rules allow. In the **Bid room**, press **Run** on "Fleet tracking for the port
-   authority". The Qualifier scores it, Pricing prices it, and the run stops for you to add a condition before the
+   as**: each role sees only what its rules allow. In the **Bid room**, pick **Port fleet tracking** and press **Run
+   the agents**. The Qualifier scores it, Pricing prices it, and the run stops for you to add a condition before the
    Red team gives its verdict.
 4. In the chat sidebar, press **Add a notes field to score lines** (or type a change). The Orchestrator shows a plan,
    only the stations the change touches run again, and the tests are regenerated.
