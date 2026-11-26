@@ -1,4 +1,5 @@
 import { type ReactNode, useLayoutEffect, useRef } from 'react';
+import { fmtUsd, promptTokens, usageLine } from '@/platform/agui/usage';
 import type { BackedDef, BriefedDef } from '@/shared/types/app';
 import type {
   ApiPanel,
@@ -10,6 +11,7 @@ import type {
   DataPanel,
   DebugPanel,
   Dict,
+  Loose,
 } from '@/shared/types/workspace';
 import {
   APILOG,
@@ -46,6 +48,7 @@ import {
   setChat,
   str,
   toast,
+  toolCall,
 } from './core';
 import {
   DBX,
@@ -171,8 +174,53 @@ function setApi(appId: string, patch: Partial<ApiPanel>) {
 function tryConnector(app: AppRecord, c: Connector, tool: ConnectorTool) {
   if (!connOn(c.id)) return toast('Switch ' + c.name + ' on first.', 'warning');
   if (!needNet('Testing a connection')) return;
-  U.connOut = { id: c.id, tool: tool.name, r: callConnector(app, 'orchestrator', null, c.id, tool.name, tool.args) };
+  if (!SERVER_CONNECTORS.includes(c.id)) {
+    // no server connector for this one yet: show the labelled sample
+    U.connOut = { id: c.id, tool: tool.name, r: callConnector(app, 'orchestrator', null, c.id, tool.name, tool.args), real: false };
+    return notify();
+  }
+  U.connOut = { id: c.id, tool: tool.name, r: { ok: true, result: { status: 'Calling ' + c.name + '…' } }, real: true, busy: true };
   notify();
+  void liveConnector(c.id, tool.args).then((r) => {
+    // the debug drawer's Tool calls list shows the real call like any other
+    toolCall(
+      { agent: 'orchestrator', appId: app.id },
+      c.name + ' · ' + tool.name,
+      tool.args,
+      () => {
+        if (!r.ok) throw new Error(String(r.result));
+        return r.result;
+      },
+      'connector',
+    );
+    if (!U.connOut || U.connOut.id !== c.id || U.connOut.tool !== tool.name) return; // the owner moved on
+    U.connOut = { id: c.id, tool: tool.name, r, real: r.ok };
+    if (!r.ok) {
+      // the source failed or could not be reached: say why, and show the sample beside it
+      const sample = callConnector(app, 'orchestrator', null, c.id, tool.name, tool.args);
+      U.connOut = { id: c.id, tool: tool.name, r: { ok: false, result: { error: r.result, sample: sample.result } }, real: false };
+    }
+    notify();
+  });
+}
+/** Connectors the server can call for real (`src/server/connectors`), through `/api/connectors/<id>`. */
+const SERVER_CONNECTORS = ['wikipedia', 'worldbank', 'openalex', 'arxiv', 'patentsview'];
+/** The text to search for: the first text argument of the tool's example, which the owner may have edited. */
+function queryOf(args: Dict<unknown> | undefined): string {
+  const vals = Object.values(args || {}).filter((v): v is string | number => typeof v === 'string' || typeof v === 'number');
+  return vals.map(String).join(' ').trim().slice(0, 200);
+}
+/** One real call through this app's own server route. The browser never talks to the source itself. */
+async function liveConnector(id: string, args: Dict<unknown> | undefined): Promise<{ ok: boolean; result: Loose }> {
+  const q = queryOf(args);
+  try {
+    const res = await fetch('/api/connectors/' + encodeURIComponent(id) + '?limit=3&q=' + encodeURIComponent(q), { cache: 'no-store' });
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; items?: unknown; message?: unknown } | null;
+    if (body && body.ok === true && Array.isArray(body.items)) return { ok: true, result: { query: q, items: body.items } };
+    return { ok: false, result: typeof body?.message === 'string' ? body.message : 'The server answered ' + res.status + '.' };
+  } catch {
+    return { ok: false, result: 'The server could not be reached.' };
+  }
 }
 function setChatDraft(appId: string, text: string) {
   U.chatDraft[appId] = text;
@@ -772,8 +820,10 @@ export function ConnView({ app }: { app: AppRecord }) {
           {cur.usedBy}
           {'. '}
           {cur.kind === 'MCP server'
-            ? 'The real build opens an MCP client for each run and closes it at the end.'
-            : 'The real build calls it from the server route, so no key ever reaches the browser.'}
+            ? 'An MCP server. Turnkey does not call MCP servers yet, so Test shows a labelled sample.'
+            : SERVER_CONNECTORS.includes(cur.id)
+              ? 'Test calls it for real through Turnkey’s own server route, so no key ever reaches the browser.'
+              : 'Turnkey has no server client for it yet, so Test shows a labelled sample.'}
         </p>
         <div className="tbl-wrap">
           <table className="tbl dense">
@@ -805,7 +855,13 @@ export function ConnView({ app }: { app: AppRecord }) {
           <div className="col gap4">
             <div className="row">
               <strong>{out.tool}</strong>
-              <Proto>Sample response</Proto>
+              {out.busy ? (
+                <span className="badge b-info">Calling…</span>
+              ) : out.real ? (
+                <span className="badge b-success">Live response</span>
+              ) : (
+                <Proto>Sample response</Proto>
+              )}
             </div>
             <div className="json code">
               <Json v={out.r.result} open />
@@ -1511,6 +1567,8 @@ export function DebugDrawer({ app }: { app: AppRecord | null }) {
               <th>Model</th>
               <th className="num">Tokens in</th>
               <th className="num">Tokens out</th>
+              <th className="num">From cache</th>
+              <th className="num">Cost</th>
               <th className="num">Latency</th>
               <th className="num">Attempt</th>
             </tr>
@@ -1532,6 +1590,8 @@ export function DebugDrawer({ app }: { app: AppRecord | null }) {
                   {x.est ? '~' : ''}
                   {fmtNum(x.tokOut)}
                 </td>
+                <td className="num mono">{x.cacheRead === undefined ? '–' : fmtNum(x.cacheRead)}</td>
+                <td className="num mono">{x.mode === 'replay' ? '$0' : x.costUsd == null ? '–' : fmtUsd(x.costUsd)}</td>
                 <td className="num mono">{fmtMs(x.ms)}</td>
                 <td className="num mono">{x.attempt}</td>
               </tr>
@@ -1709,11 +1769,15 @@ export function DebugDrawer({ app }: { app: AppRecord | null }) {
         <div className="col gap4">
           <div className="row">
             <strong>Offline cache</strong>
-            <Proto>Simulated here</Proto>
+            <span className="badge b-outline">
+              {typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller
+                ? 'Active'
+                : 'Not active in this tab'}
+            </span>
           </div>
           <p className="muted t-cap">
-            The real build registers a service worker and a web manifest. Cache first: the app shell, the SQLite engine and the saved
-            builds. Network only: the agent route (/api/copilotkit) and every connection.
+            Turnkey registers a service worker and a web manifest. Cache first: the app shell, the SQLite engine and the saved builds.
+            Network only: the model and agent routes under /api, and every connection.
           </p>
         </div>
       </div>
@@ -1807,7 +1871,17 @@ export function DebugDrawer({ app }: { app: AppRecord | null }) {
               // eslint-disable-next-line react-hooks/purity -- a running run's elapsed time; the store re-renders while it runs
               k('Took', fmtMs((run.t1 || Date.now()) - run.t0)),
               k('Model calls', run.calls + (run.replayed ? ' live, ' + run.replayed + ' replayed' : '')),
-              k('Tokens', run.tokIn + run.tokOut ? '~' + fmtNum(run.tokIn + run.tokOut) : live.length ? '0' : 'sample only'),
+              k(
+                'Tokens',
+                run.usage && run.usage.calls && !run.usage.estimated
+                  ? fmtNum(promptTokens(run.usage) + run.usage.output)
+                  : run.tokIn + run.tokOut
+                    ? '~' + fmtNum(run.tokIn + run.tokOut)
+                    : live.length
+                      ? '0'
+                      : 'sample only',
+              ),
+              k('Cost', run.usage && run.usage.calls ? usageLine(run.usage).split(' · ').slice(1).join(' · ') : '$0'),
               k('Send-backs', run.retries),
             ]
           : k('Run', 'none yet')}

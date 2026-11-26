@@ -280,6 +280,7 @@ export function freshState(): State {
       tier: 'default',
       chat: true,
       tourDone: false,
+      keys: true,
     },
     apps: {},
     shared: {},

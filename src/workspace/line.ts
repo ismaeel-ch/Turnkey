@@ -11,7 +11,9 @@ import type {
   SavedBuild,
   StationLine,
   StationRecording,
+  UsageSum,
 } from '@/shared/types/workspace';
+import { addUsage, emptyUsage, promptTokens, type CallUsage } from '@/platform/agui/usage';
 import type { AskRequest, Ports, RunResult, WorkflowRun } from '@/platform/orchestrator';
 import { AGENTS } from './agents';
 import {
@@ -836,7 +838,7 @@ export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
     app.def.brief.process.entity +
     '" needs a required select column named "status" with exactly these options: ' +
     app.def.brief.process.states.join(', ') +
-    '.\n- "title" is the column shown as the record\'s name. "owner" is the user column that says whose record it is, or null.\n- At most 8 columns per table. No table named users.\n- "users": 5 to 7 people with realistic full names, at least one per role.\n- "rows": 6 to 10 rows per table. ' +
+    '.\n- "title" is the column shown as the record\'s name. "owner" is the user column that says whose record it is, or null. When the brief says people of a role see only their own records of a table (their own tickets, their own appointments), that table needs a user column for that person, limited to that role, and it is the owner.\n- At most 8 columns per table. No table named users.\n- "users": 5 to 7 people with realistic full names, at least one per role.\n- "rows": 6 to 10 rows per table. ' +
     VALUE_RULES +
     '\n\nFORMAT: {"tables":[{"name":"","label":"Plural","one":"Singular","title":"column","owner":"column or null","columns":[{"name":"","label":"","type":"","required":true,"options":[],"ref":"","role":""}],"rows":[{"column":"value"}]}],"users":[{"name":"Full Name","role":"role id"}]}' +
     fbText(f),
@@ -848,7 +850,7 @@ export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
     pTables(app.def) +
     '\n\nWrite the workflow and the access rules.\n- "status": the workflow on table "' +
     app.def.brief.process.entity +
-    '", column "status". Use exactly the states stored in that column. Give each a label and a tone (neutral, info, success, warning, danger). "initial" is the first state. Transitions: id (snake_case verb), label, from (list of states), to, roles (role ids). Every state must be reachable. Optional "set": {"column": ":me"} stamps the acting user on a user column.\n- "access": one entry for EVERY table and EVERY role. list: "all", "own" (only rows whose owner is the signed-in user) or "none". create: true or false. update: "all", "own" or "none". delete: true or false. Give each role only what its stories need; every role must be able to list something.\n- Optional "team": only if the app\'s main job is done by AI agents (checking, researching, reviewing, debating), define 2 to 4 app agents that work one after another on one record of the workflow table. Otherwise leave "team" out. {"title":"","about":"one sentence","input":{"table":"workflow table","column":"the long text column the agents read"},"start":"transition id that opens a run","done":"transition id that closes it","agents":[{"id":"","name":"","job":"one sentence","writes":"table it adds rows to","updates":"table whose rows it edits","sets":["columns of the workflow table it fills in"]}]}. Every table an agent writes must link to the workflow table, and one role must be allowed to create and update all of it and to run both transitions.\n\nFORMAT: {"status":{"table":"","column":"status","states":[{"id":"","label":"","tone":""}],"initial":"","transitions":[{"id":"","label":"","from":[""],"to":"","roles":[""]}]},"access":[{"table":"","role":"","list":"","create":false,"update":"","delete":false}]}' +
+    '", column "status". Use exactly the states stored in that column. Give each a label and a tone (neutral, info, success, warning, danger). "initial" is the first state. Transitions: id (snake_case verb), label, from (list of states), to, roles (role ids). Every state must be reachable. Optional "set": {"column": ":me"} stamps the acting user on a user column.\n- "access": one entry for EVERY table and EVERY role. list: "all", "own" (only rows whose owner is the signed-in user) or "none". create: true or false. update: "all", "own" or "none". delete: true or false. Give each role only what its stories need; every role must be able to list something. Where the brief says people of a role see or edit only their own records, use "own" on that table (it works on tables that have an owner column).\n- Optional "team": only if the app\'s main job is done by AI agents (checking, researching, reviewing, debating), define 2 to 4 app agents that work one after another on one record of the workflow table. Otherwise leave "team" out. {"title":"","about":"one sentence","input":{"table":"workflow table","column":"the long text column the agents read"},"start":"transition id that opens a run","done":"transition id that closes it","agents":[{"id":"","name":"","job":"one sentence","writes":"table it adds rows to","updates":"table whose rows it edits","sets":["columns of the workflow table it fills in"]}]}. Every table an agent writes must link to the workflow table, and one role must be allowed to create and update all of it and to run both transitions.\n\nFORMAT: {"status":{"table":"","column":"status","states":[{"id":"","label":"","tone":""}],"initial":"","transitions":[{"id":"","label":"","from":[""],"to":"","roles":[""]}]},"access":[{"table":"","role":"","list":"","create":false,"update":"","delete":false}]}' +
     fbText(f),
   views: (app, f) =>
     HEAD('View advisor') +
@@ -954,7 +956,7 @@ export function serverStep(run: Run, agent: string, app: AppRecord, p: Untrusted
   notify();
 }
 /** Who pays for and may stop a model call: a run of the line, a reviewer, the change planner or an app's own team. */
-type CallRun = { id: string; calls: number; tokIn: number; tokOut: number };
+type CallRun = { id: string; calls: number; tokIn: number; tokOut: number; usage?: UsageSum; agentUsage?: Dict<UsageSum> };
 export async function callModel(
   app: AppRecord,
   run: CallRun,
@@ -973,6 +975,9 @@ export async function callModel(
     mid = uid('m');
   let text = '',
     res: { text?: string; truncated?: boolean } | null = null;
+  // what the server reported for this prompt's model calls: real tokens, cache hits and cost, kept on the run
+  const used = emptyUsage();
+  let model = '';
   r.ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   U.calls++;
   run.calls++;
@@ -993,6 +998,13 @@ export async function callModel(
         notify();
       },
       onStep: (p: Untrusted) => serverStep(run as Run, agent, app, p),
+      onUsage: (call: CallUsage) => {
+        addUsage(used, call);
+        addUsage((run.usage ??= emptyUsage()), call);
+        addUsage(((run.agentUsage ??= {})[agent] ??= emptyUsage()), call);
+        model = call.model;
+        notify();
+      },
       activity: { app: app.id, agent },
     });
     text = (res && res.text) || text;
@@ -1009,8 +1021,9 @@ export async function callModel(
     );
   }
   U.stream[app.id] = 0;
-  const tin = Math.round(prompt.length / 4),
-    tout = Math.round(text.length / 4);
+  const real = used.calls > 0 && !used.estimated,
+    tin = real ? promptTokens(used) : Math.round(prompt.length / 4),
+    tout = real ? used.output : Math.round(text.length / 4);
   run.tokIn += tin;
   run.tokOut += tout;
   emit('TEXT_MESSAGE_CONTENT', {
@@ -1032,10 +1045,11 @@ export async function callModel(
       run: run.id,
       agent,
       mode: 'live',
-      model: 'Claude · ' + tier,
+      model: model || 'Claude · ' + tier,
       tokIn: tin,
       tokOut: tout,
-      est: true,
+      est: !real,
+      ...(used.calls ? { cacheRead: used.cacheRead, costUsd: used.unpriced ? null : used.costUsd } : {}),
       ms: performance.now() - t0,
       attempt,
     },

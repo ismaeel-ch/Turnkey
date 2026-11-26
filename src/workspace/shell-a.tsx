@@ -78,7 +78,10 @@ import { AppLogo, ReleaseView, isDirty, relOf } from './release';
 import { ApiView, ChatPanel, ConnView, DataView } from './shell-b';
 import { startTour } from './shell-c';
 import { RerunBar } from './rerun';
+import { openPalette, openShortcuts } from './commands';
 import { touchOf, touchText } from './provenance';
+import { fmtUsd, usageLine } from '@/platform/agui/usage';
+import { HistoryButtons, openHistory } from './history-ui';
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
 export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
@@ -216,6 +219,18 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
               on: () => openDialog('guide'),
             },
             {
+              label: 'Commands',
+              icon: 'search',
+              hint: /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl+K',
+              on: openPalette,
+            },
+            {
+              label: 'Keyboard shortcuts',
+              icon: 'keyboard',
+              hint: '?',
+              on: openShortcuts,
+            },
+            {
               label: 'Take the guided tour',
               icon: 'compass',
               on: () => startTour(),
@@ -229,7 +244,7 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
                 }),
             },
             {
-              label: 'What is real in this prototype',
+              label: 'What is real in Turnkey',
               icon: 'info',
               on: () => openDialog('about'),
             },
@@ -299,7 +314,7 @@ export function Home() {
           checking: 'Still connecting to the model. Try again in a moment, or pick a saved build below.',
           nomodel:
             NO_MODEL +
-            ' None of the saved builds matches that sentence, so pick one below. Inside Claude the model comes from the viewer; the hackathon build calls its own server route.',
+            ' None of the saved builds matches that sentence, so pick one below. Live calls the model through Turnkey’s own server route once a model key is set there.',
         };
       if (!tpl) {
         h.note = why[mode.id];
@@ -819,6 +834,12 @@ export function Workspace({ app }: { app: AppRecord }) {
           }),
       },
       {
+        label: 'Version history',
+        icon: 'history',
+        disabled: app.status !== 'ready',
+        on: () => openHistory(app),
+      },
+      {
         label: 'Rename app',
         icon: 'edit',
         disabled: app.status !== 'ready' || busy,
@@ -850,12 +871,13 @@ export function Workspace({ app }: { app: AppRecord }) {
         on: del,
       },
     ];
-  const tabs = VIEWS.map((v): TabItem =>
-    v.id === 'release' && app.status === 'ready'
-      ? Object.assign({}, v, {
-          count: rel ? (dirty ? 'draft' : rel.v) : 'new',
-        })
-      : v,
+  const tabs = VIEWS.map(
+    (v): TabItem =>
+      v.id === 'release' && app.status === 'ready'
+        ? Object.assign({}, v, {
+            count: rel ? (dirty ? 'draft' : rel.v) : 'new',
+          })
+        : v,
   );
   const body =
     view === 'build' ? (
@@ -927,6 +949,7 @@ export function Workspace({ app }: { app: AppRecord }) {
             <Tabs cls="views" label="Workspace views" items={tabs} value={isDetail(view) ? 'details' : view} onChange={go} />
           </span>
           <span className="grow" />
+          <HistoryButtons app={app} />
           <Btn
             className="btn sm"
             data-tour="share"
@@ -1240,6 +1263,23 @@ export function RunChips({ app, run }: { app: AppRecord; run: Run }) {
     </div>
   ) : null;
 }
+/** One line over the timeline: what the run's model calls cost, or that a saved build replayed for free. */
+export function RunUsage({ run }: { run: Run }) {
+  const u = run.usage;
+  const text =
+    u && u.calls
+      ? u.calls + (u.calls === 1 ? ' model call' : ' model calls') + ' · ' + usageLine(u)
+      : run.mode === 'live'
+        ? run.status === 'running'
+          ? 'No model call has finished yet.'
+          : 'No model calls.'
+        : 'Replayed from a saved build: no model calls, nothing spent.';
+  return (
+    <p className="tl-usage muted" data-calls={u?.calls ?? 0} data-cost={(u?.costUsd ?? 0).toFixed(6)}>
+      <Icon n="receipt" s="14" /> {text}
+    </p>
+  );
+}
 export function TimelineView({ app, run }: { app: AppRecord; run: Run | undefined }) {
   if (!run || !run.steps.length)
     return (
@@ -1258,11 +1298,17 @@ export function TimelineView({ app, run }: { app: AppRecord; run: Run | undefine
   return (
     <div className="line-wrap tl" data-tour="line">
       <RunChips app={app} run={run} />
+      <RunUsage run={run} />
       {lanes.map((id) => (
         <div key={id} className="tl-row">
           <div className="tl-l">
             <AgentAv id={id} size="xs" />
             <span className="hide-sm">{AGENTS[id].name}</span>
+            {run.agentUsage?.[id]?.calls ? (
+              <span className="tl-cost mono" title={usageLine(run.agentUsage[id])}>
+                {fmtUsd(run.agentUsage[id].costUsd)}
+              </span>
+            ) : null}
           </div>
           <div className="tl-track">
             {run.steps

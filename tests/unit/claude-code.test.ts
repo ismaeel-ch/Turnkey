@@ -9,6 +9,7 @@ import { complete, resolveProvider, type ChatChunk, type Provider, type ToolDef 
 import {
   buildArgs,
   claudeCode,
+  PLAIN_SYSTEM,
   readLine,
   renderPrompt,
   toolInstructions,
@@ -139,6 +140,11 @@ describe('Claude Code provider', () => {
     expect(calls[0].args[calls[0].args.indexOf('--model') + 1]).toBe('haiku');
     expect(calls[0].args.join(' ')).not.toMatch(/secret/);
     expect(calls[0].stdin).toBe('a secret prompt');
+  });
+  it("replaces the command's own coding-agent prompt when a request brings no system prompt", async () => {
+    const { provider, calls } = make([{ lines: [result({ result: 'ok' })] }]);
+    await complete(provider, { messages: [{ role: 'user', content: 'hi' }], tier: 'quick' });
+    expect(calls[0].args[calls[0].args.indexOf('--system-prompt') + 1]).toBe(PLAIN_SYSTEM);
   });
   it('uses the final text when no deltas were streamed', async () => {
     const { provider } = make([{ lines: [result({ result: 'whole answer' })] }]);
