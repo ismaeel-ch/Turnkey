@@ -14,10 +14,8 @@ async function newPage(browser, opts) {
   const ctx = await browser.newContext({ viewport: (opts && opts.viewport) || { width: 1440, height: 900 }, colorScheme: (opts && opts.scheme) || 'light' });
   await ctx.route('https://**/*', (route) => route.abort()); // the app is self-contained: nothing outside its own origin is needed
   if (opts && opts.init) await ctx.addInitScript(opts.init);
-  // TEMP diagnostic (PR #81): say where an SVG attribute with NaN comes from
-  await ctx.addInitScript(() => { const o = Element.prototype.setAttribute; Element.prototype.setAttribute = function (k, v) { if (typeof v === 'string' && v.includes('NaN')) console.error('NANSTACK ' + k + '=' + v.slice(0, 60) + ' ' + String(new Error().stack).slice(0, 1400)); return o.call(this, k, v); }; });
   const page = await ctx.newPage();
-  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text().slice(0, m.text().startsWith('NANSTACK') ? 1600 : 300)); });
+  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text().slice(0, 300)); });
   page.on('pageerror', (e) => errors.push('pageerror: ' + String(e.stack || e).slice(0, 500)));
   return { ctx, page };
 }
