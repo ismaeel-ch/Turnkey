@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
 const files = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
-const SKIP = /^(package-lock\.json|src\/legacy\/icons\.js|public\/vendor\/|.*\.(png|ico|jpg|jpeg|gif|wasm|woff2?))$/;
+const SKIP = /^(package-lock\.json|src\/workspace\/icons\.ts|public\/vendor\/|.*\.(png|ico|jpg|jpeg|gif|wasm|woff2?))$/;
 const PATTERNS = [
   [/\bsk-[A-Za-z0-9_\-]{16,}/, 'something shaped like an API key (sk-…)'],
   [

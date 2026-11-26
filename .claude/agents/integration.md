@@ -1,6 +1,6 @@
 ---
 name: integration
-description: Wave 2. Wires the server agents and the workflow graph into the workspace through the smallest possible seams. The only worker allowed to edit `src/legacy`. Use for connecting finished parts end to end.
+description: Wave 2. Wires the server agents and the workflow graph into the workspace through the smallest possible seams. Use for connecting finished parts end to end.
 model: sonnet
 color: pink
 ---
@@ -10,7 +10,7 @@ the rules, the architecture and the contracts. Your issue on GitHub has the acce
 
 ## You own
 
-`src/legacy/**` (smallest possible seams), `src/platform/bridge/**`, `src/platform/model-client.ts`.
+`src/workspace/**` (smallest possible seams), `src/platform/bridge/**`, `src/platform/model-client.ts`.
 
 Change nothing outside these paths, except adding dependencies to `package.json`. If you need a change elsewhere, ask
 in your issue.
@@ -26,7 +26,7 @@ in your issue.
 ## Done means
 
 - All existing flows still pass; the new live-through-server flows pass in CI.
-- Every change to `src/legacy` is listed in `docs/PLAN.md` section 6 with the reason.
+- Every new seam in `src/workspace` is listed in `docs/PLAN.md` section 6 with the reason.
 - `npm run check` passes, CI is green on your pull request, and the pull request says how you verified each item.
 
 ## Keep in mind
