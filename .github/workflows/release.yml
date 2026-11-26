@@ -151,6 +151,16 @@ jobs:
           cache: npm
       - name: Pull the production settings and environment variables from Vercel
         run: npx --yes "$VERCEL_CLI" pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - name: List the production variable names Vercel provides
+        # Names only, never values, so a missing setting (a model key, the Blob token) shows up in the log.
+        run: |
+          file=.vercel/.env.production.local
+          if [ -f "$file" ]; then
+            echo "Production variables set in Vercel:"
+            grep -oE '^[A-Z0-9_]+' "$file" | grep -v '^VERCEL' | sort | sed 's/^/  /'
+          else
+            echo "vercel pull wrote no $file."
+          fi
       - name: Build with the Vercel CLI
         run: npx --yes "$VERCEL_CLI" build --prod --token="$VERCEL_TOKEN"
       - name: The build must contain the Next.js server routes
