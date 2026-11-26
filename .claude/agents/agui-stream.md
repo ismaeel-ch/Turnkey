@@ -10,16 +10,16 @@ the rules, the architecture and the contracts. Your issue on GitHub has the acce
 
 ## You own
 
-`src/server/agui/**`, `src/platform/agui/**`.
+`src/server/agui/**`, `src/platform/agui/**`, `src/app/api/copilotkit/**`.
 
 Change nothing outside these paths, except adding dependencies to `package.json`. If you need a change elsewhere, ask
 in your issue.
 
 ## What to do
 
-1. Install `@ag-ui/core`, `@ag-ui/encoder` and `@ag-ui/client` and read their installed types before writing code. Check the current AG-UI docs for event names.
-2. Server: helpers that turn a LangGraph run into a valid AG-UI event sequence (run started, step started and finished, text message start, content and end, tool call start, args, end and result, state delta, run finished or error) and a `Response` that streams them as server-sent events.
-3. Browser: a small client that posts a run, reads the stream with abort support, and exposes it as callbacks and as a final result. It must work for both `/api/agent/step` and `/api/agent/team`.
+1. The spike (`src/app/api/copilotkit/[[...slug]]/route.ts`, `src/app/(spike)/spike/page.tsx`) runs CopilotKit's v2 runtime with an in-process `BuiltInAgent`. Read it, then read the installed types of `@copilotkit/runtime/v2`, `@ag-ui/core` and `@ag-ui/client` before writing code. Check the current docs for event names.
+2. Server: a base class for in-process agents (an AG-UI `AbstractAgent` subclass) that runs a compiled LangGraph graph and emits a valid AG-UI event sequence (run started, step started and finished, text message start, content and end, tool call start, args, end and result, state delta, run finished or error). A registry (`src/server/agui/registry.ts`) that the runtime route reads; keep the spike's `default` agent and the limits in front of the route.
+3. Browser: a small client, without CopilotKit's UI components, that runs an agent by id at `/api/copilotkit`, reads the stream with abort support, and exposes it as callbacks and as a final result. It must work for agents `step` and `team`.
 4. A contract test: every sequence the server helpers can produce passes the official event schemas.
 
 ## Done means
@@ -30,7 +30,7 @@ in your issue.
 
 ## Keep in mind
 
-Do not add CopilotKit UI components. The transport is AG-UI; the UI is the workspace.
+Do not add CopilotKit UI components to the workspace page. They stay on `/spike`. The transport is AG-UI; the UI is the workspace.
 
 ## How you work
 

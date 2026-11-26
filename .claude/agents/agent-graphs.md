@@ -10,7 +10,7 @@ the rules, the architecture and the contracts. Your issue on GitHub has the acce
 
 ## You own
 
-`src/server/graph/step/**`, `src/server/graph/shared/**`, `src/server/agents/**`, `src/shared/**`, `src/app/api/agent/step/**`.
+`src/server/graph/step/**`, `src/server/graph/shared/**`, `src/server/agents/**`, `src/shared/**`.
 
 Change nothing outside these paths, except adding dependencies to `package.json`. If you need a change elsewhere, ask
 in your issue.
@@ -21,7 +21,7 @@ in your issue.
 2. Build the agent-step graph: nodes `guard`, `draft` (model call, streamed), `validate` (parse the JSON, check it against the role's schema), `repair` (ask again with the exact failures), `finish`. Conditional edges, at most three attempts, state typed with annotations.
 3. Write the role registry: for each builder agent (Researcher, Database, Backend, View advisor, UI, Tester) and for review steps and app agents, how to recognise its prompt and the zod schema its answer must satisfy. Derive the schemas from the normalisers in `src/legacy/line.js`, `viewspec.js` and `tester.js`: read them, do not guess.
 4. Define `src/shared/agent-contract.ts` first and post it in your issue: the request and event shapes that agui-stream, team-graph and integration build against.
-5. Route `POST /api/agent/step`: validated input, guard rails, the graph, an AG-UI event stream. Until agui-stream lands, emit events through a small interface it can replace.
+5. Export `createStepAgent()`: the graph wrapped for the CopilotKit runtime at `/api/copilotkit` (agent id `step`). agui-stream owns the runtime route, the registry and the base class that turns a graph run into AG-UI events; until that lands, emit events through a small interface it can replace, and test the graph directly.
 
 ## Done means
 

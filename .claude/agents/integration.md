@@ -17,8 +17,8 @@ in your issue.
 
 ## What to do
 
-1. Live mode through the server graph: `model-client.ts` calls `/api/agent/step` with the AG-UI client and still satisfies the workspace's `sample` contract (`onText` with the growing text, `{ text, truncated }`, the error codes).
-2. Team runs through `/api/agent/team` when Live is on, with rows and steps arriving as events and written by the workspace's own code; saved runs stay as they are for Demo.
+1. Live mode through the server graph: `model-client.ts` runs agent `step` at `/api/copilotkit` with the AG-UI client and still satisfies the workspace's `sample` contract (`onText` with the growing text, `{ text, truncated }`, the error codes).
+2. Team runs through agent `team` when Live is on, with rows and steps arriving as events and written by the workspace's own code; saved runs stay as they are for Demo.
 3. The workflow graph drives builds when `window.__turnkeyOptions.orchestrator === 'graph'`; the classic orchestrator stays the default until every flow passes with the graph.
 4. Show server-side steps (draft, validate, repair, tool calls) in the workspace's debug drawer and timeline.
 5. Add browser flows that run Live against the server with `LLM_PROVIDER=mock`.

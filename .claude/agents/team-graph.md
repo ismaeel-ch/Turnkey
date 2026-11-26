@@ -10,7 +10,7 @@ the rules, the architecture and the contracts. Your issue on GitHub has the acce
 
 ## You own
 
-`src/server/graph/team/**`, `src/app/api/agent/team/**`.
+`src/server/graph/team/**`.
 
 Change nothing outside these paths, except adding dependencies to `package.json`. If you need a change elsewhere, ask
 in your issue.
@@ -20,7 +20,7 @@ in your issue.
 1. An app can have a team of up to four agents, defined as data (`def.team` in the workspace: read `src/legacy/team.js` and `quests.js` to learn the exact shape and rules).
 2. Compile a team definition into a LangGraph graph at request time: one node per agent in order, each writing rows or updating the work item, a checking step that can send work back once, and an interrupt where the definition asks a person to weigh in.
 3. Give agents tools from `src/server/connectors` (Wikipedia, World Bank, OpenAlex, arXiv, PatentsView). An agent plans which source to ask, the graph calls it, the result goes back to the agent.
-4. Stream each agent's steps, tool calls and rows as AG-UI events, so the app's room can show them as they happen.
+4. Stream each agent's steps, tool calls and rows as AG-UI events, so the app's room can show them as they happen. Export `createTeamAgent()` for the CopilotKit runtime at `/api/copilotkit` (agent id `team`); agui-stream owns the route and the registry.
 5. Keep each run under the request limit: cap tool calls per agent and total steps.
 
 ## Done means

@@ -26,22 +26,28 @@ workflow canvas, the six builder agents and their checks, the browser runtime (S
 view types, dashboards), app agent teams and their rooms, the Tester and its repair loop, changes from chat,
 releases, share links and the app-only view. It was verified by 286 browser checks with a stand-in model.
 
-**Foundation (done, pull request 1):** those modules now run unchanged in a Next.js 16 app, drawn by React 19.
-`src/platform/compat` puts React behind the names the modules already use (`html`, `render`, hooks), so the built
-bundle is byte-identical to the prototype's script. All 286 checks pass against the React app. A model route
-(`POST /api/llm`) and a health route exist, so Live mode works as soon as a key is set on Vercel.
+**Spike (done, pull request 1, by another session):** a streamed tool call from the model updates shared canvas
+state, through CopilotKit's v2 runtime with an in-process agent and LiteLLM. It proved the stack the project
+instructions name: Next.js 16, CopilotKit on AG-UI, no separate server. It lives on at `/spike`.
+
+**Foundation (done, the next pull request):** the prototype's modules now run unchanged in the same Next.js app,
+drawn by React 19. `src/platform/compat` puts React behind the names the modules already use (`html`, `render`,
+hooks), so the built bundle is byte-identical to the prototype's script. All 286 checks pass against the React app.
+A model route (`POST /api/llm`) and a health route exist, so Live mode works as soon as a key is set on Vercel.
 
 ## 2. Architecture
 
 ```
 Browser                                              Server (Next.js route handlers on Vercel)
 ───────────────────────────────────────────          ─────────────────────────────────────────────
-src/legacy    workspace UI, runtime, checks           /api/health         up? model configured? probe
+src/legacy    workspace UI, runtime, checks           /api/health         up? model configured? probes
 src/platform  compat layer, boot, model client        /api/llm            one guarded model call, streamed
-              orchestrator: the build workflow        /api/agent/step     one agent step as a LangGraph run:
-              as a LangGraph graph (browser)                               draft → validate → repair, AG-UI events
-              AG-UI client, storage, PWA              /api/agent/team     an app's agent team as a LangGraph run:
-SQLite (sql.js) + app state in browser storage                             agents hand over, call tools, are checked
+              orchestrator: the build workflow        /api/copilotkit     CopilotKit runtime (AG-UI), agents in process:
+              as a LangGraph graph (browser)            agent `default`     the spike's Architect
+              AG-UI client, storage, PWA                agent `step`        one agent step as a LangGraph run:
+SQLite (sql.js) + app state in browser storage                              draft → validate → repair
+                                                        agent `team`        an app's agent team as a LangGraph run:
+                                                                            agents hand over, call tools, are checked
                                                       /api/connectors/*   public sources (Wikipedia, World Bank,
                                                                            OpenAlex, arXiv, PatentsView)
                                                       src/server/llm      provider gateway: LiteLLM, OpenAI-compatible,
@@ -60,9 +66,10 @@ Decisions, with the reason for each. Longer versions go in `docs/adr/`.
    tool calls to public sources. In the browser, the build workflow (stations, gates, send-backs, approvals, the
    owner's added steps) is compiled from the workflow definition into a graph, so the canvas the owner edits is the
    graph that runs. `@langchain/langgraph/web` is the browser entry point.
-4. **AG-UI on the wire.** Agent routes stream AG-UI events (run, step, text, tool call, state delta) with the
-   official `@ag-ui/core` and `@ag-ui/encoder` packages. CopilotKit's UI is not used: the workspace is the product's
-   own UI. This departs from an early project note and is recorded as an ADR.
+4. **AG-UI through CopilotKit's runtime.** The spike showed CopilotKit's v2 runtime running agents in process in
+   a route handler. The LangGraph graphs are wrapped as AG-UI agents (`AbstractAgent` subclasses that run a
+   compiled graph and emit AG-UI events) and registered in that same runtime at `/api/copilotkit`. The workspace
+   keeps its own UI and talks to the runtime through the AG-UI client, without CopilotKit's chat components.
 5. **Definitions, not code.** Agents return JSON definitions. A fixed runtime runs them. Nothing a model writes is
    executed as code, and a share link is treated as untrusted input.
 6. **Any model key.** `src/server/llm` hides the provider. LiteLLM is the default because the hackathon requires
@@ -98,9 +105,11 @@ Model tiers: `default` (careful) and `quick` (cheap). Provider interface: `src/s
 of times, then `{"type":"done","truncated"}` or `{"type":"error","code","message"}`. Refusals are JSON with a
 `code`: `not_configured`, `rate_limited`, `budget`, `bad_request`.
 
-`POST /api/agent/step` and `POST /api/agent/team` take an AG-UI `RunAgentInput` and answer an AG-UI event stream
-(server-sent events). What goes in `forwardedProps` and `state` is defined in `src/shared/agent-contract.ts`, owned
-by the agent-graphs agent and agreed with agui-stream and team-graph in their issues before code depends on it.
+Agents `step` and `team` are registered in the CopilotKit runtime at `/api/copilotkit` (the route the spike
+created). Each takes an AG-UI `RunAgentInput` and answers an AG-UI event stream. What goes in `forwardedProps` and
+`state` is defined in `src/shared/agent-contract.ts`, owned by the agent-graphs agent and agreed with agui-stream
+and team-graph in their issues before code depends on it. The runtime route and the agent registry
+(`src/server/agui/registry.ts`) belong to agui-stream; agent-graphs and team-graph export agent factories.
 
 ## 3. Milestones and releases
 
@@ -116,27 +125,27 @@ versions. Release notes list the merged pull requests.
 
 ## 4. Work packages
 
-Each package is one GitHub issue with the same number as its row (`WP-nn` in the title). Paths under "Owns" belong to
+Each package is one GitHub issue: `WP-nn` is issue number nn + 1 (WP-01 is #2, WP-16 is #17). Mission control is #18. Paths under "Owns" belong to
 that agent alone. Models: the supervisor runs on Opus, workers on Sonnet or Haiku.
 
-| WP  | Agent              | Model  | Owns                                                                                                                           | Delivers                                                                                                                                                                                                                       | Serves   | Needs               |
-| --- | ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------------------- |
-| 01  | supervisor         | Opus   | merges, `docs/STATUS.md`, any file when integrating                                                                            | reviews and merges pull requests, keeps `main` green and deployed, resolves conflicts, cuts releases, posts status on the Mission control issue                                                                                | all      |                     |
-| 02  | react-port         | Sonnet | `src/platform/compat/**`, `src/platform/boot.ts`, `src/platform/LegacyApp.tsx`, `tests/e2e/**`, `scripts/build-legacy.mjs`     | all 8 browser flows green in CI as a matrix; React-specific checks (no console errors, keyboard, focus); fixes for any gap the compat layer has                                                                                | C1 C2 C5 |                     |
-| 03  | backend-gateway    | Sonnet | `src/server/llm/**`, `src/app/api/llm/**`, `src/app/api/health/**`, `src/app/api/spike/**`                                     | Anthropic and Claude Code CLI providers; retries with backoff; tool-call support with a JSON fallback and a probe that picks the mode; a LangChain chat-model adapter the graphs use; the spike route (one streamed tool call) | C1 C2    |                     |
-| 04  | security-guard     | Sonnet | `src/server/guard/**`, `src/proxy.ts`, security headers in `next.config.ts`, `scripts/check-secrets.mjs`, `SECURITY.md`        | prompt policy (only Turnkey's agent prompts are relayed), stronger limits, request validation helpers, content security policy that still allows SQLite's WebAssembly, the secrets scan                                        | C2       |                     |
-| 05  | agent-graphs       | Sonnet | `src/server/graph/step/**`, `src/server/graph/shared/**`, `src/server/agents/**`, `src/shared/**`, `src/app/api/agent/step/**` | the agent-step graph in LangGraph (draft, validate, repair, at most 3 attempts), the role registry with a zod schema per builder agent, the route                                                                              | C1 C2    | 03 (interface only) |
-| 06  | team-graph         | Sonnet | `src/server/graph/team/**`, `src/app/api/agent/team/**`                                                                        | a LangGraph graph compiled from an app's team definition: agents in order, tool calls to connectors, a checking agent that can send work back once, a pause for a person; works for the three quest apps and the bidding desk  | C1 C3    | 05 shared types, 07 |
-| 07  | connectors         | Haiku  | `src/server/connectors/**`, `src/app/api/connectors/**`                                                                        | Wikipedia, World Bank, OpenAlex, arXiv, PatentsView: typed, validated, cached, time-limited, with recorded fixtures for tests                                                                                                  | C1 C4    |                     |
-| 08  | agui-stream        | Sonnet | `src/server/agui/**`, `src/platform/agui/**`                                                                                   | AG-UI event encoding on the server, the mapping from LangGraph stream events to AG-UI events, a browser client that consumes the stream; contract tests                                                                        | C1 C2    |                     |
-| 09  | workflow-graph     | Sonnet | `src/platform/orchestrator/**`                                                                                                 | the build workflow as a LangGraph graph compiled from a workflow definition (stations, gates, send-backs, approvals as interrupts, added steps); a pure library with tests, not yet wired                                      | C1 C3    |                     |
-| 10  | database           | Sonnet | `src/platform/storage/**`, `src/shared/sql/**`, `docs/architecture/data.md`                                                    | storage adapter (IndexedDB with the current localStorage format still readable), export and import of an app's SQLite file, a validator for generated table definitions, data-model diagrams                                   | C2 C4    |                     |
-| 11  | pwa-install        | Sonnet | `src/app/manifest.ts`, `src/app/a/**`, `src/app/icon*`, `public/sw.js`, `public/icons/**`, `src/platform/pwa/**`               | a real install: web manifest, service worker that keeps the shell, SQLite and saved builds offline, per-app manifest and icon routes drawn from the app's icon data                                                            | C5 C4    |                     |
-| 12  | devops-ci          | Haiku  | `.github/**`, `scripts/ci/**`, `docs/process/**`, `vercel.json`                                                                | CI hardening, release workflow, issue and pull request templates, CODEOWNERS, dependency updates, the release checklist                                                                                                        | C2       |                     |
-| 13  | docs-architect     | Sonnet | `README.md`, `docs/architecture/**`, `docs/adr/**`, `docs/hackathon/**`                                                        | README, architecture diagrams (Mermaid), ADRs, the criteria evidence page, the use-case page, the submission summary                                                                                                           | C5 C4 C2 |                     |
-| 14  | compliance-auditor | Haiku  | `docs/hackathon/checklist.md`, `THIRD_PARTY_NOTICES.md`                                                                        | rule-by-rule audit of the repo and the live URL, repeated after each milestone; opens an issue for every gap                                                                                                                   | C2       |                     |
-| 15  | qa-unit            | Haiku  | `tests/unit/**` (files for code that has no owner-written test), `vitest.config.ts`                                            | unit tests for the foundation code, coverage report, test helpers                                                                                                                                                              | C2       |                     |
-| 16  | integration        | Sonnet | `src/legacy/**` (smallest possible seams), `src/platform/bridge/**`, `src/platform/model-client.ts`                            | wave 2: Live mode goes through `/api/agent/step`; team runs go through `/api/agent/team`; the workflow graph drives builds behind a switch; the debug drawer shows server events                                               | C1       | 05 06 08 09         |
+| WP  | Agent              | Model  | Owns                                                                                                                       | Delivers                                                                                                                                                                                                                                                                 | Serves   | Needs               |
+| --- | ------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------------------- |
+| 01  | supervisor         | Opus   | merges, `docs/STATUS.md`, any file when integrating                                                                        | reviews and merges pull requests, keeps `main` green and deployed, resolves conflicts, cuts releases, posts status on the Mission control issue                                                                                                                          | all      |                     |
+| 02  | react-port         | Sonnet | `src/platform/compat/**`, `src/platform/boot.ts`, `src/platform/LegacyApp.tsx`, `tests/e2e/**`, `scripts/build-legacy.mjs` | all 8 browser flows green in CI as a matrix; React-specific checks (no console errors, keyboard, focus); fixes for any gap the compat layer has                                                                                                                          | C1 C2 C5 |                     |
+| 03  | backend-gateway    | Sonnet | `src/server/llm/**`, `src/lib/model.ts`, `src/app/api/llm/**`, `src/app/api/health/**`                                     | one provider configuration for everything (the gateway, the spike's AI SDK model, the graphs' LangChain model); Anthropic and Claude Code CLI providers; retries with backoff; tool-call support with a JSON fallback and a probe that picks the mode; a role-aware mock | C1 C2    |                     |
+| 04  | security-guard     | Sonnet | `src/server/guard/**`, `src/proxy.ts`, security headers in `next.config.ts`, `scripts/check-secrets.mjs`, `SECURITY.md`    | prompt policy (only Turnkey's agent prompts are relayed), stronger limits, request validation helpers, content security policy that still allows SQLite's WebAssembly, the secrets scan                                                                                  | C2       |                     |
+| 05  | agent-graphs       | Sonnet | `src/server/graph/step/**`, `src/server/graph/shared/**`, `src/server/agents/**`, `src/shared/**`                          | the agent-step graph in LangGraph (draft, validate, repair, at most 3 attempts), the role registry with a zod schema per builder agent, exported as an agent factory for the runtime                                                                                     | C1 C2    | 03 (interface only) |
+| 06  | team-graph         | Sonnet | `src/server/graph/team/**`                                                                                                 | a LangGraph graph compiled from an app's team definition: agents in order, tool calls to connectors, a checking agent that can send work back once, a pause for a person; exported as an agent factory; works for the three quest apps and the bidding desk              | C1 C3    | 05 shared types, 07 |
+| 07  | connectors         | Haiku  | `src/server/connectors/**`, `src/app/api/connectors/**`                                                                    | Wikipedia, World Bank, OpenAlex, arXiv, PatentsView: typed, validated, cached, time-limited, with recorded fixtures for tests                                                                                                                                            | C1 C4    |                     |
+| 08  | agui-stream        | Sonnet | `src/server/agui/**`, `src/platform/agui/**`, `src/app/api/copilotkit/**`                                                  | the bridge from a LangGraph run to AG-UI events as an in-process agent class, the agent registry in the CopilotKit runtime (keeping the spike's `default` agent), a browser client that runs an agent and consumes its events; contract tests                            | C1 C2    |                     |
+| 09  | workflow-graph     | Sonnet | `src/platform/orchestrator/**`                                                                                             | the build workflow as a LangGraph graph compiled from a workflow definition (stations, gates, send-backs, approvals as interrupts, added steps); a pure library with tests, not yet wired                                                                                | C1 C3    |                     |
+| 10  | database           | Sonnet | `src/platform/storage/**`, `src/shared/sql/**`, `docs/architecture/data.md`                                                | storage adapter (IndexedDB with the current localStorage format still readable), export and import of an app's SQLite file, a validator for generated table definitions, data-model diagrams                                                                             | C2 C4    |                     |
+| 11  | pwa-install        | Sonnet | `src/app/manifest.ts`, `src/app/a/**`, `src/app/icon*`, `public/sw.js`, `public/icons/**`, `src/platform/pwa/**`           | a real install: web manifest, service worker that keeps the shell, SQLite and saved builds offline, per-app manifest and icon routes drawn from the app's icon data                                                                                                      | C5 C4    |                     |
+| 12  | devops-ci          | Haiku  | `.github/**`, `scripts/ci/**`, `docs/process/**`, `vercel.json`                                                            | CI hardening, release workflow, issue and pull request templates, CODEOWNERS, dependency updates, the release checklist                                                                                                                                                  | C2       |                     |
+| 13  | docs-architect     | Sonnet | `README.md`, `docs/architecture/**`, `docs/adr/**`, `docs/hackathon/**`                                                    | README, architecture diagrams (Mermaid), ADRs, the criteria evidence page, the use-case page, the submission summary                                                                                                                                                     | C5 C4 C2 |                     |
+| 14  | compliance-auditor | Haiku  | `docs/hackathon/checklist.md`, `THIRD_PARTY_NOTICES.md`                                                                    | rule-by-rule audit of the repo and the live URL, repeated after each milestone; opens an issue for every gap                                                                                                                                                             | C2       |                     |
+| 15  | qa-unit            | Haiku  | `tests/unit/**` (files for code that has no owner-written test), `vitest.config.ts`                                        | unit tests for the foundation code, coverage report, test helpers                                                                                                                                                                                                        | C2       |                     |
+| 16  | integration        | Sonnet | `src/legacy/**` (smallest possible seams), `src/platform/bridge/**`, `src/platform/model-client.ts`                        | wave 2: Live mode goes through agent `step` at `/api/copilotkit`; team runs go through agent `team`; the workflow graph drives builds behind a switch; the debug drawer shows server events                                                                              | C1       | 05 06 08 09         |
 
 Wave 1 is packages 01 to 15, all at once. Wave 2 is package 16 and whatever wave 1 left open. The supervisor decides.
 
@@ -176,15 +185,15 @@ Wave 1 is packages 01 to 15, all at once. Wave 2 is package 16 and whatever wave
 
 The legacy modules reach the outside world through a handful of names. New work plugs in here, not into the modules.
 
-| Seam                                                                                            | Today                                              | What plugs in                                             |
-| ----------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------- |
-| `window.claude.use('sample')` → `(prompt, { modelTier, signal, onText }) → { text, truncated }` | `src/platform/model-client.ts`, calling `/api/llm` | the AG-UI client calling `/api/agent/step` (WP-16)        |
-| `window.claude.use('downloads')` → `{ save({ filename, data }) }`                               | browser download                                   | unchanged                                                 |
-| `window.htmPreact`, `window.React`, `window.ReactDOM`, `window.ReactFlow`                       | React, through the compat layer                    | unchanged                                                 |
-| `window.initSqlJs`                                                                              | sql.js WebAssembly from `/vendor`                  | unchanged                                                 |
-| browser storage keys `formwork:v1:state`, `formwork:v1:db:<appId>`                              | localStorage                                       | the storage adapter (WP-10)                               |
-| `window.__formwork`                                                                             | read-only test hook: state, logs, workflow helpers | reading state for the orchestrator and the debug stream   |
-| `window.__turnkeyOptions`                                                                       | `{ canvas: false }` shows the plain line           | further switches, for example `{ orchestrator: 'graph' }` |
+| Seam                                                                                            | Today                                              | What plugs in                                                      |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------ |
+| `window.claude.use('sample')` → `(prompt, { modelTier, signal, onText }) → { text, truncated }` | `src/platform/model-client.ts`, calling `/api/llm` | the AG-UI client running agent `step` at `/api/copilotkit` (WP-16) |
+| `window.claude.use('downloads')` → `{ save({ filename, data }) }`                               | browser download                                   | unchanged                                                          |
+| `window.htmPreact`, `window.React`, `window.ReactDOM`, `window.ReactFlow`                       | React, through the compat layer                    | unchanged                                                          |
+| `window.initSqlJs`                                                                              | sql.js WebAssembly from `/vendor`                  | unchanged                                                          |
+| browser storage keys `formwork:v1:state`, `formwork:v1:db:<appId>`                              | localStorage                                       | the storage adapter (WP-10)                                        |
+| `window.__formwork`                                                                             | read-only test hook: state, logs, workflow helpers | reading state for the orchestrator and the debug stream            |
+| `window.__turnkeyOptions`                                                                       | `{ canvas: false }` shows the plain line           | further switches, for example `{ orchestrator: 'graph' }`          |
 
 If a feature cannot be built through a seam, WP-16 adds the smallest new seam to `src/legacy` and documents it here.
 

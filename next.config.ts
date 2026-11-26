@@ -1,5 +1,9 @@
 import type { NextConfig } from 'next';
 
+// CopilotKit's runtime reports anonymous usage unless told not to. Set here for the build, and in
+// src/instrumentation.ts for the running server. This project sends nothing to third parties.
+process.env.COPILOTKIT_TELEMETRY_DISABLED ??= 'true';
+
 const nextConfig: NextConfig = {
   // The workspace mounts its own React root from an effect; a double-invoked effect in development would start it twice.
   reactStrictMode: false,
