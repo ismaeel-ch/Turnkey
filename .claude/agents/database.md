@@ -17,7 +17,7 @@ in your issue.
 
 ## What to do
 
-1. Read `src/legacy/db.js`, `core.js` (the `LS` wrapper) and `engine.js` to learn how state and each app's SQLite database are saved today (base64 in localStorage under `formwork:v1:*`).
+1. Read `src/workspace/db.ts`, `core.ts` (the `LS` wrapper) and `engine.tsx` to learn how state and each app's SQLite database are saved today (base64 in localStorage under `formwork:v1:*`).
 2. Build a storage adapter with the same get, set, delete and keys behaviour, backed by IndexedDB for capacity, that still reads existing localStorage data and migrates it once. It must report quota problems instead of losing data.
 3. Export and import one app's database as a `.sqlite` file, and a whole-workspace backup as one JSON file.
 4. A validator for generated table definitions: safe identifiers, known column types, references that exist, limits from the design (8 tables, 12 fields each). Shared by server and browser.

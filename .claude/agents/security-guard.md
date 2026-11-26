@@ -18,7 +18,7 @@ in your issue.
 ## What to do
 
 1. The app is public, has no login, and its model budget is small and does not refill. Make it hard to waste.
-2. Prompt policy: `/api/llm` and the agent routes accept only prompts that begin with one of Turnkey's own agent headers. Derive the allowed headers from `src/legacy` at build time so they cannot drift.
+2. Prompt policy: `/api/llm` and the agent routes accept only prompts that begin with one of Turnkey's own agent headers. Derive the allowed headers from `src/workspace` so they cannot drift.
 3. Limits: per visitor, global per minute, per day, per prompt size and per answer size, all from environment variables with safe defaults, plus `LIVE_MODE=off`.
 4. Shared helpers for the routes: parse and validate a JSON body with zod, uniform JSON errors with a `code`, the visitor key.
 5. Security headers for every response, including a content security policy that still lets SQLite's WebAssembly, the workspace's inline styles and the service worker run. Verify in a browser flow that nothing is blocked.

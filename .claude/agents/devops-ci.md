@@ -21,7 +21,6 @@ in your issue.
 2. Add `release.yml`: on a `v*` tag, build, run the checks and publish a GitHub release with notes generated from merged pull requests.
 3. Issue templates (work package, bug), a pull request template with the definition of done as a checklist, CODEOWNERS mapping folders to the owner, Dependabot for npm and actions (weekly, grouped).
 4. `docs/process/`: how to branch, review, merge and release; `deploy.md` on how Vercel deploys `main`, how to see a deployment's status from a commit, and the deploy-hook fallback.
-5. A CI check that fails a pull request which changes `src/legacy/**` unless its title starts with `WP-16` or contains `[legacy]`.
 
 ## Done means
 

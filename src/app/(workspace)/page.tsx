@@ -1,5 +1,9 @@
-import LegacyApp from '@/platform/LegacyApp';
+import WorkspaceLoader from './WorkspaceLoader';
 
 export default function Page() {
-  return <LegacyApp />;
+  return (
+    <div id="root">
+      <WorkspaceLoader />
+    </div>
+  );
 }
