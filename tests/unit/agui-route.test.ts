@@ -29,8 +29,8 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe('registry', () => {
   it('has default always, and echo only with the mock provider', async () => {
-    expect(Object.keys(await resolveAgents({ LLM_PROVIDER: 'mock' })).sort()).toEqual(['default', 'echo']);
-    expect(Object.keys(await resolveAgents({}))).toEqual(['default']);
+    expect(Object.keys(await resolveAgents({ LLM_PROVIDER: 'mock' })).sort()).toEqual(['default', 'echo', 'step']);
+    expect(Object.keys(await resolveAgents({})).sort()).toEqual(['default', 'step']);
   });
 
   it('registers an agent lazily and survives a loader that throws', async () => {
@@ -42,7 +42,7 @@ describe('registry', () => {
     const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
     const first = await resolveAgents({});
     await resolveAgents({});
-    expect(Object.keys(first).sort()).toEqual(['default', 'late']);
+    expect(Object.keys(first).sort()).toEqual(['default', 'late', 'step']);
     expect(calls).toBe(1);
     quiet.mockRestore();
     unregisterAgent('late');
