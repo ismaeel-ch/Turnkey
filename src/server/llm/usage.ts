@@ -15,7 +15,7 @@
  *
  * A call that stops before the provider reports its usage (the visitor left, or the answer hit the size limit) is
  * still paid for, so it is counted from an estimate: about four characters to a token, for the prompt and for the
- * text that came back.
+ * text that came back. So is a call whose provider finished without reporting usage at all.
  *
  * The totals live in this server instance's memory: on Vercel each instance counts its own calls since it started.
  * `spentToday()` is what src/server/guard/limits.ts checks against LLM_DAILY_SPEND_USD.
@@ -158,10 +158,12 @@ export function withUsage(inner: Provider, env: Env = process.env, log?: (line: 
             continue;
           }
           settled = true;
-          const usage: Usage = { ...chunk.usage };
+          // A gateway that leaves usage out of its stream still bills the call: estimate it, as for a call cut short,
+          // so the daily dollar cap does not go blind.
+          const usage: Usage = chunk.usage ? { ...chunk.usage } : estimateUsage(request, outChars);
           if (usage.costUsd === undefined) {
             const cost = costOf(model, usage);
-            if (cost !== null && chunk.usage) usage.costUsd = cost;
+            if (cost !== null) usage.costUsd = cost;
           }
           recordUsage(
             { provider: inner.id, model, tier: request.tier, effort: effortFor(request), usage, ms: Date.now() - started },

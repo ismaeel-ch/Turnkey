@@ -1256,7 +1256,66 @@ async function flowSizes(browser, url) {
   }
   check('the share dialog gave a short link to try', !!short, short);
 }
-const FLOWS = { demo: flowDemo, live: flowLive, misc: flowMisc, views: flowViews, quests: flowQuests, new: flowNew, custom: flowCustom, round6: flowRound6, react: flowReact, sizes: flowSizes };
+// ----- undo, redo and version history (src/workspace/history.ts) -----
+async function flowHistory(browser, url) {
+  const { ctx, page } = await newPage(browser);
+  await enter(page, url); await buildTpl(page, 'clinic'); await waitIdle(page);
+  const id = (await appState(page)).id;
+  const hist = () => st(page, (x) => window.__formwork.history.of(x), id);
+  const waitVersions = (n) => page.waitForFunction(([x, k]) => { const h = window.__formwork.history.of(x); return h && h.versions.length >= k; }, [id, n], { timeout: 20000 });
+  const cols = () => st(page, (x) => window.__formwork.sql(x, 'PRAGMA table_info("patients")').map((r) => r.name), id);
+  const phone = () => st(page, (x) => window.__formwork.sql(x, 'SELECT phone FROM patients ORDER BY id LIMIT 1')[0].phone, id);
+  const key = async (combo) => { await page.evaluate(() => document.activeElement && document.activeElement.blur()); await page.keyboard.press(combo); await sleep(300); await waitIdle(page); };
+  await waitVersions(1);
+  let h = await hist();
+  check('history: a built app starts its history with one version', h.versions.length === 1 && h.versions[0].kind === 'start' && h.at === 0, h);
+  check('history: Undo is off while there is nothing to undo', await page.getByRole('button', { name: 'Undo', exact: true }).isDisabled());
+
+  await view(page, 'Build');
+  await say(page, 'Add an insurance provider field to patients'); await waitIdle(page); await waitVersions(2);
+  h = await hist();
+  check('history: a change from chat is saved as a version, made by the Database agent', h.versions.length === 2 && h.versions[1].by.includes('database') && /insurance/i.test(h.versions[1].what), h.versions[1]);
+  await st(page, (x) => window.__formwork.sql(x, "UPDATE patients SET phone = '555-0199' WHERE id = (SELECT MIN(id) FROM patients)"), id);
+
+  await st(page, () => { const F = window.__formwork, s = F.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); F.wf.edit(s.apps[t.app], [{ tool: 'set_approval', args: { station: 'views', on: true } }]); });
+  await waitIdle(page); await waitVersions(3);
+  h = await hist();
+  check('history: a workflow edit is saved as a version, made by you', h.versions.length === 3 && h.versions[2].by.join() === 'you', h.versions[2]);
+
+  await key('Control+z');
+  let a = await st(page, (x) => window.__formwork.state().apps[x].flow.approve, id);
+  h = await hist();
+  check('undo (Ctrl+Z): the workflow edit is taken back', !a.views && h.at === 1 && h.versions.length === 3, [a, h.at]);
+  await key('Control+z');
+  a = await appState(page);
+  const c1 = await cols();
+  check('undo again: the new field leaves the app and its database table', !a.cols.patients.includes('insurance_provider') && !c1.includes('insurance_provider') && (await hist()).at === 0, [a.cols.patients, c1]);
+  check('undo keeps the records: a value typed in after the change is still there', (await phone()) === '555-0199');
+  await key('Control+Shift+z');
+  a = await appState(page);
+  check('redo (Ctrl+Shift+Z): the field comes back, in the definition and the table', a.cols.patients.includes('insurance_provider') && (await cols()).includes('insurance_provider') && (await hist()).at === 1, a.cols.patients);
+  check('history: undo and redo show in the event log', await st(page, () => window.__formwork.logs.EV.filter((e) => e.type === 'CUSTOM' && e.name === 'history').map((e) => e.value.op).join()) === 'undo,undo,redo');
+
+  await page.getByRole('button', { name: 'Version history' }).click(); await page.waitForSelector('.dialog.history .hist-row');
+  const rows = await page.locator('.hist-row').evaluateAll((l) => l.map((x) => [x.dataset.kind, x.classList.contains('now'), x.classList.contains('undone'), x.innerText.replace(/\s+/g, ' ')]));
+  check('version history lists every version newest first, with who made it, the current one and the undone one', rows.length === 3 && rows[2][0] === 'start' && rows[1][1] && rows[0][2] && /Database agent/.test(rows[1][3]) && /You/.test(rows[0][3]), rows);
+  await shot(page, 'history-dialog');
+  await page.locator('.hist-row[data-kind="start"] .btn').click(); await sleep(300); await waitIdle(page);
+  h = await hist(); a = await appState(page);
+  check('restoring the first version brings it back as a new version that can be undone', h.versions.length === 3 && h.versions[2].kind === 'restore' && h.at === 2 && !a.cols.patients.includes('insurance_provider'), [h, a.cols.patients]);
+  await page.locator('.dialog.history').getByRole('button', { name: 'Close' }).last().click();
+
+  await st(page, () => window.__formwork.save()); await sleep(800);
+  await page.reload(); await page.waitForSelector('.work-head', { timeout: 20000 }); await sleep(1500);
+  await waitVersions(3);
+  h = await hist();
+  check('history is kept in IndexedDB across a reload', h.versions.length === 3 && h.at === 2 && (await st(page, () => window.__formwork.history.durable())), h);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click(); await sleep(300); await waitIdle(page);
+  a = await appState(page);
+  check('the Undo button takes back the restore', a.cols.patients.includes('insurance_provider') && (await hist()).at === 1, a.cols.patients);
+  await ctx.close();
+}
+const FLOWS = { demo: flowDemo, live: flowLive, misc: flowMisc, views: flowViews, quests: flowQuests, new: flowNew, custom: flowCustom, round6: flowRound6, react: flowReact, sizes: flowSizes, history: flowHistory };
 (async () => {
   const url = (process.env.TK_URL || '').replace(/\/?$/, '/');
   if (!/^https?:/.test(url)) { console.error('TK_URL is not set. Run the checks with: npm run test:e2e'); process.exit(2); }
