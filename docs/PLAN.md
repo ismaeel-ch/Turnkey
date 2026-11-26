@@ -168,7 +168,8 @@ Wave 1 is packages 01 to 15, all at once. Wave 2 is package 16 and whatever wave
 - **CI:** `.github/workflows/ci.yml` runs the secrets scan, lint, typecheck, unit tests, a production build and the
   browser flows on a pull request into `main` only once it is out of draft and labelled `ready-to-merge`, to save
   Actions minutes. Nothing runs on pushes to `main`.
-- **CD:** publishing a GitHub release deploys that tag to production (`.github/workflows/release.yml`, Vercel CLI).
+- **CD:** a release deploys to production (`.github/workflows/release.yml`, Vercel CLI): merging a version bump in
+  `package.json` deploys that commit and creates the tag and GitHub release; a release published by hand also deploys.
   Vercel's Git integration is off (`vercel.json`), so merges and pushes never deploy. See docs/process/deploy.md.
 - **Labels:** `ready-to-merge`, `wp`, `area:*`, `crit:C1`…`crit:C5`, `wave:1`, `wave:2`, `blocked`, `bug`.
 - **Status:** the supervisor comments on the Mission control issue at least every hour: merged, open, blocked, next.

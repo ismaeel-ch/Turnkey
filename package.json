@@ -1,6 +1,6 @@
 {
   "name": "turnkey",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Turnkey: describe the app your work needs and a team of agents builds its database, backend, views, pages and tests on a workflow you can watch and change.",
   "license": "MIT",
@@ -42,6 +42,7 @@
     "openai": "^7.65.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "rxjs": "^7.8.1",
     "sql.js": "1.12.0",
     "zod": "^4.6.7"
   },
