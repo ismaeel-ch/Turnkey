@@ -497,7 +497,7 @@ async function flowMisc(browser, url) {
 async function flowViews(browser, url) {
   const { ctx, page } = await newPage(browser);
   await enter(page, url); await shot(page, '70-home-library');
-  check('home lists three quests and four business apps', await page.locator('.tpl').count() === 7 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
+  check('home lists three quests and six business apps', await page.locator('.tpl').count() === 9 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
   await page.locator('[data-tpl="clinic"] .tpl-build').click(); await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').first().click(); await waitReady(page);
   let a = await appState(page);
   check('six stations, and the Views station passed', Object.keys(a.line).length === 6 && a.line.views === 'ok', a.line);
@@ -944,7 +944,7 @@ async function flowCustom(browser, url) {
 /* ---------- round 6: plain navigation, the Tester's repair loop, agent rooms, an agent step that changes the schema, releases, the app on its own ---------- */
 async function flowRound6(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
-  check('home: four plain steps, and four business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 7 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
+  check('home: four plain steps, and six business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 9 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
   await buildTpl(page, 'biddesk'); a = await appFull(page);
   check('workspace: three plain steps and one Details tab', (await page.locator('.views .tab').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim().split(' ')[0]).join() === 'Build,App,Release,Details', await page.locator('.views .tab').allInnerTexts());
   check('bidding desk: every station passed first time, with four tables and its own team of agents', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'tenders,score_lines,price_options,risks', [a.status, a.line]);
@@ -1026,6 +1026,30 @@ async function flowRound6(browser, url) {
   check('debate room: two sides face to face with the weight of each, answers linked to the points they answer, the Moderator\'s notes in groups, the leaning on top', await page.locator('.bd-versus .bd-side').count() === 2 && await page.locator('.bd-balance .bd-bal').count() === 2 && /For 7/.test(await page.locator('.bd-balance').innerText()) && await page.locator('.bd-reply').count() === 3 && await page.locator('.bdp-groups .bd-group').count() === 4 && /Leaning For/.test((await page.locator('.verdict').innerText()).replace(/\s+/g, ' ')), deb.slice(0, 400)); await shot(page, 'r6-05-debate-room');
   await page.reload(); await page.waitForSelector('.work-head'); await sleep(300);
   check('a finished app reopens on the app itself, not on its build', await page.locator('.views .tab.on').innerText() === 'App' || /^App/.test(await page.locator('.views .tab.on').innerText()), await page.locator('.views .tab.on').innerText());
+  await ctx.close();
+  await samplesChecks(browser, url);
+}
+/* ---------- The two more business apps on Home: a grant desk with its own agent team, and purchase requests ---------- */
+async function samplesChecks(browser, url) {
+  const { ctx, page } = await newPage(browser); await enter(page, url); let a;
+  check('home: the grant desk and purchase requests are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('.tpl').count() === 9);
+  await page.fill('#home-prompt', 'a community foundation that reviews grant applications'); await page.locator('.prompt .btn.primary').click(); await page.waitForFunction(() => { const s = window.__formwork.state(), t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]); return t && t.app; }); await waitReady(page); a = await appFull(page);
+  check('Demo: a sentence about grants is built from the grant desk\'s saved build', a.tpl === 'grants' && a.mode === 'demo', [a.tpl, a.mode]);
+  check('grant desk: every station passed first time, with four tables and its own team of three agents', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'applications,score_lines,award_options,checks' && a.tests.failed === 0 && a.tests.fresh, [a.status, a.line, a.tests]);
+  await view(page, 'App'); await page.locator('.persona-btn').first().click(); await land(page); await page.waitForSelector('.team.room');
+  await page.locator('.team-start .chip', { hasText: 'Reading club for care homes' }).click(); await sleep(60); await page.locator('.team-start button[type=submit]').click(); await page.waitForSelector('.team-log .gcard.ask', { timeout: 20000 });
+  check('review room: scores and award options fill in, and the run pauses for a person before Due diligence', await page.locator('.bdp-scores .bd-srows li').count() === 5 && await page.locator('.bdp-options .bd-opt').count() === 3 && await page.locator('.verdict').count() === 0, [await page.locator('.bdp-scores .bd-srows li').count(), await page.locator('.bdp-options .bd-opt').count()]);
+  await page.fill('.team-log .gcard.ask input', 'Ask for a safeguarding policy'); await page.locator('.team-log .gcard.ask .btn', { hasText: 'Add' }).click(); await sleep(100); await page.locator('.team-log .gcard.ask .btn.primary').click(); await waitTeam(page); await sleep(300);
+  const room = (await page.locator('.team-log').innerText()).replace(/\s+/g, ' ');
+  check('review room: weighted score, the full request recommended, the condition from the team, and the verdict on top', /80 out of 100/.test(room) && await page.locator('.bdp-options .bd-opt.best').count() === 1 && /Full request/.test(await page.locator('.bd-opt.best').innerText()) && /From the team: Ask for a safeguarding policy/.test(room) && /Fund/.test(await page.locator('.verdict').innerText()) && /82/.test(await page.locator('.verdict .ring').textContent()) && (await page.locator('.team-log .badge').first().innerText()).trim() === 'Awaiting decision', room.slice(0, 900));
+  check('review room: a programme officer is not offered the award', await page.locator('.verdict .btn', { hasText: 'Award the grant' }).count() === 0);
+  await page.selectOption('select[aria-label="Preview as"]', { label: 'Rukhsana Baig · Board chair' }); await sleep(250); await nav(page, 'Review room'); await page.waitForSelector('.verdict');
+  await page.locator('.verdict .btn', { hasText: 'Award the grant' }).click(); await sleep(250);
+  check('review room: the board chair awards the grant from the same page, through the workflow', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Awarded', await page.locator('.team-log .badge').first().innerText());
+  await page.locator('.brand').click(); await page.waitForSelector('.home'); await buildTpl(page, 'purchasing'); a = await appFull(page);
+  const pr = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), d = s.apps[t.app].def; return { confirm: d.process.transitions.find((x) => x.id === 'confirm_delivery').roles.join(), approve: d.process.transitions.find((x) => x.id === 'approve').roles.join(), order: d.process.transitions.find((x) => x.id === 'place_order').roles.join(), mine: d.access.purchase_requests.requester.list, budgets: d.access.budgets.requester.list }; });
+  check('purchase requests: every station passed first time, with three tables, and the tests pass', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'purchase_requests,suppliers,budgets' && a.tests.failed === 0 && a.tests.fresh, [a.status, a.line, a.tests]);
+  check('purchase requests: only the budget holder approves, only the buyer orders, staff see only their own requests, and the answer let the person who asked confirm delivery', pr.approve === 'approver' && pr.order === 'buyer' && pr.mine === 'own' && pr.budgets === 'none' && pr.confirm === 'requester,buyer', pr);
   await ctx.close();
 }
 /* ---------- What only React can get wrong: warnings, carets, handlers fired twice, focus, the other pages ---------- */
