@@ -14,6 +14,7 @@ import { answerMeter, limiter, limitsFrom } from '@/server/guard/limits';
 import { parseBody, refuse, refuseCrossSite, visitorKey } from '@/server/guard/http';
 import { checkPrompt } from '@/server/guard/prompt';
 import { LlmError, resolveProvider, type Tier } from '@/server/llm';
+import { errorText, log, withRequestLog } from '@/server/log';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -25,7 +26,7 @@ const SYSTEM =
 // The body is read with a size limit first (the prompt limit plus room for the other fields), then checked.
 const Body = z.object({ prompt: z.string().min(1, 'A prompt is required.'), tier: z.enum(['default', 'quick']).catch('default') });
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   const foreign = refuseCrossSite(request);
   if (foreign) return foreign;
   const provider = resolveProvider();
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
         if (cut) send({ type: 'done', truncated: true });
       } catch (e) {
         const error = e instanceof LlmError ? e : new LlmError('upstream', 'the model call failed');
-        if (error.code !== 'aborted') console.error('[llm]', provider.id, error.code, error.message);
+        if (error.code !== 'aborted') log('error', 'model_failed', { provider: provider.id, code: error.code, error: errorText(error) });
         try {
           send({ type: 'error', code: error.code === 'unauthorized' ? 'not_configured' : error.code, message: error.message });
         } catch {
@@ -103,3 +104,5 @@ export async function POST(request: Request) {
     },
   });
 }
+
+export const POST = withRequestLog('llm', post);
