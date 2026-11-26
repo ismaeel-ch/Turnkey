@@ -5,7 +5,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runTeamGraph } from '@/server/graph/team';
 import { queryFrom, toolBoxFromConnectors, type ConnectorLike } from '@/server/graph/team/connector-tools';
-import { KNOWN_TOOLS, noTools, toolBoxFrom } from '@/server/graph/team/tools';
+import { KNOWN_TOOLS, toolBoxFrom } from '@/server/graph/team/tools';
+import type { ToolBox } from '@/server/graph/team/tools';
+
+// a tool box with nothing in it (the export of the same name was removed as unused in #100)
+const noTools: ToolBox = {
+  info: () => null,
+  run: async () => ({ ok: false, text: 'No tools are available.' }),
+};
 import type { Provider } from '@/server/llm';
 import { collect, factRequest, fixtureTools } from './fixtures';
 
