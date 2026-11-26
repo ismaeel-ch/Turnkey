@@ -43,13 +43,17 @@ export function mockProvider(reply?: (request: ChatRequest) => string): Provider
         const tool = tools[0];
         const call: ToolCall = { id: 'mock_call_' + ++n, name: tool.name, args: sampleArgs(tool.parameters) };
         yield { type: 'tool_call', call };
-        yield { type: 'done', truncated: false, usage: { input: Math.ceil(lastUser.length / 4), output: 20 } };
+        yield { type: 'done', truncated: false, usage: { input: Math.ceil(lastUser.length / 4), output: 20, costUsd: 0 } };
         return;
       }
       const text = reply ? reply(request) : answered ? 'Done.' : (roleAnswer(lastUser) ?? echo(lastUser));
       const size = Math.max(1, Math.ceil(text.length / 3));
       for (let i = 0; i < text.length; i += size) yield { type: 'delta', text: text.slice(i, i + size) };
-      yield { type: 'done', truncated: false, usage: { input: Math.ceil(lastUser.length / 4), output: Math.ceil(text.length / 4) } };
+      yield {
+        type: 'done',
+        truncated: false,
+        usage: { input: Math.ceil(lastUser.length / 4), output: Math.ceil(text.length / 4), costUsd: 0 },
+      };
     },
   };
 }

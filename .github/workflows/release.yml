@@ -21,8 +21,9 @@ name: Release and deploy
 on:
   push:
     branches: [main]
-    # A change to this file also counts, so that fixing the workflow retries a version whose release failed.
-    paths: [package.json, .github/workflows/release.yml]
+    # A change to this file or to vercel.json also counts, so that fixing the deploy retries a version whose release
+    # failed.
+    paths: [package.json, vercel.json, .github/workflows/release.yml]
   release:
     types: [published]
   workflow_dispatch:
@@ -152,6 +153,17 @@ jobs:
         run: npx --yes "$VERCEL_CLI" pull --yes --environment=production --token="$VERCEL_TOKEN"
       - name: Build with the Vercel CLI
         run: npx --yes "$VERCEL_CLI" build --prod --token="$VERCEL_TOKEN"
+      - name: The build must contain the Next.js server routes
+        # Guards against a static-only build (wrong framework settings in the Vercel project), which deploys fine but
+        # answers 404 on every page.
+        run: |
+          if [ ! -d .vercel/output/functions/api/health.func ]; then
+            echo "The build has no server function for /api/health, so it is not a Next.js build."
+            echo "Builders used:"
+            grep -o '"use": "[^"]*"\|"require": "[^"]*"' .vercel/output/builds.json || true
+            exit 1
+          fi
+          echo "Next.js server routes present."
       - name: Deploy the build to production
         id: deploy
         run: |
