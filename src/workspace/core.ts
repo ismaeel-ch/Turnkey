@@ -407,7 +407,7 @@ export function useStore() {
 
 /* ---------- AG-UI event log and telemetry (Debug mode reads these) ---------- */
 export const EV: LoggedEvent[] = [];
-export let evSeq = 0,
+let evSeq = 0,
   toolSeq = 0;
 export const TOOLCALLS: ToolCallRecord[] = [],
   MODELCALLS: ModelCallRecord[] = [],
@@ -591,7 +591,6 @@ export function modeNow() {
     cls: 'b-info',
   };
 }
-export const liveOn = () => modeNow().on; // the Live switch as it shows: wanted, and connected
 export const liveModelOn = () => modeNow().live; // Live, with a model to call
 interface NetworkInfo {
   effectiveType?: string;
