@@ -5,7 +5,7 @@
  * The palette follows the ARIA combobox pattern: focus stays in the search box, the arrow keys move the active option
  * (aria-activedescendant), Enter runs it, Escape closes the dialog.
  */
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Input } from '@fluentui/react-components';
 import { keyLabel, rankCommands } from '@/platform/command-match';
 import { closeDialog, cx } from './core';
@@ -16,12 +16,12 @@ const apple = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(n
 
 /** A shortcut as keys on screen. "g b" is two keys pressed one after the other. */
 export function Keys({ keys }: { keys: string }) {
+  // the keys are read out as they show ("G then B", "Ctrl+K"); a span may not carry an aria-label of its own
   const parts = keyLabel(keys, apple());
-  const spoken = keys === 'mod+k' ? (apple() ? 'Command K' : 'Control K') : parts.join(' then ');
   return (
-    <span className="keys" aria-label={spoken}>
+    <span className="keys">
       {parts.map((p, i) => (
-        <span key={i} aria-hidden="true">
+        <span key={i}>
           {i > 0 && <span className="keys-then"> then </span>}
           <kbd className="kbd">{p}</kbd>
         </span>
@@ -43,6 +43,17 @@ export function PaletteDialog() {
   const shown = useMemo(() => rankCommands(all, q), [all, q]);
   const cur = Math.min(active, Math.max(0, shown.length - 1));
   const optId = (c: Command) => 'cmd-' + c.id;
+  const box = useRef<HTMLInputElement>(null);
+
+  // Fluent's dialog moves focus to its first button once it has opened; the search box takes it back
+  useEffect(() => {
+    const t = setTimeout(() => box.current?.focus(), 0);
+    const f = requestAnimationFrame(() => box.current?.focus());
+    return () => {
+      clearTimeout(t);
+      cancelAnimationFrame(f);
+    };
+  }, []);
 
   useEffect(() => {
     const c = shown[cur];
@@ -73,6 +84,7 @@ export function PaletteDialog() {
     <Dialog title="Commands" onClose={closeDialog} cls="palette">
       <Input
         data-autofocus
+        ref={box}
         className="palette-q"
         contentBefore={<Icon n="search" s="16" />}
         placeholder="Type a command or an app name"

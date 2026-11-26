@@ -3,6 +3,7 @@
 // checks cover what axe cannot see: a skip link, visible focus, dialogs that keep focus, and reduced motion.
 // Run it with the other flows: `npm run test:e2e -- a11y` (or `TK_URL=http://localhost:3304 node tests/e2e/a11y.cjs`).
 //   A11Y_REPORT=1 prints every node of every violation, for working through a list of fixes.
+//   A11Y_ONLY=keyboard runs one part (light, dark, phone or keyboard).
 const fs = require('fs');
 const { chromium } = require('playwright');
 const axeSource = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
@@ -294,7 +295,10 @@ async function shortcuts(page) {
 
 (async () => {
   const browser = await chromium.launch();
-  for (const step of [() => scheme(browser, 'light'), () => scheme(browser, 'dark'), () => phone(browser, 'light'), () => phone(browser, 'dark'), () => keyboard(browser)]) {
+  // A11Y_ONLY=keyboard (or light, dark, phone) runs one part, while working on it
+  const steps = { light: [() => scheme(browser, 'light')], dark: [() => scheme(browser, 'dark')], phone: [() => phone(browser, 'light'), () => phone(browser, 'dark')], keyboard: [() => keyboard(browser)] };
+  const only = process.env.A11Y_ONLY;
+  for (const step of only && steps[only] ? steps[only] : Object.values(steps).flat()) {
     try { await step(); } catch (e) { errors.push('a11y flow stopped: ' + String(e.stack || e).slice(0, 700)); }
   }
   await browser.close();
