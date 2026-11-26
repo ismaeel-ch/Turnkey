@@ -1,3 +1,4 @@
+import { AreaBoundary } from '@/platform/area-boundary';
 import {
   BRAND,
   LS,
@@ -887,19 +888,21 @@ export function Workspace({ app }: { app: AppRecord }) {
               <Icon n="share" />
             </Btn>
           </div>
-          <div className="view">
-            {chatShown() ? (
-              <ChatPanel app={app} />
-            ) : view === 'app' ? (
-              stageOf(app).tour ? (
-                <StageView app={app} />
+          <AreaBoundary name={chatShown() ? 'The chat' : 'This view'} resetKey={chatShown() ? 'chat' : view}>
+            <div className="view">
+              {chatShown() ? (
+                <ChatPanel app={app} />
+              ) : view === 'app' ? (
+                stageOf(app).tour ? (
+                  <StageView app={app} />
+                ) : (
+                  <AppLauncher app={app} />
+                )
               ) : (
-                <AppLauncher app={app} />
-              )
-            ) : (
-              body
-            )}
-          </div>
+                body
+              )}
+            </div>
+          </AreaBoundary>
         </div>
         <PhoneNav app={app} />
       </div>
@@ -951,11 +954,21 @@ export function Workspace({ app }: { app: AppRecord }) {
         </div>
         {/* On a tablet the chat lies over the view, below the header, so the view tabs and Share stay in reach. */}
         <div className={'view' + (chatShown() && NARROW() ? ' has-chat' : '')}>
-          {view === 'app' ? <StageView app={app} /> : body}
-          {chatShown() && NARROW() && <ChatPanel app={app} />}
+          <AreaBoundary name="This view" resetKey={view}>
+            {view === 'app' ? <StageView app={app} /> : body}
+          </AreaBoundary>
+          {chatShown() && NARROW() && (
+            <AreaBoundary name="The chat">
+              <ChatPanel app={app} />
+            </AreaBoundary>
+          )}
         </div>
       </div>
-      {chatShown() && !NARROW() && <ChatPanel app={app} />}
+      {chatShown() && !NARROW() && (
+        <AreaBoundary name="The chat">
+          <ChatPanel app={app} />
+        </AreaBoundary>
+      )}
     </div>
   );
 }
