@@ -119,7 +119,7 @@ async function scheme(browser, s) {
   for (const [menu, item, sel] of [
     ['.acct', 'Settings', '.dialog'],
     ['[aria-label="Help"]', 'Feature guide', '.dialog'],
-    ['[aria-label="Help"]', 'What is real in this prototype', '.dialog'],
+    ['[aria-label="Help"]', 'What is real in Turnkey', '.dialog'],
   ]) {
     await page.locator('.titlebar ' + menu).first().click();
     await page.getByRole('menuitem', { name: item }).click();
