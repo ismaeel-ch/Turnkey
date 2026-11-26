@@ -1,12 +1,12 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
 import { REC } from './registry';
+import type { AccessRule, AppRecord, Connector, Dict, SavedCase } from '@/shared/types/workspace';
 import { S, isoDate, online, today, toolCall } from './core';
 import { QUESTS } from './quests';
 
 /* ===== Turnkey prototype · saved builds (Demo mode) and connections =====
    A saved build is the recorded output of each agent. Demo mode feeds it through the same checks,
    the same SQLite engine and the same API as a live build. All people and records are made up. */
-export const nextDate = (m, d) => {
+export const nextDate = (m: number, d: number) => {
   const t = today();
   let x = new Date(t.getFullYear(), m - 1, d);
   if (x < t) x = new Date(t.getFullYear() + 1, m - 1, d);
@@ -162,7 +162,7 @@ REC.clinic = {
       ['15:30', 'booked'],
       ['16:00', 'booked'],
     ];
-    const appts = [];
+    const appts: Dict<string | number>[] = [];
     let k = 0;
     for (let day = -5; day <= 6; day++) {
       const n = day === 0 ? now.length : k % 3 === 0 ? 3 : 2;
@@ -179,7 +179,7 @@ REC.clinic = {
               : k % 8 === 6
                 ? 'cancelled'
                 : 'booked';
-        const a = {
+        const a: Dict<string | number> = {
           patient_id: 1 + ((k * 5) % 14),
           doctor_id: 3 + (k % 3),
           starts_at: day + ' ' + (day === 0 ? now[j][0] : slots[(k * 5 + j * 3) % slots.length]),
@@ -1015,7 +1015,7 @@ REC.helpdesk = {
       'new',
       'closed',
     ];
-    const D = {
+    const D: Dict<string> = {
       access: 'Started this morning. Blocks work on the month-end report.',
       hardware: 'Happens every day. The device is still under warranty.',
       software: 'Reproduced on two machines after the latest update.',
@@ -1883,10 +1883,10 @@ REC.leave = {
         sick: 10,
         casual: 8,
       },
-      bal = [],
+      bal: Dict<string | number>[] = [],
       yr = new Date().getFullYear();
     [1, 2, 3, 4].forEach((e) =>
-      ['annual', 'sick', 'casual'].forEach((k) =>
+      (['annual', 'sick', 'casual'] as const).forEach((k) =>
         bal.push({
           employee_id: e,
           leave_type: k,
@@ -2547,6 +2547,8 @@ REC.leave = {
 /* Sales bidding: a team that bids on tenders. It shows an app with its own screens, its own team of agents and its own
    agent room (scores, price options, a go or no-go verdict). The saved Backend answer keeps one slip on purpose, so the
    Tester has something to catch and the repair loop is visible in Demo. Clients, tenders and prices are made up. */
+// The bid desk's records start from its saved cases, which come later in the same object.
+const bidCases = (): SavedCase[] => REC.biddesk.cases || [];
 REC.biddesk = {
   id: 'biddesk',
   title: 'Sales bidding desk',
@@ -2726,7 +2728,7 @@ REC.biddesk = {
         'No capacity in the analytics team before the deadline.',
       ],
     ];
-    const D = {
+    const D: Dict<string> = {
       Transport:
         'The client wants live positions on a map, alerts for late arrivals and a monthly report. Delivery within four months of award.',
       Health:
@@ -2735,12 +2737,12 @@ REC.biddesk = {
     };
     const SC = ['Fit with what we sell', 'Team capacity', 'Relationship with the client', 'Competition', 'Time to the deadline'],
       W = [3, 2, 2, 2, 1],
-      SV = {
+      SV: Dict<number[]> = {
         3: [4, 3, 4, 3, 4],
         4: [5, 4, 3, 4, 3],
         5: [4, 5, 3, 3, 2],
       };
-    const PO = {
+    const PO: Dict<(string | number | boolean)[][]> = {
       3: [
         ['Lean', 790000, 12, 61, false],
         ['Balanced', 868000, 20, 55, true],
@@ -2842,7 +2844,7 @@ REC.biddesk = {
             title: t[0],
             client: t[1],
             sector: t[2],
-            description: i < 2 ? REC.biddesk.cases[i].values.description : D[t[2]],
+            description: i < 2 ? bidCases()[i].values.description : D[t[2] as string],
             value: t[3],
             deadline: t[4],
             bid_manager: t[5],
@@ -2889,7 +2891,7 @@ REC.biddesk = {
               type: 'longtext',
             },
           ],
-          rows: [].concat.apply(
+          rows: ([] as Dict<unknown>[]).concat.apply(
             [],
             [3, 4, 5].map((id) =>
               SC.map((c, i) => ({
@@ -2949,7 +2951,7 @@ REC.biddesk = {
               type: 'longtext',
             },
           ],
-          rows: [].concat.apply(
+          rows: ([] as Dict<unknown>[]).concat.apply(
             [],
             [3, 4, 5].map((id) =>
               PO[id].map((p) => ({
@@ -3139,7 +3141,7 @@ REC.biddesk = {
         delete: false,
       },
     ].concat(
-      ['score_lines', 'price_options', 'risks'].reduce(
+      ['score_lines', 'price_options', 'risks'].reduce<AccessRule[]>(
         (a, tn) =>
           a.concat([
             {
@@ -3223,7 +3225,7 @@ REC.biddesk = {
         },
         label: 'Add a condition or a risk',
       },
-      samples: REC.biddesk.cases.map((c) => ({
+      samples: bidCases().map((c) => ({
         label: c.label,
         values: c.values,
       })),
@@ -3951,7 +3953,7 @@ REC.biddesk = {
   ],
 };
 export const TEMPLATES = ['clinic', 'helpdesk', 'leave', 'biddesk'];
-export function matchTemplate(text) {
+export function matchTemplate(text: string) {
   const s = ' ' + String(text || '').toLowerCase() + ' ';
   let best = null,
     score = 0;
@@ -3968,7 +3970,7 @@ export function matchTemplate(text) {
 /* ---------- connections to third parties ----------
    The real build calls these from the server route (REST) or through CopilotKit's MCP client.
    This page cannot reach other hosts, so every response below is a labelled sample. */
-export const CONNECTORS = [
+export const CONNECTORS: Connector[] = [
   {
     id: 'wikipedia',
     name: 'Wikipedia',
@@ -4105,8 +4107,8 @@ export const CONNECTORS = [
     ],
   },
 ];
-export const allConnectors = () => CONNECTORS.concat(S.custom || []);
-export const connOn = (id) => (S.conns[id] !== undefined ? !!S.conns[id] : true);
+export const allConnectors = (): Connector[] => CONNECTORS.concat((S.custom || []) as Connector[]);
+export const connOn = (id: string) => (S.conns[id] !== undefined ? !!S.conns[id] : true);
 export const WIKI = [
   ['Appointment scheduling software', 'Software that lets organisations manage bookings and appointments.'],
   ['Triage', 'Sorting people by how urgently they need care.'],
@@ -4119,14 +4121,16 @@ export const WIKI = [
   ['Workflow', 'A repeatable pattern of activity that moves work through steps.'],
   ['Role-based access control', 'Restricting system access by the roles users hold.'],
 ];
-export const LEARN = [
+export const LEARN: [RegExp, string, string][] = [
   [/vpn|wi-?fi|network|dns|proxy/i, 'Windows documentation', 'https://learn.microsoft.com/en-us/windows/'],
   [/password|sign|mfa|multifactor|account|access|locked/i, 'Microsoft Entra documentation', 'https://learn.microsoft.com/en-us/entra/'],
   [/outlook|mail|calendar|excel|office|365/i, 'Microsoft 365 documentation', 'https://learn.microsoft.com/en-us/microsoft-365/'],
   [/teams|meeting|call/i, 'Microsoft Teams documentation', 'https://learn.microsoft.com/en-us/microsoftteams/'],
 ];
 export const SAMPLE_NOTE = 'Sample response. This prototype cannot reach other hosts; the real build makes this call from the server.';
-export const SAMPLES = {
+// Sample arguments come from saved builds and from what the owner types in the connector panel.
+type SampleArgs = Dict<string | number | undefined>;
+export const SAMPLES: Dict<Dict<(a: SampleArgs) => Dict<unknown>>> = {
   wikipedia: {
     search_pages: (a) => {
       const w = String(a.q || '')
@@ -4226,15 +4230,22 @@ export const SAMPLES = {
     }),
   },
 };
-export function callConnector(app, agent, runId, cid, tool, args) {
+export function callConnector(
+  app: AppRecord | null | undefined,
+  agent: string,
+  runId: string | null | undefined,
+  cid: string,
+  tool: string,
+  args?: SampleArgs | null,
+) {
   const c = allConnectors().find((x) => x.id === cid) || {
     name: cid,
   };
   return toolCall(
     {
       agent,
-      runId,
-      appId: app ? app.id : null,
+      runId: runId ?? undefined,
+      appId: app ? app.id : undefined,
     },
     c.name + ' · ' + tool,
     args,

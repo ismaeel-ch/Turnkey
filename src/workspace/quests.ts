@@ -1,4 +1,4 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
+import type { AccessRule, SavedCase } from '@/shared/types/workspace';
 import { REC } from './builds';
 
 /* ===== Turnkey prototype · the three hackathon quests, each as its own app =====
@@ -7,7 +7,9 @@ import { REC } from './builds';
    those agents, replayed in Demo mode through the app's real API. People, newsrooms, ideas and prior-work
    records below are made up. The facts in the fact-check cases are well-known reference facts. */
 export const SAMPLE_PW = 'Illustrative record for the demo. The live build lists real search results here.';
-export const everyone = (table, roles, write, boss) =>
+// A quest's records start from its saved cases, which come later in the same object.
+const casesOf = (id: string): SavedCase[] => REC[id].cases || [];
+export const everyone = (table: string, roles: string[], write: string[], boss: string): AccessRule[] =>
   roles.map((r) => ({
     table,
     role: r,
@@ -153,7 +155,7 @@ REC.factcheck = {
         67,
         -1,
       ],
-      ['Science class handout', REC.factcheck.cases[1].values.text, 'Class handout', 2, 'queued', null, null, null],
+      ['Science class handout', casesOf('factcheck')[1].values.text, 'Class handout', 2, 'queued', null, null, null],
     ];
     const K = [
       [
@@ -400,7 +402,7 @@ REC.factcheck = {
             title: e[1],
             finding: e[2],
             stance: e[3],
-            url: 'https://en.wikipedia.org/wiki/' + e[1].replace(/ /g, '_'),
+            url: 'https://en.wikipedia.org/wiki/' + String(e[1]).replace(/ /g, '_'),
           })),
         },
       ],
@@ -482,7 +484,7 @@ REC.factcheck = {
         },
       ],
     },
-    access: [].concat(
+    access: ([] as AccessRule[]).concat(
       everyone('checks', ['editor', 'senior_editor', 'reader'], ['editor', 'senior_editor'], 'senior_editor'),
       everyone('claims', ['editor', 'senior_editor', 'reader'], ['editor', 'senior_editor'], 'senior_editor'),
       everyone('evidence', ['editor', 'senior_editor', 'reader'], ['editor', 'senior_editor'], 'senior_editor'),
@@ -538,7 +540,7 @@ REC.factcheck = {
           sets: ['summary', 'accuracy', 'checked_on'],
         },
       ],
-      samples: REC.factcheck.cases.map((c) => ({
+      samples: casesOf('factcheck').map((c) => ({
         label: c.label,
         values: c.values,
       })),
@@ -1320,7 +1322,7 @@ REC.priorart = {
         'Speech-based reading tutors are well established. Nothing in the idea is clearly new.',
         -14,
       ],
-      [REC.priorart.cases[0].values.title, REC.priorart.cases[0].values.description, 'health_tech', 2, 'draft', 'unknown', null, null],
+      [casesOf('priorart')[0].values.title, casesOf('priorart')[0].values.description, 'health_tech', 2, 'draft', 'unknown', null, null],
     ];
     const W = [
       [1, 'Camera system for monitoring shelf inventory', 'patentsview', 'patent', 2018, 'high', 'P-01'],
@@ -1715,7 +1717,7 @@ REC.priorart = {
           sets: ['novelty', 'summary', 'assessed_on'],
         },
       ],
-      samples: REC.priorart.cases.map((c) => ({
+      samples: casesOf('priorart').map((c) => ({
         label: c.label,
         values: c.values,
       })),
@@ -2473,7 +2475,7 @@ REC.debate = {
         'No clear lean. Parked until the design system work is finished.',
         -12,
       ],
-      [REC.debate.cases[0].values.motion, REC.debate.cases[0].values.context, 'engineering', 2, 'open', 'undecided', null, null],
+      [casesOf('debate')[0].values.motion, casesOf('debate')[0].values.context, 'engineering', 2, 'open', 'undecided', null, null],
     ];
     const A = [
       [1, 'for', 'A clean design removes years of workarounds', 'strong', null],
@@ -2746,7 +2748,7 @@ REC.debate = {
         },
       ],
     },
-    access: [].concat(
+    access: ([] as AccessRule[]).concat(
       everyone('debates', ['member', 'facilitator', 'observer'], ['member', 'facilitator'], 'facilitator'),
       [
         {
@@ -2857,7 +2859,7 @@ REC.debate = {
         },
         label: 'Add your own point',
       },
-      samples: REC.debate.cases.map((c) => ({
+      samples: casesOf('debate').map((c) => ({
         label: c.label,
         values: c.values,
       })),

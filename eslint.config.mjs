@@ -11,6 +11,15 @@ const eslintConfig = defineConfig([
     // (core.ts: S, U, notify) that components read and write directly, which these rules forbid. Each module moves to
     // typed code and a proper store; remove a rule from this list once no module needs it.
     files: ['src/workspace/**'],
+    // Modules that are typed and pass every rule. Add a module here when its `// @ts-nocheck` goes.
+    ignores: [
+      'src/workspace/agents.ts',
+      'src/workspace/builds.ts',
+      'src/workspace/core.ts',
+      'src/workspace/db.ts',
+      'src/workspace/quests.ts',
+      'src/workspace/registry.ts',
+    ],
     rules: {
       '@typescript-eslint/ban-ts-comment': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
