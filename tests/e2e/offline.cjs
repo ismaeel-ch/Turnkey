@@ -156,6 +156,34 @@ const check = (name, ok, detail) => {
   await sleep(300);
   const back = await ip.evaluate(() => document.querySelector('link[rel=manifest]')?.getAttribute('href'));
   check("leaving the app links Turnkey's manifest again", back === '/manifest.webmanifest', back);
+  // a short link: saved under the app's name, opens the app alone, and the next save keeps the name
+  const saved = await ip.evaluate(async (code) => {
+    const r = await fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, name: 'Help Desk Short' }) });
+    return { status: r.status, body: await r.json() };
+  }, share.code);
+  check('a shared app saves under a short name made from its name', saved.status === 201 && saved.body.path === '/help-desk-short' && !!saved.body.token, saved);
+  const shortPage = await ctx.newPage();
+  shortPage.on('pageerror', (e) => errors.push(String(e).slice(0, 300)));
+  await shortPage.goto(url + '/help-desk-short');
+  await shortPage.waitForSelector('.solo .app', { timeout: 30000 });
+  const viaShort = await shortPage.evaluate(() => {
+    const s = window.__formwork.state(), so = window.__formwork.view().solo, a = so && s.apps[so.app];
+    return { slug: a && a.shared && a.shared.slug, path: location.pathname };
+  });
+  check('the short address opens the app alone and remembers its name', viaShort.slug === 'help-desk-short' && viaShort.path === '/help-desk-short', viaShort);
+  const again = await shortPage.evaluate(async (a) => {
+    const r = await fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: a.code, name: 'Help Desk Short', slug: 'help-desk-short', token: a.token }) });
+    const other = await fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: a.code, name: 'Help Desk Short', slug: 'help-desk-short', token: 'not-the-token' }) });
+    return [r.status, (await r.json()).slug, other.status];
+  }, { code: share.code, token: saved.body.token });
+  check('only the token puts a newer version under the same short name', again[0] === 200 && again[1] === 'help-desk-short' && again[2] === 403, again);
+  await ctx.setOffline(true);
+  await shortPage.reload();
+  await shortPage.waitForSelector('.solo .app', { timeout: 30000 }).then(() => true, () => false).then((ok) => check('offline, the short address opens the copy saved in this browser', ok));
+  await ctx.setOffline(false);
+  const missing = await ctx.newPage();
+  await missing.goto(url + '/no-such-app-here');
+  await missing.waitForFunction(() => /No app is shared under this address/.test(document.body.innerText), null, { timeout: 30000 }).then(() => true, () => false).then((ok) => check('an unknown short address says so', ok));
   const gone = await ctx.newPage();
   await gone.goto(url + '/#app=i.nothing_here');
   await gone.waitForFunction(() => /no longer saved in this browser/.test(document.body.innerText), null, { timeout: 30000 }).then(() => true, () => false).then((ok) => check('an unknown app id says to open the link again', ok));

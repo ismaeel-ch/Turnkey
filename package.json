@@ -39,6 +39,7 @@
     "@fluentui/react-components": "^9.75.3",
     "@langchain/core": "^1.5.1",
     "@langchain/langgraph": "^1.7.5",
+    "@vercel/blob": "^2.9.0",
     "@xyflow/react": "12.12.1",
     "ai": "^6.0.338",
     "next": "16.4.6",
