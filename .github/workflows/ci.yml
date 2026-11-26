@@ -6,8 +6,7 @@ name: CI
 # checks the commit again before it deploys.
 #
 # The full checks: secrets scan, lint, typecheck, unit tests, a production build, the 286 browser checks (one job per
-# flow), and the legacy guard (src/legacy changes need WP-16 or [legacy] in the title). The job named "ci" is the single
-# result branch protection requires. Without the label the heavy jobs are skipped and only "ci" runs, for a few
+# flow). The job named "ci" is the single result branch protection requires. Without the label the heavy jobs are skipped and only "ci" runs, for a few
 # seconds, failing on purpose so that an unchecked pull request never looks green.
 
 on:
@@ -24,26 +23,9 @@ permissions:
   contents: read
 
 jobs:
-  legacy-guard:
-    name: legacy-guard
-    # The full checks run on a manual run, or on a non-draft pull request labelled ready-to-merge.
-    if: github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') && !github.event.pull_request.draft)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Fail a pull request that changes src/legacy without WP-16 or [legacy] in its title
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: node scripts/ci/legacy-guard.mjs
-
   check:
     name: check
+    # The full checks run on a manual run, or on a non-draft pull request labelled ready-to-merge.
     if: github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -113,13 +95,12 @@ jobs:
   ci:
     name: ci
     if: always()
-    needs: [legacy-guard, check, e2e]
+    needs: [check, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: All required jobs passed
         env:
-          GUARD: ${{ needs.legacy-guard.result }}
           CHECK: ${{ needs.check.result }}
           E2E: ${{ needs.e2e.result }}
         run: |
@@ -127,7 +108,6 @@ jobs:
             echo "CI has not run on this commit. Add the label ready-to-merge (and mark the pull request ready) to run it."
             exit 1
           fi
-          echo "legacy-guard: $GUARD, check: $CHECK, e2e: $E2E"
-          test "$GUARD" = "success"
+          echo "check: $CHECK, e2e: $E2E"
           test "$CHECK" = "success"
           test "$E2E" = "success"

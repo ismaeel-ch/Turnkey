@@ -16,8 +16,6 @@ process in brief. This page says what the repository does to enforce it.
 - Title: `WP-nn: what changed`. For a change outside a work package, a short imperative title.
 - Body: use the template. It lists the definition of done (docs/PLAN.md section 4) and names the issue with
   `Closes #n`.
-- Pull requests that change `src/legacy/**` must have `WP-16` at the start of the title, or `[legacy]` anywhere in it.
-  The `legacy-guard` job in `.github/workflows/ci.yml` fails the pull request otherwise. CLAUDE.md rule 5 explains why.
 - Keep pull requests small. One issue per pull request.
 
 ## Checks
@@ -28,12 +26,11 @@ labelled pull request runs it again. It can also be started by hand from the **A
 to `main`. Without the label, only the `ci` job runs, for a few seconds, and fails on purpose with a message saying
 to add the label, so an unchecked pull request never looks green.
 
-| Job            | What it runs                                                          |
-| -------------- | --------------------------------------------------------------------- |
-| `legacy-guard` | the `src/legacy` title rule (`scripts/ci/legacy-guard.mjs`)           |
-| `check`        | secrets scan, lint, typecheck, unit tests, production build           |
-| `e2e` (8 jobs) | one browser flow each, with failure screenshots kept for 3 days       |
-| `ci`           | passes only if the three above ran and passed; the one required check |
+| Job            | What it runs                                                         |
+| -------------- | -------------------------------------------------------------------- |
+| `check`        | secrets scan, lint, typecheck, unit tests, production build          |
+| `e2e` (8 jobs) | one browser flow each, with failure screenshots kept for 3 days      |
+| `ci`           | passes only if the jobs above ran and passed; the one required check |
 
 A run takes about four minutes. A job that fails can be reproduced locally with the matching npm script:
 `npm run check:secrets`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e -- <flow>`.

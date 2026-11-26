@@ -59,7 +59,7 @@ labelled `ready-to-merge` (docs/process/workflow.md). The other labels in docs/P
 ## 6. Checks after setup
 
 - A test pull request without the label gets only a failing `ci` check that says to add `ready-to-merge`. With the
-  label it gets the `legacy-guard`, `check`, eight `e2e` jobs and `ci` checks.
+  label it gets the `check`, eight `e2e` jobs and `ci` checks.
 - The merge button offers squash only, and the head branch is deleted after the merge.
 - A merge to `main` starts no Actions run and no Vercel deployment. Publishing a release starts **Release and
   deploy**, which ends with the production URL in its summary.
