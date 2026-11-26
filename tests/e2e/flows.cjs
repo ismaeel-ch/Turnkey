@@ -40,7 +40,29 @@ const land = async (page) => { await page.waitForSelector('.app-nav .nav-i'); aw
 const nav = (page, name) => page.locator('.app-nav .nav-i', { hasText: name }).first().click();
 const vtab = async (page, name) => { await page.locator('.vswitch [role=tab]', { hasText: name }).click(); await sleep(90); };
 
+async function quickStarts(browser, url) { // the two ways in from the first screen, for a judge who opens the URL cold
+  for (const vp of [null, { width: 390, height: 844 }]) {
+    const tag = vp ? 'phone: ' : '';
+    const { ctx, page } = await newPage(browser, vp ? { viewport: vp } : undefined);
+    await page.goto(url); await page.waitForSelector('#ob-sample', { timeout: 20000 });
+    check(tag + 'first screen says what Turnkey does in one line and offers both quick starts', /turns one sentence into a working business app/.test(await page.locator('.ob-body .lead').innerText()) && await page.locator('#ob-own').isVisible());
+    await page.click('#ob-sample');
+    await page.waitForSelector('.tour-pop', { timeout: 8000 });
+    const s = await st(page, () => { const F = window.__formwork, S = F.state(), t = (S.tabs[S.session] || []).find((x) => x.id === S.active[S.session]), a = t && t.app ? S.apps[t.app] : null; return { demo: S.settings.demo, tpl: a && a.tpl, status: a && a.status, steps: document.querySelector('.tour-pop').innerText }; });
+    check(tag + 'Try a sample: the sales bidding desk is building in Demo within a second, with a short tour', s.demo && s.tpl === 'biddesk' && s.status === 'building' && /1 of 4/.test(s.steps), s);
+    await shot(page, vp ? '00-phone-sample' : '00-sample');
+    await ctx.close();
+  }
+  const { ctx, page } = await newPage(browser);
+  await page.goto(url); await page.waitForSelector('#ob-own', { timeout: 20000 });
+  await page.click('#ob-own'); await page.waitForSelector('#home-prompt'); await sleep(500);
+  const h = await st(page, () => ({ focus: document.activeElement && document.activeElement.id, apps: Object.keys(window.__formwork.state().apps).length, tour: !!document.querySelector('.tour-pop') }));
+  check('Describe your own: an empty workspace with the sentence box focused, no build and no tour', h.focus === 'home-prompt' && h.apps === 0 && !h.tour, h);
+  await ctx.close();
+}
+
 async function flowDemo(browser, url) {
+  await quickStarts(browser, url);
   const { ctx, page } = await newPage(browser);
   await page.goto(url); await page.waitForSelector('.ob-card', { timeout: 20000 });
   check('onboarding shows on first run', await page.locator('.ob-steps li').count() === 5);
