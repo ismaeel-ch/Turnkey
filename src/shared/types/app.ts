@@ -226,11 +226,18 @@ export interface TestCase {
   why: string;
   steps: TourStep[];
 }
+/** The agent room's layout (src/workspace/room.tsx), read as saved. */
+export interface Board {
+  panels: { layout: string; [field: string]: Loose }[];
+  [field: string]: Loose;
+}
 export interface Theme {
   accent: string;
   nav: string;
   icon: string;
   density?: string;
+  /** the app's own icon: shape, fill and mark */
+  logo?: Dict<Loose> | null;
 }
 
 /** One schema change made after the first build. */
@@ -257,7 +264,7 @@ export interface AppDef {
   migrations: Migration[];
   cases?: TestCase[];
   /** the room layout of an app with a team (src/workspace/room.tsx) */
-  board?: Loose;
+  board?: Board | null;
 }
 /** A definition past station 1: it has a brief. */
 export type BriefedDef = AppDef & { brief: Brief };

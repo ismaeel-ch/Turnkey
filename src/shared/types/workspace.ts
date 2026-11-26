@@ -76,7 +76,11 @@ export interface AppRecord {
   /** the seed rows by table, kept so "Reset data" can put them back */
   seed?: { rows: Dict<Row[]> } | null;
   /** the last permission matrix the Backend check ran */
-  matrix?: { at: number; calls: number; refused: number; failed: string[] };
+  matrix?: { at: number; calls: number; refused: number; failed: string[] } | null;
+  /** the owner's answers to the build's questions; `q` is the Researcher's question */
+  answers: { q?: number | null; [field: string]: Loose };
+  /** what the Researcher looked up, shown as the brief's sources */
+  lookups?: Loose[];
   /** the last ten runs of the build line, oldest first */
   runs: Run[];
   /** the conversation with the agents, newest last */
