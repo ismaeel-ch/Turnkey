@@ -5,6 +5,32 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-26
+
+Link previews, retries for public sources, better charts in built apps, and layout fixes on phones and tablets.
+
+### Added
+
+- Link previews for Turnkey and for shared apps, plus robots.txt and a sitemap. ([#173](https://github.com/ismaeel-ch/Turnkey/pull/173))
+- Public sources are retried with backoff, and the app says plainly when one is down. ([#136](https://github.com/ismaeel-ch/Turnkey/pull/136))
+
+### Fixed
+
+- Built apps read years as years, total rows average scores, and sparse charts draw columns. ([#174](https://github.com/ismaeel-ch/Turnkey/pull/174))
+- Dialog layout, the Agents button over pages, and other UI issues. ([#135](https://github.com/ismaeel-ch/Turnkey/pull/135))
+- The workflow canvas does not animate while it is hidden. ([#158](https://github.com/ismaeel-ch/Turnkey/pull/158))
+- A share save that wrote nothing gives its place in the daily quota back. ([#160](https://github.com/ismaeel-ch/Turnkey/pull/160))
+
+### Changed
+
+- README has fresh screenshots of the Fluent UI and a demo GIF from sentence to app; the README demo path runs as
+  a scripted check with screenshots. ([#167](https://github.com/ismaeel-ch/Turnkey/pull/167)) ([#165](https://github.com/ismaeel-ch/Turnkey/pull/165))
+- The workspace drops its lint exemption block and unnecessary type casts. ([#162](https://github.com/ismaeel-ch/Turnkey/pull/162))
+
+### Tests
+
+- The new features are checked at phone and tablet sizes. ([#169](https://github.com/ismaeel-ch/Turnkey/pull/169))
+
 ## [0.4.2] - 2026-11-26
 
 Undo, redo and version history, a command palette, and the cost of each run and agent.
