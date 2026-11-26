@@ -100,6 +100,44 @@ export function Cell({ app, user, t, c, v }: { app: AppRecord; user: AppUser; t:
     );
   return cellText(app, user, t, c, v, 0);
 }
+/* ---------- store actions: components change pane, form and walkthrough state only through these ---------- */
+/** Changes one pane (who is signed in, the page, the open record or form) and redraws. */
+export function patchPane(pane: Pane, patch: Partial<Pane>) {
+  Object.assign(pane, patch);
+  notify();
+}
+/** Opens one page of the app as another person, or the sign-in screen (`uid` null), with nothing open. */
+export const signInAs = (pane: Pane, uid: number | null) => patchPane(pane, { uid, screen: null, rec: null, form: null, sheet: null });
+/** Opens a record in the drawer. */
+export const openRecord = (pane: Pane, table: string, id: number) => patchPane(pane, { rec: { table, id }, conn: null });
+/** Fills in one field of a record form, clears that field's error and redraws. */
+export function setField(f: PaneForm, name: string, v: unknown) {
+  f.vals[name] = v;
+  if (f.errs) delete f.errs[name];
+  notify();
+}
+/** Changes a record form (values, errors, the record just created) and redraws. */
+export function patchForm(f: PaneForm, patch: Partial<PaneForm>) {
+  Object.assign(f, patch);
+  notify();
+}
+/** The sign-in form of a pane, kept with the pane so typing survives a redraw. */
+export function loginOf(pane: Pane) {
+  return pane.login || (pane.login = { u: '', p: '', err: '' });
+}
+/** A form screen's draft, kept with the pane per screen. */
+export function draftOf(pane: Pane, key: string, table: string): PaneForm {
+  const forms = pane.forms || (pane.forms = {});
+  return forms[key] || (forms[key] = { table, id: null, vals: {}, errs: {}, done: null });
+}
+/** The form that edits one record, filled with its values. */
+export function editForm(pane: Pane, t: AppTable, row: StoredRow) {
+  const vals: Dict<unknown> = {};
+  t.columns.forEach((c) => {
+    vals[c.name] = row[c.name];
+  });
+  patchPane(pane, { form: { table: t.name, id: row.id, vals, errs: {} } });
+}
 export const newPane = (n: number): Pane => ({
   n,
   uid: null,
@@ -139,23 +177,10 @@ export function AppPane({ app, pane, solo: given }: { app: AppRecord; pane: Pane
   if (!user) return <AppLogin app={app} pane={pane} users={users} solo={solo} />;
   const screens = def.screens.filter((s) => s.roles.includes(user.role)),
     scr = screens.find((s) => s.id === pane.screen) || screens[0];
-  const go = (id: string) => {
-      pane.screen = id;
-      pane.rec = null;
-      pane.form = null;
-      pane.sheet = null;
-      notify();
-    },
+  const go = (id: string) => patchPane(pane, { screen: id, rec: null, form: null, sheet: null }),
     th = def.theme,
     navKind = ['top', 'rail'].includes(th.nav) ? th.nav : 'side';
-  const swap = (u: AppUser | null) => {
-    pane.uid = u ? u.id : null;
-    pane.screen = null;
-    pane.rec = null;
-    pane.form = null;
-    pane.sheet = null;
-    notify();
-  };
+  const swap = (u: AppUser | null) => signInAs(pane, u ? u.id : null);
   const nav = (cls: string) => (
     <nav className={'app-nav ' + cls} aria-label="Screens">
       {screens.map((s) => (
@@ -207,10 +232,7 @@ export function AppPane({ app, pane, solo: given }: { app: AppRecord; pane: Pane
             className="persona"
             aria-haspopup="dialog"
             aria-label={'Account ' + initials(user.name) + ', signed in as ' + user.name}
-            onClick={() => {
-              pane.sheet = 'me';
-              notify();
-            }}
+            onClick={() => patchPane(pane, { sheet: 'me' })}
           >
             <Avatar name={user.name} size="sm" />
           </button>
@@ -256,13 +278,7 @@ export function AppPane({ app, pane, solo: given }: { app: AppRecord; pane: Pane
 }
 export function AppLogin({ app, pane, users, solo }: { app: AppRecord; pane: Pane; users: AppUser[]; solo?: SoloItems }) {
   const def = app.def,
-    f =
-      pane.login ||
-      (pane.login = {
-        u: '',
-        p: '',
-        err: '',
-      });
+    f = loginOf(pane);
   const login = (u: string, p: string) => {
     const r = apiCall(
       app,
@@ -275,12 +291,8 @@ export function AppLogin({ app, pane, users, solo }: { app: AppRecord; pane: Pan
       },
       'app',
     );
-    if (r.status === 200) {
-      pane.uid = r.data.id;
-      pane.screen = null;
-      pane.login = null;
-    } else f.err = r.error || '';
-    notify();
+    if (r.status === 200) patchPane(pane, { uid: r.data.id, screen: null, login: null });
+    else patchPane(pane, { login: { ...f, err: r.error || '' } });
   };
   return (
     <div className={cx('app app-login', 'acc-' + def.theme.accent)}>
@@ -324,9 +336,7 @@ export function AppLogin({ app, pane, users, solo }: { app: AppRecord; pane: Pan
             placeholder="Username"
             autoComplete="off"
             value={f.u}
-            onInput={(e: FormEvent<HTMLInputElement>) => {
-              f.u = e.currentTarget.value;
-            }}
+            onInput={(e: FormEvent<HTMLInputElement>) => patchPane(pane, { login: { ...f, u: e.currentTarget.value } })}
           />
           <Input
             native
@@ -337,9 +347,7 @@ export function AppLogin({ app, pane, users, solo }: { app: AppRecord; pane: Pan
             placeholder="Password"
             autoComplete="off"
             value={f.p}
-            onInput={(e: FormEvent<HTMLInputElement>) => {
-              f.p = e.currentTarget.value;
-            }}
+            onInput={(e: FormEvent<HTMLInputElement>) => patchPane(pane, { login: { ...f, p: e.currentTarget.value } })}
           />
           <Btn className="btn primary" type="submit">
             Sign in
@@ -389,11 +397,7 @@ export function FieldInput({ app, user, c, f, idp }: { app: AppRecord; user: App
   const def = app.def,
     id = idp + c.name,
     v = f.vals[c.name],
-    set = (x: unknown) => {
-      f.vals[c.name] = x;
-      if (f.errs) delete f.errs[c.name];
-      notify();
-    };
+    set = (x: unknown) => setField(f, c.name, x);
   let ctl;
   if (c.type === 'longtext')
     ctl = (
@@ -517,22 +521,14 @@ export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUs
   const t = tableOf(app.def, f.table);
   if (!t) return null;
   const cols = formCols(app, user, t, !f.id),
-    close = () => {
-      pane.form = null;
-      notify();
-    };
+    close = () => patchPane(pane, { form: null });
   const save = (e: FormEvent) => {
     e.preventDefault();
     const row = saveForm(app, user, t, f, cols);
     if (row) {
       toast(t.one + (f.id ? ' saved' : ' created'), 'success');
-      pane.form = null;
-      pane.rec = {
-        table: t.name,
-        id: row.id,
-      };
-    }
-    notify();
+      patchPane(pane, { form: null, rec: { table: t.name, id: row.id } });
+    } else notify();
   };
   return (
     <div
@@ -577,26 +573,15 @@ export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUs
 export function FormScreen({ app, user, pane, scr }: ScreenProps) {
   const t = tableOf(app.def, scr.table);
   if (!t) return <Empty icon="warning" title="This page has no table" />;
-  const forms = pane.forms || (pane.forms = {}),
-    f =
-      forms[scr.id] ||
-      (forms[scr.id] = {
-        table: t.name,
-        id: null,
-        vals: {},
-        errs: {},
-        done: null,
-      }),
+  const f = draftOf(pane, scr.id, t.name),
     cols = formCols(app, user, t, true);
   const save = (e: FormEvent) => {
     e.preventDefault();
     const row = saveForm(app, user, t, f, cols);
     if (row) {
-      f.done = row.id;
-      f.vals = {};
       toast(t.one + ' created', 'success');
-    }
-    notify();
+      patchForm(f, { done: row.id, vals: {} });
+    } else notify();
   };
   return (
     <div className="scr">
@@ -618,12 +603,7 @@ export function FormScreen({ app, user, pane, scr }: ScreenProps) {
                 type="button"
                 className="btn sm"
                 onClick={() => {
-                  if (f.done == null) return;
-                  pane.rec = {
-                    table: t.name,
-                    id: f.done,
-                  };
-                  notify();
+                  if (f.done != null) openRecord(pane, t.name, f.done);
                 }}
               >
                 Open it
@@ -667,11 +647,7 @@ export function RecordDrawer({
 }) {
   const def = app.def,
     t = tableOf(def, rec.table),
-    close = () => {
-      pane.rec = null;
-      pane.conn = null;
-      notify();
-    };
+    close = () => patchPane(pane, { rec: null, conn: null });
   if (!t) return null;
   const res = fetchApi(app, user, '/api/' + t.name + '/' + rec.id);
   const back = compact ? (
@@ -727,24 +703,14 @@ export function RecordDrawer({
     const r = apiCall(app, user, 'DELETE', '/api/' + t.name + '/' + row.id, {}, 'app');
     if (r.status === 200) {
       toast(t.one + ' deleted', 'success');
-      pane.rec = null;
-    } else toast(r.status + ' ' + r.error, 'danger');
-    notify();
+      patchPane(pane, { rec: null });
+    } else {
+      toast(r.status + ' ' + r.error, 'danger');
+      notify();
+    }
   };
   const canEdit = acc.update === 'all' || (acc.update === 'own' && row[t.owner || 'created_by'] === user.id);
-  const edit = () => {
-    const vals: Dict<unknown> = {};
-    t.columns.forEach((c) => {
-      vals[c.name] = row[c.name];
-    });
-    pane.form = {
-      table: t.name,
-      id: row.id,
-      vals,
-      errs: {},
-    };
-    notify();
-  };
+  const edit = () => editForm(pane, t, row);
   const kids = def.tables.filter(
     (k) =>
       k.name !== t.name && k.columns.some((c) => c.type === 'ref' && c.ref === t.name) && accOf(def, user.role, k.name).list !== 'none',
@@ -757,15 +723,16 @@ export function RecordDrawer({
     };
     if (!connOn(a.connector)) return toast(c.name + ' is switched off under Connections.', 'warning');
     if (!needNet(a.label)) return;
-    pane.conn = {
-      row: row.id,
-      name: c.name,
-      label: a.label,
-      res: callConnector(app, 'ui', null, a.connector, a.tool, {
-        query: String(row[a.arg] || ''),
-      }),
-    };
-    notify();
+    patchPane(pane, {
+      conn: {
+        row: row.id,
+        name: c.name,
+        label: a.label,
+        res: callConnector(app, 'ui', null, a.connector, a.tool, {
+          query: String(row[a.arg] || ''),
+        }),
+      },
+    });
   };
   return (
     <aside className="drawer" aria-label={t.one + ' details'}>
@@ -933,17 +900,18 @@ export function Related({
         {accOf(def, user.role, k.name).create && (
           <Btn
             className="btn subtle sm"
-            onClick={() => {
-              pane.form = {
-                table: k.name,
-                id: null,
-                vals: {
-                  [c.name]: row.id,
+            onClick={() =>
+              patchPane(pane, {
+                form: {
+                  table: k.name,
+                  id: null,
+                  vals: {
+                    [c.name]: row.id,
+                  },
+                  errs: {},
                 },
-                errs: {},
-              };
-              notify();
-            }}
+              })
+            }
           >
             <Icon n="add" s="16" />
             Add
@@ -954,17 +922,7 @@ export function Related({
         <ul className="rel">
           {list.slice(0, 6).map((r) => (
             <li key={r.id}>
-              <button
-                className="rel-i"
-                onClick={() => {
-                  pane.rec = {
-                    table: k.name,
-                    id: r.id,
-                  };
-                  pane.conn = null;
-                  notify();
-                }}
-              >
+              <button className="rel-i" onClick={() => openRecord(pane, k.name, r.id)}>
                 <span className="ellipsis grow">{rowTitle(app, user, k, r)}</span>
                 {P && (
                   <span className={'badge b-' + stateTone(def, k, colOf(k, P.column), r[P.column])}>
@@ -1014,23 +972,8 @@ export function StageView({ app }: { app: AppRecord }) {
   const users = appUsers(app),
     p0 = st.panes[0],
     saved = app.tpl ? REC[app.tpl] : undefined;
-  const setUser = (pane: Pane, id: number | null) => {
-    pane.uid = id;
-    pane.screen = null;
-    pane.rec = null;
-    pane.form = null;
-    notify();
-  };
-  const split = () => {
-    st.split = !st.split;
-    if (st.split && st.panes[1].uid == null) {
-      const cur = users.find((u) => u.id === p0.uid),
-        other = users.find((u) => !cur || u.role !== cur.role);
-      if (!cur && users[0]) p0.uid = users[0].id;
-      st.panes[1].uid = other ? other.id : null;
-    }
-    notify();
-  };
+  const setUser = (pane: Pane, id: number | null) => patchPane(pane, { uid: id, screen: null, rec: null, form: null });
+  const split = () => toggleSplit(st, users);
   const reset = async () => {
     if (
       await confirmBox({
@@ -1102,30 +1045,59 @@ export function StageView({ app }: { app: AppRecord }) {
     </div>
   );
 }
+/** Two users side by side, or one. The second pane signs in as someone with another role. */
+function toggleSplit(st: Stage, users: AppUser[]) {
+  st.split = !st.split;
+  const p0 = st.panes[0];
+  if (st.split && st.panes[1].uid == null) {
+    const cur = users.find((u) => u.id === p0.uid),
+      other = users.find((u) => !cur || u.role !== cur.role);
+    if (!cur && users[0]) p0.uid = users[0].id;
+    st.panes[1].uid = other ? other.id : null;
+  }
+  notify();
+}
+/** Plays one walkthrough step against the API and shows its outcome in the first pane. Does not redraw. */
+function walkExec(app: AppRecord, st: Stage, T: Walk, i: number) {
+  const x = tourExec(app, T.state, app.def.tour[i]),
+    p = st.panes[0];
+  T.res[i] = {
+    ok: x.ok,
+    detail: x.detail,
+  };
+  if (x.user) {
+    p.uid = x.user.id;
+    p.form = null;
+  }
+  if (x.screen) p.screen = x.screen;
+  p.rec = x.rec || null;
+  p.vs = {};
+}
+/** The walkthrough's buttons: do this step, go to the next one, run the rest, close. */
+function walkDo(app: AppRecord, st: Stage, T: Walk) {
+  walkExec(app, st, T, T.i);
+  notify();
+}
+function walkNext(T: Walk) {
+  T.i++;
+  notify();
+}
+function walkAll(app: AppRecord, st: Stage, T: Walk) {
+  const n = app.def.tour.length;
+  for (let i = T.i; i < n; i++) if (!T.res[i]) walkExec(app, st, T, i);
+  T.i = n;
+  notify();
+}
+function closeWalk(st: Stage) {
+  st.tour = null;
+  notify();
+}
 export function WalkPlayer({ app, st, T }: { app: AppRecord; st: Stage; T: Walk }) {
   const steps = app.def.tour,
     step = steps[T.i],
     done = T.i >= steps.length,
-    r = T.res[T.i],
-    p = st.panes[0];
-  const exec = (i: number) => {
-    const x = tourExec(app, T.state, steps[i]);
-    T.res[i] = {
-      ok: x.ok,
-      detail: x.detail,
-    };
-    if (x.user) {
-      p.uid = x.user.id;
-      p.form = null;
-    }
-    if (x.screen) p.screen = x.screen;
-    p.rec = x.rec || null;
-    p.vs = {};
-  };
-  const close = () => {
-    st.tour = null;
-    notify();
-  };
+    r = T.res[T.i];
+  const close = () => closeWalk(st);
   return (
     <div className="walk" role="dialog" aria-label="Walkthrough">
       <div className="row between">
@@ -1180,35 +1152,16 @@ export function WalkPlayer({ app, st, T }: { app: AppRecord; st: Stage; T: Walk 
           )}
           <div className="row">
             {!r ? (
-              <Btn
-                className="btn primary sm"
-                onClick={() => {
-                  exec(T.i);
-                  notify();
-                }}
-              >
+              <Btn className="btn primary sm" onClick={() => walkDo(app, st, T)}>
                 <Icon n="play" s="16" />
                 Do it
               </Btn>
             ) : (
-              <Btn
-                className="btn primary sm"
-                onClick={() => {
-                  T.i++;
-                  notify();
-                }}
-              >
+              <Btn className="btn primary sm" onClick={() => walkNext(T)}>
                 {T.i === steps.length - 1 ? 'Finish' : 'Next step'}
               </Btn>
             )}
-            <Btn
-              className="btn subtle sm"
-              onClick={() => {
-                for (let i = T.i; i < steps.length; i++) if (!T.res[i]) exec(i);
-                T.i = steps.length;
-                notify();
-              }}
-            >
+            <Btn className="btn subtle sm" onClick={() => walkAll(app, st, T)}>
               Run all
             </Btn>
           </div>
