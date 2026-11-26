@@ -2,9 +2,9 @@ import { modelHost } from '@/platform/model-client';
 import { type ReactNode, useState, useLayoutEffect } from 'react';
 import type { BackedDef } from '@/shared/types/app';
 import type { SqlValue } from '@/shared/types/sqljs';
-import type { AppRecord, Downloader, ProductTourStep, Settings } from '@/shared/types/workspace';
+import type { AppRecord, Dict, Downloader, OnboardingForm, ProductTourStep, Settings, SignInForm } from '@/shared/types/workspace';
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
-import { render, toStyle } from '@/platform/dom';
+import { toStyle } from '@/platform/dom';
 import {
   APILOG,
   BRAND,
@@ -34,7 +34,6 @@ import {
   myApps,
   netChanged,
   netInfo,
-  netWas,
   notify,
   online,
   openDialog,
@@ -92,57 +91,59 @@ import { Home, Titlebar, Workspace, lineApp } from './shell-a';
 import { DebugDrawer } from './shell-b';
 
 /* ===== Turnkey prototype · shell: first-run onboarding, sign-in, dialogs, guided tour, boot ===== */
+/* The forms below keep their state in the view store (U), so it outlives a re-render. Components read it through a
+   getter and change it only through these actions, never by writing to the store while rendering. */
+const OB_START: OnboardingForm = { step: 0, name: '', user: '', pass: '', demo: true, dev: false, pick: 'clinic', tour: true, err: '' };
+const obForm = (): OnboardingForm => U.ob || OB_START;
+function setOb(patch: Partial<OnboardingForm> | null) {
+  U.ob = patch ? { ...obForm(), ...patch } : null;
+  notify();
+}
+const SI_START: SignInForm = { u: '', p: '', name: '', err: '', create: false };
+const siForm = (): SignInForm => U.si || SI_START;
+function setSi(patch: Partial<SignInForm> | null) {
+  U.si = patch ? { ...siForm(), ...patch } : null;
+  notify();
+}
+/** Create the account from the onboarding form, apply its choices, and start the first build and the tour. */
+function finishOnboarding(o: OnboardingForm) {
+  const a = createAccount(o.name || 'Demo user', o.user || 'demo', o.pass || 'demo');
+  S.session = a.id;
+  S.onboarded = true;
+  S.settings.demo = o.demo;
+  S.settings.debug = o.dev;
+  commit();
+  const pick = o.pick,
+    tour = o.tour;
+  setOb(null);
+  if (pick)
+    startBuild({
+      request: REC[pick].sentence,
+      tpl: pick,
+    });
+  if (tour) setTimeout(startTour, 900);
+  notify();
+}
 export function Onboarding() {
-  const o =
-      U.ob ||
-      (U.ob = {
-        step: 0,
-        name: '',
-        user: '',
-        pass: '',
-        demo: true,
-        dev: false,
-        pick: 'clinic',
-        tour: true,
-        err: '',
-      }),
+  const o = obForm(),
     steps = ['Welcome', 'Your account', 'How to run', 'First app', 'Ready'],
     liveOK = online();
   const next = () => {
     if (o.step === 1) {
       const u = snake(o.user);
       if (!str(o.name) || !u) {
-        o.err = 'Enter a name and a username, or skip to use the demo account.';
-        return notify();
+        setOb({ err: 'Enter a name and a username, or skip to use the demo account.' });
+        return;
       }
       if (str(o.pass).length < 4) {
-        o.err = 'Use at least 4 characters for the password.';
-        return notify();
+        setOb({ err: 'Use at least 4 characters for the password.' });
+        return;
       }
-      o.user = u;
+      setOb({ user: u });
     }
-    o.err = '';
-    o.step = Math.min(steps.length - 1, o.step + 1);
-    notify();
+    setOb({ err: '', step: Math.min(steps.length - 1, o.step + 1) });
   };
-  const finish = () => {
-    const a = createAccount(o.name || 'Demo user', o.user || 'demo', o.pass || 'demo');
-    S.session = a.id;
-    S.onboarded = true;
-    S.settings.demo = o.demo;
-    S.settings.debug = o.dev;
-    commit();
-    const pick = o.pick,
-      tour = o.tour;
-    U.ob = null;
-    if (pick)
-      startBuild({
-        request: REC[pick].sentence,
-        tpl: pick,
-      });
-    if (tour) setTimeout(startTour, 900);
-    notify();
-  };
+  const finish = () => finishOnboarding(o);
   const body = [
     () => (
       <>
@@ -206,7 +207,7 @@ export function Onboarding() {
               autoComplete="off"
               value={o.name}
               onInput={(e) => {
-                o.name = e.currentTarget.value;
+                setOb({ name: e.currentTarget.value });
               }}
             />
           </Field>
@@ -218,7 +219,7 @@ export function Onboarding() {
               autoComplete="off"
               value={o.user}
               onInput={(e) => {
-                o.user = e.currentTarget.value;
+                setOb({ user: e.currentTarget.value });
               }}
             />
           </Field>
@@ -231,7 +232,7 @@ export function Onboarding() {
               autoComplete="off"
               value={o.pass}
               onInput={(e) => {
-                o.pass = e.currentTarget.value;
+                setOb({ pass: e.currentTarget.value });
               }}
             />
           </Field>
@@ -240,12 +241,7 @@ export function Onboarding() {
         <Btn
           className="btn subtle"
           onClick={() => {
-            o.name = 'Demo user';
-            o.user = 'demo';
-            o.pass = 'demo';
-            o.err = '';
-            o.step = 2;
-            notify();
+            setOb({ name: 'Demo user', user: 'demo', pass: 'demo', err: '', step: 2 });
           }}
         >
           Skip and use the demo account (demo / demo)
@@ -261,8 +257,7 @@ export function Onboarding() {
             className={cx('choice', o.demo && 'on')}
             aria-pressed={o.demo}
             onClick={() => {
-              o.demo = true;
-              notify();
+              setOb({ demo: true });
             }}
           >
             <span className="row">
@@ -280,8 +275,7 @@ export function Onboarding() {
             aria-pressed={!o.demo}
             disabled={!liveOK}
             onClick={() => {
-              o.demo = false;
-              notify();
+              setOb({ demo: false });
             }}
           >
             <span className="row">
@@ -308,8 +302,7 @@ export function Onboarding() {
           id="ob-dev"
           on={o.dev}
           onChange={(v) => {
-            o.dev = v;
-            notify();
+            setOb({ dev: v });
           }}
           text="Show developer tools (debug mode): AG-UI events, tool calls, model usage, SQL"
         />
@@ -328,8 +321,7 @@ export function Onboarding() {
                 className={cx('choice', o.pick === id && 'on')}
                 aria-pressed={o.pick === id}
                 onClick={() => {
-                  o.pick = id;
-                  notify();
+                  setOb({ pick: id });
                 }}
               >
                 <span className="row">
@@ -352,8 +344,7 @@ export function Onboarding() {
         <Btn
           className={cx('btn subtle', !o.pick && 'on')}
           onClick={() => {
-            o.pick = '';
-            notify();
+            setOb({ pick: '' });
           }}
         >
           Start with an empty workspace instead
@@ -387,8 +378,7 @@ export function Onboarding() {
           id="ob-tour"
           on={o.tour}
           onChange={(v) => {
-            o.tour = v;
-            notify();
+            setOb({ tour: v });
           }}
           text="Show me around with a short guided tour"
         />
@@ -427,9 +417,7 @@ export function Onboarding() {
               <Btn
                 className="btn"
                 onClick={() => {
-                  o.step--;
-                  o.err = '';
-                  notify();
+                  setOb({ step: o.step - 1, err: '' });
                 }}
               >
                 Back
@@ -452,15 +440,7 @@ export function Onboarding() {
   );
 }
 export function SignIn() {
-  const f =
-      U.si ||
-      (U.si = {
-        u: '',
-        p: '',
-        name: '',
-        err: '',
-        create: false,
-      }),
+  const f = siForm(),
     apps = Object.keys(S.apps).length,
     bytes = LS.keys().reduce((n, k) => n + LS.size(k), 0);
   const submit = (e: React.FormEvent) => {
@@ -468,25 +448,23 @@ export function SignIn() {
     if (f.create) {
       const u = snake(f.u);
       if (!str(f.name) || !u || str(f.p).length < 4) {
-        f.err = 'Enter a name, a username and a password of at least 4 characters.';
-        return notify();
+        setSi({ err: 'Enter a name, a username and a password of at least 4 characters.' });
+        return;
       }
       if (S.accounts.some((a) => a.username === u)) {
-        f.err = 'That username is taken in this browser.';
-        return notify();
+        setSi({ err: 'That username is taken in this browser.' });
+        return;
       }
       const a = createAccount(f.name, u, f.p);
       S.session = a.id;
-      U.si = null;
+      setSi(null);
       commit();
       return;
     }
     if (signIn(f.u, f.p)) {
-      U.si = null;
-      notify();
+      setSi(null);
     } else {
-      f.err = 'Wrong username or password.';
-      notify();
+      setSi({ err: 'Wrong username or password.' });
     }
   };
   return (
@@ -517,7 +495,7 @@ export function SignIn() {
               autoComplete="off"
               value={f.name}
               onInput={(e) => {
-                f.name = e.currentTarget.value;
+                setSi({ name: e.currentTarget.value });
               }}
             />
           </Field>
@@ -535,7 +513,7 @@ export function SignIn() {
             autoComplete="off"
             value={f.u}
             onInput={(e) => {
-              f.u = e.currentTarget.value;
+              setSi({ u: e.currentTarget.value });
             }}
           />
         </Field>
@@ -548,7 +526,7 @@ export function SignIn() {
             autoComplete="off"
             value={f.p}
             onInput={(e) => {
-              f.p = e.currentTarget.value;
+              setSi({ p: e.currentTarget.value });
             }}
           />
         </Field>
@@ -561,9 +539,7 @@ export function SignIn() {
             type="button"
             className="btn subtle sm"
             onClick={() => {
-              f.create = !f.create;
-              f.err = '';
-              notify();
+              setSi({ create: !f.create, err: '' });
             }}
           >
             {f.create ? 'Back to sign in' : 'Create another account'}
@@ -630,13 +606,20 @@ export function SetRow({ title, text, children }: { title: ReactNode; text: Reac
     </div>
   );
 }
+/** Change one setting and save. */
+function setSetting<K extends keyof Settings>(k: K, v: Settings[K]) {
+  S.settings[k] = v;
+  if (k === 'theme') applyTheme();
+  commit();
+}
+/** Change fields of the open dialog's props (its form), keeping the rest. */
+function patchDialog(patch: Dict<unknown>) {
+  if (U.dialog) U.dialog = { ...U.dialog, props: { ...U.dialog.props, ...patch } };
+  notify();
+}
 export function SettingsDialog() {
   const s = S.settings,
-    set = <K extends keyof Settings>(k: K, v: Settings[K]) => {
-      s[k] = v;
-      if (k === 'theme') applyTheme();
-      commit();
-    },
+    set = setSetting,
     mode = modeNow(),
     on = online(),
     net = netInfo();
@@ -971,7 +954,7 @@ export function RenameDialog({ p }: { p: AppPick & { name: string } }) {
             data-autofocus
             value={p.name}
             onInput={(e) => {
-              p.name = e.currentTarget.value;
+              patchDialog({ name: e.currentTarget.value });
             }}
           />
         </Field>
@@ -995,36 +978,32 @@ export interface AddConnForm {
   auth: string;
   err: string;
 }
+const ADD_CONN_START: AddConnForm = { kind: 'MCP server', name: '', url: '', auth: 'none', err: '' };
 export function AddConnDialog({ p }: { p: AddConnForm }) {
-  if (!p.kind)
-    Object.assign(p, {
-      kind: 'MCP server',
-      name: '',
-      url: '',
-      auth: 'none',
-      err: '',
-    });
+  // a dialog opened without a form starts from the empty one
+  const f: AddConnForm = p.kind ? p : ADD_CONN_START,
+    set = (patch: Partial<AddConnForm>) => patchDialog({ ...f, ...patch });
   const add = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!str(p.name) || !/^https:\/\/\S+\.\S+/.test(str(p.url))) {
-      p.err = 'Give it a name and an https:// address.';
-      return notify();
+    if (!str(f.name) || !/^https:\/\/\S+\.\S+/.test(str(f.url))) {
+      set({ err: 'Give it a name and an https:// address.' });
+      return;
     }
     const id = uid('c');
     S.custom.push({
       id,
       custom: true,
-      name: str(p.name),
-      kind: p.kind || 'MCP server',
-      url: str(p.url),
-      auth: p.auth === 'key' ? 'API key on the server' : 'No key needed',
+      name: str(f.name),
+      kind: f.kind || 'MCP server',
+      url: str(f.url),
+      auth: f.auth === 'key' ? 'API key on the server' : 'No key needed',
       icon: 'plug',
       acc: 'steel',
       about: 'Added by you.',
       usedBy: 'Not used yet',
       tools: [
         {
-          name: p.kind === 'MCP server' ? 'tools/list' : 'GET /',
+          name: f.kind === 'MCP server' ? 'tools/list' : 'GET /',
           desc: 'Placeholder. The real build discovers the tools from the server.',
           args: {},
         },
@@ -1034,7 +1013,7 @@ export function AddConnDialog({ p }: { p: AddConnForm }) {
     U.conn = id;
     commit();
     closeDialog();
-    toast(str(p.name) + ' added', 'success');
+    toast(str(f.name) + ' added', 'success');
   };
   return (
     <Dialog title="Add a connection" onClose={closeDialog}>
@@ -1044,10 +1023,9 @@ export function AddConnDialog({ p }: { p: AddConnForm }) {
             native
             className="select"
             id="ac-kind"
-            value={p.kind}
+            value={f.kind}
             onChange={(e) => {
-              p.kind = e.currentTarget.value;
-              notify();
+              set({ kind: e.currentTarget.value });
             }}
           >
             <option value="MCP server">MCP server (HTTP)</option>
@@ -1060,25 +1038,25 @@ export function AddConnDialog({ p }: { p: AddConnForm }) {
             className="input"
             id="ac-name"
             data-autofocus
-            value={p.name}
+            value={f.name}
             onInput={(e) => {
-              p.name = e.currentTarget.value;
+              set({ name: e.currentTarget.value });
             }}
           />
         </Field>
         <Field
           id="ac-url"
           label="Address"
-          hint={p.kind === 'MCP server' ? "The server's streamable HTTP endpoint." : 'The base address of the API.'}
+          hint={f.kind === 'MCP server' ? "The server's streamable HTTP endpoint." : 'The base address of the API.'}
         >
           <Input
             native
             className="input mono"
             id="ac-url"
             placeholder="https://"
-            value={p.url}
+            value={f.url}
             onInput={(e) => {
-              p.url = e.currentTarget.value;
+              set({ url: e.currentTarget.value });
             }}
           />
         </Field>
@@ -1091,17 +1069,16 @@ export function AddConnDialog({ p }: { p: AddConnForm }) {
             native
             className="select"
             id="ac-auth"
-            value={p.auth}
+            value={f.auth}
             onChange={(e) => {
-              p.auth = e.currentTarget.value;
-              notify();
+              set({ auth: e.currentTarget.value });
             }}
           >
             <option value="none">No key needed</option>
             <option value="key">API key, stored on the server</option>
           </Select>
         </Field>
-        {p.err && <MBar tone="warning">{p.err}</MBar>}
+        {f.err && <MBar tone="warning">{f.err}</MBar>}
         <div className="row end">
           <Btn type="button" className="btn" onClick={closeDialog}>
             Cancel
@@ -1420,12 +1397,19 @@ export function startTour() {
   };
   notify();
 }
+/** Move the running tour to step i. */
+function setTourStep(i: number) {
+  if (U.tour) U.tour = { ...U.tour, i };
+  notify();
+}
 export function TourLayer() {
   const T = U.tour,
     st = useState<{ x: number; y: number; w: number; h: number } | null>(null),
     rect = st[0],
     setRect = st[1],
-    step = T ? T.steps[T.i] : null;
+    step = T ? T.steps[T.i] : null,
+    tourId = T && T.id,
+    tourStep = T && T.i;
   useLayoutEffect(() => {
     if (!T || !step) return undefined;
     let alive = true;
@@ -1464,7 +1448,7 @@ export function TourLayer() {
       clearInterval(iv);
       window.removeEventListener('resize', measure);
     };
-  }, [T && T.id, T && T.i]);
+  }, [tourId, tourStep]); // eslint-disable-line react-hooks/exhaustive-deps -- runs once per tour step; T and step are that step's
   if (!T || !step) return null;
   const W = window.innerWidth,
     H = window.innerHeight,
@@ -1478,8 +1462,7 @@ export function TourLayer() {
       const i = T.i + d;
       if (i < 0) return;
       if (i >= T.steps.length) return end();
-      T.i = i;
-      notify();
+      setTourStep(i);
     };
   let style: { left: string; top?: string; bottom?: string; width: string } = {
     left: (W - pw) / 2 + 'px',
@@ -1754,7 +1737,7 @@ export function boot() {
       Object.keys(DBX.timers).forEach((id) => {
         if (DBX.timers[id]) dbFlush(id);
       });
-    } catch (e) {}
+    } catch {}
   };
   setNetWas(online()); // Live follows the connection: listen for it coming and going
   window.addEventListener('online', netChanged);
@@ -1765,7 +1748,7 @@ export function boot() {
     const n = navigator as Navigator & { connection?: EventTarget; mozConnection?: EventTarget; webkitConnection?: EventTarget },
       c = n.connection || n.mozConnection || n.webkitConnection;
     if (c && c.addEventListener) c.addEventListener('change', netChanged);
-  } catch (e) {}
+  } catch {}
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush();
@@ -1775,7 +1758,7 @@ export function boot() {
       Object.keys(S.apps).forEach((id) => {
         try {
           if (dbExists(id)) dbSave(id);
-        } catch (e) {}
+        } catch {}
       });
       saveNow();
     },
