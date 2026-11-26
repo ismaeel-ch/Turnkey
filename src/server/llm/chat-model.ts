@@ -22,7 +22,7 @@ export interface GatewayCallOptions extends BaseLanguageModelCallOptions {
   tool_choice?: string | Record<string, unknown>;
 }
 
-export type GatewayChatModelParams = BaseChatModelParams & { provider: Provider; tier?: Tier; maxTokens?: number; temperature?: number };
+export type GatewayChatModelParams = BaseChatModelParams & { provider: Provider; tier?: Tier; maxTokens?: number };
 
 const textOf = (content: BaseMessage['content']): string =>
   typeof content === 'string'
@@ -66,14 +66,12 @@ export class GatewayChatModel extends BaseChatModel<GatewayCallOptions> {
   private provider: Provider;
   private tier: Tier;
   private maxTokens?: number;
-  private temperature?: number;
 
   constructor(params: GatewayChatModelParams) {
     super(params);
     this.provider = params.provider;
     this.tier = params.tier ?? 'default';
     this.maxTokens = params.maxTokens;
-    this.temperature = params.temperature;
   }
 
   _llmType() {
@@ -93,7 +91,6 @@ export class GatewayChatModel extends BaseChatModel<GatewayCallOptions> {
       messages: toGatewayMessages(messages),
       tier: this.tier,
       maxTokens: this.maxTokens,
-      temperature: this.temperature,
       signal: options.signal,
       tools: toolsOf(options),
       toolChoice: choice === 'none' ? 'none' : choice === 'any' || choice === 'required' ? 'required' : undefined,
@@ -173,11 +170,11 @@ export class GatewayChatModel extends BaseChatModel<GatewayCallOptions> {
 /** A chat model for LangGraph on the configured provider, or null when none is configured. */
 export function toChatModel(
   tier: Tier = 'default',
-  options: { maxTokens?: number; temperature?: number; provider?: Provider | null } = {},
+  options: { maxTokens?: number; provider?: Provider | null } = {},
 ): GatewayChatModel | null {
   const provider = options.provider === undefined ? resolveProvider() : options.provider;
   if (!provider) return null;
-  return new GatewayChatModel({ provider, tier, maxTokens: options.maxTokens, temperature: options.temperature });
+  return new GatewayChatModel({ provider, tier, maxTokens: options.maxTokens });
 }
 
 /** Like toChatModel, but throws the LlmError the routes already understand when nothing is configured. */

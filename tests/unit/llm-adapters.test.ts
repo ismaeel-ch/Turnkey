@@ -124,6 +124,7 @@ describe('toAiSdkModel (AI SDK)', () => {
       LITELLM_BASE_URL: undefined,
       OPENAI_API_KEY: undefined,
       ANTHROPIC_API_KEY: undefined,
+      NODE_ENV: 'production',
     });
     try {
       const m = litellmModel();
@@ -149,17 +150,17 @@ describe('routes follow LLM_PROVIDER', () => {
     expect(body).toMatchObject({ ok: true, live: true, provider: 'mock', models: { default: 'mock-default', quick: 'mock-quick' } });
     expect(JSON.stringify(body)).not.toMatch(/gateway\.example|test-key/);
   });
-  it('/api/health?probe=1 makes one tiny call', async () => {
+  it('/api/health?probe=1 makes one tool call and reports pass or fail', async () => {
     const body = await (
       await health(new Request('http://localhost/api/health?probe=1', { headers: { 'x-forwarded-for': '10.0.0.1' } }))
     ).json();
-    expect(body.probe).toMatchObject({ ok: true, model: 'mock-quick' });
+    expect(body.probe).toMatchObject({ ok: true, provider: 'mock', model: 'mock-quick', toolCalling: 'works' });
   });
-  it('/api/health?probe=tools says whether tools work, and how', async () => {
+  it('/api/health?probe=tools is the same probe under its older name', async () => {
     const body = await (
       await health(new Request('http://localhost/api/health?probe=tools', { headers: { 'x-forwarded-for': '10.0.0.2' } }))
     ).json();
-    expect(body.tools).toMatchObject({
+    expect(body.probe).toMatchObject({
       ok: true,
       mode: 'native',
       toolCalling: 'works',
@@ -167,7 +168,7 @@ describe('routes follow LLM_PROVIDER', () => {
     });
     expect(JSON.stringify(body)).not.toMatch(/gateway\.example|test-key/);
   });
-  it('/api/health?probe=tools reports a plain error with no model configured', async () => {
+  it('/api/health?probe reports a plain error with no model configured', async () => {
     restore();
     restore = withEnv({
       LLM_PROVIDER: undefined,
@@ -175,11 +176,12 @@ describe('routes follow LLM_PROVIDER', () => {
       LITELLM_BASE_URL: undefined,
       OPENAI_API_KEY: undefined,
       ANTHROPIC_API_KEY: undefined,
+      NODE_ENV: 'production', // in development the stand-in or the Claude Code command would answer
     });
     const body = await (
       await health(new Request('http://localhost/api/health?probe=tools', { headers: { 'x-forwarded-for': '10.0.0.3' } }))
     ).json();
-    expect(body).toMatchObject({ live: false, provider: null, tools: { ok: false } });
+    expect(body).toMatchObject({ live: false, provider: null, probe: { ok: false } });
   });
   it('/api/llm streams a role-aware answer from the mock', async () => {
     const prompt =

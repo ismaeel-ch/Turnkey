@@ -1,11 +1,7 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { complete, resolveProvider, withTools, type ChatChunk, type ChatRequest, type Provider, type ToolDef } from '@/server/llm';
 import { createPacer, retryAfterMs, scrub, withRetries } from '@/server/llm/http';
 import { anthropic, toAnthropicMessages } from '@/server/llm/providers/anthropic';
-import { claudeCli } from '@/server/llm/providers/claude-cli';
 import { mockProvider, sampleArgs } from '@/server/llm/providers/mock';
 import { openAiCompatible, toOpenAiMessages } from '@/server/llm/providers/openai-compatible';
 import { firstJsonObject, forgetToolModes, parseToolReply, toJsonMessages } from '@/server/llm/tools';
@@ -240,71 +236,12 @@ describe('anthropic provider', () => {
   });
 });
 
-describe('Claude Code command provider', () => {
-  let dir: string;
-  beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-claude-'));
-  });
-  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const fake = (script: string) => {
-    const file = path.join(dir, 'claude');
-    fs.writeFileSync(file, '#!/bin/sh\n' + script, { mode: 0o755 });
-    return file;
-  };
-  const ask = (p: Provider, content = 'Say ok') =>
-    complete(p, {
-      messages: [
-        { role: 'system', content: 'Be brief.' },
-        { role: 'user', content },
-      ],
-      tier: 'default',
-    });
-
-  it('runs `claude -p`, sends the prompt on standard input and reads the JSON result', async () => {
-    const log = path.join(dir, 'args.txt');
-    const cmd = fake(
-      `echo "$@" > "${log}"\ncat > "${log}.stdin"\necho '{"type":"result","subtype":"success","is_error":false,"result":"ok then","usage":{"input_tokens":4,"output_tokens":2}}'`,
-    );
-    const out = await ask(claudeCli({ model: 'sonnet', quickModel: 'haiku', command: cmd, env: {} }), 'a secret prompt');
-    expect(out).toMatchObject({ text: 'ok then', truncated: false, usage: { input: 4, output: 2 } });
-    const args = fs.readFileSync(log, 'utf8');
-    expect(args).toMatch(/-p --output-format json --model sonnet/);
-    expect(args).toMatch(/--system-prompt Be brief\./);
-    expect(args).not.toMatch(/secret/);
-    expect(fs.readFileSync(log + '.stdin', 'utf8')).toBe('a secret prompt');
-  });
-  it('reports the failure the command gives (from here the API cannot be reached)', async () => {
-    const cmd = fake(
-      `cat >/dev/null\necho '{"type":"result","subtype":"error_during_execution","is_error":true,"terminal_reason":"api_error","result":"cannot reach the API"}'`,
-    );
-    await expect(ask(claudeCli({ model: 'sonnet', command: cmd, env: {} }))).rejects.toMatchObject({
-      code: 'upstream',
-      message: expect.stringContaining('api_error'),
-    });
-  });
-  it('says so when the command is not installed or answers with something else', async () => {
-    await expect(ask(claudeCli({ model: 'sonnet', command: path.join(dir, 'nope'), env: {} }))).rejects.toMatchObject({
-      code: 'not_configured',
-    });
-    const cmd = fake('cat >/dev/null\necho not json');
-    await expect(ask(claudeCli({ model: 'sonnet', command: cmd, env: {} }))).rejects.toMatchObject({ code: 'upstream' });
-  });
-  it('is refused on Vercel', () => {
-    expect(() => claudeCli({ model: 'sonnet', env: { VERCEL: '1' } })).toThrow(/local testing only/);
-    expect(resolveProvider({ LLM_PROVIDER: 'claude-cli', VERCEL: '1' })).toBeNull();
-    expect(resolveProvider({ LLM_PROVIDER: 'claude-cli' })?.id).toBe('claude-cli');
-  });
-});
-
 describe('resolveProvider', () => {
   it('takes an Anthropic key, but only picks it when nothing else is set', () => {
     const p = resolveProvider({ ANTHROPIC_API_KEY: 'test-key', ANTHROPIC_MODEL_FAST: 'fast-1' });
     expect([p?.id, p?.model('default'), p?.model('quick')]).toEqual(['anthropic', 'claude-sonnet-5-5', 'fast-1']);
     expect(resolveProvider({ ANTHROPIC_API_KEY: 'k', OPENAI_API_KEY: 'k', OPENAI_MODEL: 'o' })?.id).toBe('openai');
-    expect(resolveProvider({ LLM_PROVIDER: 'anthropic', OPENAI_API_KEY: 'k', OPENAI_MODEL: 'o' })).toBeNull();
-  });
-  it('never picks the Claude command or the mock by itself', () => {
-    expect(resolveProvider({})).toBeNull();
+    expect(resolveProvider({ LLM_PROVIDER: 'anthropic', OPENAI_API_KEY: 'k', OPENAI_MODEL: 'o', NODE_ENV: 'production' })).toBeNull();
   });
 });
 

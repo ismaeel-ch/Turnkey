@@ -72,7 +72,6 @@ function requestOf(options: LanguageModelV3CallOptions, tier: Tier): ChatRequest
     messages,
     tier,
     maxTokens: options.maxOutputTokens,
-    temperature: options.temperature,
     signal: options.abortSignal,
     tools: tools.length ? tools : undefined,
     toolChoice: choice === 'none' ? 'none' : choice === 'required' || choice === 'tool' ? 'required' : tools.length ? 'auto' : undefined,

@@ -56,7 +56,6 @@ export function anthropic(config: AnthropicConfig): Provider {
       const body = JSON.stringify({
         model: model(request.tier),
         max_tokens: request.maxTokens ?? 4096,
-        temperature: request.temperature,
         system: system || undefined,
         messages,
         stream: true,

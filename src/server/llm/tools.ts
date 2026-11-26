@@ -150,7 +150,6 @@ async function probeNative(inner: Provider, tier: Tier): Promise<ToolMode> {
       messages: [{ role: 'user', content: 'Call the report_ready tool with the word "ready". Do not answer in text.' }],
       tier,
       maxTokens: 64,
-      temperature: 0,
       tools: [PROBE_TOOL],
       toolChoice: 'required',
     })) {
@@ -169,6 +168,7 @@ async function probeNative(inner: Provider, tier: Tier): Promise<ToolMode> {
 export async function toolModeFor(inner: Provider, tier: Tier, env: Env = process.env): Promise<ToolMode> {
   const setting = toolModeSetting(env);
   if (setting === 'json') return 'json';
+  if (inner.fixedToolMode) return inner.fixedToolMode;
   if (setting === 'native') return inner.nativeTools ? 'native' : 'json';
   if (!inner.nativeTools) return 'json';
   const key = inner.id + ':' + inner.model(tier);

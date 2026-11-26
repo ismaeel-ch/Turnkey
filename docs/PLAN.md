@@ -91,7 +91,7 @@ Environment variables, read only in server code:
 | `LITELLM_MODEL_FAST`                                                                                                               | optional cheap model for the Quick setting                        |
 | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_MODEL_FAST`, `OPENAI_BASE_URL`                                                           | any OpenAI-compatible service                                     |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_MODEL_FAST`                                                                     | Anthropic directly                                                |
-| `LLM_PROVIDER`                                                                                                                     | force one: `litellm`, `openai`, `anthropic`, `claude-cli`, `mock` |
+| `LLM_PROVIDER`                                                                                                                     | force one: `litellm`, `openai`, `anthropic`, `claude-code`, `mock` |
 | `LLM_TOOL_MODE`                                                                                                                    | `auto` (default), `native`, `json`                                |
 | `LLM_RATE_PER_MINUTE`, `LLM_GLOBAL_PER_MINUTE`, `LLM_DAILY_CALL_CAP`, `LLM_MAX_PROMPT_CHARS`, `LLM_MAX_OUTPUT_TOKENS`, `LIVE_MODE` | guard rails (`src/server/guard/limits.ts`)                        |
 | `PATENTSVIEW_API_KEY`                                                                                                              | optional, for the PatentsView connector                           |

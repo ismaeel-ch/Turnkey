@@ -86,7 +86,6 @@ export function openAiCompatible(config: OpenAiCompatibleConfig): Provider {
         stream: true,
         stream_options: { include_usage: true },
         max_tokens: request.maxTokens,
-        temperature: request.temperature,
         ...(tools
           ? {
               tools: tools.map((t) => ({
