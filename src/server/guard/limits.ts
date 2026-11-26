@@ -10,6 +10,7 @@
  *   LLM_DAILY_CALL_CAP      calls from everyone per day             (default 600)
  *   LLM_MAX_PROMPT_CHARS    longest prompt accepted                 (default 120000)
  *   LLM_MAX_OUTPUT_TOKENS   most tokens one answer may use          (default 8000)
+ *   LLM_MAX_ANSWER_CHARS    longest answer relayed, in characters   (default 4 x the output token cap)
  *   LIVE_MODE               set to `off` to refuse every model call (saved builds keep working)
  */
 type Env = Record<string, string | undefined>;
@@ -26,6 +27,7 @@ export function limitsFrom(env: Env = process.env) {
     dailyCap: num(env.LLM_DAILY_CALL_CAP, 600),
     maxPromptChars: num(env.LLM_MAX_PROMPT_CHARS, 120000),
     maxOutputTokens: num(env.LLM_MAX_OUTPUT_TOKENS, 8000),
+    maxAnswerChars: num(env.LLM_MAX_ANSWER_CHARS, num(env.LLM_MAX_OUTPUT_TOKENS, 8000) * 4),
     off: (env.LIVE_MODE || '').trim().toLowerCase() === 'off',
   };
 }
@@ -81,4 +83,18 @@ export const limiter = createLimiter();
 export function visitorOf(request: Request): string {
   const forwarded = request.headers.get('x-forwarded-for');
   return (forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'local').trim();
+}
+
+/** Stops a streamed answer at the size limit. Feed it each chunk; it says how much of the chunk may be sent. */
+export function answerMeter(maxChars: number) {
+  let sent = 0;
+  return {
+    /** The part of `text` that fits. `done` is true once the limit is reached. */
+    take(text: string): { text: string; done: boolean } {
+      const room = Math.max(0, maxChars - sent);
+      const part = text.length > room ? text.slice(0, room) : text;
+      sent += part.length;
+      return { text: part, done: sent >= maxChars };
+    },
+  };
 }
