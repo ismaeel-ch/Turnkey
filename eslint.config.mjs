@@ -26,6 +26,8 @@ const eslintConfig = defineConfig([
       'src/workspace/team-stream.ts',
       'src/workspace/ui.tsx',
       'src/workspace/tester.tsx',
+      'src/workspace/activity.tsx',
+      'src/workspace/guide.tsx',
     ],
     rules: {
       '@typescript-eslint/ban-ts-comment': 'off',

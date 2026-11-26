@@ -4,7 +4,7 @@
  * bus in src/platform/agui/activity.ts, the events of agents that run on the server. A second tab, "How it works",
  * draws the build team and the workflow this app runs on, plus the app's own agent team when it has one.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Badge,
   Button,
@@ -114,7 +114,9 @@ export function startActivityBridge() {
   if (bridged) return;
   bridged = true;
   subscribeAgentEvents((e) => {
-    const { type, seq, t, ...rest } = e; // the log numbers and times its own events
+    const { type, ...rest } = e;
+    delete rest.seq; // the log numbers and times its own events
+    delete rest.t;
     emit(type, rest);
   });
 }
@@ -322,7 +324,7 @@ export function AgentActivity({ app }: { app: AppRecord | null }) {
   const scope = all || !app ? null : app.id;
   const model = activityNow(scope);
   const working = Object.values(model.agents).filter((a) => a.state === 'working' || a.state === 'waiting').length;
-  const theme = useMemo(() => (isDark() ? webDarkTheme : webLightTheme), [S.settings && S.settings.theme, open]);
+  const theme = isDark() ? webDarkTheme : webLightTheme;
 
   const roster = rosterOf(app, model);
   const items = model.items.filter(FILTERS[filter]).slice().reverse();
@@ -620,7 +622,7 @@ function HowItWorks({ app, model, c }: { app: AppRecord | null; model: ActivityM
 
       <div className={c.section}>
         <Text weight="semibold" className={c.sectionTitle}>
-          One agent's turn
+          One agent&apos;s turn
         </Text>
         <div className={c.steps}>
           {['Check the request', 'Write a draft', 'Check the draft', 'Fix what failed', 'Hand over'].map((s, i, a) => (

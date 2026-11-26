@@ -1,4 +1,4 @@
-import { NARROW, S, U, activeTab, chatShown, closeDialog, commit, cx, notify, openTab, setChat, str, toast } from './core';
+import { NARROW, S, U, activeTab, chatShown, closeDialog, commit, notify, openTab, setChat, str, toast } from './core';
 import { Btn, Chip, Dialog, Empty, Icon, Input } from './ui';
 import { openShare } from './share';
 import { startTour } from './shell-c';
@@ -561,6 +561,11 @@ export function guideGo(go: GuideGo, app: AppRecord | null): void {
     return;
   }
 }
+/** Changes the open guide's search or section. The props live on U.dialog, so they outlast a re-render. */
+function setGuide(patch: GuideProps): void {
+  if (U.dialog && U.dialog.type === 'guide') Object.assign(U.dialog.props, patch);
+  notify();
+}
 export function GuideDialog({ p }: { p: GuideProps }) {
   const tab = S.session ? activeTab() : null,
     app = tab && tab.app ? S.apps[tab.app] : null,
@@ -582,8 +587,7 @@ export function GuideDialog({ p }: { p: GuideProps }) {
             placeholder={'Search ' + GUIDE.length + ' features'}
             value={p.q || ''}
             onInput={(e) => {
-              p.q = e.currentTarget.value;
-              notify();
+              setGuide({ q: e.currentTarget.value });
             }}
           />
         </div>
@@ -595,8 +599,7 @@ export function GuideDialog({ p }: { p: GuideProps }) {
             on={!!(g === x.id)}
             aria-pressed={g === x.id}
             onClick={() => {
-              p.g = x.id;
-              notify();
+              setGuide({ g: x.id });
             }}
           >
             {x.icon && <Icon n={x.icon} s="16" />}
