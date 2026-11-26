@@ -48,3 +48,9 @@ export const KNOWN_TOOLS: ToolInfo[] = [
 export function toolBoxFrom(run: ToolBox['run'], known: ToolInfo[] = KNOWN_TOOLS): ToolBox {
   return { info: (c, t) => known.find((k) => k.connector === c && k.tool === t) ?? null, run };
 }
+
+/** No tools at all: agents are told to work from what they know. */
+export const noTools: ToolBox = {
+  info: () => null,
+  run: async () => ({ ok: false, text: 'No tools are available.' }),
+};
