@@ -46,13 +46,15 @@ ul.dots{list-style:disc;padding-left:18px}
 .btn.on{background:var(--colorNeutralBackground1Selected);color:var(--colorBrandForeground1);border-color:var(--colorBrandStroke1)}.btn.subtle.on{border-color:transparent;background:var(--colorSubtleBackgroundSelected)}
 .btn.icon.sm{width:24px}
 .input,.select,.textarea{width:100%;min-height:32px;padding:5px 10px;border:1px solid var(--colorNeutralStroke1);border-bottom-color:var(--colorNeutralStrokeAccessible);border-radius:4px;background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground1)}
-.input:focus,.select:focus,.textarea:focus{outline:none;border-bottom-color:var(--colorCompoundBrandStroke);box-shadow:inset 0 -1px 0 var(--colorCompoundBrandStroke)}
+:not(.tk-field)>.input:focus,:not(.tk-field)>.select:focus,:not(.tk-field)>.textarea:focus{outline:none;border-bottom-color:var(--colorCompoundBrandStroke);box-shadow:inset 0 -1px 0 var(--colorCompoundBrandStroke)}
 .input.sm,.select.sm{min-height:24px;padding:1px 8px;font-size:12px;width:auto}.textarea{resize:vertical;display:block}.input.mono,.textarea.mono{font-family:var(--mono);font-size:12px}
 .input::placeholder,.textarea::placeholder{color:var(--colorNeutralForeground4)}
+/* Inside Fluent's Input/Select/Textarea (ui.tsx) Fluent draws the frame, so the native element drops its own. */
+.tk-field>.input,.tk-field>.select,.tk-field>.textarea{border:0;box-shadow:none;background:transparent;border-radius:0;outline:none}.tk-field.tk-input,.tk-field.tk-select,.tk-field.tk-textarea{width:100%;max-width:100%}.tk-field:has(>.sm){width:auto}
 /* Native fields drawn to Fluent 2's Input/Select/Textarea spec (they stay native because module code reads their DOM values). */
-.input:hover:not(:disabled):not(:focus),.select:hover:not(:disabled):not(:focus),.textarea:hover:not(:disabled):not(:focus){border-color:var(--colorNeutralStroke1Hover);border-bottom-color:var(--colorNeutralStrokeAccessibleHover)}
-.input:disabled,.select:disabled,.textarea:disabled{border-color:var(--colorNeutralStrokeDisabled);background:var(--colorTransparentBackground);color:var(--colorNeutralForegroundDisabled);cursor:not-allowed}
-.input[aria-invalid=true],.select[aria-invalid=true],.textarea[aria-invalid=true]{border-color:var(--colorPaletteRedBorder2)}
+:not(.tk-field)>.input:hover:not(:disabled):not(:focus),:not(.tk-field)>.select:hover:not(:disabled):not(:focus),:not(.tk-field)>.textarea:hover:not(:disabled):not(:focus){border-color:var(--colorNeutralStroke1Hover);border-bottom-color:var(--colorNeutralStrokeAccessibleHover)}
+:not(.tk-field)>.input:disabled,:not(.tk-field)>.select:disabled,:not(.tk-field)>.textarea:disabled{border-color:var(--colorNeutralStrokeDisabled);background:var(--colorTransparentBackground);color:var(--colorNeutralForegroundDisabled);cursor:not-allowed}
+:not(.tk-field)>.input[aria-invalid=true],:not(.tk-field)>.select[aria-invalid=true],:not(.tk-field)>.textarea[aria-invalid=true]{border-color:var(--colorPaletteRedBorder2)}
 .input,.select,.textarea{border-radius:var(--borderRadiusMedium,4px);font-family:inherit;font-size:var(--fontSizeBase300,14px)}
 .field{min-width:0}.field-hint{font-size:12px;line-height:16px;color:var(--colorNeutralForeground3)}
 .field-err{font-size:12px;line-height:16px;color:var(--colorStatusDangerForeground1)}.field.has-err .input,.field.has-err .select,.field.has-err .textarea{border-color:var(--colorStatusDangerBorder2)}
@@ -64,6 +66,8 @@ ul.dots{list-style:disc;padding-left:18px}
 .b-warning{background:var(--colorStatusWarningBackground1);color:var(--colorStatusWarningForeground1);border-color:var(--colorStatusWarningBorder1)}
 .b-danger{background:var(--colorStatusDangerBackground1);color:var(--colorStatusDangerForeground1);border-color:var(--colorStatusDangerBorder1)}
 .card{background:var(--colorNeutralBackground1);border:1px solid var(--colorTransparentStroke);border-radius:var(--borderRadiusLarge,6px);box-shadow:var(--shadow4)}.card.flat{box-shadow:none;border-color:var(--colorNeutralStroke2)}
+/* Fluent Card (ui.tsx Card) draws the surface; the card's own class sets padding and layout (restated as .fui-Card.<class> below so it outranks Fluent's). */
+.card.fui-Card{padding:0;gap:0;overflow:visible;border-radius:var(--borderRadiusLarge,6px)}.card.flat.fui-Card{box-shadow:none}
 button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStroke1Hover)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}.chip{display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:2px 10px;border-radius:12px;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);font-size:12px;line-height:16px;text-align:left}
 .chip:hover{background:var(--colorNeutralBackground1Hover);border-color:var(--colorNeutralStroke1Hover)}.chip:active{background:var(--colorNeutralBackground1Pressed)}.chip:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:1px}.chip.on{background:var(--colorBrandBackground2);border-color:var(--colorBrandStroke1);color:var(--colorBrandForeground2);font-weight:600}.chip-n{color:var(--colorNeutralForeground3);font-weight:400}
@@ -109,9 +113,9 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .home{flex:1;overflow:auto}.home-in{max-width:920px;margin:0 auto;padding:40px 24px 72px;display:flex;flex-direction:column;gap:12px}
 .prompt{background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke1);border-radius:8px;box-shadow:var(--shadow4);padding:6px}.prompt:focus-within{border-color:var(--colorBrandStroke1)}
 .prompt .textarea{border:0;box-shadow:none;resize:none;font-size:16px;line-height:22px;padding:8px 10px;background:transparent}.prompt-bar{display:flex;align-items:center;gap:8px;padding:4px 4px 2px 8px;flex-wrap:wrap}
-.tpl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.tpl{display:flex;flex-direction:column;gap:6px;text-align:left;padding:16px}
+.tpl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.tpl,.fui-Card.tpl{display:flex;flex-direction:column;gap:6px;text-align:left;padding:16px}
 .tpl-go{display:flex;align-items:center;gap:4px;color:var(--colorBrandForeground1);font-weight:600;margin-top:4px}
-.apps{display:flex;flex-direction:column;gap:8px}.app-row{display:flex;align-items:center;gap:12px;padding:6px 8px 6px 6px}.app-open{display:flex;align-items:center;gap:12px;flex:1;min-width:0;border:0;background:none;text-align:left;padding:6px;border-radius:6px}.app-open:hover{background:var(--colorSubtleBackgroundHover)}
+.apps{display:flex;flex-direction:column;gap:8px}.app-row,.fui-Card.app-row{display:flex;align-items:center;gap:12px;padding:6px 8px 6px 6px}.app-open{display:flex;align-items:center;gap:12px;flex:1;min-width:0;border:0;background:none;text-align:left;padding:6px;border-radius:6px}.app-open:hover{background:var(--colorSubtleBackgroundHover)}
 
 /* workspace */
 .work{flex:1;min-width:0;min-height:0;display:flex;position:relative}.work-main{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -142,8 +146,8 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .out-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px 28px}.out-c.wide{grid-column:1/-1}.out-c{display:flex;flex-direction:column;gap:6px;min-width:0}
 .insp-body h4,.api-grid h4,.about h4{font-size:12px;line-height:16px;font-weight:600;color:var(--colorNeutralForeground3);margin-top:10px}.out-c>h4:first-child{margin-top:0}
 .flow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;color:var(--colorNeutralForeground3)}
-.tables{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}.tcard{padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}.tcard .tbl td{padding:4px 8px 4px 0;font-size:13px}
-.screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin-top:12px}.scard{display:flex;gap:10px;padding:10px 12px;align-items:flex-start}.scard-ic{width:32px;height:32px;border-radius:6px;background:var(--colorNeutralBackground3);display:grid;place-items:center;color:var(--colorNeutralForeground2);flex:none}
+.tables{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}.tcard,.fui-Card.tcard{padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}.tcard .tbl td{padding:4px 8px 4px 0;font-size:13px}
+.screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin-top:12px}.scard,.fui-Card.scard{display:flex;gap:10px;padding:10px 12px;align-items:flex-start}.scard-ic{width:32px;height:32px;border-radius:6px;background:var(--colorNeutralBackground3);display:grid;place-items:center;color:var(--colorNeutralForeground2);flex:none}
 .tour-list{margin-top:12px}
 
 /* data, API, connections */
@@ -155,8 +159,8 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .main-body{flex:1;min-height:0;overflow:auto;background:var(--colorNeutralBackground1)}.console{display:flex;flex-direction:column;gap:10px}
 .api-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
 .connv{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:14px}.conn-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
-.conn-card{padding:12px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}.conn-card>.row{width:100%}.conn-card.sel{border-color:var(--colorBrandStroke1);box-shadow:0 0 0 1px var(--colorBrandStroke1)}
-.conn-main{display:flex;align-items:center;gap:10px;flex:1;min-width:0;border:0;background:none;text-align:left;padding:2px;border-radius:4px}.conn-detail{padding:16px;display:flex;flex-direction:column;gap:10px}
+.conn-card,.fui-Card.conn-card{padding:12px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}.conn-card>.row{width:100%}.conn-card.sel{border-color:var(--colorBrandStroke1);box-shadow:0 0 0 1px var(--colorBrandStroke1)}
+.conn-main{display:flex;align-items:center;gap:10px;flex:1;min-width:0;border:0;background:none;text-align:left;padding:2px;border-radius:4px}.conn-detail,.fui-Card.conn-detail{padding:16px;display:flex;flex-direction:column;gap:10px}
 
 /* chat */
 .chat{width:372px;flex:none;display:flex;flex-direction:column;border-left:1px solid var(--colorNeutralStroke2);background:var(--colorNeutralBackground1);min-height:0}
@@ -209,7 +213,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .cal-t{font-variant-numeric:tabular-nums;color:var(--colorNeutralForeground3);flex:none}.cal-more{border:0;background:none;font-size:11px;color:var(--colorBrandForeground1);text-align:left;padding:0 5px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.kpi{background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke2);border-radius:8px;padding:12px 16px;display:flex;flex-direction:column;gap:2px}
 .kpi-l{font-size:12px;line-height:16px;color:var(--colorNeutralForeground3)}.kpi-v{font-size:28px;line-height:36px;font-weight:600;font-variant-numeric:tabular-nums}
-.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.widget{background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke2);border-radius:8px;padding:12px 16px;display:flex;flex-direction:column;gap:8px;min-width:0}.widget-h{font-size:14px;font-weight:600}
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.widget,.fui-Card.widget{background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke2);border-radius:8px;padding:12px 16px;display:flex;flex-direction:column;gap:8px;min-width:0}.widget-h{font-size:14px;font-weight:600}
 .bars{display:flex;flex-direction:column;gap:2px}.bar-row{display:grid;grid-template-columns:minmax(72px,34%) 1fr;gap:10px;align-items:center;padding:3px 4px;border-radius:4px;font-size:12px;line-height:16px}.bar-row:hover,.bar-row:focus-visible{background:var(--colorSubtleBackgroundHover)}
 .bar-l{color:var(--colorNeutralForeground2)}.bar-track{display:flex;align-items:center;gap:6px;min-width:0}.bar-fill{height:12px;border-radius:0 4px 4px 0;background:var(--acc-mark);flex:none;max-width:calc(100% - 34px)}.bar-v{font-variant-numeric:tabular-nums;color:var(--colorNeutralForeground1)}
 .rel{list-style:none;padding:0;display:flex;flex-direction:column}.rel-i{display:flex;align-items:center;gap:8px;width:100%;padding:6px 4px;border:0;border-bottom:1px solid var(--colorNeutralStroke2);background:none;text-align:left;text-decoration:none;color:inherit;min-width:0}.rel-i:hover{background:var(--colorSubtleBackgroundHover)}.rel li:last-child .rel-i{border-bottom:0}
@@ -300,7 +304,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .hb-v{flex:none;margin-left:6px;font-variant-numeric:tabular-nums;color:var(--colorNeutralForeground1)}
 .plot{display:block;max-width:100%}.plot .grid{stroke:var(--colorNeutralStroke3);stroke-width:1}.plot .ax0{stroke:var(--colorNeutralStroke1);stroke-width:1}.plot .cross{stroke:var(--colorNeutralStrokeAccessible);stroke-width:1;stroke-dasharray:3 3}
 .plot .axl{font-size:11px;fill:var(--colorNeutralForeground3)}.plot .axd{font-size:11px;fill:var(--colorNeutralForeground2)}.plot .dot{stroke:var(--colorNeutralBackground1);stroke-width:2}.plot .hit{fill:transparent}.plot .hit.can{cursor:pointer}
-.chart-card{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.chart-card,.fui-Card.chart-card{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .tbl.pivot th[scope=row]{font-weight:600;color:var(--colorNeutralForeground1);font-size:13px;position:static;border-bottom:1px solid var(--colorNeutralStroke2);white-space:nowrap;padding:9px 12px}
 .tbl.pivot td{padding:9px 12px;border-left:1px solid var(--colorNeutralStroke2)}.tbl.pivot td.pv-c{padding:0;min-width:64px}.pv-c>span{display:block;padding:9px 12px}
 .pv-b{display:block;width:100%;padding:9px 12px;border:0;background:none;text-align:right;font-variant-numeric:tabular-nums;color:var(--colorNeutralForeground1)}.pv-b:hover,.pv-b:focus-visible{box-shadow:inset 0 0 0 2px var(--colorBrandStroke1)}
@@ -470,7 +474,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
   .dhead{padding:16px 12px 8px 16px}.dbody{padding:4px 16px 12px}.dfoot{padding:10px 16px 14px}.dfoot .btn{flex:1}.share-grid,.guide-list{grid-template-columns:minmax(0,1fr)}
   .toasts{left:12px;right:12px;width:auto;bottom:calc(76px + env(safe-area-inset-bottom))}
   .work.phone .chat{position:static;width:auto;flex:1;border-left:0;box-shadow:none;z-index:auto}.work.phone .chat-head .btn.icon{display:none}
-  .home-in{padding:20px 12px 40px;gap:10px}.tpl-grid{grid-template-columns:minmax(0,1fr)}.app-row{flex-wrap:wrap;gap:6px}.app-open{flex:1 1 100%}.prompt-bar .btn.primary{flex:1}
+  .home-in{padding:20px 12px 40px;gap:10px}.tpl-grid{grid-template-columns:minmax(0,1fr)}.app-row,.fui-Card.app-row{flex-wrap:wrap;gap:6px}.app-open{flex:1 1 100%}.prompt-bar .btn.primary{flex:1}
   .build{padding:12px;gap:10px}.build-sum{display:flex;overflow-x:auto;scrollbar-width:none;margin:0 -12px;padding:0 12px;scroll-snap-type:x proximity}.build-sum::-webkit-scrollbar{display:none}.build-sum .kpi{flex:0 0 132px;scroll-snap-align:start}
   .build-bar{gap:8px}.flow-wrap{padding:8px;gap:8px}.flow-canvas.narrow{height:calc(100dvh - 420px);min-height:320px}.flow-foot{gap:8px}.fl-key{font-size:11px}.orch{display:none}
   .tests-view{padding:12px}.tests-head{flex-direction:column;align-items:stretch}.kpis.tk{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.suite-h{flex-wrap:wrap;padding:8px}.suite-t{flex:1 1 100%}.test{grid-template-columns:16px minmax(0,1fr);padding:8px 12px}.test-x{grid-column:2;text-align:left;white-space:normal}

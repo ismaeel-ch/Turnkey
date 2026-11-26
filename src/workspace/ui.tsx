@@ -1,7 +1,14 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
-import { cloneElement, forwardRef, isValidElement, useEffect, useRef } from 'react';
+import { cloneElement, createElement, forwardRef, isValidElement, useEffect, useRef } from 'react';
 import {
   Button,
+  Card as FluentCard,
+  Input as FluentInput,
+  InteractionTag,
+  InteractionTagPrimary,
+  InteractionTagSecondary,
+  Select as FluentSelect,
+  Textarea as FluentTextarea,
   Menu as FluentMenu,
   MenuDivider,
   MenuGroupHeader,
@@ -101,6 +108,116 @@ export const Btn = forwardRef(function Btn({ className, children, ...rest }, ref
  * Fluent's Switch inside a `label.switch`, so a click on the text toggles it too and tests can find it by class.
  * Its input is a NativeField, like every other field here: one native `change` per toggle.
  */
+/*
+ * Text boxes, dropdowns and text areas: Fluent's Input, Select and Textarea around the native element.
+ * Module code reads values from the DOM and listens for the browser's `change` event, so:
+ * - `className`, `id`, `name`, `data-*`, `aria-*` and every other native prop stay on the native element
+ *   (tests and CSS find `.input`, `#id`); `size`, `appearance` and `cls` go to Fluent's frame.
+ * - Fluent never takes over the value: without a `value` prop the field is uncontrolled.
+ * - `native` renders the element as a NativeField (commit-time `change`, value written only when it differs),
+ *   for code that used NativeField before. Without it the element is a plain React field.
+ */
+const fieldSize = (className) => {
+  const t = String(className || '').split(/\s+/);
+  return t.includes('sm') ? 'small' : t.includes('lg') ? 'large' : 'medium';
+};
+function fieldSlot(tag, props, className, native, ref) {
+  const hasValue = 'value' in props;
+  return {
+    children: (_t, p) => {
+      const q = { ...p, className: cx(p.className, className), ref };
+      if (!hasValue) {
+        delete q.value;
+        if ('defaultValue' in props) q.defaultValue = props.defaultValue;
+      }
+      return native ? <NativeField as={tag} {...q} /> : createElement(tag, q);
+    },
+  };
+}
+function splitFieldProps(props) {
+  const { className, cls, native, appearance, style, onChange, ...rest } = props;
+  return { className, cls, native, appearance, style, onChange, rest };
+}
+export const Input = forwardRef(function Input(props, ref) {
+  const { className, cls, native, appearance, style, onChange, rest } = splitFieldProps(props);
+  return (
+    <FluentInput
+      className={cx('tk-field', 'tk-input', cls)}
+      style={style}
+      size={fieldSize(className)}
+      appearance={appearance || 'outline'}
+      onChange={onChange ? (e) => onChange(e) : undefined}
+      input={fieldSlot('input', props, className, native, ref)}
+      {...rest}
+    />
+  );
+});
+export const Select = forwardRef(function Select(props, ref) {
+  const { className, cls, native, appearance, style, onChange, rest } = splitFieldProps(props);
+  return (
+    <FluentSelect
+      className={cx('tk-field', 'tk-select', cls)}
+      style={style}
+      size={fieldSize(className)}
+      appearance={appearance || 'outline'}
+      onChange={onChange ? (e) => onChange(e) : undefined}
+      select={fieldSlot('select', props, className, native, ref)}
+      {...rest}
+    />
+  );
+});
+export const Textarea = forwardRef(function Textarea(props, ref) {
+  const { className, cls, native, appearance, style, onChange, rest } = splitFieldProps(props);
+  return (
+    <FluentTextarea
+      className={cx('tk-field', 'tk-textarea', cls)}
+      style={style}
+      size={fieldSize(className)}
+      appearance={appearance || 'outline'}
+      resize="vertical"
+      onChange={onChange ? (e) => onChange(e) : undefined}
+      textarea={fieldSlot('textarea', props, className, native, ref)}
+      {...rest}
+    />
+  );
+});
+/** A filter or suggestion chip: Fluent's circular small button (a toggle when `on` is given). */
+export const Chip = forwardRef(function Chip({ className, on, children, ...rest }, ref) {
+  const C = on === undefined ? Button : ToggleButton;
+  return (
+    <C
+      ref={ref}
+      className={cx('chip', on && 'on', className)}
+      shape="circular"
+      size="small"
+      appearance={on ? 'primary' : 'outline'}
+      {...(on === undefined ? {} : { checked: !!on })}
+      {...rest}
+    >
+      {children}
+    </C>
+  );
+});
+/** A chip for an active filter, with its own remove button (`.chip-x`): Fluent's InteractionTag. */
+export function FilterChip({ children, onRemove, removeLabel }) {
+  return (
+    <InteractionTag className="chip on" shape="circular" size="small" appearance="brand">
+      <InteractionTagPrimary hasSecondaryAction>{children}</InteractionTagPrimary>
+      <InteractionTagSecondary className="chip-x" aria-label={removeLabel} onClick={onRemove} />
+    </InteractionTag>
+  );
+}
+/**
+ * Fluent's Card as a plain container. Pass the old classes (`card tpl` ...): workspace.css resets Fluent's own padding
+ * and gap on `.card.fui-Card` and restates each card's layout, so Fluent draws the surface and the layout stays.
+ */
+export const Card = forwardRef(function Card({ className, children, ...rest }, ref) {
+  return (
+    <FluentCard ref={ref} className={className} appearance={/\bflat\b/.test(className || '') ? 'outline' : 'filled'} {...rest}>
+      {children}
+    </FluentCard>
+  );
+});
 export function Switch({ on, onChange, text, id, disabled, title }) {
   return (
     <label className={cx('switch', disabled && 'is-off')} title={title}>

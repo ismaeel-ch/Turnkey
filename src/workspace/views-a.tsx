@@ -1,6 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
 import { useState, useEffect, useRef } from 'react';
-import { NativeField } from '@/platform/dom';
 import {
   MON,
   MONTH,
@@ -23,7 +22,7 @@ import {
 } from './core';
 import { VIEW_ICON, VIEW_LABEL, accOf, apiCall, appUsers, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isNum, viewCfg, viewFit, viewsOf } from './viewspec';
-import { Btn, Empty, Icon, MBar, Menu, Seg } from './ui';
+import { Btn, Empty, FilterChip, Icon, Input, MBar, Menu, Seg, Select } from './ui';
 import { Cell, cellText, fetchApi, isStatusCol, optLabel, rowTitle, stateLabel, stateTone } from './runtime';
 import { VChart, VPivot, VTimeline } from './views-b';
 
@@ -270,40 +269,26 @@ export function FilterBox({ app, user, t, st, set }) {
   let ctl = null;
   if (!noVal)
     ctl = isCat(c) ? (
-      <NativeField
-        as="select"
-        className="select"
-        id={id + 'v'}
-        aria-label="Value"
-        value={String(d.val)}
-        onChange={(e) => upd('val', e.target.value)}
-      >
+      <Select native className="select" id={id + 'v'} aria-label="Value" value={String(d.val)} onChange={(e) => upd('val', e.target.value)}>
         <option value="">Choose</option>
         {choices(app, user, t, c).map((o) => (
           <option key={o.key} value={String(o.key)}>
             {o.label}
           </option>
         ))}
-      </NativeField>
+      </Select>
     ) : op === 'range' ? (
-      <NativeField
-        as="select"
-        className="select"
-        id={id + 'v'}
-        aria-label="Value"
-        value={d.val}
-        onChange={(e) => upd('val', e.target.value)}
-      >
+      <Select native className="select" id={id + 'v'} aria-label="Value" value={d.val} onChange={(e) => upd('val', e.target.value)}>
         <option value="">Choose</option>
         {Object.keys(RANGES).map((k) => (
           <option key={k} value={k}>
             {RANGES[k]}
           </option>
         ))}
-      </NativeField>
+      </Select>
     ) : (
-      <NativeField
-        as="input"
+      <Input
+        native
         className="input"
         id={id + 'v'}
         aria-label="Value"
@@ -321,34 +306,20 @@ export function FilterBox({ app, user, t, st, set }) {
       {open && (
         <form className="menu right fbox" onSubmit={add}>
           <div className="mlabel">Show rows where</div>
-          <NativeField
-            as="select"
-            className="select"
-            id={id + 'c'}
-            aria-label="Field"
-            value={c.name}
-            onChange={(e) => upd('col', e.target.value)}
-          >
+          <Select native className="select" id={id + 'c'} aria-label="Field" value={c.name} onChange={(e) => upd('col', e.target.value)}>
             {t.columns.map((x) => (
               <option key={x.name} value={x.name}>
                 {x.label}
               </option>
             ))}
-          </NativeField>
-          <NativeField
-            as="select"
-            className="select"
-            id={id + 'o'}
-            aria-label="Condition"
-            value={op}
-            onChange={(e) => upd('op', e.target.value)}
-          >
+          </Select>
+          <Select native className="select" id={id + 'o'} aria-label="Condition" value={op} onChange={(e) => upd('op', e.target.value)}>
             {ops.map((o) => (
               <option key={o} value={o}>
                 {OP_TEXT[o]}
               </option>
             ))}
-          </NativeField>
+          </Select>
           {ctl}
           <Btn className="btn primary sm" type="submit">
             Add filter
@@ -482,21 +453,18 @@ export function Explorer({ app, user, pane, scr, test }) {
                 ? fmtDate(f.val)
                 : f.val;
     return (
-      <span key={i} className="chip on">
+      <FilterChip
+        key={i}
+        removeLabel={'Remove the filter on ' + c.label}
+        onRemove={() =>
+          set((s) => {
+            s.filters.splice(i, 1);
+            s.page = 0;
+          })
+        }
+      >
         {c.label} {f.op === 'range' || (f.op === 'between' && f.val[0] === f.val[1]) ? 'is' : OP_TEXT[f.op]} {v}
-        <button
-          className="chip-x"
-          aria-label={'Remove the filter on ' + c.label}
-          onClick={() =>
-            set((s) => {
-              s.filters.splice(i, 1);
-              s.page = 0;
-            })
-          }
-        >
-          <Icon n="dismiss" s="12" />
-        </button>
-      </span>
+      </FilterChip>
     );
   };
   const csv = () => {
@@ -534,8 +502,8 @@ export function Explorer({ app, user, pane, scr, test }) {
         </div>
         <div className="search">
           <Icon n="search" s="16" />
-          <NativeField
-            as="input"
+          <Input
+            native
             className="input"
             id={'q' + scr.id + '_' + pane.n}
             aria-label={'Search ' + t.label.toLowerCase()}
@@ -653,14 +621,14 @@ export function Explorer({ app, user, pane, scr, test }) {
 export const Pick = ({ id, label: text, value, onChange, opts, none }) => (
   <label className="pick">
     <span>{text}</span>
-    <NativeField as="select" className="select sm" id={id} value={value || ''} onChange={(e) => onChange(e.target.value || null)}>
+    <Select native className="select sm" id={id} value={value || ''} onChange={(e) => onChange(e.target.value || null)}>
       {none && <option value="">{none}</option>}
       {opts.map((o) => (
         <option key={o.name} value={o.name}>
           {o.label}
         </option>
       ))}
-    </NativeField>
+    </Select>
   </label>
 );
 export const NoRows = ({ t }) => (
