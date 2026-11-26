@@ -4,7 +4,8 @@
  * bus in src/platform/agui/activity.ts, the events of agents that run on the server. A second tab, "How it works",
  * draws the build team and the workflow this app runs on, plus the app's own agent team when it has one.
  */
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Badge,
   Button,
@@ -265,6 +266,22 @@ const useStyles = makeStyles({
     boxShadow: 'none',
     zIndex: 50,
   },
+  // On a desktop the launcher sits in the title bar, in the slot TitleBar keeps for it (.act-slot) left of the Live
+  // switch. A tab fixed to the left edge used to cover the page under it (API badges, test rows, timeline lanes).
+  launchBar: {
+    position: 'static',
+    transform: 'none',
+    writingMode: 'horizontal-tb',
+    minWidth: 0,
+    height: '28px',
+    padding: '0 ' + tokens.spacingHorizontalS,
+    borderTopLeftRadius: tokens.borderRadiusMedium,
+    borderBottomLeftRadius: tokens.borderRadiusMedium,
+    borderTopRightRadius: tokens.borderRadiusMedium,
+    borderBottomRightRadius: tokens.borderRadiusMedium,
+    boxShadow: 'none',
+    fontWeight: tokens.fontWeightRegular,
+  },
   drawer: { width: '440px', maxWidth: '100vw' },
   head: { paddingBottom: tokens.spacingVerticalS },
   bar: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS, flexWrap: 'wrap' },
@@ -351,6 +368,14 @@ export function AgentActivity({ app }: { app: AppRecord | null }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [shown, setShown] = useState<Dict<boolean>>({});
   useEffect(() => startActivityBridge(), []);
+  // The title bar re-renders on its own, so look for its slot after every render rather than once.
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const el = document.querySelector<HTMLElement>('.titlebar:not(.phone) .act-slot');
+    if (el === slot) return;
+    const id = requestAnimationFrame(() => setSlot(el));
+    return () => cancelAnimationFrame(id);
+  });
   useEffect(() => {
     const flip = () => setOpen((o) => !o);
     panelToggles.add(flip);
@@ -364,21 +389,26 @@ export function AgentActivity({ app }: { app: AppRecord | null }) {
   const theme = isDark() ? webDarkTheme : webLightTheme;
 
   const roster = rosterOf(app, model);
+  const button = (
+    <Button
+      className={mergeClasses('act-launch', c.launch, PHONE() ? c.launchPhone : !!slot && c.launchBar)}
+      appearance={working ? 'primary' : slot && !PHONE() ? 'subtle' : 'secondary'}
+      icon={<Icon n="team" s={PHONE() ? '20' : '16'} />}
+      aria-expanded={open}
+      aria-label={PHONE() ? (working ? 'Agents, ' + working + ' working' : 'Agents') : undefined}
+      title={PHONE() ? 'Agent activity' : undefined}
+      onClick={() => setOpen(!open)}
+    >
+      {PHONE() ? null : working ? 'Agents · ' + working + ' working' : 'Agents'}
+    </Button>
+  );
   const items = model.items.filter(FILTERS[filter]).slice().reverse();
+
+  const launcher = slot && !PHONE() ? createPortal(button, slot) : button;
 
   return (
     <FluentProvider theme={theme} className="act-root" style={{ background: 'transparent' }}>
-      <Button
-        className={mergeClasses('act-launch', c.launch, PHONE() && c.launchPhone)}
-        appearance={working ? 'primary' : 'secondary'}
-        icon={<Icon n="team" s={PHONE() ? '20' : '16'} />}
-        aria-expanded={open}
-        aria-label={PHONE() ? (working ? 'Agents, ' + working + ' working' : 'Agents') : undefined}
-        title={PHONE() ? 'Agent activity' : undefined}
-        onClick={() => setOpen(!open)}
-      >
-        {PHONE() ? null : working ? 'Agents · ' + working + ' working' : 'Agents'}
-      </Button>
+      {launcher}
       <OverlayDrawer
         open={open}
         position="end"

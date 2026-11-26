@@ -157,6 +157,8 @@ interface IslandProps {
   start: Viewport;
   fitKey: string;
   fit: { padding: number; maxZoom: number };
+  /** True while the canvas has a size on the page. An animated move on a canvas 0 pixels wide is drawn at NaN. */
+  shown: () => boolean;
 }
 type FlowInstance = ReactFlowInstance<FlowNode, RouteEdge>;
 export interface FlowKit {
@@ -1418,7 +1420,9 @@ export function flowKit(): FlowKit {
       const go = (d: number) =>
           setTimeout(
             () => {
-              if (!inst.current) return;
+              // hidden (another view, a dialog over it, the page going away): d3's animated zoom divides by the
+              // canvas size, and the background and the minimap would be drawn at NaN
+              if (!inst.current || !p.shown()) return;
               if (p.v)
                 void inst.current.setViewport(p.start, {
                   duration: 200,
@@ -1435,7 +1439,7 @@ export function flowKit(): FlowKit {
       };
     }, [p.fitKey]); /* fitted twice: nodes that were just added are measured a moment later */
     R.useEffect(() => {
-      if (!p.v || !p.focus || !inst.current) return;
+      if (!p.v || !p.focus || !inst.current || !p.shown()) return;
       const n = inst.current.getNode(p.focus);
       if (n)
         void inst.current.setCenter(n.position.x + 110, n.position.y + 170, {
@@ -1650,6 +1654,7 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
           padding: 0.06,
           maxZoom: 1.1,
         },
+        shown: () => !!ref.current && ref.current.clientWidth > 0 && ref.current.clientHeight > 0,
       }),
     );
   });
