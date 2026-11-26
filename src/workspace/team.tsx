@@ -57,7 +57,6 @@ export function normTeam(o, def, P) {
         acc: ACCENTS.includes(a.acc) ? a.acc : ACC_PICK[i % ACC_PICK.length],
         job: str(a.job),
         hint: str(a.hint),
-        proto: str(a.proto),
         writes: w ? w.name : null,
         updates: u ? u.name : null,
         sets: arr(a.sets)
@@ -397,7 +396,7 @@ async function teamServer(app, user, T, finishStep) {
           st.t0 = Date.now();
           T.calls++;
           U.calls++;
-          emit('STEP_STARTED', { app: app.id, runId: T.id, stepName: team.agents[i].id, agent: team.agents[i].id, where: 'server' });
+          emit('STEP_STARTED', { app: app.id, runId: T.id, stepName: team.agents[i].id, agent: team.agents[i].id, server: true });
           notify();
         } else if (e.type === 'TOOL_CALL_START') calls[e.toolCallId] = { name: e.toolCallName, args: '' };
         else if (e.type === 'TOOL_CALL_ARGS' && calls[e.toolCallId]) calls[e.toolCallId].args += str(e.delta);
@@ -413,7 +412,12 @@ async function teamServer(app, user, T, finishStep) {
             U.calls++;
             notify();
           }
-          emit('CUSTOM', { app: app.id, runId: T.id, name: 'check', agent: v.agent, value: v });
+          // in the activity panel's words: a check that passed, or one that sent the work back with its reason
+          const where = { app: app.id, runId: T.id, agent: v.agent, stepName: v.agent, server: true };
+          if (v.sentBack) {
+            emit('CUSTOM', { ...where, name: 'sent_back', value: { issues: 1, by: v.by } });
+            emit('CUSTOM', { ...where, name: 'issues', value: { issues: [str(v.reason)] } });
+          } else emit('CUSTOM', { ...where, name: 'checks', value: { passed: v.ok ? 1 : 0, failed: v.ok ? 0 : 1, by: v.by } });
         } else if (e.type === 'CUSTOM' && e.name === 'interrupt') snapshot = (e.value || {}).snapshot || null;
         else if (e.type === 'CUSTOM' && e.name === 'cap') emit('CUSTOM', { app: app.id, runId: T.id, name: 'cap', value: e.value });
         else if (e.type === 'STATE_DELTA') {
