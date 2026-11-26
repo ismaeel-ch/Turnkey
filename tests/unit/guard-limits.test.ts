@@ -172,6 +172,22 @@ describe('spend of calls that stop early', () => {
     expect(t.output).toBe(1000);
     expect(spentToday()).toBeGreaterThan(0);
   });
+  it('a call whose provider reports no usage is priced from an estimate and counts toward the daily cap', async () => {
+    resetUsageTotals();
+    const inner = {
+      id: 'test',
+      model: () => 'claude-sonnet-5-5',
+      async *stream() {
+        yield { type: 'delta' as const, text: 'x'.repeat(4000) };
+        yield { type: 'done' as const, truncated: false };
+      },
+    };
+    const p = withUsage(inner as never, { LLM_LOG_USAGE: '0' });
+    for await (const _ of p.stream({ messages: [{ role: 'user', content: 'y'.repeat(400) }], tier: 'default' })) void _;
+    const t = usageTotals({});
+    expect(t).toMatchObject({ calls: 1, input: 100, output: 1000, unpriced: 0 });
+    expect(spentToday()).toBeGreaterThan(0);
+  });
   it('a call that fails before any answer is not counted', async () => {
     resetUsageTotals();
     const inner = {
