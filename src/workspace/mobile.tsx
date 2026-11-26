@@ -30,7 +30,8 @@ import {
 import { appUsers, roleName } from './engine';
 import { testStats } from './tests';
 import { AGENTS, PENDING, RUNS, STATIONS, deleteApp, resetAppData } from './line';
-import { REVIEWERS, flowOf } from './custom';
+import { flowOf } from './custom';
+import { REVIEWERS } from './reviewers';
 import { Btn, Avatar, Empty, Icon, Logo } from './ui';
 import { startWalk } from './runtime';
 import { enterSolo, openShare } from './share';
