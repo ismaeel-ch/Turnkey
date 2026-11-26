@@ -35,7 +35,8 @@ steps are the owner's. Do them once, in this order. Each one can be checked afte
 ## 4. Labels used by the templates
 
 The work-package template applies the label `wp`, and the bug template applies `bug`, which GitHub has by default.
-Create `wp` under **Issues**, then **Labels**, then **New label**. The other labels in docs/PLAN.md section 5
+Create `wp` and `ready-to-merge` under **Issues**, then **Labels**, then **New label**. CI runs only on pull requests
+labelled `ready-to-merge` (docs/process/workflow.md). The other labels in docs/PLAN.md section 5
 (`area:*`, `crit:C1` to `crit:C5`, `wave:1`, `wave:2`, `blocked`) are optional.
 
 ## 5. Vercel
@@ -48,16 +49,20 @@ Create `wp` under **Issues**, then **Labels**, then **New label**. The other lab
    - `LITELLM_API_KEY`: the key. Mark it **Sensitive** so it cannot be read back.
    - `LITELLM_MODEL`: the model name for the careful tier.
    - `LITELLM_MODEL_FAST` (optional): the cheaper model for the Quick setting.
-   Do not add any variable whose name starts with `NEXT_PUBLIC_`.
-4. Under **Settings**, then **Git**, confirm the production branch is `main`.
-5. Open **Deployments**, choose the latest production deployment, then **Redeploy** so the new variables apply.
+     Do not add any variable whose name starts with `NEXT_PUBLIC_`.
+4. Merges and pushes do not deploy (`vercel.json` turns the Git integration off). Add the three secrets in
+   docs/process/deploy.md, section One-time setup, so that publishing a release deploys.
+5. Publish a release, or run **Release and deploy** by hand with the latest tag, so the new variables apply.
 6. When it is ready, open `https://<your-project>.vercel.app/api/health?probe=1`. It should report that a model is
-   configured and that the probe call succeeded. If it says the key is missing, check step 3 and redeploy.
+   configured and that the probe call succeeded. If it says the key is missing, check step 3 and deploy again.
 
 ## 6. Checks after setup
 
-- A test pull request gets the `legacy-guard`, `check`, eight `e2e` jobs and `ci` checks.
+- A test pull request without the label gets only a failing `ci` check that says to add `ready-to-merge`. With the
+  label it gets the `check`, eight `e2e` jobs and `ci` checks.
 - The merge button offers squash only, and the head branch is deleted after the merge.
-- Dependabot opens its first grouped pull requests on the next weekly run. Its runs on `main` failed before this
-  change; whether these files fix them could not be checked from the agents' access. If the **Dependabot** runs still
-  fail, open the failing run on the **Actions** tab and send the first error line to the supervisor.
+- A merge to `main` starts no Actions run and no Vercel deployment. Publishing a release starts **Release and
+  deploy**, which ends with the production URL in its summary.
+- Dependabot is off: there is no `.github/dependabot.yml`. To stop security-update pull requests as well, open
+  **Settings**, **Code security**, and turn off **Dependabot security updates** (and **Dependabot version updates** if
+  shown as on).
