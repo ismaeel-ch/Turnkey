@@ -72,6 +72,7 @@ import { enterSolo, keepShared, openShare, sharedApps } from './share';
 import { AppLogo, ReleaseView, isDirty, relOf } from './release';
 import { ApiView, ChatPanel, ConnView, DataView } from './shell-b';
 import { startTour } from './shell-c';
+import { RerunBar } from './rerun';
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
 export function Titlebar({ tabs, tab }) {
@@ -1019,6 +1020,7 @@ export function BuildView({ app }) {
           </Btn>
         )}
       </div>
+      <RerunBar app={app} />
       {app.line.research.status === 'waiting' && app.line.research.hold !== 'approval' && (
         <MBar
           tone="warning"
