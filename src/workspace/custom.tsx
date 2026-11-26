@@ -62,6 +62,7 @@ import type { ParsedChange } from './changes';
 import { keepFix } from './tester';
 import { Btn, AgentAv, Dialog, Field, Icon, MBar, Seg, Spinner, Switch } from './ui';
 import { rebuildAsk } from './shell-a';
+import { RerunBar, queueRerun, queuedRerun } from './rerun';
 
 /* ===== Turnkey prototype · the workflow is yours: approvals, review steps, instructions, attempts =====
    The build workflow is shared state (app.flow). The owner edits it on the canvas, in the inspector or in the settings dialog.
@@ -823,6 +824,8 @@ export function flowAfter(app: AppRecord, res: FlowApplied, by: string) {
         },
       );
   }
+  // the stations the change touches run again on their own, a few seconds after the last edit (src/workspace/rerun.tsx)
+  if (from && res.fx.from != null) queueRerun(app, res.fx.from, (a, st, auto) => rerunFrom(a, st, true, auto));
   // a review step that was just added reads the app as it is now. Only the new reviewers work, one after the other; no station runs again.
   if (ready && !busy && !PENDING[app.id])
     (async () => {
@@ -2260,7 +2263,8 @@ export function dismissFinding(app: AppRecord, id: string, fid: string) {
 }
 
 /* ---------- running again from one station: the stations before it are kept ---------- */
-export async function rerunFrom(app: AppRecord, stId: string, viaChat?: boolean) {
+/** `auto`: the re-run queued after a workflow edit (src/workspace/rerun.tsx), which asks only when the database would be rebuilt. */
+export async function rerunFrom(app: AppRecord, stId: string, viaChat?: boolean, auto?: boolean) {
   const i = stationIdx(stId),
     tell = (t: string) => (viaChat ? say(app, 'orchestrator', t) : toast(t, 'info'));
   if (i < 0) return;
@@ -2275,6 +2279,7 @@ export async function rerunFrom(app: AppRecord, stId: string, viaChat?: boolean)
     notify();
   } // on a phone the question must not open behind the sheet it was asked from
   if (
+    !auto &&
     !(await confirmBox({
       title: 'Run again from ' + STATIONS[i].name + '?',
       body:
@@ -3216,7 +3221,8 @@ export function FlowCards({ app, m }: { app: AppRecord; m: ChatMessage }) {
       notify();
     };
   if (c.type === 'flow') {
-    const cur = JSON.stringify(normFlow(flowOf(app))),
+    const latest = m === [...(app.chat || [])].reverse().find((x) => x.card && x.card.type === 'flow'),
+      cur = JSON.stringify(normFlow(flowOf(app))),
       canUndo = !c.undone && cur === c.after && c.before !== c.after;
     return (
       <div className={cx('gcard', !c.quiet && 'ok')}>
@@ -3236,8 +3242,9 @@ export function FlowCards({ app, m }: { app: AppRecord; m: ChatMessage }) {
             ))}
           </ul>
         )}
+        {latest && <RerunBar app={app} compact />}
         <div className="row wrap">
-          {c.from && ready && (
+          {c.from && ready && !(latest && queuedRerun(app.id)) && (
             <Btn className="btn sm" disabled={busy} onClick={() => rerunFrom(app, c.from || '')}>
               <Icon n="rerun" s="16" />
               {'Run again from '}
