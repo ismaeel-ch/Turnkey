@@ -95,7 +95,17 @@ describe('GET /a/manifest', () => {
     expect(m.icons.some((i: { sizes: string; purpose: string }) => i.sizes === '512x512' && i.purpose === 'maskable')).toBe(true);
     for (const i of m.icons) expect(i.src.startsWith('/a/icon?')).toBe(true);
   });
+  it('starts an app with a key from the copy saved in the browser, under one id for every version', async () => {
+    const v1 = await manifestGET(req('manifest', 'name=Case%20Desk&key=a_k3y9&c=1.abc')).json();
+    const v2 = await manifestGET(req('manifest', 'name=Case%20Desk&key=a_k3y9&c=1.xyz')).json();
+    expect(v1.start_url).toBe('/#app=i.a_k3y9');
+    expect(v2.id).toBe(v1.id);
+    const other = await manifestGET(req('manifest', 'name=Case%20Desk&key=b_other')).json();
+    expect(other.id).not.toBe(v1.id);
+  });
   it('refuses bad input', async () => {
+    expect(manifestGET(req('manifest', 'key=a%2Fb')).status).toBe(400);
+    expect(manifestGET(req('manifest', 'key=' + 'k'.repeat(41))).status).toBe(400);
     expect(manifestGET(req('manifest', 'accent=%3Cb%3E')).status).toBe(400);
     expect(manifestGET(req('manifest', 'c=javascript:alert(1)')).status).toBe(400);
   });
@@ -152,7 +162,15 @@ describe('appInstallLinks', () => {
     expect(res.status).toBe(200);
     expect(iconGET(new Request('http://localhost' + links.iconUrl())).status).toBe(200);
   });
+  it('carries the key, and leaves out a share code too long for a manifest address', () => {
+    const links = appInstallLinks({ name: 'Cases', key: 'a_k3y9', shareCode: '1.' + 'x'.repeat(7000) })!;
+    const m = new URL(links.manifestUrl, 'http://x');
+    expect(m.searchParams.get('key')).toBe('a_k3y9');
+    expect(m.searchParams.has('c')).toBe(false);
+    expect(links.manifestUrl.length).toBeLessThan(400);
+  });
   it('refuses a value outside the catalogs', () => {
+    expect(appInstallLinks({ key: 'a b' })).toBeNull();
     expect(appInstallLinks({ accent: 'red' })).toBeNull();
     expect(appInstallLinks({ shareCode: '<script>' })).toBeNull();
   });

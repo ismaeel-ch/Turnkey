@@ -40,6 +40,9 @@ export type AppIdentity = {
   mark: Mark;
   /** The share code of a released version ("1.xxxx"), used for the start address. Empty when none was given. */
   code: string;
+  /** The app's lasting id (the same for every version), used for the manifest id and the start address. Empty when
+   *  none was given. With a key the installed app reopens the copy saved in this browser, whatever its version. */
+  key: string;
 };
 
 export type ParseResult = { ok: true; identity: AppIdentity } | { ok: false; error: string };
@@ -47,6 +50,8 @@ export type ParseResult = { ok: true; identity: AppIdentity } | { ok: false; err
 export const DEFAULT_NAME = 'Turnkey app';
 export const MAX_NAME = 40;
 export const MAX_CODE = 6000;
+export const MAX_KEY = 40;
+export const KEY_RE = /^[A-Za-z0-9_-]{1,40}$/;
 
 const GLYPHS = glyphs as Record<string, string>;
 const has = (list: readonly string[], v: string) => list.includes(v);
@@ -65,7 +70,7 @@ export function cleanName(raw: string | null | undefined): string {
   return s || DEFAULT_NAME;
 }
 
-/** The query parameters are: name, accent, glyph, shape, fill, mark, c (share code). Missing ones take a default;
+/** The query parameters are: name, accent, glyph, shape, fill, mark, c (share code), key (the app's lasting id). Missing ones take a default;
  *  one that is present but not in its catalog is refused. */
 export function parseIdentity(q: URLSearchParams): ParseResult {
   const pick = <T extends string>(key: string, list: readonly T[], dflt: T): T | null => {
@@ -85,7 +90,9 @@ export function parseIdentity(q: URLSearchParams): ParseResult {
   if (g !== null && g !== '' && !isGlyph(g)) return { ok: false, error: 'glyph is not one of the symbols' };
   const c = q.get('c') ?? '';
   if (c !== '' && (c.length > MAX_CODE || !/^[01]\.[A-Za-z0-9_-]+$/.test(c))) return { ok: false, error: 'c is not a share code' };
-  return { ok: true, identity: { name: cleanName(q.get('name')), accent, glyph: g || 'apps', shape, fill, mark, code: c } };
+  const key = q.get('key') ?? '';
+  if (key !== '' && !KEY_RE.test(key)) return { ok: false, error: 'key is not an app id' };
+  return { ok: true, identity: { name: cleanName(q.get('name')), accent, glyph: g || 'apps', shape, fill, mark, code: c, key } };
 }
 
 /** The same identity as a query string, in a fixed order (so equal identities share one cached icon). */

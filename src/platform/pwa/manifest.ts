@@ -10,8 +10,9 @@ export function iconUrl(id: AppIdentity, size: number, extra: Record<string, str
 
 export function appManifest(id: AppIdentity) {
   const hasCode = id.code !== '';
+  // The id stays the same across versions when the app's key is known, so a newer version replaces the installed one.
   const key = createHash('sha256')
-    .update(hasCode ? id.code : id.name)
+    .update(id.key ? 'key:' + id.key : hasCode ? id.code : id.name)
     .digest('base64url')
     .slice(0, 22);
   return {
@@ -19,8 +20,9 @@ export function appManifest(id: AppIdentity) {
     name: id.name,
     short_name: id.name.length > 12 ? id.name.slice(0, 12).trim() : id.name,
     description: id.name + ', an app built with Turnkey.',
-    // A share code is only ever added behind the "#app=" the workspace already reads.
-    start_url: hasCode ? '/#app=' + id.code : '/',
+    // Both forms sit behind the "#app=" the workspace already reads: "i.<key>" reopens the saved copy, a share code
+    // opens that version from the address itself.
+    start_url: id.key ? '/#app=i.' + id.key : hasCode ? '/#app=' + id.code : '/',
     scope: '/',
     display: 'standalone',
     orientation: 'any',

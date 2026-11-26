@@ -3,7 +3,9 @@
 //   - the service worker registers and takes control; API routes are not in its cache
 //   - after one visit with a saved build, a reload with the network off shows the workspace and the build still runs
 //   - an app's own manifest and icon come from /a/manifest and /a/icon
-// Not part of the flows list in run.mjs: `TK_URL=http://localhost:3304 node tests/e2e/offline.cjs`.
+//   - a shared app, open on its own, links its own manifest: Chrome finds it installable under the app's name, and its
+//     start address reopens the saved copy (no second copy); leaving the app links Turnkey's manifest again
+// Run it with the other flows: `npm run test:e2e -- offline` (or `TK_URL=http://localhost:3304 node tests/e2e/offline.cjs`).
 const { chromium } = require('playwright');
 const url = process.env.TK_URL || 'http://localhost:3304';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -54,7 +56,7 @@ const check = (name, ok, detail) => {
   // service worker
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
-  await page.waitForFunction(() => window.__formwork && window.__formwork.state, null, { timeout: 30000 }).catch(async () => { await page.screenshot({ path: '/tmp/claude-0/wtD-fail.png' }); console.log(await page.evaluate(() => document.body.innerText.slice(0, 300))); throw new Error('workspace did not load after reload'); });
+  await page.waitForFunction(() => window.__formwork && window.__formwork.state, null, { timeout: 30000 }).catch(async () => { await page.screenshot({ path: require('path').join(__dirname, 'shots', 'offline-fail.png') }); console.log(await page.evaluate(() => document.body.innerText.slice(0, 300))); throw new Error('workspace did not load after reload'); });
   for (let i = 0; i < 60 && !(await page.evaluate(() => !!navigator.serviceWorker.controller)); i++) await sleep(250);
   check('the service worker controls the page', await page.evaluate(() => !!navigator.serviceWorker.controller));
   await sleep(2500); // the page tells the worker which files it loaded
@@ -94,6 +96,69 @@ const check = (name, ok, detail) => {
   check('/a/manifest answers with the app name', am.ok() && (await am.json()).name === 'Case Desk');
   const ai = await ctx.request.get(url + '/a/icon?' + qs + '&size=192');
   check('/a/icon answers with a PNG', ai.ok() && ai.headers()['content-type'] === 'image/png');
+
+  // a shared app installs as itself
+  const share = await page.evaluate(async (id) => {
+    const f = window.__formwork, app = f.state().apps[id];
+    const pack = f.share.packOf(app, { data: 'demo', as: '' });
+    pack.ver = '1.0';
+    pack.uid = app.uid;
+    pack.notes = ['First version'];
+    return { code: await f.share.squeeze(JSON.stringify(pack)), name: app.name, uid: app.uid };
+  }, appId);
+  const sp = await ctx.newPage();
+  sp.on('pageerror', (e) => errors.push(String(e).slice(0, 300)));
+  await sp.goto(url + '/#app=' + share.code);
+  await sp.waitForSelector('.solo .app', { timeout: 30000 });
+  await sleep(300);
+  const links = await sp.evaluate(() => ({
+    manifest: document.querySelector('link[rel=manifest]')?.getAttribute('href') || '',
+    touch: document.querySelector('link[rel=apple-touch-icon]')?.getAttribute('href') || '',
+    others: [...document.querySelectorAll('link[rel=manifest]')].filter((l) => l.getAttribute('href') !== document.querySelector('link[rel=manifest]').getAttribute('href')).length,
+  }));
+  const mq = new URL(links.manifest, url).searchParams;
+  check('a shared app open on its own links its own manifest, with its name and lasting id', links.others === 0 && links.manifest.startsWith('/a/manifest?') && mq.get('name') === share.name && mq.get('key') === share.uid && !mq.has('c'), links);
+  const appM = await (await ctx.request.get(new URL(links.manifest, url).href)).json();
+  check("the app's manifest starts the saved copy under the app's name", appM.name === share.name && appM.start_url === '/#app=i.' + share.uid && appM.display === 'standalone', appM);
+  const touch = await ctx.request.get(new URL(links.touch, url).href);
+  check("the app's home-screen icon is a PNG drawn from its logo", touch.ok() && touch.headers()['content-type'] === 'image/png');
+  const scdp = await ctx.newCDPSession(sp);
+  let gm = null, gi = null;
+  for (let i = 0; i < 20; i++) { // Chrome reads the new manifest a moment after the link changes
+    gm = await scdp.send('Page.getAppManifest');
+    if (gm.url && gm.url.includes('/a/manifest?')) break;
+    await sleep(250);
+  }
+  gi = await scdp.send('Page.getInstallabilityErrors');
+  check('Chrome reads the app manifest and finds no installability errors', !!gm && gm.url.includes('/a/manifest?') && gi.installabilityErrors.length === 0, { url: gm && gm.url, errors: gi.installabilityErrors });
+  await sp.locator('#solo-install').click();
+  await sp.waitForSelector('.dialog');
+  const how = await sp.locator('#inst-go').getAttribute('data-install');
+  const instText = await sp.locator('.dialog').innerText();
+  console.log('  install dialog: ' + how);
+  check('the install dialog offers the browser install, or says where the browser menu has it', how === 'browser' || (how === 'menu' && /menu/.test(instText)), { how, text: instText.slice(0, 300) });
+  await sp.locator('.dialog .dfoot .btn', { hasText: 'Not now' }).click();
+  const before = await sp.evaluate(() => Object.values(window.__formwork.state().apps).filter((a) => a.shared).length);
+  await sp.evaluate(() => window.__formwork.save());
+  await sp.close();
+
+  const ip = await ctx.newPage(); // what the installed app opens
+  ip.on('pageerror', (e) => errors.push(String(e).slice(0, 300)));
+  await ip.goto(url + appM.start_url);
+  await ip.waitForSelector('.solo .app', { timeout: 30000 });
+  await ip.waitForFunction((n) => document.title === n, share.name, { timeout: 5000 }).catch(() => {});
+  const reopened = await ip.evaluate((uid) => {
+    const s = window.__formwork.state(), so = window.__formwork.view().solo, a = so && s.apps[so.app];
+    return { name: a && a.name, uid: a && a.shared && a.shared.uid, copies: Object.values(s.apps).filter((x) => x.shared).length, title: document.title };
+  }, share.uid);
+  check('the start address reopens the saved copy, without making another', reopened.uid === share.uid && reopened.copies === before && reopened.title === share.name, reopened);
+  await ip.evaluate(() => window.__formwork.share.exitSolo());
+  await sleep(300);
+  const back = await ip.evaluate(() => document.querySelector('link[rel=manifest]')?.getAttribute('href'));
+  check("leaving the app links Turnkey's manifest again", back === '/manifest.webmanifest', back);
+  const gone = await ctx.newPage();
+  await gone.goto(url + '/#app=i.nothing_here');
+  await gone.waitForFunction(() => /no longer saved in this browser/.test(document.body.innerText), null, { timeout: 30000 }).then(() => true, () => false).then((ok) => check('an unknown app id says to open the link again', ok));
   check('no error on the page', errors.length === 0, errors);
   await browser.close();
   const pass = results.every(Boolean);
