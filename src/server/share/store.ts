@@ -30,9 +30,10 @@ const parse = (text: string): ShareRecord | null => {
 /** How the Blob SDK signs in: a read-write token, or the deployment's OIDC token with the store id. */
 export type BlobAuth = { token: string } | { storeId: string };
 
-export function blobStore(auth: BlobAuth): ShareStore {
+/** A string is a read-write token. */
+export function blobStore(auth: BlobAuth | string): ShareStore {
   // With a store id and no token, the SDK reads the OIDC token from the Vercel request (or VERCEL_OIDC_TOKEN).
-  const creds = 'token' in auth ? { token: auth.token } : { storeId: auth.storeId };
+  const creds = typeof auth === 'string' ? { token: auth } : 'token' in auth ? { token: auth.token } : { storeId: auth.storeId };
   const key = (slug: string) => 'share/' + slug + '.json';
   return {
     kind: 'blob',
