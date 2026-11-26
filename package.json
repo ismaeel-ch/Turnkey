@@ -23,6 +23,7 @@
     "check:secrets": "node scripts/check-secrets.mjs",
     "check": "npm run check:secrets && npm run lint && npm run typecheck && npm run test",
     "icons": "node scripts/gen-icons.cjs",
+    "icons:pwa": "node scripts/gen-pwa-icons.mjs",
     "theme": "node scripts/generate-theme.mjs"
   },
   "dependencies": {

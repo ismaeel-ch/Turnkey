@@ -1,5 +1,6 @@
 /**
- * GET /api/health: is the app up, and is a model configured. Costs nothing.
+ * GET /api/health: is the app up, and is a model configured. Costs nothing. Also shows the effort of each tier and
+ *   `spend`: tokens, cache hits and cost of this server instance's model calls, beside the budget.
  * GET /api/health?probe=1: also makes one real tool call through the active provider (on the fast model) and reports
  *   pass or fail, how long it took, and whether tools go natively or by the JSON protocol. `probe=tools` is the same.
  *
@@ -8,7 +9,7 @@
  */
 import { limiter, lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
 import { refuseVerdict, visitorKey } from '@/server/guard/http';
-import { LlmError, resolveProvider, type Provider } from '@/server/llm';
+import { EFFORT_BY_TIER, LlmError, resolveProvider, usageTotals, type Provider } from '@/server/llm';
 import pkg from '../../../../package.json';
 
 export const runtime = 'nodejs';
@@ -26,7 +27,10 @@ export async function GET(request: Request) {
     live: !!provider,
     provider: provider?.id ?? null,
     models: provider ? { default: provider.model('default'), quick: provider.model('quick') } : null,
+    effort: provider ? EFFORT_BY_TIER : null,
     usage: limiter.usage(),
+    // Tokens and cost of the model calls this server instance has made since it started, against the budget.
+    spend: usageTotals(),
     time: new Date().toISOString(),
   };
 
@@ -52,7 +56,8 @@ async function toolProbe(provider: Provider) {
     for await (const chunk of provider.stream({
       messages: [{ role: 'user', content: 'Add a note node titled Hello to the canvas.' }],
       tier: 'quick',
-      maxTokens: 200,
+      maxTokens: 1024, // current Claude models think before answering
+      cache: false,
       tools: [
         {
           name: 'add_canvas_node',

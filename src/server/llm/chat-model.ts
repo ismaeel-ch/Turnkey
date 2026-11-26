@@ -12,7 +12,7 @@ import { ChatGenerationChunk, type ChatResult } from '@langchain/core/outputs';
 import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
 import { convertToOpenAITool } from '@langchain/core/utils/function_calling';
 import { resolveProvider } from './index';
-import { LlmError, type ChatMessage, type ChatRequest, type Provider, type Tier, type ToolDef } from './types';
+import { LlmError, type ChatMessage, type ChatRequest, type Provider, type Tier, type ToolDef, type Usage } from './types';
 
 type OpenAiToolDict = { type?: string; function?: { name?: string; description?: string; parameters?: Record<string, unknown> } };
 
@@ -125,12 +125,10 @@ export class GatewayChatModel extends BaseChatModel<GatewayCallOptions> {
           text: '',
         });
       } else {
-        const input = chunk.usage?.input ?? 0;
-        const output = chunk.usage?.output ?? 0;
         yield new ChatGenerationChunk({
           message: new AIMessageChunk({
             content: '',
-            usage_metadata: { input_tokens: input, output_tokens: output, total_tokens: input + output },
+            usage_metadata: usageMetadata(chunk.usage),
             response_metadata: { finish_reason: chunk.truncated ? 'length' : 'stop' },
           }),
           text: '',
@@ -142,7 +140,7 @@ export class GatewayChatModel extends BaseChatModel<GatewayCallOptions> {
   async _generate(messages: BaseMessage[], options: this['ParsedCallOptions'], runManager?: CallbackManagerForLLMRun): Promise<ChatResult> {
     let text = '';
     let truncated = false;
-    let usage: { input?: number; output?: number } | undefined;
+    let usage: Usage | undefined;
     const calls: { id: string; name: string; args: Record<string, unknown>; type: 'tool_call' }[] = [];
     for await (const chunk of this.provider.stream(this.request(messages, options))) {
       if (chunk.type === 'delta') {
@@ -155,15 +153,17 @@ export class GatewayChatModel extends BaseChatModel<GatewayCallOptions> {
         usage = chunk.usage;
       }
     }
-    const input = usage?.input ?? 0;
-    const output = usage?.output ?? 0;
+    const meta = usageMetadata(usage);
     const message = new AIMessage({
       content: text,
       tool_calls: calls,
-      usage_metadata: { input_tokens: input, output_tokens: output, total_tokens: input + output },
+      usage_metadata: meta,
       response_metadata: { finish_reason: truncated ? 'length' : 'stop' },
     });
-    return { generations: [{ text, message }], llmOutput: { tokenUsage: { promptTokens: input, completionTokens: output } } };
+    return {
+      generations: [{ text, message }],
+      llmOutput: { tokenUsage: { promptTokens: meta.input_tokens, completionTokens: meta.output_tokens } },
+    };
   }
 }
 
@@ -182,4 +182,18 @@ export function requireChatModel(tier: Tier = 'default'): GatewayChatModel {
   const model = toChatModel(tier);
   if (!model) throw new LlmError('not_configured', 'No model is configured on this deployment.', 503);
   return model;
+}
+
+/** LangChain's usage shape. `Usage.input` is the uncached part; LangChain's input total counts the cache as well. */
+function usageMetadata(u?: Usage) {
+  const cacheRead = u?.cacheRead ?? 0;
+  const cacheWrite = u?.cacheWrite ?? 0;
+  const input = (u?.input ?? 0) + cacheRead + cacheWrite;
+  const output = u?.output ?? 0;
+  return {
+    input_tokens: input,
+    output_tokens: output,
+    total_tokens: input + output,
+    ...(cacheRead || cacheWrite ? { input_token_details: { cache_read: cacheRead, cache_creation: cacheWrite } } : {}),
+  };
 }

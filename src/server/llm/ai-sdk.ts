@@ -13,7 +13,7 @@ import type {
   LanguageModelV3Usage,
 } from '@ai-sdk/provider';
 import { resolveProvider } from './index';
-import { LlmError, type ChatMessage, type ChatRequest, type Provider, type Tier, type ToolCall, type ToolDef } from './types';
+import { LlmError, type ChatMessage, type ChatRequest, type Provider, type Tier, type ToolCall, type ToolDef, type Usage } from './types';
 
 const stringify = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v ?? null));
 
@@ -53,10 +53,19 @@ function outputText(output: { type: string; value?: unknown }): string {
   return output.type === 'text' || output.type === 'error-text' ? String(output.value ?? '') : stringify(output.value);
 }
 
-const usageOf = (input?: number, output?: number): LanguageModelV3Usage => ({
-  inputTokens: { total: input, noCache: input, cacheRead: undefined, cacheWrite: undefined },
-  outputTokens: { total: output, text: output, reasoning: undefined },
-});
+/** `Usage.input` is the uncached part; the AI SDK's total counts cache reads and writes as well. */
+const usageOf = (u?: Usage): LanguageModelV3Usage => {
+  const cached = (u?.cacheRead ?? 0) + (u?.cacheWrite ?? 0);
+  return {
+    inputTokens: {
+      total: u?.input === undefined ? undefined : u.input + cached,
+      noCache: u?.input,
+      cacheRead: u?.cacheRead,
+      cacheWrite: u?.cacheWrite,
+    },
+    outputTokens: { total: u?.output, text: u?.output, reasoning: undefined },
+  };
+};
 
 function requestOf(options: LanguageModelV3CallOptions, tier: Tier): ChatRequest {
   const tools: ToolDef[] = [];
@@ -104,7 +113,7 @@ export function toAiSdkModel(tier: Tier = 'default', provider?: () => Provider |
       const p = need();
       let text = '';
       let truncated = false;
-      let usage: { input?: number; output?: number } | undefined;
+      let usage: Usage | undefined;
       const calls: ToolCall[] = [];
       for await (const c of p.stream(requestOf(options, tier))) {
         if (c.type === 'delta') text += c.text;
@@ -117,7 +126,7 @@ export function toAiSdkModel(tier: Tier = 'default', provider?: () => Provider |
       const content: LanguageModelV3Content[] = [];
       if (text) content.push({ type: 'text', text });
       for (const c of calls) content.push({ type: 'tool-call', toolCallId: c.id, toolName: c.name, input: stringify(c.args) });
-      return { content, finishReason: finish(truncated, calls.length), usage: usageOf(usage?.input, usage?.output), warnings: [] };
+      return { content, finishReason: finish(truncated, calls.length), usage: usageOf(usage), warnings: [] };
     },
     async doStream(options) {
       const p = need();
@@ -153,7 +162,7 @@ export function toAiSdkModel(tier: Tier = 'default', provider?: () => Provider |
               if (textId) controller.enqueue({ type: 'text-end', id: textId });
               controller.enqueue({
                 type: 'finish',
-                usage: usageOf(value.usage?.input, value.usage?.output),
+                usage: usageOf(value.usage),
                 finishReason: finish(value.truncated, calls),
               });
               controller.close();
