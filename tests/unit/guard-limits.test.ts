@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { answerMeter, createLimiter, limitsFrom } from '@/server/guard/limits';
 import { parseBody, refuse, visitorKey } from '@/server/guard/http';
+import { resetUsageTotals, spentToday, usageTotals, withUsage } from '@/server/llm/usage';
 
 describe('limitsFrom', () => {
   it('has safe defaults and reads the environment', () => {
@@ -116,5 +117,57 @@ describe('route helpers', () => {
     expect(visitorKey(new Request('http://x', { headers: { 'x-forwarded-for': '1.2.3.4, 5.6.7.8' } }))).toBe('1.2.3.4');
     expect(visitorKey(new Request('http://x', { headers: { 'x-forwarded-for': 'a'.repeat(500) } })).length).toBe(64);
     expect(visitorKey(new Request('http://x'))).toBe('local');
+  });
+});
+
+describe('daily spend cap', () => {
+  it('refuses every call once the day has cost LLM_DAILY_SPEND_USD', () => {
+    let spent = 0;
+    const l = createLimiter(() => 1000, () => spent);
+    const L = limitsFrom({ LLM_DAILY_SPEND_USD: '2' });
+    expect(L.dailySpendUsd).toBe(2);
+    expect(l.take('a', L).ok).toBe(true);
+    spent = 2.01;
+    expect(l.take('b', L)).toMatchObject({ ok: false, code: 'budget' });
+    expect(limitsFrom({}).dailySpendUsd).toBe(5);
+  });
+});
+
+describe('spend of calls that stop early', () => {
+  it('a call the caller leaves midway is still counted, from an estimate', async () => {
+    resetUsageTotals();
+    const inner = {
+      id: 'test',
+      model: () => 'claude-sonnet-5-5',
+      async *stream() {
+        yield { type: 'delta' as const, text: 'x'.repeat(4000) };
+        yield { type: 'delta' as const, text: 'more' };
+        yield { type: 'done' as const, truncated: false, usage: { input: 1, output: 1 } };
+      },
+    };
+    const p = withUsage(inner as never, { LLM_LOG_USAGE: '0' });
+    for await (const c of p.stream({ messages: [{ role: 'user', content: 'y'.repeat(400) }], tier: 'default' })) {
+      if (c.type === 'delta') break;
+    }
+    const t = usageTotals({});
+    expect(t.calls).toBe(1);
+    expect(t.input).toBe(100);
+    expect(t.output).toBe(1000);
+    expect(spentToday()).toBeGreaterThan(0);
+  });
+  it('a call that fails before any answer is not counted', async () => {
+    resetUsageTotals();
+    const inner = {
+      id: 'test',
+      model: () => 'claude-sonnet-5-5',
+      async *stream() {
+        throw new Error('down');
+      },
+    };
+    const p = withUsage(inner as never, { LLM_LOG_USAGE: '0' });
+    await expect(async () => {
+      for await (const _ of p.stream({ messages: [{ role: 'user', content: 'y' }], tier: 'default' })) void _;
+    }).rejects.toThrow('down');
+    expect(usageTotals({}).calls).toBe(0);
   });
 });
