@@ -436,6 +436,12 @@ async function flowMisc(browser, url) {
   await page.locator('[data-tpl="clinic"] .tpl-build').click(); await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').nth(1).click(); await waitReady(page);
   let a = await appState(page);
   check('second answer lets the front desk read visit notes', a.access.visit_notes.receptionist.list === 'all' && a.tour.every(Boolean), a.access.visit_notes);
+  // the canvas fits itself a moment after it changes; if it is hidden by then (0 pixels wide), it must not be drawn at NaN
+  const nan = []; const onNan = (m) => { if (/NaN/.test(m.text())) nan.push(m.text().slice(0, 120)); }; page.on('console', onNan);
+  await view(page, 'Build'); await page.waitForSelector('.flow-canvas .react-flow__node'); await sleep(800);
+  await page.evaluate(async () => { document.querySelector('button[title="Put every node back where it started"]').click(); await new Promise((r) => setTimeout(r, 20)); const el = document.createElement('style'); el.id = 'tk-hide-canvas'; el.textContent = '.flow-canvas{display:none !important}'; document.head.appendChild(el); });
+  await sleep(1200); await page.evaluate(() => document.getElementById('tk-hide-canvas').remove()); await sleep(600); page.off('console', onNan);
+  check('the workflow canvas hidden just after a change is not drawn at NaN, and shows its nodes again', nan.length === 0 && await page.locator('.flow-canvas .react-flow__node').first().isVisible(), nan.slice(0, 3));
   await page.getByRole('button', { name: 'Log', exact: true }).click(); await sleep(100); check('log view lists steps', await page.locator('.line-wrap .tbl tbody tr').count() > 8); await shot(page, '61-log');
   for (let i = 0; i < 4; i++) { await page.getByRole('button', { name: 'Workflow', exact: true }).click(); await page.locator('.station').nth(i).click(); await sleep(60); if (i === 1) { await page.locator('.insp-body .switch').click(); await sleep(60); await shot(page, '62-schema-sql'); } if (i === 2) await shot(page, '63-backend-out'); }
   // dialogs
