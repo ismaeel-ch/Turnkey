@@ -7,7 +7,8 @@
  * Probes spend a little of the model budget, so they go through the same limits as every other model call.
  * Never returns a key, a gateway address or anything else that is secret. Model names are not secret.
  */
-import { limiter, visitorOf } from '@/server/guard/limits';
+import { limiter, lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
+import { refuseVerdict, visitorKey } from '@/server/guard/http';
 import { EFFORT_BY_TIER, LlmError, resolveProvider, usageTotals, type Provider } from '@/server/llm';
 import pkg from '../../../../package.json';
 
@@ -15,6 +16,8 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
+  const light = lightLimiter.take(visitorKey(request), lightLimitsFrom());
+  if (!light.ok) return refuseVerdict(light);
   const provider = resolveProvider();
   const out: Record<string, unknown> = {
     ok: true,
@@ -34,7 +37,7 @@ export async function GET(request: Request) {
   // ?probe=1 (or ?probe=tools): one real tool-call round trip. Spends a little of the model budget, so it is limited
   // like every other model call.
   if (new URL(request.url).searchParams.get('probe')) {
-    const verdict = limiter.take('probe:' + visitorOf(request));
+    const verdict = limiter.take('probe:' + visitorKey(request));
     out.probe = !verdict.ok
       ? { ok: false, error: verdict.message }
       : provider

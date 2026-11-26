@@ -9,7 +9,10 @@
  * The key stays on the server. Each agent step is its own short request, so a long build never holds one request
  * open: the browser runs the workflow and asks for one answer at a time.
  */
-import { limiter, limitsFrom, visitorOf } from '@/server/guard/limits';
+import { z } from 'zod';
+import { answerMeter, limiter, limitsFrom } from '@/server/guard/limits';
+import { parseBody, refuse, visitorKey } from '@/server/guard/http';
+import { checkPrompt } from '@/server/guard/prompt';
 import { LlmError, resolveProvider, type Tier } from '@/server/llm';
 
 export const runtime = 'nodejs';
@@ -19,26 +22,26 @@ const SYSTEM =
   'You are one of the agents of Turnkey, a tool that builds business apps from a description. ' +
   'Do exactly what the message asks and answer in the format it asks for. Do not add commentary around the answer.';
 
-const refuse = (status: number, code: string, message: string, headers?: Record<string, string>) =>
-  Response.json({ code, message }, { status, headers: { 'cache-control': 'no-store', ...headers } });
+// The body is read with a size limit first (the prompt limit plus room for the other fields), then checked.
+const Body = z.object({ prompt: z.string().min(1, 'A prompt is required.'), tier: z.enum(['default', 'quick']).catch('default') });
 
 export async function POST(request: Request) {
   const provider = resolveProvider();
   if (!provider) return refuse(503, 'not_configured', 'No model is configured on this deployment.');
 
-  let body: { prompt?: unknown; tier?: unknown };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return refuse(400, 'bad_request', 'The request body must be JSON.');
-  }
   const limits = limitsFrom();
-  const prompt = typeof body.prompt === 'string' ? body.prompt : '';
-  if (!prompt.trim()) return refuse(400, 'bad_request', 'A prompt is required.');
-  if (prompt.length > limits.maxPromptChars) return refuse(413, 'bad_request', 'The prompt is too long.');
-  const tier: Tier = body.tier === 'quick' ? 'quick' : 'default';
+  if (limits.off) return refuse(503, 'not_configured', 'Live builds are switched off on this deployment. Saved builds still run.');
 
-  const verdict = limiter.take(visitorOf(request), limits);
+  const parsed = await parseBody(request, Body, limits.maxPromptChars * 4 + 1000);
+  if (!parsed.ok) return parsed.response;
+  const { prompt, tier } = parsed.data as { prompt: string; tier: Tier };
+  if (!prompt.trim()) return refuse(400, 'bad_request', 'A prompt is required.');
+  if (prompt.length > limits.maxPromptChars) return refuse(413, 'too_large', 'The prompt is too long.');
+  // Only Turnkey's own agents may use the model: checked before anything is counted or sent.
+  const policy = checkPrompt(prompt);
+  if (!policy.ok) return refuse(400, policy.code, policy.message);
+
+  const verdict = limiter.take(visitorKey(request), limits);
   if (!verdict.ok) {
     const headers = verdict.retryAfter ? { 'retry-after': String(verdict.retryAfter) } : undefined;
     return refuse(verdict.code === 'off' ? 503 : 429, verdict.code === 'off' ? 'not_configured' : verdict.code, verdict.message, headers);
@@ -58,7 +61,21 @@ export async function POST(request: Request) {
           maxTokens: limits.maxOutputTokens,
           signal: request.signal,
         });
-        for await (const chunk of chunks) send(chunk);
+        const meter = answerMeter(limits.maxAnswerChars);
+        let cut = false;
+        for await (const chunk of chunks) {
+          if (chunk.type === 'delta') {
+            const part = meter.take(chunk.text);
+            if (part.text) send({ type: 'delta', text: part.text });
+            if (part.done) {
+              cut = true;
+              break; // leaving the loop stops the upstream call
+            }
+          } else if (chunk.type === 'done') {
+            send(chunk);
+          }
+        }
+        if (cut) send({ type: 'done', truncated: true });
       } catch (e) {
         const error = e instanceof LlmError ? e : new LlmError('upstream', 'the model call failed');
         if (error.code !== 'aborted') console.error('[llm]', provider.id, error.code, error.message);
