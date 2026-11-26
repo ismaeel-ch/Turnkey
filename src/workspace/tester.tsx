@@ -1,5 +1,6 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
-import { U, arr, commit, cx, emit, snake, str, toolCall, liveModelOn } from './core';
+import type { AppTable, BackedDef, BriefedDef, Role, TestCase, TourStep, Untrusted } from '@/shared/types/app';
+import type { AppRecord, Dict, QaState, Run } from '@/shared/types/workspace';
+import { U, arr, commit, cx, emit, errText, snake, str, toolCall, liveModelOn } from './core';
 import { accOf, appUsers, roleName, tableOf } from './engine';
 import { REC } from './builds';
 import { TESTS, runTests, runTestsSync, suiteOf, testStats, testable } from './tests';
@@ -23,6 +24,7 @@ import {
   stepStart,
 } from './line';
 import { applyChangeSync, parseChange, planOps } from './changes';
+import type { ParsedChange } from './changes';
 import { stName } from './custom';
 import { Btn, AgentAv, Empty, Icon, MBar } from './ui';
 import { logChange } from './release';
@@ -39,9 +41,33 @@ AGENTS.tester = {
   acc: 'seafoam',
   role: 'Writes test cases from the brief and sends failures back for repair',
 };
+type Act = 'create' | 'update' | 'delete' | 'list';
+/** A refusal the access rules promise, weighted by how much a rule of the brief stresses it. */
+interface Refusal {
+  r: Role;
+  t: AppTable;
+  act: Act;
+  w: number;
+}
+/** A test that failed in the last run. */
+export interface FailingTest {
+  id: string;
+  name: string;
+  suite: string;
+  suiteName: string;
+  station: string;
+  actual: string;
+}
+/** A repair, as a plain change request one agent asks for. */
+export interface Repair {
+  by: string;
+  for: string;
+  text: string;
+}
+type BackedApp = AppRecord & { def: BackedDef };
 export const CASE_DO = ['create', 'see', 'hidden', 'transition', 'denied', 'invalid', 'open'],
   QA_ROUNDS = 3; // one run, then at most two repair rounds
-export const CASE_EXPECT = {
+export const CASE_EXPECT: Record<string, string> = {
   create: '201 Created',
   see: 'the record is in the list',
   hidden: 'the record is not in the list',
@@ -50,14 +76,14 @@ export const CASE_EXPECT = {
   invalid: 'refused with 400',
   open: 'the page opens',
 };
-export function normCases(o, def) {
+export function normCases(o: Untrusted, def: BriefedDef): TestCase[] {
   const roleIds = def.brief.roles.map((r) => r.id),
-    seen = {};
+    seen: Dict<number> = {};
   return arr(o && o.cases)
-    .map((c, i) => {
+    .map((c: Untrusted, i) => {
       c = c || {};
-      const steps = arr(c.steps)
-        .map((x) => {
+      const steps: TourStep[] = arr(c.steps)
+        .map((x: Untrusted) => {
           x = x || {};
           return {
             role: snake(x.role),
@@ -86,23 +112,25 @@ export function normCases(o, def) {
     .filter((c) => c.steps.length)
     .slice(0, 10);
 }
-export function suggestCases(app) {
+/** A case as code writes it, before normCases gives it an id. */
+type CaseDraft = Omit<TestCase, 'id'>;
+export function suggestCases(app: BackedApp): CaseDraft[] {
   // what code writes when there is no model and no saved answer: one case for every kind of rule the app has
   const def = app.def,
     P = def.process,
     roles = def.brief.roles,
     users = def.users,
-    out = [],
-    rules = arr(def.brief.rules),
-    VERB = {
+    out: CaseDraft[] = [],
+    rules = arr<string>(def.brief.rules),
+    VERB: Record<Act, string> = {
       create: 'add',
       update: 'change',
       delete: 'delete',
       list: 'see',
     };
-  const ruleFor = (words) => rules.find((r) => words.every((w) => r.toLowerCase().includes(String(w).toLowerCase()))) || '',
-    lc = (s) => String(s).toLowerCase();
-  const refused = [];
+  const ruleFor = (words: string[]) => rules.find((r) => words.every((w) => r.toLowerCase().includes(String(w).toLowerCase()))) || '',
+    lc = (s: unknown) => String(s).toLowerCase();
+  const refused: Refusal[] = [];
   roles.forEach((r) =>
     def.tables.forEach((t) => {
       const a = accOf(def, r.id, t.name);
@@ -138,8 +166,8 @@ export function suggestCases(app) {
         });
     }),
   );
-  const pick = [],
-    perRole = {};
+  const pick: Refusal[] = [],
+    perRole: Dict<number> = {};
   refused
     .sort((a, b) => b.w - a.w)
     .forEach((x) => {
@@ -167,7 +195,7 @@ export function suggestCases(app) {
     }),
   );
   if (P) {
-    const t = tableOf(def, P.table),
+    const t = tableOf(def, P.table) as AppTable,
       maker = roles.find((r) => accOf(def, r.id, t.name).create);
     if (maker && t.columns.some((c) => c.required && c.name !== P.column && c.name !== t.owner))
       out.push({
@@ -216,7 +244,7 @@ export function suggestCases(app) {
       own && def.tour.find((s) => s.do === 'create' && s.role === own.id && accOf(def, own.id, s.table || (P && P.table)).list === 'own');
   if (own && mk) {
     const us = appUsers(app).filter((u) => u.role === own.id),
-      t = tableOf(def, mk.table || P.table);
+      t = tableOf(def, mk.table || (P && P.table)) as AppTable;
     out.push({
       name: 'One ' + lc(own.name) + " does not see another's " + lc(t.label),
       why: ruleFor(['own']) || 'The access rules give this role its own ' + lc(t.label) + ' only.',
@@ -237,7 +265,7 @@ export function suggestCases(app) {
   }
   return out;
 }
-export const testerPrompt = (app) =>
+export const testerPrompt = (app: BackedApp) =>
   HEAD('Tester') +
   'BRIEF: ' +
   pBrief(app.def.brief) +
@@ -252,9 +280,9 @@ export const testerPrompt = (app) =>
   '\n\nWrite 5 to 8 test cases that prove the rules and user stories of the brief hold in the finished app. Code will play each case against the real endpoints, so a case is data, not prose.\n- Each case: {"name":"what must be true, in plain words","why":"the rule or user story it protects, quoted or paraphrased from the brief","steps":[...]} with 1 to 5 steps.\n- Each step: {"role":"role id","user":"optional username when two people of one role matter","do":"create|see|hidden|transition|denied|invalid|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list or a transition id","say":"one present-tense sentence naming the person"}.\n- create needs "values" for the required columns and must succeed. invalid is a create that must be refused because required values are missing. see: that person lists the table and must find the record this case created. hidden: must not find it. transition: runs a workflow transition on the record this case created. denied: the attempt must be refused with 403.\n- Cover: every rule in the brief at least once, one refusal per role that has limits, one case about required fields. Do not repeat the guided tour.\n' +
   VALUE_RULES +
   '\n\nFORMAT: {"cases":[{"name":"","why":"","steps":[]}]}';
-export function failingTests(app) {
+export function failingTests(app: AppRecord): FailingTest[] {
   const R = TESTS[app.id],
-    out = [];
+    out: FailingTest[] = [];
   if (!R || R.rev !== app.rev) return out;
   suiteOf(app).forEach((s) =>
     s.tests.forEach((t) => {
@@ -272,11 +300,11 @@ export function failingTests(app) {
   );
   return out;
 }
-export function ruleRepairs(app, fails) {
+export function ruleRepairs(app: BackedApp, fails: FailingTest[]): Repair[] {
   // without a model, the repair rules can read: an access rule that lets through what a case says must be refused, or refuses what must work
   const def = app.def,
-    out = [],
-    ING = {
+    out: Repair[] = [],
+    ING: Dict<string> = {
       create: 'creating',
       update: 'editing',
       delete: 'deleting',
@@ -285,11 +313,11 @@ export function ruleRepairs(app, fails) {
   fails
     .filter((f) => f.suite === 'scenarios')
     .forEach((f) => {
-      const c = arr(def.cases).find((x) => 'case:' + x.id === f.id),
+      const c = (def.cases || []).find((x) => 'case:' + x.id === f.id),
         m = /^step (\d+)/.exec(f.actual),
         s = c && m ? c.steps[+m[1] - 1] : null,
         t = s ? tableOf(def, s.table || (def.process && def.process.table)) : null;
-      if (!t) return;
+      if (!c || !s || !t) return;
       const who = roleName(def, s.role).toLowerCase();
       if (s.do === 'denied' && ING[s.action || 'create'])
         out.push({
@@ -312,7 +340,7 @@ export function ruleRepairs(app, fails) {
     });
   return out.filter((x, i, a) => a.findIndex((y) => y.text === x.text) === i);
 }
-export const repairPrompt = (app, fails) =>
+export const repairPrompt = (app: BackedApp, fails: FailingTest[]) =>
   HEAD('Backend') +
   'The finished app failed some of its tests. Decide what to change so they pass.\n\nTABLES:\n' +
   pTables(app.def) +
@@ -327,7 +355,7 @@ export const repairPrompt = (app, fails) =>
     .join('\n') +
   '\n\nTEST CASES (written by the Tester from the brief):\n' +
   JSON.stringify(
-    arr(app.def.cases)
+    (app.def.cases || [])
       .filter((c) => fails.some((f) => f.id === 'case:' + c.id))
       .map((c) => ({
         id: c.id,
@@ -343,12 +371,16 @@ export const repairPrompt = (app, fails) =>
       })),
   ) +
   '\n\nReply with changes in plain words, one per fix, from this list of forms only: "Stop the <role name> from creating|editing|deleting|seeing <table label>", "Let the <role name> create|edit|delete|see <table label>", "Add a <field name> field to <table label>", "Remove the <field name> field from <table label>". If a test case itself contradicts the brief, list its id under "wrong" instead of changing the app.\n\nFORMAT: {"say":"one sentence","fixes":[{"change":"","for":"name of the failing test"}],"wrong":[{"case":"case id","why":""}]}';
-export function keepFix(app, text, ctx) {
+export function keepFix(
+  app: BackedApp,
+  text: string,
+  ctx: Parameters<typeof applyChangeSync>[2],
+): { ok: true; items: string[]; station: string } | { ok: false; why: string; station?: undefined } {
   // one plain change request, applied for real. applyChangeSync works inside a savepoint and puts everything back if any check fails.
-  let plan;
+  let plan: ParsedChange;
   try {
     plan = parseChange(app, text);
-  } catch (e) {
+  } catch {
     plan = {};
   }
   if (!plan.ops || !plan.ops.length)
@@ -373,13 +405,13 @@ export function keepFix(app, text, ctx) {
   } catch (e) {
     return {
       ok: false,
-      why: String((e && e.message) || e),
+      why: errText(e),
     };
   }
   if (res.failed)
     return {
       ok: false,
-      why: stName(res.failed) + ' would fail: ' + (((res.per[res.failed] || {}).issues || [])[0] || 'a check'),
+      why: stName(res.failed) + ' would fail: ' + (res.per[res.failed]?.issues[0] || 'a check'),
     };
   STATIONS.forEach((st, i) => {
     const r = res.per[st.id],
@@ -402,12 +434,13 @@ export function keepFix(app, text, ctx) {
  * failures back for repair, and record the result. The graph decides how often `run` and `repair` happen (at most
  * QA_ROUNDS runs) and emits the `tests` step events itself.
  */
-export function testerSteps(app, run) {
+export function testerSteps(app: BackedApp, run: Run) {
   const live = app.mode === 'live' && liveModelOn(),
     ctx = ctxOf(app, run, 'tester'),
-    rec = REC[app.tpl];
-  let Q = null,
-    fails = [];
+    rec = app.tpl ? REC[app.tpl] : undefined;
+  // write() sets Q before the graph calls the other steps
+  let Q!: QaState;
+  let fails: FailingTest[] = [];
   async function write() {
     Q = app.qa = {
       status: 'working',
@@ -435,7 +468,7 @@ export function testerSteps(app, run) {
         raw = await callModel(app, run, 'tester', testerPrompt(app), 1);
         Q.by = 'model';
       } catch (e) {
-        if (e instanceof Stopped || e.fatal) throw e;
+        if (e instanceof Stopped || (e as { fatal?: boolean }).fatal) throw e;
         raw = null;
       }
     } else {
@@ -482,7 +515,7 @@ export function testerSteps(app, run) {
     });
     commit();
   }
-  async function runRound({ round: n }) {
+  async function runRound({ round: n }: { round: number }) {
     Q.status = 'checking';
     commit();
     const s2 = stepStart(run, 'tests', 'orchestrator', n === 1 ? 'Run every test' : 'Run every test again', 'check');
@@ -505,7 +538,7 @@ export function testerSteps(app, run) {
     commit();
     return { total: R.total, failed: R.failed };
   }
-  async function repair({ round: n }) {
+  async function repair({ round: n }: { round: number }) {
     const R = Q.rounds[Q.rounds.length - 1];
     Q.status = 'sentback';
     run.retries++;
@@ -531,8 +564,8 @@ export function testerSteps(app, run) {
       },
     );
     const s3 = stepStart(run, 'tests', 'backend', 'Repair', live ? 'model' : 'tool');
-    let fixes = [],
-      wrong = [];
+    let fixes: Repair[] = [],
+      wrong: { id: string; why: string }[] = [];
     if (live) {
       try {
         const o = await callModel(app, run, 'backend', repairPrompt(app, fails), n);
@@ -549,9 +582,9 @@ export function testerSteps(app, run) {
             id: snake(x && x.case),
             why: str(x && x.why),
           }))
-          .filter((x) => app.def.cases.some((c) => c.id === x.id));
+          .filter((x) => (app.def.cases || []).some((c) => c.id === x.id));
       } catch (e) {
-        if (e instanceof Stopped || e.fatal) throw e;
+        if (e instanceof Stopped || (e as { fatal?: boolean }).fatal) throw e;
       }
     }
     if (!fixes.length && !wrong.length) {
@@ -559,7 +592,7 @@ export function testerSteps(app, run) {
       fixes = ruleRepairs(app, fails);
     }
     if (wrong.length) {
-      app.def.cases = app.def.cases.filter((c) => !wrong.some((w) => w.id === c.id));
+      app.def.cases = (app.def.cases || []).filter((c) => !wrong.some((w) => w.id === c.id));
       app.rev++;
       wrong.forEach((w) => Q.dropped.push(w));
     }
@@ -635,9 +668,9 @@ export function testerSteps(app, run) {
             ' tests pass' +
             (repaired ? ' after ' + repaired + (repaired === 1 ? ' repair' : ' repairs') : '') +
             ': ' +
-            app.def.cases.length +
+            (app.def.cases || []).length +
             ' cases I wrote and ' +
-            (last.total - app.def.cases.length) +
+            (last.total - (app.def.cases || []).length) +
             ' generated from the definitions.',
       {
         type: 'tests',
@@ -656,9 +689,9 @@ export function testerSteps(app, run) {
 }
 
 /* ---------- the Tester in the inspector ---------- */
-export function TesterPanel({ app }) {
+export function TesterPanel({ app }: { app: BackedApp }) {
   const Q = app.qa,
-    cases = arr(app.def.cases),
+    cases = app.def.cases || [],
     R = TESTS[app.id],
     res = R && R.rev === app.rev ? R.res : {},
     st = testStats(app),

@@ -172,7 +172,7 @@ export const normAgent = (a, i) => {
       }
     : null;
 };
-export const stName = (id) => (STATIONS.find((s) => s.id === id) || {}).name || label(id);
+export const stName = (id: string): string => (STATIONS.find((s) => s.id === id) || {}).name || label(id);
 export const firstStationOf = (agent) => STATIONS.findIndex((s) => s.agent === agent);
 export const agentThe = (id, low) => {
   const n = AGENTS[id].name,
