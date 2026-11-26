@@ -233,6 +233,9 @@ async function flowDemo(browser, url) {
   check('leave build ready, no send-backs, second answer applied', a.status === 'ready' && a.name === 'TimeOff' && a.retries[0] === 0 && a.tour.every(Boolean), [a.status, a.name, a.retries, a.tour, a.last]);
   await view(page, 'App'); await page.locator('.persona-btn').nth(4).click(); await land(page); await page.waitForSelector('.kb-col'); await shot(page, '33-leave-board');
   await page.locator('.app-nav .nav-i', { hasText: 'Team calendar' }).click(); await page.waitForSelector('.cal-grid'); await shot(page, '34-leave-calendar');
+  await page.locator('.app-head .persona').first().click(); await page.locator('.menu .mi', { hasText: 'Fatima' }).click(); await nav(page, 'My balance'); await page.waitForSelector('.app .tbl tfoot');
+  const bal = await st(page, () => ({ year: document.querySelector('.app .tbl tbody td:nth-child(2)').innerText.trim(), foot: [...document.querySelectorAll('.app .tbl tfoot td')].map((x) => x.innerText.trim()) }));
+  check('a year reads as 2026, not 2,026, and the total row does not add years up', bal.year === '2026' && bal.foot[1] === '' && /^Total of 3$/.test(bal.foot[0]), bal);
   await page.locator('.newtab').click(); await page.waitForSelector('.home'); await page.locator('[data-tpl="helpdesk"] .tpl-build').click();
   await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').first().click(); await waitReady(page); a = await appState(page);
   check('helpdesk build ready', a.status === 'ready' && a.name === 'DeskLine' && a.tour.length === 8 && a.tour.every(Boolean), [a.status, a.name, a.tour, a.last]);
@@ -1258,6 +1261,7 @@ async function fitBoth(page, label) {
 }
 async function flowSizes(browser, url) {
   let link = '', short = '';
+  if (process.env.SIZES_ONLY === 'features') return sizesFeatures(browser, url);
   for (const { w, h } of SIZES) {
     const at = w + 'px: ', phone = w <= 640;
     const { ctx, page } = await newPage(browser, { viewport: { width: w, height: h } });
@@ -1307,6 +1311,59 @@ async function flowSizes(browser, url) {
     }
   }
   check('the share dialog gave a short link to try', !!short, short);
+  await sizesFeatures(browser, url);
+}
+/** The features added after the first phone pass, at each size: the command palette and shortcuts, version history,
+ *  the spend panel, the deliverable export, the offline state and an area that failed to draw. */
+async function sizesFeatures(browser, url) {
+  for (const { w, h } of SIZES) {
+    const at = w + 'px: ', phone = w <= 640;
+    const { ctx, page } = await newPage(browser, { viewport: { width: w, height: h } });
+    await enter(page, url); await buildTpl(page, 'clinic'); await waitIdle(page); await sleep(300);
+    const esc = async (sel) => { await page.keyboard.press('Escape'); await page.waitForSelector(sel, { state: 'detached', timeout: 5000 }).catch(() => {}); await sleep(150); };
+    const blur = () => page.evaluate(() => document.activeElement && document.activeElement.blur());
+    // the command palette and the shortcuts dialog
+    await blur(); await page.keyboard.press('Control+k'); await page.waitForSelector('.dialog.palette .palette-opt'); await sleep(300);
+    await fitBoth(page, at + 'the command palette'); await shot(page, 'szf-' + w + '-palette');
+    await esc('.dialog.palette');
+    await blur(); await page.keyboard.press('Shift+?'); await page.waitForSelector('.dialog'); await sleep(300);
+    await fitBoth(page, at + 'the keyboard shortcuts dialog'); await shot(page, 'szf-' + w + '-keys');
+    await esc('.dialog');
+    // version history, from the More menu (the phone's More sheet)
+    if (phone) { await page.locator('.phone-nav .tab-i', { hasText: 'More' }).click(); await page.waitForSelector('.sheet'); await page.locator('.sheet .sheet-i', { hasText: 'Version history' }).click(); }
+    else { await page.getByRole('button', { name: 'More actions' }).first().click(); await page.getByRole('menuitem', { name: 'Version history' }).click(); }
+    await page.waitForSelector('.dialog.history .hist-row'); await sleep(300);
+    check(at + 'Version history opens from the ' + (phone ? 'More sheet' : 'More menu'), true);
+    await fitBoth(page, at + 'the version history dialog'); await shot(page, 'szf-' + w + '-history');
+    await esc('.dialog.history');
+    // the agent panel with what the agents spent
+    await page.locator('.act-launch').click(); await page.waitForSelector('.act-panel .act-usage'); await sleep(400);
+    const tabs = await st(page, () => [...document.querySelectorAll('.act-panel [role=tab]')].map((e) => { const r = e.getBoundingClientRect(), p = e.closest('.act-panel').getBoundingClientRect(); return r.left >= p.left - 1 && r.right <= p.right + 1 ? '' : e.textContent; }).filter(Boolean));
+    check(at + 'every tab in the agent panel can be reached, none is cut off at the edge', !tabs.length, tabs);
+    await fitBoth(page, at + 'the agent panel with the spend card'); await shot(page, 'szf-' + w + '-spend');
+    await page.locator('.act-panel').getByRole('button', { name: 'Close' }).click(); await page.waitForSelector('.act-panel', { state: 'detached' }); await sleep(200);
+    // the deliverable export on the Release screen
+    if (phone) await page.locator('.phone-nav .tab-i', { hasText: 'Release' }).click(); else await view(page, 'Release');
+    await page.waitForSelector('#rel-export'); await page.locator('#rel-export').scrollIntoViewIfNeeded(); await sleep(300);
+    await fitBoth(page, at + 'the Release screen at the export card'); await shot(page, 'szf-' + w + '-export');
+    // offline: the title bar and the Build view say so
+    if (phone) await page.locator('.phone-nav .tab-i', { hasText: 'Build' }).click(); else await view(page, 'Build');
+    await ctx.setOffline(true); await sleep(500);
+    await fitBoth(page, at + 'the builder, offline'); await shot(page, 'szf-' + w + '-offline');
+    await ctx.setOffline(false); await sleep(400);
+    // an area that could not draw shows its message in place, and the rest of the screen still works
+    const errs = errors.length; // the errors this break causes on purpose are dropped below
+    await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), a = s.apps[t.app]; window.__szKeep = a.def; a.def = { ...a.def, screens: null, tables: null }; });
+    if (phone) await page.locator('.phone-nav .tab-i', { hasText: 'App' }).click(); else await view(page, 'App');
+    await page.waitForSelector('[data-area-error]', { timeout: 5000 }).catch(() => {});
+    const failed = await page.locator('[data-area-error]').count();
+    check(at + 'a part that fails to draw shows its message in place', failed > 0, failed);
+    if (failed) { await fitBoth(page, at + 'the message for a part that failed'); await shot(page, 'szf-' + w + '-area-error'); }
+    await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); s.apps[t.app].def = window.__szKeep; });
+    if (failed) { for (let i = 0; i < 4 && (await page.locator('[data-area-error]').count()); i++) { await page.locator('[data-area-error]').getByRole('button', { name: 'Try again' }).first().click(); await sleep(300); } check(at + 'Try again draws the part again once it can', !(await page.locator('[data-area-error]').count())); }
+    errors.splice(errs, errors.length - errs, ...errors.slice(errs).filter((e) => !/could not draw|reading 'length'/.test(e)));
+    await ctx.close();
+  }
 }
 // ----- undo, redo and version history (src/workspace/history.ts) -----
 async function flowHistory(browser, url) {

@@ -287,6 +287,7 @@ const useStyles = makeStyles({
   bar: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS, flexWrap: 'wrap' },
   grow: { flexGrow: 1 },
   section: { marginTop: tokens.spacingVerticalL },
+  filters: { flexWrap: 'wrap' }, // on a phone the four filters do not fit one row, and a cut-off tab cannot be tapped
   sectionTitle: { display: 'block', marginBottom: tokens.spacingVerticalS },
   roster: { display: 'grid', gap: tokens.spacingVerticalXS },
   agent: {
@@ -491,7 +492,13 @@ export function AgentActivity({ app }: { app: AppRecord | null }) {
                     What happened
                   </Text>
                 </div>
-                <TabList size="small" selectedValue={filter} onTabSelect={(_, d) => setFilter(d.value as Filter)} aria-label="Show">
+                <TabList
+                  size="small"
+                  className={c.filters}
+                  selectedValue={filter}
+                  onTabSelect={(_, d) => setFilter(d.value as Filter)}
+                  aria-label="Show"
+                >
                   <Tab value="all">Everything</Tab>
                   <Tab value="steps">Steps and hand-offs</Tab>
                   <Tab value="tools">Tool calls</Tab>

@@ -249,8 +249,7 @@ export function flowGraph(app: AppRecord, v: boolean): FlowGraph {
     suites = ok ? suiteOf(app) : [],
     T0 = TESTS[app.id],
     res: Dict<{ ok: boolean }> = T0 && T0.rev === app.rev ? T0.res : {},
-    // tests.tsx keeps the id of the suite that is running here, though its type says boolean
-    running = T0 ? (T0.running as unknown as string | null | undefined) : null;
+    running = T0 ? T0.running : null; // the id of the suite running now
   const css = getComputedStyle(document.documentElement),
     col = (n: string) => css.getPropertyValue('--' + n).trim() || '#888',
     C = {
@@ -1412,7 +1411,7 @@ export function flowKit(): FlowKit {
             sig = JSON.stringify([at, n.width, n.data]);
           return o && o.type === n.type && o.sig === sig && o.position.x === at.x && o.position.y === at.y
             ? o
-            : ({ ...(o && o.type === n.type ? o : null), ...n, position: at, sig } as IslandNode);
+            : ({ ...(o && o.type === n.type ? o : null), ...n, position: at, sig });
         }),
       );
     }, [p.sig]); // a node that did not change keeps its object, so React Flow leaves it alone

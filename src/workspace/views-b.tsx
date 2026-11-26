@@ -4,7 +4,7 @@ import type { AppRecord, Dict, Pane, ViewFilter, ViewOptions } from '@/shared/ty
 import { toStyle } from '@/platform/dom';
 import { DOW, MON, cap, cx, fmtDate, fmtNum, fmtTime, isoDate, notify, parseISO, toast, today } from './core';
 import { accOf, colOf, roleName, tableOf } from './engine';
-import { DATA_VIEWS, isCat, isDate, isNum } from './viewspec';
+import { DATA_VIEWS, isCat, isDate, isMeasure } from './viewspec';
 import { Btn, Card, Empty, FilterChip, Icon, Seg, Switch } from './ui';
 import { cellText, fetchApi, rowTitle, stateLabel, stateTone } from './runtime';
 import { NoRows, Pick, asText, choices, passes, vxState, type DrillPair, type ViewProps } from './views-a';
@@ -21,7 +21,7 @@ export type Measure = { fn: 'count'; col: null; label: string } | { fn: 'sum' | 
 export const measureOf = (t: AppTable, m: string | null | undefined): Measure => {
   const x = /^(sum|avg):(.+)$/.exec(m || ''),
     c = x && colOf(t, x[2]);
-  return x && c && isNum(c)
+  return x && c && isMeasure(c)
     ? {
         fn: x[1] === 'sum' ? 'sum' : 'avg',
         col: c,
@@ -496,9 +496,15 @@ export function TimePlot({
     bar = kind === 'bar',
     direct = !bar && many && series.length <= 4;
   if (!n) return <p className="muted t-cap">No dates to plot for these filters.</p>;
+  const tops = buckets.map((_, i) =>
+      bar ? series.reduce((a, s) => a + Math.max(0, s.vals[i] || 0), 0) : Math.max(...series.map((s) => s.vals[i] || 0)),
+    ),
+    ticks = niceTicks(Math.max(...tops, 0), whole),
+    // room on the left for the widest axis label, so large amounts such as 300,000 are not cut off
+    widest = Math.max(...ticks.map((v) => fmtNum(v).length));
   const h = 228,
     m = {
-      l: 42,
+      l: Math.max(42, Math.ceil(widest * 7 + 14)),
       r: direct ? 104 : 14,
       t: 10,
       b: 24,
@@ -507,11 +513,7 @@ export function TimePlot({
     ih = h - m.t - m.b,
     band = iw / n,
     cxi = (i: number) => m.l + band * (i + 0.5);
-  const tops = buckets.map((_, i) =>
-      bar ? series.reduce((a, s) => a + Math.max(0, s.vals[i] || 0), 0) : Math.max(...series.map((s) => s.vals[i] || 0)),
-    ),
-    ticks = niceTicks(Math.max(...tops, 0), whole),
-    ymax = ticks[ticks.length - 1] || 1,
+  const ymax = ticks[ticks.length - 1] || 1,
     y = (v: number) => m.t + ih - (Math.max(0, v) / ymax) * ih;
   const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(iw / 62)))),
     bw = Math.max(2, Math.min(24, band * 0.68));
@@ -692,7 +694,7 @@ export function DataTable({ head, rows }: { head: string[]; rows: (string | numb
   );
 }
 export const measureOpts = (t: AppTable) => {
-  const nums = t.columns.filter(isNum);
+  const nums = t.columns.filter(isMeasure);
   return [
     {
       name: 'count',
@@ -1506,13 +1508,16 @@ export function Dash({
     } else if (!xc) {
       body = <p className="muted t-cap">Nothing to plot by.</p>;
     } else if (w.kind === 'line') {
-      const T = timeData(app, user, t, rows, xc, sp, M, w.bucket);
+      const T = timeData(app, user, t, rows, xc, sp, M, w.bucket),
+        // a single line through mostly empty days zig-zags to zero and back; columns read better there
+        gaps = T.series.length === 1 ? T.series[0].vals.filter((v) => !v).length : 0,
+        sparse = T.buckets.length <= 3 || gaps * 2 >= T.buckets.length;
       body = (
         <TimePlot
           buckets={T.buckets}
           b={T.b}
           series={T.series}
-          kind="line"
+          kind={sparse ? 'bar' : 'line'}
           unit={M.label}
           whole={M.fn === 'count'}
           about={w.label}

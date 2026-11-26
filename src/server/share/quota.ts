@@ -52,6 +52,19 @@ export function createShareQuota(now: () => number = Date.now) {
       if (visitors.size > 20_000) visitors.clear(); // a flood of forged addresses must not grow memory without end
       return { ok: true };
     },
+    /**
+     * Gives back one save that `take` counted but that wrote nothing (the store was down, the token was wrong, every
+     * name was taken), so a short outage does not use up the day's allowance. Only within the same day.
+     */
+    refund(who: string, size: number) {
+      roll();
+      const mine = visitors.get(who) ?? 0;
+      if (saves <= 0 || mine <= 0) return;
+      saves--;
+      bytes = Math.max(0, bytes - size);
+      if (mine === 1) visitors.delete(who);
+      else visitors.set(who, mine - 1);
+    },
   };
 }
 

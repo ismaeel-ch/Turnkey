@@ -1,0 +1,328 @@
+// A judge's walk through the live site: the README's five-minute walk-through and the demo video's shot list
+// (docs/hackathon/demo-video.md), done the way a person would do it, by clicking what is on screen. Each step saves a
+// screenshot, so the run doubles as a picture book of the demo path. Demo mode only: it calls no model.
+//
+//   TK_URL=https://turnkey-bay.vercel.app node tests/e2e/judge.cjs
+//   TK_URL=http://localhost:3000 JUDGE_SHOTS=/tmp/judge node tests/e2e/judge.cjs
+//   npm run test:e2e -- judge          against a local production build, like the other flows
+//
+// The "Judge walk" workflow runs it by hand against the live site and keeps the screenshots as an artifact.
+// Unlike flows.cjs it does not read or set the app's state through the test hook: what a judge cannot see or click,
+// it does not check. It only reads the hook to wait for a build to finish, never to change anything.
+// Exits 1 if any step fails. Writes a table to $GITHUB_STEP_SUMMARY when that is set.
+const fs = require('node:fs');
+const path = require('node:path');
+const { chromium } = require('playwright');
+
+const base = String(process.env.TK_URL || process.argv[2] || '').replace(/\/+$/, '');
+const shots = process.env.JUDGE_SHOTS || path.join(__dirname, 'shots', 'judge');
+if (!/^https?:\/\/[^/\s]+$/.test(base)) {
+  console.error('Give the site address, for example: TK_URL=https://turnkey-bay.vercel.app node tests/e2e/judge.cjs');
+  process.exit(2);
+}
+fs.mkdirSync(shots, { recursive: true });
+
+/** @type {{ n: number, name: string, status: 'pass' | 'fail', detail: string, ms: number }[]} */
+const results = [];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+const firstLine = (e) =>
+  String(e && e.message ? e.message : e)
+    .split('\n')[0]
+    .slice(0, 300);
+
+/** Runs one step of the walk, saves a screenshot after it (also when it fails), and records the result. A step
+ *  returns a short note for the summary, or throws with what went wrong. */
+async function step(page, name, fn) {
+  const n = results.length + 1;
+  const started = Date.now();
+  let status = 'pass';
+  let detail = '';
+  try {
+    detail = (await fn()) || '';
+  } catch (e) {
+    status = 'fail';
+    detail = firstLine(e);
+  }
+  const file = `${String(n).padStart(2, '0')}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50)}.png`;
+  await page.screenshot({ path: path.join(shots, file) }).catch(() => {});
+  results.push({ n, name, status, detail, ms: Date.now() - started });
+  console.log(`${status.toUpperCase().padEnd(4)} ${n}. ${name}${detail ? '  (' + detail + ')' : ''}`);
+  return status === 'pass';
+}
+
+function expect(ok, what) {
+  if (!ok) throw new Error(what);
+}
+
+/** Waits for the open app to be built and its agents to go quiet. Reads the test hook only to know when it is done. */
+async function waitBuilt(page, ms) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const s = await page.evaluate(() => {
+      const st = window.__formwork && window.__formwork.state();
+      if (!st) return null;
+      const t = (st.tabs[st.session] || []).find((x) => x.id === st.active[st.session]);
+      const a = t && t.app ? st.apps[t.app] : null;
+      return a ? { status: a.status, name: a.name, tests: a.tests || null } : null;
+    });
+    const busy = await page.locator('.work-head .spin').count();
+    if (s && (s.status === 'ready' || s.status === 'failed') && !busy) return s;
+    await sleep(500);
+  }
+  throw new Error(`the build did not finish in ${Math.round(ms / 1000)} s`);
+}
+
+/** Opens one of the workspace's main tabs (Build, App, Release, Details) by its visible name. */
+async function openTab(page, name) {
+  await page.locator('.views .tab', { hasText: name }).first().click();
+  await sleep(400);
+}
+
+async function main() {
+  const browser = await chromium.launch();
+  const errors = [];
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errors.push(firstLine(e)));
+  // a server error a judge would run into; short links answer 503 on purpose where they are not set up
+  page.on('response', (r) => {
+    const u = new URL(r.url());
+    if (r.status() >= 500 && !(r.status() === 503 && u.pathname.startsWith('/api/share'))) errors.push(`HTTP ${r.status()} on ${u.pathname}`);
+  });
+
+  try {
+    // ---- 1. the welcome screen (shot 1) ----
+    await step(page, 'Welcome screen shows the headline and the stations', async () => {
+      await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.waitForSelector('.ob-card', { timeout: 45000 });
+      await sleep(800);
+      const text = clean(await page.locator('.ob-card').innerText());
+      expect(await page.getByRole('button', { name: 'Get started' }).isVisible(), 'no Get started button');
+      return text.slice(0, 120);
+    });
+
+    // ---- 2. first run: demo account, Demo, Sales bidding desk (shot 2) ----
+    await step(page, 'Skip sign-in and keep Demo', async () => {
+      await page.getByRole('button', { name: 'Get started' }).click();
+      await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
+      await page.waitForSelector('.choice', { timeout: 10000 });
+      const live = clean(await page.locator('.choice').nth(1).innerText());
+      return 'Live choice says: ' + (live.match(/Model connected|No model connected|Checking the model/) || ['?'])[0];
+    });
+    await step(page, 'Pick Sales bidding desk as the first app', async () => {
+      await page.getByRole('button', { name: 'Continue' }).click();
+      await page.getByText('Sales bidding desk', { exact: true }).click();
+      await sleep(300);
+    });
+    await step(page, 'Open the workspace', async () => {
+      await page.getByRole('button', { name: 'Continue' }).click();
+      await page.getByRole('button', { name: 'Open my workspace' }).click();
+      await page.waitForSelector('.work-head', { timeout: 30000 });
+      await sleep(1500);
+    });
+
+    // the guided tour starts with the workspace; a judge reads it through
+    await step(page, 'Guided tour runs to the end', async () => {
+      let n = 0;
+      while ((await page.locator('.tour-pop').count()) && n < 25) {
+        n++;
+        if (n === 2) await page.screenshot({ path: path.join(shots, '05a-tour.png') });
+        await page.locator('.tour-pop .btn.primary').click();
+        await sleep(500);
+      }
+      expect(!(await page.locator('.tour-pop').count()), 'the tour is still open after 25 steps');
+      return n ? `${n} steps` : 'no tour shown';
+    });
+
+    // ---- 3, 4. the build: stations, checks, the Tester's planted slip and the repair ----
+    await step(page, 'Build finishes with every test passing', async () => {
+      await openTab(page, 'Build');
+      const a = await waitBuilt(page, 180000);
+      expect(a.status === 'ready', 'build status ' + a.status);
+      expect(a.tests && a.tests.total > 0 && a.tests.failed === 0, 'tests ' + JSON.stringify(a.tests));
+      await sleep(800);
+      return `${a.name}: ${a.tests.total} tests pass`;
+    });
+    await step(page, 'Tests station shows the repair and is ready to release', async () => {
+      await page.waitForSelector('.react-flow .fl-node.station', { timeout: 15000 });
+      const nodes = await page.locator('.fl-node.station').allInnerTexts();
+      const tests = nodes.find((t) => /repair/i.test(t));
+      expect(tests, 'no station mentions the repair: ' + nodes.map(clean).join(' | ').slice(0, 200));
+      return clean(tests).slice(0, 120);
+    });
+    await step(page, 'Tester panel tells run 1, the repair and run 2', async () => {
+      const node = page.locator('.fl-node.station', { hasText: /repair/i }).first();
+      await node.click();
+      await page.waitForSelector('.review-insp', { timeout: 10000 });
+      const tp = clean(await page.locator('.review-insp').innerText());
+      expect(/Run 1/.test(tp) && /1 of \d+ failed/.test(tp), 'no failed run 1: ' + tp.slice(0, 200));
+      expect(/repaired/i.test(tp) && /Run 2/.test(tp) && /all \d+ passed/.test(tp), 'no repaired run 2: ' + tp.slice(0, 200));
+      return (tp.match(/1 of \d+ failed/) || [''])[0] + ', then ' + (tp.match(/all \d+ passed/) || [''])[0];
+    });
+
+    // ---- 5. the same run three ways, and the agents panel ----
+    await step(page, 'Timeline view of the run', async () => {
+      await page.keyboard.press('Escape').catch(() => {});
+      await page.getByRole('button', { name: 'Timeline' }).click();
+      await sleep(600);
+      const u = clean(await page.locator('.tl-usage').innerText().catch(() => ''));
+      return u.slice(0, 120);
+    });
+    await step(page, 'Log view of the run', async () => {
+      await page.getByRole('button', { name: 'Log', exact: true }).click();
+      await sleep(600);
+    });
+    await step(page, 'Agents panel: activity', async () => {
+      await page.getByRole('button', { name: 'Workflow', exact: true }).click();
+      await page.locator('.act-launch').click();
+      await page.waitForSelector('.act-panel .act-agent', { timeout: 10000 });
+      await sleep(400);
+      const agents = await page.locator('.act-panel .act-agent').count();
+      expect(agents >= 6, `${agents} agents listed`);
+      return `${agents} agents listed`;
+    });
+    await step(page, 'Agents panel: how it works', async () => {
+      await page.locator('.act-tab-how').click();
+      await page.waitForSelector('.act-how', { timeout: 10000 });
+      await sleep(400);
+      await page.locator('.act-launch').click();
+      await sleep(400);
+    });
+
+    // ---- 6. the app it built: sign in as Sana, then preview as Omar ----
+    await step(page, 'App tab: sign in as Sana Malik', async () => {
+      await openTab(page, 'App');
+      await page.waitForSelector('.login-card', { timeout: 15000 });
+      await page.screenshot({ path: path.join(shots, '13a-app-sign-in.png') });
+      await page.locator('.persona-btn', { hasText: 'Sana' }).first().click();
+      await page.waitForSelector('.app-nav', { timeout: 15000 });
+      await sleep(500);
+      const nav = (await page.locator('.app-nav .nav-i').allInnerTexts()).map(clean);
+      return 'pages: ' + nav.join(', ');
+    });
+    await step(page, 'Preview as Omar Farooq, the sales director', async () => {
+      await page.selectOption('select[aria-label="Preview as"]', { label: 'Omar Farooq · Sales director' });
+      await sleep(600);
+      const nav = (await page.locator('.app-nav .nav-i').allInnerTexts()).map(clean);
+      return 'pages: ' + nav.join(', ');
+    });
+
+    // ---- 7. the Bid room: the app's own agent team, with a pause for a person ----
+    await step(page, 'Bid room: run the team on the port authority tender', async () => {
+      await page.selectOption('select[aria-label="Preview as"]', { label: 'Sana Malik · Bid manager' });
+      await sleep(400);
+      await page.locator('.app-nav .nav-i', { hasText: 'Bid room' }).click();
+      await page.waitForSelector('.team.room', { timeout: 15000 });
+      const chip = page.locator('.team-start .chip', { hasText: /port/i }).first();
+      expect(await chip.count(), 'no example tender for the port authority');
+      await chip.click();
+      await sleep(100);
+      await page.locator('.team-start button[type=submit]').click();
+      await page.waitForSelector('.team-log .gcard.ask', { timeout: 60000 });
+      await sleep(400);
+      const scores = await page.locator('.bdp-scores .bd-srows li').count();
+      const prices = await page.locator('.bdp-options .bd-opt').count();
+      expect(scores > 0 && prices > 0, `scores ${scores}, prices ${prices}`);
+      return `paused for you after ${scores} score lines and ${prices} prices`;
+    });
+    await step(page, 'Bid room: add a condition, continue, Red team verdict', async () => {
+      await page.fill('.team-log .gcard.ask input', 'Ask for a site visit first');
+      await page.locator('.team-log .gcard.ask .btn', { hasText: 'Add' }).click();
+      await sleep(150);
+      await page.locator('.team-log .gcard.ask .btn.primary').click();
+      await page.waitForSelector('.verdict', { timeout: 60000 });
+      await sleep(800);
+      const v = clean(await page.locator('.verdict').innerText());
+      expect(/Bid|No bid|bid/.test(v), 'verdict: ' + v.slice(0, 120));
+      return v.slice(0, 120);
+    });
+
+    // ---- 8. a change from chat ----
+    await step(page, 'Chat: "Add a notes field to score lines"', async () => {
+      await openTab(page, 'Build');
+      const chip = page.getByRole('button', { name: /Add a notes field to score lines/ }).first();
+      if (await chip.count()) await chip.click();
+      else {
+        await page.fill('.chat textarea, .chat input[type=text]', 'Add a notes field to score lines');
+        await page.keyboard.press('Enter');
+      }
+      await sleep(1000);
+      const a = await waitBuilt(page, 120000);
+      expect(a.status === 'ready', 'status ' + a.status);
+      expect(a.tests && a.tests.failed === 0, 'tests ' + JSON.stringify(a.tests));
+      await sleep(600);
+      const applied = page.locator('.gcard', { hasText: 'Add Notes' }).last();
+      expect(await applied.count(), 'no Applied card for the notes field in chat');
+      const ran = clean(await applied.innerText()).match(/Ran again (.*)$/);
+      return `ran again: ${ran ? ran[1] : '?'}; ${a.tests.total} tests pass`;
+    });
+
+    // ---- 9. release and share ----
+    await step(page, 'Release version 1.0', async () => {
+      await openTab(page, 'Release');
+      await page.waitForSelector('#rel-go', { timeout: 15000 });
+      await page.locator('#rel-go').click();
+      await page.waitForFunction(() => /Version 1\.0 · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''), null, {
+        timeout: 60000,
+      });
+      return clean(await page.locator('#rel-state').innerText());
+    });
+    await step(page, 'Share by link', async () => {
+      await page.locator('#rel-share').click();
+      await page.waitForSelector('.dialog.share', { timeout: 10000 });
+      await page.waitForFunction(() => /#app=1\./.test((document.getElementById('sh-link') || {}).value || ''), null, { timeout: 20000 });
+      await sleep(1500);
+      const short = await page.inputValue('#sh-short').catch(() => '');
+      return short ? 'short link ' + short : 'long link only';
+    });
+
+    // ---- 10. debug mode ----
+    await step(page, 'Debug drawer: AG-UI events and tool calls', async () => {
+      await page.locator('.dialog .dhead .btn[aria-label="Close"]').click();
+      await sleep(300);
+      await page.locator('.titlebar [data-tour=debug]').click();
+      await page.waitForSelector('.debug', { timeout: 10000 });
+      await sleep(400);
+      const rows = await page.locator('.dbg-body tr').count();
+      expect(rows > 2, `${rows} rows`);
+      await page.locator('.dbg-head').getByRole('tab', { name: /^Tool calls/ }).click();
+      await sleep(300);
+      return `${rows} events`;
+    });
+
+    // ---- 11. back to the finished workflow ----
+    await step(page, 'Finished workflow canvas', async () => {
+      await page.locator('.dbg-head .btn[aria-label="Close debug"]').click();
+      await openTab(page, 'Build');
+      await page.getByRole('button', { name: 'Workflow', exact: true }).click();
+      await sleep(800);
+    });
+
+    // the page itself must not have thrown along the way
+    await step(page, 'No errors on the page', async () => {
+      expect(!errors.length, errors.slice(0, 3).join(' | '));
+    });
+  } finally {
+    await browser.close();
+  }
+
+  const failed = results.filter((r) => r.status === 'fail').length;
+  console.log(`\n${results.length - failed} of ${results.length} steps passed. Screenshots in ${shots}`);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const rows = results.map((r) => `| ${r.status === 'pass' ? '✅' : '❌'} | ${r.n}. ${r.name} | ${Math.round(r.ms / 1000)} s | ${r.detail.replace(/\|/g, '\\|')} |`);
+    fs.appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      [`### Judge walk of ${base}`, '', '| | Step | Took | Detail |', '| - | - | - | - |', ...rows, ''].join('\n'),
+    );
+  }
+  return failed ? 1 : 0;
+}
+
+main().then(
+  (code) => process.exit(code),
+  (e) => {
+    console.error(e);
+    process.exit(1);
+  },
+);

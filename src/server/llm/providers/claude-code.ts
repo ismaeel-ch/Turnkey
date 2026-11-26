@@ -207,7 +207,7 @@ export function claudeCode(config: ClaudeCodeConfig): Provider {
   const env = config.env ?? process.env;
   assertLocal(env);
   const model = (tier: Tier) => (tier === 'quick' && config.quickModel ? config.quickModel : config.model);
-  const run = config.spawnImpl ?? (spawn as unknown as SpawnFn);
+  const run = config.spawnImpl ?? spawn;
   const sleep = config.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
   /** One attempt: yields text deltas as they arrive and returns the final result line. */
@@ -215,7 +215,7 @@ export function claudeCode(config: ClaudeCodeConfig): Provider {
     let child: ChildProcessWithoutNullStreams;
     try {
       child = run(config.command || 'claude', args, {
-        env: { ...process.env, ...env } as NodeJS.ProcessEnv,
+        env: { ...process.env, ...env },
         stdio: ['pipe', 'pipe', 'pipe'],
       });
     } catch {
