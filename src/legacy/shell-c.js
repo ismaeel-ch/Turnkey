@@ -1,0 +1,271 @@
+/* ===== Turnkey prototype · shell: first-run onboarding, sign-in, dialogs, guided tour, boot ===== */
+function Onboarding() {
+  const o = U.ob || (U.ob = { step: 0, name: '', user: '', pass: '', demo: true, dev: false, pick: 'clinic', tour: true, err: '' }), steps = ['Welcome', 'Your account', 'How to run', 'First app', 'Ready'], liveOK = online();
+  const next = () => {
+    if (o.step === 1) { const u = snake(o.user); if (!str(o.name) || !u) { o.err = 'Enter a name and a username, or skip to use the demo account.'; return notify(); } if (str(o.pass).length < 4) { o.err = 'Use at least 4 characters for the password.'; return notify(); } o.user = u; }
+    o.err = ''; o.step = Math.min(steps.length - 1, o.step + 1); notify();
+  };
+  const finish = () => {
+    const a = createAccount(o.name || 'Demo user', o.user || 'demo', o.pass || 'demo'); S.session = a.id; S.onboarded = true; S.settings.demo = o.demo; S.settings.debug = o.dev; commit();
+    const pick = o.pick, tour = o.tour; U.ob = null;
+    if (pick) startBuild({ request: REC[pick].sentence, tpl: pick });
+    if (tour) setTimeout(startTour, 900);
+    notify();
+  };
+  const body = [
+    () => html`<h1 class="t-title1">Say what the work is. Get the whole app, ready to use.</h1>
+      <p class="lead">A turnkey job is one that is handed over finished: you turn the key and it works. ${BRAND.name} turns one sentence into a complete, working app for any domain: SQLite tables, role-guarded endpoints, switchable views, a dashboard and a guided tour. You watch five agents build it, and code checks every handoff.</p>
+      <div class="ob-line" aria-hidden="true">${STATIONS.map((s, i) => html`<span key=${s.id} class="ob-pair">${i > 0 && html`<${Icon} n="arrowRight" s="16" />`}<span class="ob-st"><${AgentAv} id=${s.agent} size="sm" />${s.name}</span></span>`)}</div>
+      <ul class="plain ticks"><li><${Icon} n="eye" s="16" /><span><strong>Built in front of you.</strong> Every agent step, tool call and check is visible.</span></li><li><${Icon} n="shield" s="16" /><span><strong>Checked at every handoff.</strong> Agents write definitions. Code tests them and sends failures back.</span></li><li><${Icon} n="storage" s="16" /><span><strong>Yours, in this browser.</strong> Apps and data stay here, work offline, and are still here when you sign in again.</span></li></ul>`,
+    () => html`<h1 class="t-title2">Create your account</h1><p class="muted">It keeps your workspaces apart from anyone else who uses this browser. Sign-in is demo-grade: use a made-up password.</p>
+      <div class="form-grid one"><${Field} id="ob-name" label="Your name"><input class="input" id="ob-name" data-autofocus autocomplete="off" value=${o.name} onInput=${(e) => { o.name = e.target.value; }} /><//>
+        <${Field} id="ob-user" label="Username"><input class="input" id="ob-user" autocomplete="off" value=${o.user} onInput=${(e) => { o.user = e.target.value; }} /><//>
+        <${Field} id="ob-pass" label="Password" hint="At least 4 characters. Stored in this browser only, hashed."><input class="input" id="ob-pass" type="password" autocomplete="off" value=${o.pass} onInput=${(e) => { o.pass = e.target.value; }} /><//></div>
+      ${o.err && html`<${MBar} tone="warning">${o.err}<//>`}
+      <button class="btn subtle" onClick=${() => { o.name = 'Demo user'; o.user = 'demo'; o.pass = 'demo'; o.err = ''; o.step = 2; notify(); }}>Skip and use the demo account (demo / demo)</button>`,
+    () => html`<h1 class="t-title2">How should the agents run?</h1><p class="muted">You can switch at any time from the title bar.</p>
+      <div class="choices"><button class=${cx('choice', o.demo && 'on')} aria-pressed=${o.demo} onClick=${() => { o.demo = true; notify(); }}><span class="row"><${Icon} n="playOutline" /><strong>Demo</strong><span class="badge b-info">Good first look</span></span><span class="muted">Replays saved builds through the real checks and the real database, with made-up data that looks like the real thing. No model calls, works offline.</span></button>
+        <button class=${cx('choice', !o.demo && 'on')} aria-pressed=${!o.demo} disabled=${!liveOK} onClick=${() => { o.demo = false; notify(); }}><span class="row"><${Icon} n="sparkle" /><strong>Live</strong>${!liveOK ? html`<span class="badge b-warning">Needs internet</span>` : html`<span class="badge b-success">You are connected</span>`}</span><span class="muted">Sends your own sentence to the model. Each agent makes its own call, capped at ${CAP} calls a session. Live follows your internet connection: it pauses when you go offline and comes back when you reconnect.</span></button></div>
+      <${Switch} id="ob-dev" on=${o.dev} onChange=${(v) => { o.dev = v; notify(); }} text="Show developer tools (debug mode): AG-UI events, tool calls, model usage, SQL" />`,
+    () => html`<h1 class="t-title2">Pick a first app</h1><p class="muted">Each is one sentence. The agents build it while you take the tour.</p>
+      <div class="choices three">${TEMPLATES.concat(QUESTS).map((id) => { const r = REC[id]; return html`<button key=${id} class=${cx('choice', o.pick === id && 'on')} aria-pressed=${o.pick === id} onClick=${() => { o.pick = id; notify(); }}><span class="row"><span class=${'tpl-ic sm acc-' + r.accent}><${Icon} n=${r.icon} /></span>${r.quest && html`<span class="badge b-outline">Quest ${r.quest}</span>`}</span><strong>${r.title}</strong><span class="muted t-cap">${r.blurb}</span></button>`; })}</div>
+      <button class=${cx('btn subtle', !o.pick && 'on')} onClick=${() => { o.pick = null; notify(); }}>Start with an empty workspace instead</button>`,
+    () => html`<h1 class="t-title2">You are set, ${(o.name || 'Demo user').split(' ')[0]}</h1>
+      <ul class="plain ticks"><li><${Icon} n="person" s="16" /><span>Account <strong>${o.user || 'demo'}</strong>, kept in this browser</span></li><li><${Icon} n=${o.demo ? 'playOutline' : 'sparkle'} s="16" /><span>${o.demo ? 'Demo: saved builds, no model calls' : 'Live: your sentence goes to the model, while you are connected'}</span></li><li><${Icon} n="production" s="16" /><span>${o.pick ? 'First app: ' + REC[o.pick].title + ', built as soon as you continue' : 'An empty workspace'}</span></li></ul>
+      <${Switch} id="ob-tour" on=${o.tour} onChange=${(v) => { o.tour = v; notify(); }} text="Show me around with a short guided tour" />
+      <p class="muted t-cap">Tip: install ${BRAND.name} as a desktop app from the title bar. Built apps and their data keep working offline.</p>`
+  ];
+  return html`<div class="ob"><div class="ob-card">
+    <aside class="ob-rail"><div class="row"><${Logo} size=${28} /><strong class="t-sub1">${BRAND.name}</strong></div>
+      <ol class="ob-steps">${steps.map((s, i) => html`<li key=${s} class=${cx(i === o.step && 'cur', i < o.step && 'done')} aria-current=${i === o.step ? 'step' : undefined}><span class="ob-n">${i < o.step ? html`<${Icon} n="check" s="12" />` : i + 1}</span>${s}</li>`)}</ol>
+      <p class="t-cap muted">A prototype of the hackathon entry. People and records in it are made up.</p></aside>
+    <main class="ob-main"><div class="ob-body" key=${o.step}>${body[o.step]()}</div>
+      <div class="ob-foot">${o.step > 0 && html`<button class="btn" onClick=${() => { o.step--; o.err = ''; notify(); }}>Back</button>`}<span class="grow"></span>${o.step < steps.length - 1 ? html`<button class="btn primary" onClick=${next}>${o.step === 0 ? 'Get started' : 'Continue'}</button>` : html`<button class="btn primary" onClick=${finish}>Open my workspace</button>`}</div></main>
+  </div></div>`;
+}
+function SignIn() {
+  const f = U.si || (U.si = { u: '', p: '', name: '', err: '', create: false }), apps = Object.keys(S.apps).length, bytes = LS.keys().reduce((n, k) => n + LS.size(k), 0);
+  const submit = (e) => {
+    e.preventDefault();
+    if (f.create) { const u = snake(f.u); if (!str(f.name) || !u || str(f.p).length < 4) { f.err = 'Enter a name, a username and a password of at least 4 characters.'; return notify(); } if (S.accounts.some((a) => a.username === u)) { f.err = 'That username is taken in this browser.'; return notify(); } const a = createAccount(f.name, u, f.p); S.session = a.id; U.si = null; commit(); return; }
+    if (signIn(f.u, f.p)) { U.si = null; notify(); } else { f.err = 'Wrong username or password.'; notify(); }
+  };
+  return html`<div class="ob"><form class="signin" onSubmit=${submit}>
+    <div class="row"><${Logo} size=${28} /><strong class="t-sub1">${BRAND.name}</strong></div>
+    <h1 class="t-title3">${f.create ? 'Create another account' : 'Welcome back'}</h1>
+    ${!f.create && html`<${MBar} tone="success">Your work is still here: ${apps} app${apps === 1 ? '' : 's'} and ${fmtBytes(bytes)} of data saved in this browser.<//>`}
+    ${f.create && html`<${Field} id="si-name" label="Your name"><input class="input" id="si-name" autocomplete="off" value=${f.name} onInput=${(e) => { f.name = e.target.value; }} /><//>`}
+    <${Field} id="si-user" label="Username" hint=${!f.create && S.accounts.length ? 'Accounts in this browser: ' + S.accounts.map((a) => a.username).join(', ') : ''}><input class="input" id="si-user" data-autofocus autocomplete="off" value=${f.u} onInput=${(e) => { f.u = e.target.value; }} /><//>
+    <${Field} id="si-pass" label="Password"><input class="input" id="si-pass" type="password" autocomplete="off" value=${f.p} onInput=${(e) => { f.p = e.target.value; }} /><//>
+    ${f.err && html`<${MBar} tone="danger">${f.err}<//>`}
+    <button class="btn primary lg" type="submit">${f.create ? 'Create account' : 'Sign in'}</button>
+    <div class="row between"><button type="button" class="btn subtle sm" onClick=${() => { f.create = !f.create; f.err = ''; notify(); }}>${f.create ? 'Back to sign in' : 'Create another account'}</button><button type="button" class="btn subtle sm" onClick=${() => openDialog('reset', { out: true })}>Erase everything</button></div>
+  </form></div>`;
+}
+
+/* ---------- dialogs ---------- */
+function resetEverything() {
+  Object.values(S.apps).forEach(stopRun);
+  Object.keys(DBX.open).forEach((id) => { try { DBX.open[id].close(); } catch (e) {} });
+  Object.keys(DBX.timers).forEach((id) => clearTimeout(DBX.timers[id]));
+  DBX.open = {}; DBX.size = {}; DBX.savedAt = {}; DBX.timers = {}; DBX.hold = {};
+  LS.keys().forEach((k) => LS.del(k)); clearTimeout(saveTimer); saveTimer = null;
+  const live = U.live, dl = U.dl; S = freshState(); U = freshView(); U.boot = 'ready'; U.live = live; U.dl = dl;
+  EV.length = 0; TOOLCALLS.length = 0; MODELCALLS.length = 0; SQLLOG.length = 0; APILOG.length = 0; APICACHE.clear(); PEEK.clear();
+  applyTheme(); notify();
+}
+function SetRow({ title, text, children }) { return html`<div class="set-row"><div class="col gap0 grow"><strong>${title}</strong><span class="muted t-cap">${text}</span></div>${children}</div>`; }
+function SettingsDialog() {
+  const s = S.settings, set = (k, v) => { s[k] = v; if (k === 'theme') applyTheme(); commit(); }, mode = modeNow(), on = online(), net = netInfo();
+  return html`<${Dialog} title="Settings" onClose=${closeDialog} foot=${html`<button class="btn primary" onClick=${closeDialog}>Done</button>`}>
+    <div class="set-list">
+      <${SetRow} title="Theme" text="Follows your system unless you choose."><${Seg} label="Theme" items=${[{ id: 'system', label: 'System' }, { id: 'light', label: 'Light' }, { id: 'dark', label: 'Dark' }]} value=${s.theme} onChange=${(v) => set('theme', v)} /><//>
+      <${SetRow} title="Live" text=${!on ? 'Paused: you are offline. It comes back by itself when the connection does.' : mode.on ? 'On: you are connected, so your own sentence goes to the model. Switch off for Demo.' : 'Off: Demo is on. Saved builds and made-up data, no model calls.'}><${Switch} id="set-live" on=${mode.on} disabled=${!on} onChange=${setLive} /><//>
+      <${SetRow} title="Replay speed" text="How fast saved builds and changes play."><${Seg} label="Replay speed" items=${[{ id: 'normal', label: 'Normal' }, { id: 'fast', label: 'Fast' }, { id: 'instant', label: 'Instant' }]} value=${s.speed} onChange=${(v) => set('speed', v)} /><//>
+      <${SetRow} title="Live model" text="Balanced passes the checks more often. Fast answers sooner."><${Seg} label="Live model" items=${[{ id: 'default', label: 'Balanced' }, { id: 'quick', label: 'Fast' }]} value=${s.tier} onChange=${(v) => set('tier', v)} /><//>
+      <${SetRow} title="Debug mode" text="AG-UI events, tool calls, model usage, SQL, API calls, state, storage."><${Switch} id="set-debug" on=${s.debug} onChange=${(v) => set('debug', v)} /><//>
+      <${SetRow} title="Simulate offline" text="Pretend the connection is gone, to see Live pause and what keeps working."><${Switch} id="set-off" on=${s.offline} onChange=${setOffline} /><//>
+      <${SetRow} title="Agents panel" text="Show the chat beside the canvas."><${Switch} id="set-chat" on=${s.chat} onChange=${(v) => set('chat', v)} /><//>
+    </div>
+    <p class="muted t-cap" id="set-net">Connection: ${on ? 'online' + (net ? ' (' + net + ')' : '') : s.offline ? 'offline (simulated)' : 'offline'}. Live follows it, wherever this page runs. Model: ${U.live === 'ready' ? 'connected through this page, ' + U.calls + ' of ' + CAP + ' calls used this session.' : U.live === 'unknown' ? 'connecting.' : 'none connected to this copy, so saved builds and built-in changes stand in.'} The hackathon build reaches the model through its own server route, so there Live needs the connection and nothing else.</p><//>`;
+}
+function InstallDialog() {
+  const s = S.settings;
+  return html`<${Dialog} title=${s.installed ? BRAND.name + ' is installed' : 'Install ' + BRAND.name} onClose=${closeDialog} foot=${s.installed ? html`<button class="btn" onClick=${() => { s.installed = false; commit(); closeDialog(); toast('Removed. Your apps and data are untouched.', 'info'); }}>Uninstall</button><button class="btn primary" onClick=${closeDialog}>Done</button>` : html`<button class="btn" onClick=${closeDialog}>Not now</button><button class="btn primary" data-autofocus onClick=${() => { s.installed = true; commit(); closeDialog(); toast('Installed. It opens in its own window and starts without internet.', 'success'); }}>Install</button>`}>
+    <div class="col gap12"><div class="install-app"><${Logo} size=${40} /><div class="col gap0"><strong class="t-sub2">${BRAND.name}</strong><span class="muted t-cap">Progressive web app</span></div></div>
+      <ul class="plain ticks"><li><${Icon} n="window" s="16" /><span>Opens in its own window from the desktop, taskbar or dock</span></li><li><${Icon} n="checkCircle" s="16" /><span><strong>Works offline:</strong> the shell, your built apps and their SQLite data, tours, saved builds, export and reset</span></li><li><${Icon} n="cloudOff" s="16" /><span><strong>Waits for internet:</strong> Live builds, changes through the model, and connections to third parties</span></li></ul>
+      <${MBar} tone="info"><${Proto}>Simulated here<//> A page inside Claude cannot register a service worker, so this dialog only shows the flow. The real build ships a web manifest and a service worker, and the browser shows its own install prompt.<//></div><//>`;
+}
+function ResetDialog() {
+  const apps = S.session ? myApps() : [], out = !S.session;
+  const act = (kind) => {
+    if (kind === 'data') { let n = 0; apps.forEach((a) => { if (a.status === 'ready' && !RUNS[a.id] && dbExists(a.id)) { reseed(a); n++; } }); commit(); closeDialog(); return toast('Seed data restored in ' + n + ' app' + (n === 1 ? '' : 's') + '.', 'success'); }
+    if (kind === 'apps') { apps.forEach(deleteApp); closeDialog(); return toast('All your apps are deleted. Your account is still here.', 'success'); }
+    resetEverything();
+  };
+  return html`<${Dialog} title="Reset data" onClose=${closeDialog}>
+    <p class="muted">Everything ${BRAND.name} keeps is stored in this browser. Choose how far to go.</p>
+    <div class="set-list">
+      ${!out && html`<${SetRow} title="Restore seed data" text=${'Empties the tables of your ' + apps.length + ' app' + (apps.length === 1 ? '' : 's') + ' and puts the original rows back. Tables, screens and your changes stay.'}><button class="btn" disabled=${!apps.length} onClick=${() => act('data')}>Restore</button><//>`}
+      ${!out && html`<${SetRow} title="Delete all my apps" text="Removes every app with its database and chat. Your account and settings stay."><button class="btn" disabled=${!apps.length} onClick=${() => act('apps')}>Delete apps</button><//>`}
+      <${SetRow} title="Erase everything" text="Removes all accounts, apps, databases and settings from this browser and starts again at the welcome screen."><button class="btn danger" onClick=${() => act('all')}>Erase</button><//>
+    </div><//>`;
+}
+function PackDialog({ p }) {
+  const app = S.apps[p.app]; if (!app) return null; const md = buildPack(app);
+  return html`<${Dialog} wide=${true} title=${'Build pack · ' + app.name} onClose=${closeDialog} foot=${html`${U.dl && html`<button class="btn" onClick=${() => saveFile(snake(app.name) + '-build-pack.md', md, 'text/markdown')}><${Icon} n="download" s="16" />Download .md</button>`}<button class="btn primary" onClick=${() => copyText(md, 'Build pack')}><${Icon} n="copy" s="16" />Copy</button>`}>
+    <p class="muted t-cap">One document generated from the canvas state: brief, SQL, workflow, endpoints, screens and the acceptance test. It is what the team that builds the production version starts from.</p><pre class="code pack">${md}</pre><//>`;
+}
+function RenameDialog({ p }) {
+  const app = S.apps[p.app]; if (!app) return null;
+  const save = (e) => { e.preventDefault(); const name = str(p.name); if (!name || name === app.name) return closeDialog(); const pl = planOps(app, [{ op: 'rename_app', name }]); closeDialog(); if (pl.steps.length) { pushChat(app, 'user', 'Rename the app to ' + name); runChange(app, pl.steps, 'Rename the app'); } };
+  return html`<${Dialog} title="Rename app" onClose=${closeDialog}><form class="col gap12" onSubmit=${save}><${Field} id="rn-name" label="App name"><input class="input" id="rn-name" data-autofocus value=${p.name} onInput=${(e) => { p.name = e.target.value; }} /><//><div class="row end"><button type="button" class="btn" onClick=${closeDialog}>Cancel</button><button type="submit" class="btn primary">Rename</button></div></form><//>`;
+}
+function AddConnDialog({ p }) {
+  if (!p.kind) Object.assign(p, { kind: 'MCP server', name: '', url: '', auth: 'none', err: '' });
+  const add = (e) => { e.preventDefault(); if (!str(p.name) || !/^https:\/\/\S+\.\S+/.test(str(p.url))) { p.err = 'Give it a name and an https:// address.'; return notify(); } const id = uid('c'); S.custom.push({ id, custom: true, name: str(p.name), kind: p.kind, url: str(p.url), auth: p.auth === 'key' ? 'API key on the server' : 'No key needed', icon: 'plug', acc: 'steel', about: 'Added by you.', usedBy: 'Not used yet', tools: [{ name: p.kind === 'MCP server' ? 'tools/list' : 'GET /', desc: 'Placeholder. The real build discovers the tools from the server.', args: {} }] }); S.conns[id] = true; U.conn = id; commit(); closeDialog(); toast(str(p.name) + ' added', 'success'); };
+  return html`<${Dialog} title="Add a connection" onClose=${closeDialog}><form class="col gap12" onSubmit=${add}>
+    <${Field} id="ac-kind" label="Kind"><select class="select" id="ac-kind" value=${p.kind} onChange=${(e) => { p.kind = e.target.value; notify(); }}><option value="MCP server">MCP server (HTTP)</option><option value="REST API">REST API</option></select><//>
+    <${Field} id="ac-name" label="Name"><input class="input" id="ac-name" data-autofocus value=${p.name} onInput=${(e) => { p.name = e.target.value; }} /><//>
+    <${Field} id="ac-url" label="Address" hint=${p.kind === 'MCP server' ? 'The server\'s streamable HTTP endpoint.' : 'The base address of the API.'}><input class="input mono" id="ac-url" placeholder="https://" value=${p.url} onInput=${(e) => { p.url = e.target.value; }} /><//>
+    <${Field} id="ac-auth" label="Sign-in" hint="Keys are set as server environment variables. They never reach the browser or the repository."><select class="select" id="ac-auth" value=${p.auth} onChange=${(e) => { p.auth = e.target.value; notify(); }}><option value="none">No key needed</option><option value="key">API key, stored on the server</option></select><//>
+    ${p.err && html`<${MBar} tone="warning">${p.err}<//>`}
+    <div class="row end"><button type="button" class="btn" onClick=${closeDialog}>Cancel</button><button type="submit" class="btn primary">Add connection</button></div></form><//>`;
+}
+function AboutDialog() {
+  const li = (items) => html`<ul class="plain dots">${items.map((x, i) => html`<li key=${i}>${x}</li>`)}</ul>`;
+  return html`<${Dialog} wide=${true} title="What is real in this prototype" onClose=${closeDialog} foot=${html`<button class="btn primary" onClick=${closeDialog}>Close</button>`}>
+    <div class="about"><div><h4><${Icon} n="checkCircle" s="16" />Real here</h4>${li(['SQLite runs in this page. Tables are created with CREATE TABLE from the agents\' definitions and changed with ALTER TABLE.', 'Each database is saved into this browser\'s storage and is still there after you sign out and back in.', 'Every station check runs for real: links, seed rows, the permission matrix, screen mounting, the tour as an acceptance test.', 'The built app is drawn from the definition by a generic runtime, and every read or write goes through the role-guarded endpoints.', 'Every view (table, board, calendar, timeline, chart, pivot, tree, cards) and the dashboard are computed from the rows the endpoints return for the signed-in role.', 'In the three quest apps the app\'s own agents write their claims, findings and arguments through those same endpoints.', 'Changes from chat run real migrations inside a savepoint and roll back if any check fails.', 'The test suite is generated from each app\'s definition and runs for real: SQL against the SQLite file, calls against the endpoints as each role, views and pages drawn off screen. Anything a test writes is rolled back.', 'The workflow canvas is React Flow, the same library the hackathon build uses.', 'The workflow can be customised for real: approvals pause the run, review steps read the definition and try out their own fixes in a savepoint, attempts and rules change how a station runs, and a run from a later station keeps the earlier ones.', 'A share link really carries the app: it is compressed in this page, rebuilt in the page that opens it, and has to pass every station check again there.', 'The phone layouts are real. A built app switches to them by the width it is given.', 'Live follows the internet connection: the page listens to the browser\'s online and offline signals, pauses Live when the connection goes and switches it back on when it returns.', 'In Live, each agent makes its own model call when a model is connected to this copy of the page (inside Claude, the viewer provides one).'])}</div>
+      <div><h4><${Icon} n="info" s="16" />Simulated here</h4>${li(['Demo mode replays recorded agent output, for builds and for the quest apps\' agent runs. Its token figures are samples.', 'In Demo the four review steps are rules written in code, and a standing instruction has nothing to act on, because recorded work is replayed. In Live each reviewer is one model call and instructions are added to the agents\' requests.', 'In the quest apps, evidence and prior-work records in Demo are saved samples. In Live the agents work from what the model knows, because this page cannot call Wikipedia, World Bank, PatentsView, OpenAlex or arXiv.', 'Install: a page inside Claude cannot register a service worker, so installing is imitated. Going offline is real when your device loses its connection, and the title bar button lets you imitate it.', 'A copy of this page opened outside Claude has no model behind it. Live still follows the connection there, and saved builds and built-in changes stand in for the model.', 'Connections: this page cannot reach other hosts, so every response is a labelled sample.', 'Share links give every person who opens one their own copy of the data in their own browser. One database shared by everyone needs a store on the server.', 'Inside the Claude viewer a share link cannot be opened as its own page, so Preview and Open a shared app stand in for that.', 'Sign-in is demo-grade and local to this browser.'])}</div>
+      <div><h4><${Icon} n="rocket" s="16" />In the hackathon build</h4>${li(['Next.js on Vercel. The agents run in the CopilotKit route and speak AG-UI to the page; the model sits behind the LiteLLM key on the server.', 'The workflow is part of the shared AG-UI state. The orchestrator changes it through frontend tools (set approval, add review, set instruction, set attempts), and your edits on the canvas reach it as state updates.', 'Live there needs the internet connection and nothing else, because the server route is part of every deployment. Before a run the page also pings the route, since a browser can report a connection that does not reach the internet.', 'The same definitions, checks and runtime. SQLite stays in the browser because the free plan keeps nothing on disk.', 'A web manifest and a service worker make it installable and keep the shell, the SQLite engine and saved builds available offline.', 'Connections call public REST APIs from the server route and MCP servers through the MCP client.', 'A share link is an address on the deployed site, such as your-app.vercel.app/#app=…, and opens the app-only view directly.'])}</div></div><//>`;
+}
+function DialogHost() {
+  const d = U.dialog; if (!d) return null; const p = d.props;
+  switch (d.type) {
+    case 'confirm': return html`<${Dialog} title=${p.title} onClose=${() => p.done(false)} foot=${html`<button class="btn" onClick=${() => p.done(false)}>${p.no || 'Cancel'}</button><button class=${cx('btn', p.danger ? 'danger' : 'primary')} data-autofocus onClick=${() => p.done(true)}>${p.yes || 'OK'}</button>`}><p>${p.body}</p><//>`;
+    case 'settings': return html`<${SettingsDialog} />`;
+    case 'install': return html`<${InstallDialog} />`;
+    case 'reset': return html`<${ResetDialog} />`;
+    case 'pack': return html`<${PackDialog} p=${p} />`;
+    case 'rename': return html`<${RenameDialog} p=${p} />`;
+    case 'addconn': return html`<${AddConnDialog} p=${p} />`;
+    case 'about': return html`<${AboutDialog} />`;
+    case 'share': return html`<${ShareDialog} p=${p} />`;
+    case 'openlink': return html`<${OpenLinkDialog} p=${p} />`;
+    case 'aboutapp': return html`<${AboutAppDialog} p=${p} />`;
+    case 'workflow': return html`<${WorkflowDialog} p=${p} />`;
+    case 'installapp': return html`<${InstallAppDialog} p=${p} />`;
+    case 'addstep': return html`<${AddStepDialog} p=${p} />`;
+    case 'guide': return html`<${GuideDialog} p=${p} />`;
+    default: return null;
+  }
+}
+function Toasts() { return html`<div class="toasts" aria-live="polite">${U.toasts.map((t) => html`<div key=${t.id} class=${'toast m-' + t.tone}><${Icon} n=${TONE_ICON[t.tone] || 'info'} /><span class="grow">${t.text}</span><button class="btn subtle icon sm" aria-label="Dismiss" onClick=${() => { U.toasts = U.toasts.filter((x) => x !== t); notify(); }}><${Icon} n="dismiss" s="12" /></button></div>`)}</div>`; }
+
+/* ---------- guided tour of the product ---------- */
+function tourSteps() {
+  const tab = activeTab(), app = tab && tab.app ? S.apps[tab.app] : null, view = (v) => () => { U.view[app.id] = v; }, s = [];
+  s.push({ target: 'tabs', title: 'Workspaces are tabs', body: 'Each tab holds one app with its own agents, data and chat, the way tabs work in Edge or Chrome. Press + for a new one.' });
+  if (app) s.push(
+    { target: 'line', prep: () => { U.view[app.id] = 'build'; U.bview[app.id] = 'line'; }, title: 'The workflow', body: 'Your request, six agents, a gate after each one, and the finished app, drawn as a workflow you can pan, zoom and rearrange. Workflow, Timeline and Log show the same run three ways.' },
+    { target: 'station', prep: () => { U.view[app.id] = 'build'; U.bview[app.id] = 'line'; }, title: 'Checked handoffs', body: 'Nothing moves on until code has checked it. A failed check sends the work back to the agent, at most twice. In the clinic build the Database agent is sent back once, so you can watch it happen.' },
+    { target: 'inspector', prep: view('build'), title: 'Inspect any station', body: 'Select an agent or a gate on the canvas to read what was produced, which checks ran, the tests generated for that station, and every attempt.' },
+    { target: 'customize', prep: () => { U.view[app.id] = 'build'; U.bview[app.id] = 'line'; }, title: 'Make the workflow yours', body: 'Press the plus on any gate to add a step: your approval, a step from the library, or an agent you describe in a sentence. You can also give an agent a standing instruction, or set how many attempts a station gets. Use the controls on the canvas, this button, or just ask in chat. Only the agents your change touches run again.' },
+    { target: 'chat', prep: () => setChat(true), title: 'Talk to the agents', body: 'Agents report here with cards. They stop and ask before a real trade-off, and nothing that deletes data runs without your approval. Once the app is built, ask for changes in plain words.' },
+    { target: 'views', title: 'Three steps, and the details', body: 'Build shows the agents at work. App is the working app. Release is where a draft becomes a numbered version you can share and install. Details keeps the tests, the data, the API and the connections one step away, for the curious.' },
+    { target: 'share', title: 'Share only the app', body: 'Share makes a link that opens just this app, under its own name and icon, without the builder around it. The link carries a released version. Whoever opens it gets their own copy of the data and can install it.' },
+    { target: 'stage', prep: view('app'), title: 'The working app', body: 'Sign in as any seeded user. Two users opens it side by side as different roles. Play walkthrough replays the acceptance test one step at a time.' },
+    { target: 'vswitch', prep: () => { U.view[app.id] = 'app'; if (!app.def.screens.length || !dbExists(app.id)) return; const st = stageOf(app), users = appUsers(app), p = st.panes[0]; if (!users.some((u) => u.id === p.uid) && users[0]) p.uid = users[0].id; const u = users.find((x) => x.id === p.uid), scr = u && app.def.screens.find((x) => DATA_VIEWS.includes(x.type) && x.roles.includes(u.role)); if (scr) { p.screen = scr.id; p.rec = null; } }, title: 'One table, many views', body: 'A page opens a table in its default view. The switcher offers every view the View advisor recommended for that table: table, board, calendar, timeline, chart, pivot, tree or cards. Filters stay when you switch, and every role also gets a dashboard.' }
+  );
+  else s.push(
+    { target: 'quests', title: 'Three quests, three apps', body: 'Each hackathon quest is built as its own app, and each has a team of three agents that work inside it. Build one, or all three at once.' },
+    { target: 'library', title: 'Your app library', body: 'Every app you build is saved here with its data. Open it in a tab, duplicate it with its data, or delete it.' }
+  );
+  s.push(
+    { target: 'mode', prep: app ? view('build') : null, title: 'Live and Demo', body: 'Live sends your own sentence to the model, and it follows your internet connection: it pauses when you go offline and comes back when you reconnect. Switch it off for Demo, which replays saved builds with made-up data that looks real and makes no model calls.' },
+    { target: 'net', title: 'Your connection', body: 'This shows whether you are online. Built apps and their data live in this browser, so they keep working offline; Live, model changes and connections wait for the connection. Click here to try it without one.' },
+    { target: 'debug', title: 'Debug mode', body: 'For developers: AG-UI events, tool calls, model usage, SQL, API calls, the shared state and browser storage.' },
+    { target: 'account', title: 'Your data, your call', body: 'Everything is saved in this browser and is still here when you sign in again. Settings, install and reset live in this menu.' }
+  );
+  return s;
+}
+function startTour() { if (!S.session) return; U.tour = { id: uid('tour'), i: 0, steps: tourSteps() }; notify(); }
+function TourLayer() {
+  const T = U.tour, st = useState(null), rect = st[0], setRect = st[1], step = T ? T.steps[T.i] : null;
+  useLayoutEffect(() => {
+    if (!T) return undefined; let alive = true;
+    if (NARROW() && step.target !== 'chat' && U.peek) U.peek = false;
+    if (step.prep) step.prep();
+    notify();
+    let moved = false;
+    const measure = () => { if (!alive) return; const el = step.target ? document.querySelector('[data-tour="' + step.target + '"]') : null; let r = el ? el.getBoundingClientRect() : null;
+      if (r && !moved && (r.top < 0 || r.bottom > window.innerHeight) && el.scrollIntoView && !el.closest('.react-flow')) { moved = true; el.scrollIntoView({ block: r.height > window.innerHeight * 0.6 ? 'start' : 'center' }); r = el.getBoundingClientRect(); } /* bring the thing being explained into view first */ setRect((old) => { if (!r || r.width < 2 || r.height < 2) return null; const n = { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; return old && old.x === n.x && old.y === n.y && old.w === n.w && old.h === n.h ? old : n; }); };
+    const a = setTimeout(measure, 90), iv = setInterval(measure, 350); window.addEventListener('resize', measure);
+    return () => { alive = false; clearTimeout(a); clearInterval(iv); window.removeEventListener('resize', measure); };
+  }, [T && T.id, T && T.i]);
+  if (!T) return null;
+  const W = window.innerWidth, H = window.innerHeight, pw = Math.min(340, W - 24), end = () => { U.tour = null; S.settings.tourDone = true; commit(); }, go = (d) => { const i = T.i + d; if (i < 0) return; if (i >= T.steps.length) return end(); T.i = i; notify(); };
+  let style = { left: (W - pw) / 2 + 'px', top: Math.max(40, H / 2 - 110) + 'px', width: pw + 'px' };
+  if (rect) {
+    const left = Math.min(Math.max(12, rect.x + rect.w / 2 - pw / 2), W - pw - 12), below = H - (rect.y + rect.h), right = W - (rect.x + rect.w);
+    if (below > 220) style = { left: left + 'px', top: Math.max(12, rect.y + rect.h + 14) + 'px', width: pw + 'px' };
+    else if (rect.y > 220 && rect.y < H) style = { left: left + 'px', bottom: Math.max(12, H - rect.y + 14) + 'px', width: pw + 'px' };
+    else if (right > pw + 30) style = { left: rect.x + rect.w + 14 + 'px', top: Math.max(12, Math.min(rect.y, H - 250)) + 'px', width: pw + 'px' };
+    else if (rect.x > pw + 30) style = { left: rect.x - pw - 14 + 'px', top: Math.max(12, Math.min(rect.y, H - 250)) + 'px', width: pw + 'px' };
+    else style = { left: left + 'px', bottom: '16px', width: pw + 'px' };
+  }
+  return html`<div class="tour" onKeyDown=${(e) => { if (e.key === 'Escape') end(); else if (e.key === 'ArrowRight') go(1); else if (e.key === 'ArrowLeft') go(-1); }}>
+    <div class="tour-block"></div>
+    ${rect ? html`<div class="tour-hole" style=${{ left: rect.x - 6 + 'px', top: rect.y - 6 + 'px', width: rect.w + 12 + 'px', height: rect.h + 12 + 'px' }}></div>` : html`<div class="tour-dim"></div>`}
+    <div class="tour-pop" role="dialog" aria-label=${step.title} style=${style} tabindex="-1" ref=${(el) => { if (el && el.dataset.i !== String(T.i)) { el.dataset.i = String(T.i); try { el.focus(); } catch (e) {} } }}>
+      <div class="t-cap muted">Tour · ${T.i + 1} of ${T.steps.length}</div><h3 class="t-sub2">${step.title}</h3><p>${step.body}</p>
+      <div class="row between"><button class="btn subtle sm" onClick=${end}>Skip tour</button><div class="row">${T.i > 0 && html`<button class="btn sm" onClick=${() => go(-1)}>Back</button>`}<button class="btn primary sm" onClick=${() => go(1)}>${T.i === T.steps.length - 1 ? 'Done' : 'Next'}</button></div></div>
+    </div></div>`;
+}
+
+/* ---------- root and boot ---------- */
+function Shell() {
+  const tabs = tabsNow(), tab = activeTab(), app = tab && tab.app ? S.apps[tab.app] : null;
+  return html`<div class=${cx('shell', S.settings.installed && 'installed', PHONE() && 'phone')}>
+    <${Titlebar} tabs=${tabs} tab=${tab} />
+    ${!LS.ok && html`<${MBar} tone="warning" cls="bar">Browser storage is not available in this view, so nothing will be kept after you close it. Open the page in its own tab to keep your work.<//>`}
+    ${!online() && html`<${MBar} tone="warning" cls="bar" action=${S.settings.offline ? html`<button class="btn sm" onClick=${() => setOffline(false)}>Go back online</button>` : null}>You are offline${S.settings.demo ? '' : ', so Live is paused until the connection returns'}. Built apps, their data and saved builds keep working. Changes through the model and connections wait.<//>`}
+    <div class="shell-body">${app ? html`<${Workspace} key=${app.id} app=${app} />` : html`<${Home} />`}</div>
+    ${S.settings.debug && html`<${DebugDrawer} app=${app} />`}
+    ${PHONE() && html`<${PhoneSheets} app=${app} />`}
+  </div>`;
+}
+function Root() {
+  const force = useForce();
+  useLayoutEffect(() => { subs.add(force); force(); return () => subs.delete(force); }, []); // subscribe before anything else can run, then catch up
+  if (U.boot === 'loading') return html`<div class="splash"><${Logo} size=${44} /><strong class="t-sub1">${BRAND.name}</strong><span class="muted row"><${Spinner} />Starting the SQLite engine</span></div>`;
+  if (U.boot === 'error') return html`<div class="splash"><${Logo} size=${44} /><strong class="t-sub1">${BRAND.name} could not start</strong><p class="muted">${U.bootErr} Reload the page. If it keeps happening, the SQLite engine could not be loaded in this view.</p></div>`;
+  if (U.solo && S.apps[U.solo.app]) return [html`<${SoloShell} key="solo" />`, html`<${DialogHost} key="dlg" />`, html`<${Toasts} key="toasts" />`];
+  return [!S.onboarded ? html`<${Onboarding} key="ob" />` : !S.session || !me() ? html`<${SignIn} key="si" />` : html`<${Shell} key="shell" />`, html`<${DialogHost} key="dlg" />`, html`<${TourLayer} key="tour" />`, html`<${Toasts} key="toasts" />`];
+}
+function probeClaude(tries) {
+  const c = window.claude;
+  if (c && typeof c.use === 'function') {
+    Promise.resolve(c.use('sample')).then((fn) => { LIVE.fn = typeof fn === 'function' ? fn : null; U.live = LIVE.fn ? 'ready' : 'none'; notify(); }, () => { U.live = 'none'; notify(); });
+    Promise.resolve(c.use('downloads')).then((d) => { U.dl = d && typeof d.save === 'function' ? d : null; notify(); }, () => {});
+    return;
+  }
+  if (tries < 20) setTimeout(() => probeClaude(tries + 1), 500); else { U.live = 'none'; notify(); }
+}
+function boot() {
+  LS.probe(); loadState(); applyTheme(); if (!S.shared) S.shared = {};
+  Object.values(S.apps).forEach((a) => { try { migrateApp(a); } catch (e) { console.warn('Could not update a saved app', e); } });
+  render(html`<${Root} />`, document.getElementById('root'));
+  // the SQLite engine takes a moment to start, so let the splash paint first
+  const fromLink = () => { const code = shareCode(location.hash); return code ? openShared(code).catch((e) => { toast(String((e && e.message) || e), 'danger', 9000); }) : Promise.resolve(); }; // an address that ends in #app=… opens that app on its own
+  window.addEventListener('hashchange', () => { if (U.boot === 'ready') fromLink(); });
+  setTimeout(() => initSqlite().then(() => { resumeInterrupted(); return fromLink(); }).then(() => { U.boot = 'ready'; notify(); }, (e) => { U.boot = 'error'; U.bootErr = String((e && e.message) || e); notify(); }), 40);
+  probeClaude(0);
+  const flush = () => { try { if (saveTimer) saveNow(); Object.keys(DBX.timers).forEach((id) => { if (DBX.timers[id]) dbFlush(id); }); } catch (e) {} };
+  netWas = online(); // Live follows the connection: listen for it coming and going
+  window.addEventListener('online', netChanged); window.addEventListener('offline', netChanged); window.addEventListener('resize', notify);
+  try { const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection; if (c && c.addEventListener) c.addEventListener('change', netChanged); } catch (e) {}
+  window.addEventListener('pagehide', flush); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+  window.__formwork = { save: () => { Object.keys(S.apps).forEach((id) => { try { if (dbExists(id)) dbSave(id); } catch (e) {} }); saveNow(); }, state: () => S, view: () => U, teams: () => TEAMS, tests: () => TESTS, share: { packOf, squeeze, unsqueeze, shareLink, openShared, enterSolo, exitSolo }, flow: () => FLOW, dbCount, sql: (id, text, params) => sqlRun(id, text, params || null, 'test'), guide: () => GUIDE.length, wf: { parse: parseFlow, parseChange, apply: flowApply, edit: flowEdit, rules: REVIEW_RULES, reviewers: REVIEWERS, tryFix, rerun: (app, st) => runBuild(app, st), review: reviewNow, mode: modeNow, runs: () => RUNS, dirty: isDirty, relOf, release: releaseApp, logo: logoOf, cases: suggestCases, keepFix }, runTests: (app) => runTestsSync(app), suite: (id) => suiteOf(S.apps[id]).map((x) => ({ id: x.id, n: x.tests.length })), logs: { EV, TOOLCALLS, MODELCALLS, SQLLOG, APILOG } };
+}
+boot();

@@ -155,3 +155,16 @@ vite.config.ts.timestamp-*
 .nx/cache
 .nx/workspace-data
 .nx/migrate-runs
+
+# --- Turnkey ---
+/.vercel
+next-env.d.ts
+*.tsbuildinfo
+# built from src/legacy by scripts/build-legacy.mjs
+/src/platform/generated/
+/public/vendor/
+# test output
+/test-results/
+/playwright-report/
+/tests/e2e/shots/
+.env*.local

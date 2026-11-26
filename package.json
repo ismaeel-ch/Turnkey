@@ -1,0 +1,48 @@
+{
+  "name": "turnkey",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Turnkey: describe the app your work needs and a team of agents builds its database, backend, views, pages and tests on a workflow you can watch and change.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:legacy": "node scripts/build-legacy.mjs",
+    "predev": "node scripts/build-legacy.mjs",
+    "dev": "next dev",
+    "prebuild": "node scripts/build-legacy.mjs",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "node scripts/build-legacy.mjs --quiet && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "format": "prettier --write \"src/{app,platform,server,shared}/**/*.{ts,tsx,css}\" \"tests/unit/**/*.ts\" \"scripts/*.mjs\" \"*.{json,md,mjs,ts}\" \"docs/**/*.md\"",
+    "format:check": "prettier --check \"src/{app,platform,server,shared}/**/*.{ts,tsx,css}\" \"tests/unit/**/*.ts\" \"scripts/*.mjs\"",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "check": "npm run check:secrets && npm run lint && npm run typecheck && npm run test",
+    "icons": "node scripts/gen-icons.cjs"
+  },
+  "dependencies": {
+    "@xyflow/react": "12.12.1",
+    "htm": "3.1.1",
+    "next": "16.4.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "sql.js": "1.12.0"
+  },
+  "devDependencies": {
+    "@fluentui/tokens": "1.0.0-alpha.24",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.6",
+    "playwright": "1.63.0",
+    "prettier": "^3.10.1",
+    "typescript": "^5",
+    "vitest": "^5.1.2"
+  }
+}
