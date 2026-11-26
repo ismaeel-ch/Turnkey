@@ -12,7 +12,7 @@ describe('limitsFrom', () => {
       globalPerMinute: 50,
       dailyCap: 600,
       maxPromptChars: 120000,
-      maxOutputTokens: 8000,
+      maxOutputTokens: 16000,
       off: false,
     });
     expect(d.maxAnswerChars).toBe(32000);
@@ -59,6 +59,20 @@ describe('limiter', () => {
     expect(l.usage().today).toBe(2);
     t += 86_400_000;
     expect(l.take('c', L).ok).toBe(true);
+  });
+  it('starts the day again at midnight UTC, and the refusal says what still works and when Live comes back', () => {
+    let t = Date.UTC(2026, 10, 27, 23, 50);
+    const l = createLimiter(
+      () => t,
+      () => 0,
+    );
+    const L = lim({ LLM_DAILY_CALL_CAP: '1', LLM_GLOBAL_PER_MINUTE: '100' });
+    expect(l.take('a', L).ok).toBe(true);
+    const refused = l.take('a', L);
+    expect(refused).toMatchObject({ ok: false, code: 'budget' });
+    expect(refused.ok ? '' : refused.message).toMatch(/midnight UTC.*Saved builds/);
+    t = Date.UTC(2026, 10, 28, 0, 1); // eleven minutes later, a new day
+    expect(l.take('a', L).ok).toBe(true);
   });
   it('refuses everything when LIVE_MODE is off', () => {
     expect(createLimiter().take('a', lim({ LIVE_MODE: 'off' }))).toMatchObject({ ok: false, code: 'off' });
@@ -123,7 +137,10 @@ describe('route helpers', () => {
 describe('daily spend cap', () => {
   it('refuses every call once the day has cost LLM_DAILY_SPEND_USD', () => {
     let spent = 0;
-    const l = createLimiter(() => 1000, () => spent);
+    const l = createLimiter(
+      () => 1000,
+      () => spent,
+    );
     const L = limitsFrom({ LLM_DAILY_SPEND_USD: '2' });
     expect(L.dailySpendUsd).toBe(2);
     expect(l.take('a', L).ok).toBe(true);
