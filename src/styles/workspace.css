@@ -640,11 +640,6 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .hist-who{flex-wrap:wrap}
 .hist-time{white-space:nowrap}
 @media (max-width:640px){.hist-row{flex-wrap:wrap}.hist-time{order:3}}
-<<<<<<< HEAD
-/* 10: the wide canvas is sized to show node text at a readable size, so it can be taller than the window; its
-   controls (zoom, Fit, Map, Reset layout) stay in view at the bottom while any of it is on screen */
-.flow-wrap>.flow-foot{position:sticky;bottom:0;z-index:5;background:var(--colorNeutralBackground1);padding:8px 0;margin-bottom:-8px}
-=======
 
 /* UI QA fixes (docs/ui-issues.md). Griffel's styles load after this file and win ties, so these restate a class with
    the Fluent class it sits on. */
@@ -671,4 +666,6 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 /* 9: the onboarding "skip" action lines up with the form's left edge and reads as a link */
 .fui-Button.ob-skip{align-self:flex-start;min-width:0;padding-left:0;padding-right:0;color:var(--colorBrandForegroundLink)}
 .fui-Button.ob-skip:hover{background:none;text-decoration:underline;color:var(--colorBrandForegroundLink)}
->>>>>>> origin/main
+/* 10: the wide canvas is sized to show node text at a readable size, so it can be taller than the window; its
+   controls (zoom, Fit, Map, Reset layout) stay in view at the bottom while any of it is on screen */
+.flow-wrap>.flow-foot{position:sticky;bottom:0;z-index:5;background:var(--colorNeutralBackground1);padding:8px 0;margin-bottom:-8px}
