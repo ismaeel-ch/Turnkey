@@ -6,8 +6,8 @@ name: CI
 # checks the commit again before it deploys.
 #
 # The full checks: secrets scan, lint, typecheck, unit tests, a production build, the 286 browser checks (one job per
-# flow). The job named "ci" is the single result branch protection requires. Without the label the heavy jobs are skipped and only "ci" runs, for a few
-# seconds, failing on purpose so that an unchecked pull request never looks green.
+# flow). The job named "ci" is the single result to look at. Without the label every job is skipped: GitHub shows them
+# grey, no runner starts, and no minutes are used. Do not merge a pull request whose "ci" is skipped.
 
 on:
   pull_request:
@@ -94,7 +94,8 @@ jobs:
 
   ci:
     name: ci
-    if: always()
+    # Runs whenever the checks ran, pass or fail; skipped with them when the pull request has no label.
+    if: always() && needs.check.result != 'skipped'
     needs: [check, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -104,10 +105,6 @@ jobs:
           CHECK: ${{ needs.check.result }}
           E2E: ${{ needs.e2e.result }}
         run: |
-          if [ "$CHECK" = "skipped" ]; then
-            echo "CI has not run on this commit. Add the label ready-to-merge (and mark the pull request ready) to run it."
-            exit 1
-          fi
           echo "check: $CHECK, e2e: $E2E"
           test "$CHECK" = "success"
           test "$E2E" = "success"
