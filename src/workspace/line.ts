@@ -879,6 +879,23 @@ export const LIVE_SAY = {
   screens: 'Laying out the pages for each role and writing the tour.',
   walkthrough: 'Rewriting the tour so it passes.',
 };
+/* The server's step agent reports its draft, check and repair steps; each one goes on the run's timeline under the
+   station's open model call (team runs have no such step and are left alone), and into the event log. */
+const SERVER_STEP = { draft: ['Draft', 'model'], validate: ['Format check', 'check'], repair: ['Repair', 'tool'] };
+export function serverStep(run, agent, app, p) {
+  const kind = p && SERVER_STEP[p.name];
+  if (!kind) return;
+  emit('CUSTOM', { name: 'agent_step', app: app.id, agent, value: { step: p.name, phase: p.phase, attempt: p.attempt, ok: p.ok, issues: p.issues } });
+  const steps = Array.isArray(run.steps) ? run.steps : [];
+  if (p.phase === 'start') {
+    const open = steps.findLast && steps.findLast((s) => s.agent === agent && s.kind === 'model' && !s.t1 && !s.sub);
+    if (open) stepStart(run, open.station, agent, kind[0] + (p.attempt > 1 ? ' ' + p.attempt : ''), kind[1]).sub = p.name;
+  } else {
+    const mine = steps.findLast && steps.findLast((s) => s.agent === agent && s.sub === p.name && !s.t1);
+    if (mine) stepEnd(mine, p.ok);
+  }
+  notify();
+}
 export async function callModel(app, run, agent, prompt, attempt, ctl) {
   // ctl: who may stop this call (a build by default, or an app's own agent team)
   if (!online()) throw fatal('The connection is gone, so Live is paused. Run it again when you are back online.');
@@ -909,6 +926,7 @@ export async function callModel(app, run, agent, prompt, attempt, ctl) {
         U.stream[app.id] = text.length;
         notify();
       },
+      onStep: (p) => serverStep(run, agent, app, p),
     });
     text = (res && res.text) || text;
   } catch (e) {

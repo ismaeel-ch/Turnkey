@@ -1,18 +1,44 @@
 /**
  * The browser's side of model access.
  *
- * The workspace modules ask the page for two capabilities: `sample` (send a prompt, get text back, streamed) and
- * `downloads` (save a file). In the prototype the host page supplied them. Here `sample` goes to this app's own
- * server route, which holds the key. No key, endpoint or model name is ever present in the browser.
+ * The workspace modules ask the page for two capabilities: `sample` (send a prompt, get JSON text back, streamed) and
+ * `downloads` (save a file). `sample` runs the server's step agent (agent `step` at /api/copilotkit, contract in
+ * src/shared/agent-contract.ts) over AG-UI: the server drafts with the model, checks the JSON shape for the agent's
+ * role, and streams each step back. No key, endpoint or model name is ever present in the browser.
  */
+import type { BaseEvent } from '@ag-ui/core';
+import { runAgent, type RunAgentOptions } from '@/platform/agui/client';
+import { STEP_AGENT_ID, type StepErrorCode, type StepInput, type StepRole } from '@/shared/agent-contract';
+
+/** One step of the server's agent graph as the browser sees it: `draft`, `validate`, `repair` (and `guard`, `finish`). */
+export type StepProgress = { name: string; phase: 'start' | 'end'; attempt: number; ok?: boolean; issues?: string[] };
 
 export type SampleOptions = {
   modelTier?: string;
   cache?: boolean;
   signal?: AbortSignal;
-  onText?: (progress: { text: string }) => void;
+  onText?: (progress: { text: string; delta?: string }) => void;
+  /** The server's draft, check and repair steps, as they start and end. */
+  onStep?: (step: StepProgress) => void;
+  /** Every AG-UI event, for the debug drawer. */
+  onEvent?: (event: BaseEvent) => void;
+  /**
+   * Model calls the server may make for this prompt, its own repairs included. Default 1: the workspace's stations
+   * already send work back with their own checks, and each station is capped at three attempts in total.
+   */
+  maxAttempts?: number;
+  role?: StepRole;
+  /** For tests. */
+  fetch?: typeof fetch;
 };
-export type SampleResult = { text: string; truncated: boolean };
+export type SampleResult = {
+  text: string;
+  truncated: boolean;
+  /** Model calls the server used. */
+  attempts?: number;
+  /** What the server's shape check found, when it returned the draft unchecked (see `sample`). */
+  issues?: string[];
+};
 export type Health = { ok: boolean; live: boolean; version?: string; provider?: string };
 
 /** Codes the workspace understands: `not_granted` turns Live off for the session, `rate_limited` asks to wait. */
@@ -25,12 +51,14 @@ export class ModelError extends Error {
   }
 }
 
-const codeFor = (status: number, code?: string) =>
-  code === 'not_configured' || status === 401 || status === 403
-    ? 'not_granted'
-    : status === 429 && code !== 'budget'
-      ? 'rate_limited'
-      : code || 'error';
+/** Maps a step error code (or an HTTP status from the route's limiter) to the workspace's codes. */
+export function codeFor(code: string | undefined, status = 0): string {
+  if (code === 'not_configured' || code === 'unauthorized' || status === 401 || status === 403 || (status === 503 && !code)) return 'not_granted';
+  if (code === 'budget') return 'budget';
+  if (code === 'rate_limited' || status === 429) return 'rate_limited';
+  if (code === 'aborted') return 'aborted';
+  return code || 'error';
+}
 
 export async function health(): Promise<Health | null> {
   try {
@@ -41,49 +69,90 @@ export async function health(): Promise<Health | null> {
   }
 }
 
-export async function sample(prompt: string, opts: SampleOptions = {}): Promise<SampleResult> {
-  let res: Response;
+type StepResultLike = { text: string; truncated?: boolean; attempts?: number };
+const isStepResult = (v: unknown): v is StepResultLike =>
+  !!v && typeof v === 'object' && typeof (v as { text?: unknown }).text === 'string';
+
+/** The route refuses a run before it starts with a JSON body and a status; the client reports it as `HTTP <status>: <body>`. */
+function refusal(message: string): { status: number; code?: string; message: string } | null {
+  const m = /HTTP (\d{3})[^{]*(\{.*\})?/s.exec(message);
+  if (!m) return null;
+  let body: { code?: string; message?: string } = {};
   try {
-    res = await fetch('/api/llm', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt, tier: opts.modelTier === 'quick' ? 'quick' : 'default' }),
-      signal: opts.signal,
-    });
-  } catch (e) {
-    if (opts.signal?.aborted) throw e;
+    body = m[2] ? (JSON.parse(m[2]) as typeof body) : {};
+  } catch {
+    // not JSON: keep the status only
+  }
+  return { status: Number(m[1]), code: body.code, message: body.message || 'the model service answered ' + m[1] };
+}
+
+/**
+ * Runs one agent prompt on the server's step agent and returns the checked JSON text.
+ *
+ * When the server's shape check fails on the last allowed attempt (`invalid_output`, `truncated`), the last draft is
+ * returned as it stands, with the issues: the workspace runs its own, fuller checks on it and sends the work back to
+ * the agent itself, or repairs it by code on its last attempt. Any other failure throws a `ModelError`.
+ */
+export async function sample(prompt: string, opts: SampleOptions = {}): Promise<SampleResult> {
+  const input: StepInput = {
+    prompt,
+    tier: opts.modelTier === 'quick' ? 'quick' : 'default',
+    maxAttempts: Math.max(1, Math.min(3, Math.floor(opts.maxAttempts ?? 1))),
+    ...(opts.role ? { role: opts.role } : {}),
+  };
+  let draft = '';
+  let attempt = 0;
+  let issues: string[] = [];
+  const failed = new Set<number>();
+  let open: string | null = null;
+  const callbacks: RunAgentOptions = {
+    forwardedProps: input,
+    signal: opts.signal,
+    fetch: opts.fetch,
+    onEvent: opts.onEvent,
+    onStepStarted: (name) => {
+      if (name === 'draft') attempt++;
+      open = name;
+      opts.onStep?.({ name, phase: 'start', attempt: Math.max(1, attempt) });
+    },
+    onStepFinished: (name) => {
+      open = null;
+      const n = Math.max(1, attempt);
+      const bad = name === 'validate' && failed.has(n);
+      opts.onStep?.({ name, phase: 'end', attempt: n, ok: !bad, ...(bad ? { issues } : {}) });
+    },
+    onText: (delta, _id, soFar) => {
+      draft = soFar;
+      opts.onText?.({ text: soFar, delta });
+    },
+    onCustom: (name, value) => {
+      if (name !== 'issues' || !value || typeof value !== 'object') return;
+      const v = value as { attempt?: number; issues?: unknown };
+      issues = Array.isArray(v.issues) ? v.issues.map(String) : [];
+      failed.add(typeof v.attempt === 'number' ? v.attempt : Math.max(1, attempt));
+    },
+  };
+  const run = await runAgent(STEP_AGENT_ID, callbacks);
+  // a run cut short (stopped, or the connection dropped) leaves its step open: close it so nothing spins forever
+  if (open) opts.onStep?.({ name: open, phase: 'end', attempt: Math.max(1, attempt), ok: false });
+  if (run.ok) {
+    if (!isStepResult(run.result)) throw new ModelError('error', 'the step agent finished without an answer');
+    return { text: run.result.text, truncated: !!run.result.truncated, attempts: run.result.attempts ?? attempt };
+  }
+  if (run.aborted) {
+    const e = new Error('The run was stopped.');
+    e.name = 'AbortError';
+    throw e;
+  }
+  const code = run.error.code as StepErrorCode | string;
+  if ((code === 'invalid_output' || code === 'truncated') && draft.trim())
+    return { text: draft, truncated: code === 'truncated', attempts: attempt, issues };
+  if (code === 'network') {
+    const r = refusal(run.error.message);
+    if (r) throw new ModelError(codeFor(r.code, r.status), r.message);
     throw new ModelError('network', 'the model service could not be reached');
   }
-  if (!res.ok || !res.body) {
-    const info = (await res.json().catch(() => null)) as { code?: string; message?: string } | null;
-    throw new ModelError(codeFor(res.status, info?.code), info?.message || 'the model service answered ' + res.status);
-  }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let text = '';
-  let truncated = false;
-  const take = (line: string) => {
-    if (!line.trim()) return;
-    const event = JSON.parse(line) as { type: string; text?: string; truncated?: boolean; code?: string; message?: string };
-    if (event.type === 'delta' && event.text) {
-      text += event.text;
-      opts.onText?.({ text });
-    } else if (event.type === 'done') truncated = !!event.truncated;
-    else if (event.type === 'error') throw new ModelError(codeFor(0, event.code), event.message || 'the model call failed');
-  };
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let at: number;
-    while ((at = buffer.indexOf('\n')) >= 0) {
-      take(buffer.slice(0, at));
-      buffer = buffer.slice(at + 1);
-    }
-  }
-  take(buffer + decoder.decode());
-  return { text, truncated };
+  throw new ModelError(codeFor(code), run.error.message || 'the model call failed');
 }
 
 const MIME: Record<string, string> = {
