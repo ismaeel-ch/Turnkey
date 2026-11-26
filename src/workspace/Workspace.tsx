@@ -7,6 +7,7 @@ import { U, attachStorage, notify } from './core';
 import { listenForStorageProblems, noteStorageProblem } from './errors';
 import { setFlowAvailable } from './flow';
 import { boot, Root } from './shell-c';
+import { startHistory } from './history';
 
 type PageOptions = { __turnkeyOptions?: { canvas?: boolean } };
 let started = false;
@@ -27,6 +28,7 @@ function start() {
     .then((storage) => {
       if (storage) attachStorage(storage.lsCompat());
       boot();
+      startHistory();
       // after boot(), so its own save on pagehide runs first and this one writes the result to IndexedDB
       if (storage) flushOnHide(storage);
       preloadWhenIdle();

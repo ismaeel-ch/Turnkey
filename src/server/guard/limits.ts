@@ -11,8 +11,9 @@
  *   LLM_DAILY_SPEND_USD     dollars of model calls per day, priced from the tokens each call used (default 5).
  *                           Calls cut off midway are counted from an estimate (src/server/llm/usage.ts).
  *   LLM_MAX_PROMPT_CHARS    longest prompt accepted                 (default 120000)
- *   LLM_MAX_OUTPUT_TOKENS   most tokens one answer may use          (default 8000)
- *   LLM_MAX_ANSWER_CHARS    longest answer relayed, in characters   (default 4 x the output token cap)
+ *   LLM_MAX_OUTPUT_TOKENS   most tokens one answer may use, thinking included (default 16000: Sonnet and Haiku think
+ *                           by default and the thinking counts here; a Haiku database step used 12000 on a real build)
+ *   LLM_MAX_ANSWER_CHARS    longest answer relayed, in characters   (default 32000; thinking is not relayed)
  *   LIGHT_RATE_PER_MINUTE   cheap routes (connectors, health) per visitor per minute   (default 60)
  *   LIGHT_GLOBAL_PER_MINUTE the same, from everyone                  (default 600)
  *   LIVE_MODE               set to `off` to refuse every model call (saved builds keep working)
@@ -33,8 +34,8 @@ export function limitsFrom(env: Env = process.env) {
     dailyCap: num(env.LLM_DAILY_CALL_CAP, 600),
     dailySpendUsd: num(env.LLM_DAILY_SPEND_USD, 5),
     maxPromptChars: num(env.LLM_MAX_PROMPT_CHARS, 120000),
-    maxOutputTokens: num(env.LLM_MAX_OUTPUT_TOKENS, 8000),
-    maxAnswerChars: num(env.LLM_MAX_ANSWER_CHARS, num(env.LLM_MAX_OUTPUT_TOKENS, 8000) * 4),
+    maxOutputTokens: num(env.LLM_MAX_OUTPUT_TOKENS, 16000),
+    maxAnswerChars: num(env.LLM_MAX_ANSWER_CHARS, 32000),
     off: (env.LIVE_MODE || '').trim().toLowerCase() === 'off',
   };
 }
@@ -43,6 +44,10 @@ export type Verdict = { ok: true } | { ok: false; code: 'rate_limited' | 'budget
 
 type Window = { start: number; count: number };
 
+/** What a visitor reads when the day's allowance is gone. It must say what still works and when Live comes back. */
+export const CAP_MESSAGE =
+  "Today's allowance for live model calls is used up, so Live builds are paused until midnight UTC. Saved builds, Demo and every app you already built keep working.";
+
 /** `spent` says how many dollars have gone on model calls today; light limiters never check it. */
 export function createLimiter(now: () => number = Date.now, spent: (t: number) => number = spentToday) {
   const visitors = new Map<string, Window>();
@@ -50,6 +55,11 @@ export function createLimiter(now: () => number = Date.now, spent: (t: number) =
   let day: Window = { start: 0, count: 0 };
 
   const roll = (w: Window, span: number, t: number) => (t - w.start >= span ? { start: t, count: 0 } : w);
+  // the day runs midnight to midnight UTC, the same day the spend total uses, so both caps start again together
+  const rollDay = (w: Window, t: number) => {
+    const start = t - (t % 86_400_000);
+    return w.start === start ? w : { start, count: 0 };
+  };
 
   return {
     /**
@@ -62,10 +72,9 @@ export function createLimiter(now: () => number = Date.now, spent: (t: number) =
         return { ok: false, code: 'off', message: 'Live builds are switched off on this deployment. Saved builds still run.' };
       const t = now();
       if (Number.isFinite(limits.dailySpendUsd) && spent(t) >= limits.dailySpendUsd)
-        return { ok: false, code: 'budget', message: "Today's allowance for live model calls is used up. Saved builds still run." };
-      day = roll(day, 86_400_000, t);
-      if (day.count + w > limits.dailyCap)
-        return { ok: false, code: 'budget', message: "Today's allowance for live model calls is used up. Saved builds still run." };
+        return { ok: false, code: 'budget', message: CAP_MESSAGE };
+      day = rollDay(day, t);
+      if (day.count + w > limits.dailyCap) return { ok: false, code: 'budget', message: CAP_MESSAGE };
       minute = roll(minute, 60_000, t);
       const retryAfter = Math.ceil((60_000 - (t - minute.start)) / 1000);
       if (minute.count + w > limits.globalPerMinute)

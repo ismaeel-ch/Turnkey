@@ -80,6 +80,7 @@ import { startTour } from './shell-c';
 import { RerunBar } from './rerun';
 import { touchOf, touchText } from './provenance';
 import { fmtUsd, usageLine } from '@/platform/agui/usage';
+import { HistoryButtons, openHistory } from './history-ui';
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
 export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
@@ -820,6 +821,12 @@ export function Workspace({ app }: { app: AppRecord }) {
           }),
       },
       {
+        label: 'Version history',
+        icon: 'history',
+        disabled: app.status !== 'ready',
+        on: () => openHistory(app),
+      },
+      {
         label: 'Rename app',
         icon: 'edit',
         disabled: app.status !== 'ready' || busy,
@@ -928,6 +935,7 @@ export function Workspace({ app }: { app: AppRecord }) {
             <Tabs cls="views" label="Workspace views" items={tabs} value={isDetail(view) ? 'details' : view} onChange={go} />
           </span>
           <span className="grow" />
+          <HistoryButtons app={app} />
           <Btn
             className="btn sm"
             data-tour="share"

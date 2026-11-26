@@ -613,3 +613,13 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .gcard .flow-chips{min-width:0}.gcard .flow-chips>*{white-space:normal;max-width:100%;text-align:left;height:auto}
 #boot{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center}
 .fl-provider{height:100%;background:transparent;color:inherit;font:inherit;line-height:inherit}
+/* version history (src/workspace/history-ui.tsx) */
+.ic.flip-x{transform:scaleX(-1)}
+.hist-list{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.hist-row{display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:var(--borderRadiusMedium);border:1px solid var(--colorNeutralStroke2)}
+.hist-row.now{border-color:var(--colorBrandStroke1);background:var(--colorBrandBackground2)}
+.hist-row.undone .hist-what{color:var(--colorNeutralForeground3);text-decoration:line-through}
+.hist-what{font-weight:600;overflow-wrap:anywhere}
+.hist-who{flex-wrap:wrap}
+.hist-time{white-space:nowrap}
+@media (max-width:640px){.hist-row{flex-wrap:wrap}.hist-time{order:3}}

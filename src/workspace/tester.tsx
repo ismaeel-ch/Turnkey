@@ -276,7 +276,7 @@ export const testerPrompt = (app: BackedApp) =>
   pAccess(app.def) +
   '\n\nWORKFLOW:\n' +
   pFlow(app.def) +
-  '\n\nWrite 5 to 8 test cases that prove the rules and user stories of the brief hold in the finished app. Code will play each case against the real endpoints, so a case is data, not prose.\n- Each case: {"name":"what must be true, in plain words","why":"the rule or user story it protects, quoted or paraphrased from the brief","steps":[...]} with 1 to 5 steps.\n- Each step: {"role":"role id","user":"optional username when two people of one role matter","do":"create|see|hidden|transition|denied|invalid|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list or a transition id","say":"one present-tense sentence naming the person"}.\n- create needs "values" for the required columns and must succeed. invalid is a create that must be refused because required values are missing. see: that person lists the table and must find the record this case created. hidden: must not find it. transition: runs a workflow transition on the record this case created. denied: the attempt must be refused with 403.\n- Cover: every rule in the brief at least once, one refusal per role that has limits, one case about required fields. Do not repeat the guided tour.\n' +
+  '\n\nWrite 5 to 8 test cases that prove the rules and user stories of the brief hold in the finished app. Code will play each case against the real endpoints, so a case is data, not prose.\n- Each case: {"name":"what must be true, in plain words","why":"the rule or user story it protects, quoted or paraphrased from the brief","steps":[...]} with 1 to 5 steps.\n- Each step: {"role":"role id","user":"optional username when two people of one role matter","do":"create|see|hidden|transition|denied|invalid|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list or a transition id","say":"one present-tense sentence naming the person"}.\n- create needs "values" for the required columns and must succeed. invalid is a create that must be refused because required values are missing. see: that person lists the table and must find the record this case created. hidden: must not find it. transition: runs a workflow transition on the record this case created. denied: the attempt must be refused with 403.\n- Cover: every rule in the brief at least once, one refusal per role that has limits, one case about required fields. Do not repeat the guided tour.\n- The app enforces only these things: which roles may see, create, edit and delete each table (all rows, only their own rows where the table has an owner column, or none), which roles may run each transition, and required fields. Do not write a case that depends on anything else, such as a field\'s value, a date or a count ("cannot start until assigned"): no access rule can make it pass.\n' +
   VALUE_RULES +
   '\n\nFORMAT: {"cases":[{"name":"","why":"","steps":[]}]}';
 export function failingTests(app: AppRecord): FailingTest[] {
@@ -324,6 +324,12 @@ export function ruleRepairs(app: BackedApp, fails: FailingTest[]): Repair[] {
           for: c.name,
           text: 'Stop the ' + who + ' from ' + ING[s.action || 'create'] + ' ' + t.label.toLowerCase(),
         });
+      else if (s.do === 'hidden' && t.owner && accOf(def, s.role, t.name).list === 'all')
+        out.push({
+          by: 'backend',
+          for: c.name,
+          text: 'Let the ' + who + ' see their own ' + t.label.toLowerCase(),
+        });
       else if (s.do === 'see' && /^403/.test(f.actual.replace(/^step \d+: /, '')))
         out.push({
           by: 'backend',
@@ -339,7 +345,7 @@ export function ruleRepairs(app: BackedApp, fails: FailingTest[]): Repair[] {
     });
   return out.filter((x, i, a) => a.findIndex((y) => y.text === x.text) === i);
 }
-export const repairPrompt = (app: BackedApp, fails: FailingTest[]) =>
+export const repairPrompt = (app: BackedApp, fails: FailingTest[], tried: string[] = []) =>
   HEAD('Backend') +
   'The finished app failed some of its tests. Decide what to change so they pass.\n\nTABLES:\n' +
   pTables(app.def) +
@@ -369,7 +375,10 @@ export const repairPrompt = (app: BackedApp, fails: FailingTest[]) =>
         })),
       })),
   ) +
-  '\n\nReply with changes in plain words, one per fix, from this list of forms only: "Stop the <role name> from creating|editing|deleting|seeing <table label>", "Let the <role name> create|edit|delete|see <table label>", "Add a <field name> field to <table label>", "Remove the <field name> field from <table label>". If a test case itself contradicts the brief, list its id under "wrong" instead of changing the app.\n\nFORMAT: {"say":"one sentence","fixes":[{"change":"","for":"name of the failing test"}],"wrong":[{"case":"case id","why":""}]}';
+  (tried.length
+    ? '\n\nALREADY TRIED IN THIS RUN (the tests above still fail after them, so do not undo them or repeat them):\n- ' + tried.join('\n- ')
+    : '') +
+  '\n\nReply with changes in plain words, one per fix, from this list of forms only: "Stop the <role name> from creating|editing|deleting|seeing <table label>", "Let the <role name> create|edit|delete|see <table label>", "Let the <role name> see|edit their own <table label>" (only the rows whose owner column, shown in TABLES, is that person: use it when one person of a role must not see or edit another\'s rows), "Add a <field name> field to <table label>", "Remove the <field name> field from <table label>". If a test case itself contradicts the brief, or needs a rule these forms cannot express (one that depends on a field\'s value, a date or a count), list its id under "wrong" instead of changing the app.\n\nFORMAT: {"say":"one sentence","fixes":[{"change":"","for":"name of the failing test"}],"wrong":[{"case":"case id","why":""}]}';
 export function keepFix(
   app: BackedApp,
   text: string,
@@ -567,7 +576,8 @@ export function testerSteps(app: BackedApp, run: Run) {
       wrong: { id: string; why: string }[] = [];
     if (live) {
       try {
-        const o = await callModel(app, run, 'backend', repairPrompt(app, fails), n);
+        const tried = Q.rounds.flatMap((x) => x.fixes.filter((f) => f.ok).map((f) => f.text));
+        const o = await callModel(app, run, 'backend', repairPrompt(app, fails, tried), n);
         fixes = arr(o.fixes)
           .map((x) => ({
             by: 'backend',

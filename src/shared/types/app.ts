@@ -86,6 +86,8 @@ export interface SeedUser {
 }
 /** A row of the built app's database, as SQLite returns it. */
 export type Row = Dict<Loose>;
+/** A row of an app table read back through the API: it always has its id. */
+export type StoredRow = Row & { id: number };
 /** A signed-in person of the built app, as the `users` table returns them. */
 export interface AppUser {
   id: number;
@@ -157,6 +159,46 @@ export interface AppTeam {
   jump: { table: string; column: string; set: Dict<Loose>; label: string } | null;
   /** sample inputs offered in the room */
   samples: { label: string; values: Dict<Loose> }[];
+}
+
+/* ---------- the agent room (src/workspace/room.tsx) ---------- */
+/** How a board panel draws the rows of one table. */
+export type BoardLayout = 'versus' | 'list' | 'groups' | 'scores' | 'options';
+/** One panel of the agent room: a table the team writes, drawn in one layout. Every field names a column of `table`. */
+export interface BoardPanel {
+  table: string;
+  layout: BoardLayout;
+  title: string;
+  /** the choice column that splits the rows (versus, groups) */
+  by: string | null;
+  badge: string | null;
+  text: string | null;
+  tag: string | null;
+  meter: string | null;
+  rank: string | null;
+  score: string | null;
+  weight: string | null;
+  /** the top of the score scale; 0 picks one from the rows */
+  max: number;
+  link: string | null;
+  flag: string | null;
+  /** rows with this reference empty are the ones not drawn under a parent */
+  loose: string | null;
+  /** a reference to the same table: which row this one answers */
+  reply: string | null;
+  facts: string[];
+  sides: string[];
+  only: string[];
+  /** rows of a child table drawn under each row, joined on `via` */
+  children: (BoardPanel & { via: string }) | null;
+}
+/** The agent room: its panels and which columns of the input table hold the outcome. */
+export interface Board {
+  /** `views` when the View advisor laid it out, `rules` when code did */
+  by: string;
+  why: string;
+  verdict: { pick: string | null; meter: string | null; text: string | null; date: string | null };
+  panels: BoardPanel[];
 }
 
 /* ---------- station 4: views and the dashboard ---------- */
@@ -250,11 +292,6 @@ export interface Logo {
   by: string;
   /** how often the owner asked for another design */
   turn?: number;
-}
-/** The agent room's layout (src/workspace/room.tsx), read as saved. */
-export interface Board {
-  panels: { layout: string; [field: string]: Loose }[];
-  [field: string]: Loose;
 }
 export interface Theme {
   accent: string;

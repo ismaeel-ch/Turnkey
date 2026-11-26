@@ -40,7 +40,7 @@ import {
   topoOrder,
 } from './db';
 import { canRunTeam, normTeam } from './team';
-import { AppPane } from './runtime';
+import { AppPane, newPane } from './runtime';
 
 /* ===== Turnkey prototype · engine: definitions, station checks, the role-guarded API, acceptance runner ===== */
 export const TYPES: readonly string[] = ['text', 'longtext', 'number', 'money', 'date', 'datetime', 'bool', 'select', 'ref', 'user'];
@@ -1502,14 +1502,11 @@ export function renderTest(app: AppRecord) {
           <AppPane
             app={app}
             pane={{
+              ...newPane(9),
               uid: u.id,
               screen: scr.id,
-              flt: {},
-              q: '',
-              month: 0,
               test: true,
             }}
-            solo={false}
           />,
           host,
         );
@@ -1576,7 +1573,12 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
   // one step against the real endpoints; the player and the headless test share this
   const def = app.def,
     users = appUsers(app);
-  const u = (step.user && users.find((x) => x.username === step.user)) || users.find((x) => x.role === step.role);
+  // a model may name the person by username, full name or first name: any of them picks that person
+  const who = (step.user || '').trim().toLowerCase(),
+    named = (x: AppUser) => x.username === who || x.name.toLowerCase() === who || x.name.toLowerCase().split(' ')[0] === who,
+    u =
+      (who && (users.find((x) => x.username === who) || users.find((x) => x.role === step.role && named(x)) || users.find(named))) ||
+      users.find((x) => x.role === step.role);
   if (!u)
     return {
       ok: false,
@@ -1654,7 +1656,22 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
               ? ['GET', '/api/' + tn]
               : ['POST', '/api/' + tn + '/' + rid + '/' + act];
     const r = apiCall(app, u, call[0], call[1], {}, 'tour');
-    return r.status === 403 ? pass('403 Forbidden · ' + r.error) : fail('Expected a refusal, got ' + r.status);
+    if (r.status === 403) return pass('403 Forbidden · ' + r.error);
+    // a transition the workflow does not allow from the record's state is refused too, with 409
+    if (r.status === 409 && call[0] === 'POST' && act !== 'create') return pass('409 Conflict · ' + r.error);
+    return fail(
+      'Expected a refusal, got ' +
+        r.status +
+        (r.status === 400
+          ? ': ' +
+            roleName(def, u.role) +
+            ' is allowed to ' +
+            (act === 'create' ? 'create' : act) +
+            ' ' +
+            t.label.toLowerCase() +
+            '; only the empty test values were refused'
+          : ''),
+    );
   }
   if (!id) return fail('Nothing was created earlier in the tour for ' + tn);
   out.rec = {

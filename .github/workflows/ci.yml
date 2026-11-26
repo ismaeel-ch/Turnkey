@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flow: [demo, live, misc, views, quests, new, custom, round6, react, sizes, offline, a11y]
+        flow: [demo, live, misc, views, quests, new, custom, round6, react, sizes, history, offline, a11y]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
