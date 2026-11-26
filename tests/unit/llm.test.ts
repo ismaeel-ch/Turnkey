@@ -15,8 +15,8 @@ async function collect(stream: AsyncIterable<ChatChunk>) {
 }
 
 describe('resolveProvider', () => {
-  it('is null when nothing is configured, so the app runs on saved builds', () => {
-    expect(resolveProvider({})).toBeNull();
+  it('is null in production when nothing is configured, so the app runs on saved builds', () => {
+    expect(resolveProvider({ NODE_ENV: 'production' })).toBeNull();
   });
   it('uses the LiteLLM names from the hackathon guide', () => {
     const p = resolveProvider({
@@ -29,9 +29,9 @@ describe('resolveProvider', () => {
     expect(p?.model('default')).toBe('model-a');
     expect(p?.model('quick')).toBe('model-b');
   });
-  it('falls back to the main model when no fast model is named', () => {
+  it('uses claude-haiku as the fast model when none is named', () => {
     expect(resolveProvider({ LITELLM_BASE_URL: 'x', LITELLM_API_KEY: 'test-key', LITELLM_MODEL: 'model-a' })?.model('quick')).toBe(
-      'model-a',
+      'claude-haiku',
     );
   });
   it('takes an OpenAI-compatible key, and a stand-in for tests', () => {
@@ -90,6 +90,7 @@ describe('openAiCompatible', () => {
         baseUrl: 'h',
         apiKey: 'k',
         model: 'm',
+        retry: { sleep: async () => undefined },
         fetchImpl: (async () => new Response(body, { status })) as unknown as typeof fetch,
       });
     await expect(collect(make(401).stream({ messages: [], tier: 'default' }))).rejects.toMatchObject({ code: 'unauthorized' });

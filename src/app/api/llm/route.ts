@@ -56,7 +56,6 @@ export async function POST(request: Request) {
           ],
           tier,
           maxTokens: limits.maxOutputTokens,
-          temperature: 0.2,
           signal: request.signal,
         });
         for await (const chunk of chunks) send(chunk);

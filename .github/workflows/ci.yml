@@ -1,16 +1,23 @@
 name: CI
 
-# Every pull request and every push to main: secrets scan, lint, typecheck, unit tests, a production build,
-# and the 286 browser checks (one job per flow). The job named "ci" is the single result branch protection requires.
+# The full checks run only when a pull request into main is about to be merged, to save Actions minutes: on a
+# non-draft pull request that carries the label "ready-to-merge" (adding the label starts a run, and each later push
+# runs it again), or when started by hand from the Actions tab. Nothing runs on a push to main; the release workflow
+# checks the commit again before it deploys.
+#
+# The full checks: secrets scan, lint, typecheck, unit tests, a production build, the 286 browser checks (one job per
+# flow). The job named "ci" is the single result branch protection requires. Without the label the heavy jobs are skipped and only "ci" runs, for a few
+# seconds, failing on purpose so that an unchecked pull request never looks green.
 
 on:
   pull_request:
-  push:
     branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -18,6 +25,8 @@ permissions:
 jobs:
   check:
     name: check
+    # The full checks run on a manual run, or on a non-draft pull request labelled ready-to-merge.
+    if: github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -59,9 +68,21 @@ jobs:
       - name: Production build
         run: npm run build
       - name: Browser checks
+        id: flow
         run: |
           export CHROME_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
           npm run test:e2e -- ${{ matrix.flow }}
+      - name: Summary of this browser flow
+        if: always()
+        env:
+          FLOW: ${{ matrix.flow }}
+          OUTCOME: ${{ steps.flow.outcome }}
+        run: |
+          {
+            echo "### Browser flow: $FLOW"
+            echo ""
+            echo "Result: $OUTCOME. Failure screenshots, if any, are in the artifact shots-$FLOW."
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Keep screenshots when a flow fails
         if: failure()
         uses: actions/upload-artifact@v7
@@ -79,7 +100,14 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: All required jobs passed
+        env:
+          CHECK: ${{ needs.check.result }}
+          E2E: ${{ needs.e2e.result }}
         run: |
-          echo "check: ${{ needs.check.result }}, e2e: ${{ needs.e2e.result }}"
-          test "${{ needs.check.result }}" = "success"
-          test "${{ needs.e2e.result }}" = "success"
+          if [ "$CHECK" = "skipped" ]; then
+            echo "CI has not run on this commit. Add the label ready-to-merge (and mark the pull request ready) to run it."
+            exit 1
+          fi
+          echo "check: $CHECK, e2e: $E2E"
+          test "$CHECK" = "success"
+          test "$E2E" = "success"
