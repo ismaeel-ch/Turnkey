@@ -374,7 +374,7 @@ export function appFromPack(pack, key, preview) {
   dbSave(id);
   return app;
 }
-export async function openShared(input, o) {
+export async function openShared(input, o?) {
   // from a link, a pasted code, or the owner's preview
   o = o || {};
   const code = shareCode(input);

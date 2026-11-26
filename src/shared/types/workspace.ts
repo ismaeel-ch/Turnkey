@@ -327,10 +327,44 @@ export interface DebugPanel {
   all: boolean;
 }
 
+/** One pane of the App view: who is signed in, and the open screen and record. */
+export interface Pane {
+  n: number;
+  /** the built app's user id signed in here */
+  uid: number | null;
+  screen: string | null;
+  rec: Loose;
+  [field: string]: Loose;
+}
+
+/** A shared app opened on its own, without the builder around it. */
+export interface SoloView {
+  app: string;
+  pane: Pane;
+  /** how it was opened: from a link, or the owner's preview */
+  from: string;
+  back: Loose;
+}
+
+/** One step of the product tour: the element it points at (`data-tour`), and what to do before showing it. */
+export interface ProductTourStep {
+  target: string;
+  title: string;
+  body: string;
+  prep?: (() => void) | null;
+}
+
+/** The product tour while it runs. */
+export interface ProductTour {
+  id: string;
+  i: number;
+  steps: ProductTourStep[];
+}
+
 /** The App view of one app: one or two panes, and the walkthrough when one is playing. */
 export interface Stage {
   split: boolean;
-  panes: Loose[];
+  panes: Pane[];
   tour: Loose;
   [field: string]: Loose;
 }
@@ -340,7 +374,7 @@ export interface ViewState {
   bootErr: string;
   toasts: Toast[];
   dialog: Dialog | null;
-  tour: Loose;
+  tour: ProductTour | null;
   /** the workspace view (build, app, release or a Details page), per app */
   view: Dict<string>;
   /** how the Build view shows the agents: line, timeline or log, per app */
@@ -377,13 +411,15 @@ export interface ViewState {
   busy: string | null;
   /** the last connector tool tried on the Connections page */
   connOut: { id: string; tool: string; r: { ok: boolean; result: Loose } } | null;
-  ob: Loose;
-  si: Loose;
+  /** the first-run onboarding form, while it is open */
+  ob: OnboardingForm | null;
+  /** the sign-in form, while it is open */
+  si: SignInForm | null;
   tv: Dict<Loose>;
   flowPos: Dict<Loose>;
   flowN: number;
   flowMap: Loose;
-  solo: Loose;
+  solo: SoloView | null;
   sheet: Loose;
   told: Dict<Loose>;
   noteDraft: Dict<Loose>;
@@ -394,6 +430,29 @@ export interface ViewState {
   /** the chat peek on narrow screens */
   peek?: boolean;
   share?: Loose;
+}
+
+/** The first-run onboarding: which step, the new account and the first choices. */
+export interface OnboardingForm {
+  step: number;
+  name: string;
+  user: string;
+  pass: string;
+  demo: boolean;
+  dev: boolean;
+  /** the saved build to start with, or '' for none */
+  pick: string;
+  tour: boolean;
+  err: string;
+}
+
+/** The sign-in form, or the new-account form when `create` is on. */
+export interface SignInForm {
+  u: string;
+  p: string;
+  name: string;
+  err: string;
+  create: boolean;
 }
 
 /** The Data page of one app: the open table and tab, the SQL console and its last result. */

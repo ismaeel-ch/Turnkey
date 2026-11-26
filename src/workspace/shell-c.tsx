@@ -1,6 +1,8 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
 import { modelHost } from '@/platform/model-client';
-import { useState, useLayoutEffect } from 'react';
+import { type ReactNode, useState, useLayoutEffect } from 'react';
+import type { BackedDef } from '@/shared/types/app';
+import type { SqlValue } from '@/shared/types/sqljs';
+import type { AppRecord, Downloader, ProductTourStep, Settings } from '@/shared/types/workspace';
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import { render, toStyle } from '@/platform/dom';
 import {
@@ -204,7 +206,7 @@ export function Onboarding() {
               autoComplete="off"
               value={o.name}
               onInput={(e) => {
-                o.name = e.target.value;
+                o.name = e.currentTarget.value;
               }}
             />
           </Field>
@@ -216,7 +218,7 @@ export function Onboarding() {
               autoComplete="off"
               value={o.user}
               onInput={(e) => {
-                o.user = e.target.value;
+                o.user = e.currentTarget.value;
               }}
             />
           </Field>
@@ -229,7 +231,7 @@ export function Onboarding() {
               autoComplete="off"
               value={o.pass}
               onInput={(e) => {
-                o.pass = e.target.value;
+                o.pass = e.currentTarget.value;
               }}
             />
           </Field>
@@ -346,7 +348,7 @@ export function Onboarding() {
         <Btn
           className={cx('btn subtle', !o.pick && 'on')}
           onClick={() => {
-            o.pick = null;
+            o.pick = '';
             notify();
           }}
         >
@@ -457,7 +459,7 @@ export function SignIn() {
       }),
     apps = Object.keys(S.apps).length,
     bytes = LS.keys().reduce((n, k) => n + LS.size(k), 0);
-  const submit = (e) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (f.create) {
       const u = snake(f.u);
@@ -511,7 +513,7 @@ export function SignIn() {
               autoComplete="off"
               value={f.name}
               onInput={(e) => {
-                f.name = e.target.value;
+                f.name = e.currentTarget.value;
               }}
             />
           </Field>
@@ -529,7 +531,7 @@ export function SignIn() {
             autoComplete="off"
             value={f.u}
             onInput={(e) => {
-              f.u = e.target.value;
+              f.u = e.currentTarget.value;
             }}
           />
         </Field>
@@ -542,7 +544,7 @@ export function SignIn() {
             autoComplete="off"
             value={f.p}
             onInput={(e) => {
-              f.p = e.target.value;
+              f.p = e.currentTarget.value;
             }}
           />
         </Field>
@@ -585,16 +587,16 @@ export function resetEverything() {
   Object.keys(DBX.open).forEach((id) => {
     try {
       DBX.open[id].close();
-    } catch (e) {}
+    } catch {}
   });
-  Object.keys(DBX.timers).forEach((id) => clearTimeout(DBX.timers[id]));
+  Object.keys(DBX.timers).forEach((id) => clearTimeout(DBX.timers[id] ?? undefined));
   DBX.open = {};
   DBX.size = {};
   DBX.savedAt = {};
   DBX.timers = {};
   DBX.hold = {};
   LS.keys().forEach((k) => LS.del(k));
-  clearTimeout(saveTimer);
+  if (saveTimer) clearTimeout(saveTimer);
   setSaveTimer(null);
   const live = U.live,
     dl = U.dl;
@@ -613,7 +615,7 @@ export function resetEverything() {
   applyTheme();
   notify();
 }
-export function SetRow({ title, text, children }) {
+export function SetRow({ title, text, children }: { title: ReactNode; text: ReactNode; children?: ReactNode }) {
   return (
     <div className="set-row">
       <div className="col gap0 grow">
@@ -626,7 +628,7 @@ export function SetRow({ title, text, children }) {
 }
 export function SettingsDialog() {
   const s = S.settings,
-    set = (k, v) => {
+    set = <K extends keyof Settings>(k: K, v: Settings[K]) => {
       s[k] = v;
       if (k === 'theme') applyTheme();
       commit();
@@ -663,7 +665,7 @@ export function SettingsDialog() {
               },
             ]}
             value={s.theme}
-            onChange={(v) => set('theme', v)}
+            onChange={(v) => set('theme', v as Settings['theme'])}
           />
         </SetRow>
         <SetRow
@@ -826,7 +828,7 @@ export function InstallDialog() {
 export function ResetDialog() {
   const apps = S.session ? myApps() : [],
     out = !S.session;
-  const act = (kind) => {
+  const act = (kind: string) => {
     if (kind === 'data') {
       let n = 0;
       apps.forEach((a) => {
@@ -899,10 +901,14 @@ export function ResetDialog() {
     </Dialog>
   );
 }
-export function PackDialog({ p }) {
+/** An app picked by id, for the dialogs that work on one app. */
+export type AppPick = { app: string };
+/** The app's definition is complete once it can be packed, renamed or changed: these dialogs open on ready apps. */
+const backed = (app: AppRecord) => app as AppRecord & { def: BackedDef };
+export function PackDialog({ p }: { p: AppPick }) {
   const app = S.apps[p.app];
   if (!app) return null;
-  const md = buildPack(app);
+  const md = buildPack(backed(app));
   return (
     <Dialog
       wide
@@ -931,14 +937,14 @@ export function PackDialog({ p }) {
     </Dialog>
   );
 }
-export function RenameDialog({ p }) {
+export function RenameDialog({ p }: { p: AppPick & { name: string } }) {
   const app = S.apps[p.app];
   if (!app) return null;
-  const save = (e) => {
+  const save = (e: React.FormEvent) => {
     e.preventDefault();
     const name = str(p.name);
     if (!name || name === app.name) return closeDialog();
-    const pl = planOps(app, [
+    const pl = planOps(backed(app), [
       {
         op: 'rename_app',
         name,
@@ -947,7 +953,7 @@ export function RenameDialog({ p }) {
     closeDialog();
     if (pl.steps.length) {
       pushChat(app, 'user', 'Rename the app to ' + name);
-      runChange(app, pl.steps, 'Rename the app');
+      runChange(backed(app), pl.steps, 'Rename the app');
     }
   };
   return (
@@ -961,7 +967,7 @@ export function RenameDialog({ p }) {
             data-autofocus
             value={p.name}
             onInput={(e) => {
-              p.name = e.target.value;
+              p.name = e.currentTarget.value;
             }}
           />
         </Field>
@@ -977,7 +983,15 @@ export function RenameDialog({ p }) {
     </Dialog>
   );
 }
-export function AddConnDialog({ p }) {
+/** The Add a connection form. */
+export interface AddConnForm {
+  kind?: string;
+  name: string;
+  url: string;
+  auth: string;
+  err: string;
+}
+export function AddConnDialog({ p }: { p: AddConnForm }) {
   if (!p.kind)
     Object.assign(p, {
       kind: 'MCP server',
@@ -986,7 +1000,7 @@ export function AddConnDialog({ p }) {
       auth: 'none',
       err: '',
     });
-  const add = (e) => {
+  const add = (e: React.FormEvent) => {
     e.preventDefault();
     if (!str(p.name) || !/^https:\/\/\S+\.\S+/.test(str(p.url))) {
       p.err = 'Give it a name and an https:// address.';
@@ -997,7 +1011,7 @@ export function AddConnDialog({ p }) {
       id,
       custom: true,
       name: str(p.name),
-      kind: p.kind,
+      kind: p.kind || 'MCP server',
       url: str(p.url),
       auth: p.auth === 'key' ? 'API key on the server' : 'No key needed',
       icon: 'plug',
@@ -1028,7 +1042,7 @@ export function AddConnDialog({ p }) {
             id="ac-kind"
             value={p.kind}
             onChange={(e) => {
-              p.kind = e.target.value;
+              p.kind = e.currentTarget.value;
               notify();
             }}
           >
@@ -1044,7 +1058,7 @@ export function AddConnDialog({ p }) {
             data-autofocus
             value={p.name}
             onInput={(e) => {
-              p.name = e.target.value;
+              p.name = e.currentTarget.value;
             }}
           />
         </Field>
@@ -1060,7 +1074,7 @@ export function AddConnDialog({ p }) {
             placeholder="https://"
             value={p.url}
             onInput={(e) => {
-              p.url = e.target.value;
+              p.url = e.currentTarget.value;
             }}
           />
         </Field>
@@ -1075,7 +1089,7 @@ export function AddConnDialog({ p }) {
             id="ac-auth"
             value={p.auth}
             onChange={(e) => {
-              p.auth = e.target.value;
+              p.auth = e.currentTarget.value;
               notify();
             }}
           >
@@ -1097,7 +1111,7 @@ export function AddConnDialog({ p }) {
   );
 }
 export function AboutDialog() {
-  const li = (items) => (
+  const li = (items: string[]) => (
     <ul className="plain dots">
       {items.map((x, i) => (
         <li key={i}>{x}</li>
@@ -1174,30 +1188,42 @@ export function AboutDialog() {
     </Dialog>
   );
 }
+/** What confirmBox puts in the dialog. */
+interface ConfirmProps {
+  title: string;
+  body: ReactNode;
+  yes?: string;
+  no?: string;
+  danger?: boolean;
+  done: (ok: boolean) => void;
+}
 export function DialogHost() {
   const d = U.dialog;
   if (!d) return null;
-  const p = d.props;
+  // openDialog's callers give each dialog the fields it reads; the dialog's props type says which
+  const p = d.props as never;
   switch (d.type) {
-    case 'confirm':
+    case 'confirm': {
+      const c: ConfirmProps = p;
       return (
         <Dialog
-          title={p.title}
-          onClose={() => p.done(false)}
+          title={c.title}
+          onClose={() => c.done(false)}
           foot={
             <>
-              <Btn className="btn" onClick={() => p.done(false)}>
-                {p.no || 'Cancel'}
+              <Btn className="btn" onClick={() => c.done(false)}>
+                {c.no || 'Cancel'}
               </Btn>
-              <Btn className={cx('btn', p.danger ? 'danger' : 'primary')} data-autofocus onClick={() => p.done(true)}>
-                {p.yes || 'OK'}
+              <Btn className={cx('btn', c.danger ? 'danger' : 'primary')} data-autofocus onClick={() => c.done(true)}>
+                {c.yes || 'OK'}
               </Btn>
             </>
           }
         >
-          <p>{p.body}</p>
+          <p>{c.body}</p>
         </Dialog>
       );
+    }
     case 'settings':
       return <SettingsDialog />;
     case 'install':
@@ -1257,10 +1283,10 @@ export function Toasts() {
 export function tourSteps() {
   const tab = activeTab(),
     app = tab && tab.app ? S.apps[tab.app] : null,
-    view = (v) => () => {
-      U.view[app.id] = v;
+    view = (v: string) => () => {
+      if (app) U.view[app.id] = v;
     },
-    s = [];
+    s: ProductTourStep[] = [];
   s.push({
     target: 'tabs',
     title: 'Workspaces are tabs',
@@ -1392,12 +1418,12 @@ export function startTour() {
 }
 export function TourLayer() {
   const T = U.tour,
-    st = useState(null),
+    st = useState<{ x: number; y: number; w: number; h: number } | null>(null),
     rect = st[0],
     setRect = st[1],
     step = T ? T.steps[T.i] : null;
   useLayoutEffect(() => {
-    if (!T) return undefined;
+    if (!T || !step) return undefined;
     let alive = true;
     if (NARROW() && step.target !== 'chat' && U.peek) U.peek = false;
     if (step.prep) step.prep();
@@ -1407,7 +1433,7 @@ export function TourLayer() {
       if (!alive) return;
       const el = step.target ? document.querySelector('[data-tour="' + step.target + '"]') : null;
       let r = el ? el.getBoundingClientRect() : null;
-      if (r && !moved && (r.top < 0 || r.bottom > window.innerHeight) && el.scrollIntoView && !el.closest('.react-flow')) {
+      if (el && r && !moved && (r.top < 0 || r.bottom > window.innerHeight) && el.scrollIntoView && !el.closest('.react-flow')) {
         moved = true;
         el.scrollIntoView({
           block: r.height > window.innerHeight * 0.6 ? 'start' : 'center',
@@ -1435,7 +1461,7 @@ export function TourLayer() {
       window.removeEventListener('resize', measure);
     };
   }, [T && T.id, T && T.i]);
-  if (!T) return null;
+  if (!T || !step) return null;
   const W = window.innerWidth,
     H = window.innerHeight,
     pw = Math.min(340, W - 24),
@@ -1444,14 +1470,14 @@ export function TourLayer() {
       S.settings.tourDone = true;
       commit();
     },
-    go = (d) => {
+    go = (d: number) => {
       const i = T.i + d;
       if (i < 0) return;
       if (i >= T.steps.length) return end();
       T.i = i;
       notify();
     };
-  let style = {
+  let style: { left: string; top?: string; bottom?: string; width: string } = {
     left: (W - pw) / 2 + 'px',
     top: Math.max(40, H / 2 - 110) + 'px',
     width: pw + 'px',
@@ -1519,13 +1545,13 @@ export function TourLayer() {
         role="dialog"
         aria-label={step.title}
         style={toStyle(style)}
-        tabIndex="-1"
+        tabIndex={-1}
         ref={(el) => {
           if (el && el.dataset.i !== String(T.i)) {
             el.dataset.i = String(T.i);
             try {
               el.focus();
-            } catch (e) {}
+            } catch {}
           }
         }}
       >
@@ -1638,12 +1664,13 @@ export function Root() {
     </FluentProvider>
   );
 }
-export function probeClaude(tries) {
+export function probeClaude(tries: number) {
   const c = modelHost();
   if (c && typeof c.use === 'function') {
     Promise.resolve(c.use('sample')).then(
       (fn) => {
-        LIVE.fn = typeof fn === 'function' ? fn : null;
+        // the host hands back the model client's sample function, or nothing
+        LIVE.fn = typeof fn === 'function' ? (fn as typeof LIVE.fn) : null;
         U.live = LIVE.fn ? 'ready' : 'none';
         notify();
       },
@@ -1654,7 +1681,7 @@ export function probeClaude(tries) {
     );
     Promise.resolve(c.use('downloads')).then(
       (d) => {
-        U.dl = d && typeof d.save === 'function' ? d : null;
+        U.dl = d && typeof (d as Downloader).save === 'function' ? (d as Downloader) : null;
         notify();
       },
       () => {},
@@ -1725,7 +1752,9 @@ export function boot() {
   window.addEventListener('offline', netChanged);
   window.addEventListener('resize', notify);
   try {
-    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    // the Network Information API is not in every browser, nor in the DOM types
+    const n = navigator as Navigator & { connection?: EventTarget; mozConnection?: EventTarget; webkitConnection?: EventTarget },
+      c = n.connection || n.mozConnection || n.webkitConnection;
     if (c && c.addEventListener) c.addEventListener('change', netChanged);
   } catch (e) {}
   window.addEventListener('pagehide', flush);
@@ -1756,7 +1785,7 @@ export function boot() {
     },
     flow: () => FLOW,
     dbCount,
-    sql: (id, text, params) => sqlRun(id, text, params || null, 'test'),
+    sql: (id: string, text: string, params?: SqlValue[]) => sqlRun(id, text, params || null, 'test'),
     guide: () => GUIDE.length,
     wf: {
       parse: parseFlow,
@@ -1766,7 +1795,7 @@ export function boot() {
       rules: REVIEW_RULES,
       reviewers: REVIEWERS,
       tryFix,
-      rerun: (app, st) => runBuild(app, st),
+      rerun: (app: AppRecord, st: string) => runBuild(app, st),
       review: reviewNow,
       mode: modeNow,
       runs: () => RUNS,
@@ -1777,9 +1806,9 @@ export function boot() {
       cases: suggestCases,
       keepFix,
     },
-    activity: (appId) => activityNow(appId),
-    runTests: (app) => runTestsSync(app),
-    suite: (id) =>
+    activity: (appId: string) => activityNow(appId),
+    runTests: (app: AppRecord) => runTestsSync(app),
+    suite: (id: string) =>
       suiteOf(S.apps[id]).map((x) => ({
         id: x.id,
         n: x.tests.length,
@@ -1792,4 +1821,11 @@ export function boot() {
       APILOG,
     },
   };
+}
+
+declare global {
+  interface Window {
+    /** hooks the browser tests read and drive (tests/e2e) */
+    __formwork?: unknown;
+  }
 }

@@ -1,4 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
+import type { sample } from '@/platform/model-client';
 import type { AppRecord, ChatCard, ChatMessage, Dict, Loose, Run, RunStep } from '@/shared/types/workspace';
 import { AGENTS } from './agents';
 import {
@@ -128,7 +129,7 @@ export interface RunCtl {
 }
 export const RUNS: Dict<RunCtl> = {},
   PENDING: Dict<(ok: boolean) => void> = {},
-  LIVE = {
+  LIVE: { fn: typeof sample | null } = {
     fn: null,
   };
 /** Thrown wherever a run is when the owner stops it. The workflow graph knows it as a stop, not a failure. */
