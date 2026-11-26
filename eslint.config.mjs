@@ -28,6 +28,7 @@ const eslintConfig = defineConfig([
       'src/workspace/tester.tsx',
       'src/workspace/activity.tsx',
       'src/workspace/guide.tsx',
+      'src/workspace/mobile.tsx',
     ],
     rules: {
       '@typescript-eslint/ban-ts-comment': 'off',
