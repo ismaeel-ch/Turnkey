@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import '@xyflow/react/dist/base.css';
 import '@/styles/fluent-theme.css';
 import '@/styles/workspace.css';
+import PwaRegister from '@/platform/pwa/PwaRegister';
 
 export const metadata: Metadata = {
   title: 'Turnkey',
@@ -25,7 +26,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>{children}</body>
+      <body>
+        {children}
+        <PwaRegister />
+      </body>
     </html>
   );
 }

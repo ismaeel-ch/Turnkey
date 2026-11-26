@@ -1,4 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
+import { useState, useSyncExternalStore } from 'react';
 import { ACC_HEX } from '@/styles/theme.generated';
 import { toStyle, NativeField } from '@/platform/dom';
 import { ICONS } from './icons';
@@ -33,7 +34,8 @@ import { TEAMS } from './team';
 import { runTestsSync, testStats } from './tests';
 import { RUNS, STATIONS, pushChat } from './line';
 import { Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner } from './ui';
-import { appFromPack, openShare, openShared, packOf, readPack, squeeze, unsqueeze } from './share';
+import { appFromPack, framed, openShare, openShared, packOf, readPack, squeeze, unsqueeze } from './share';
+import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 
 /* ===== Turnkey prototype · releases, the app's own icon, and installing the app on its own =====
    Building gives you a draft. Releasing turns the draft into a numbered version: the tests must pass, the notes say
@@ -1088,12 +1090,34 @@ export function ReleaseCard({ app, m }) {
   );
 }
 
-/* ---------- installing the app on its own (the flow; a page inside Claude cannot really install) ---------- */
+/* ---------- installing the app on its own ---------- */
+/* While an app is open on its own (see SoloShell in share.tsx) the page links that app's manifest and icon, so the
+   browser installs it under its own name and icon, not Turnkey's. The browser's offer comes as an event (Chrome, Edge);
+   Safari and Firefox install from their menu instead. Inside a frame nothing can be installed, so the flow is shown. */
+export function installInputOf(app) {
+  const lg = logoOf(app);
+  return {
+    name: app.name,
+    accent: lg.accent,
+    glyph: lg.glyph,
+    shape: lg.shape,
+    fill: lg.fill,
+    mark: lg.mark,
+    // the same in every version, so the installed app reopens the newest copy saved in this browser
+    key: (app.shared && app.shared.uid) || app.uid || app.id,
+  };
+}
+const noOffer = () => false;
 export function InstallAppDialog({ p }) {
+  const offered = useSyncExternalStore(onInstallPrompt, canPromptInstall, noOffer);
+  const [asked, setAsked] = useState(false);
   const app = S.apps[p.app];
   if (!app) return null;
   const on = !!app.installed,
-    ver = verText(app);
+    ver = verText(app),
+    inFrame = framed(),
+    // the browser made an offer for this app's manifest: its own Install dialog does the work
+    real = offered && !inFrame;
   const set = (v) => {
     if (v) app.installed = Date.now();
     else delete app.installed;
@@ -1102,9 +1126,16 @@ export function InstallAppDialog({ p }) {
     toast(
       v
         ? app.name + ' is installed. It opens in its own window with its own icon.'
-        : app.name + ' was removed from this device. Its link still works.',
+        : app.name +
+            ' is no longer marked as installed here. To remove the app itself, use Uninstall in its own window menu. Its link still works.',
       v ? 'success' : 'info',
     );
+  };
+  const install = async () => {
+    setAsked(true);
+    const out = await promptInstall();
+    if (out === 'accepted') set(true);
+    else if (out === 'dismissed') closeDialog();
   };
   return (
     <Dialog
@@ -1125,10 +1156,23 @@ export function InstallAppDialog({ p }) {
             <button className="btn" onClick={closeDialog}>
               Not now
             </button>
-            <button className="btn primary" data-autofocus id="inst-go" onClick={() => set(true)}>
-              <Icon n="install" s="16" />
-              Install
-            </button>
+            {real ? (
+              <button className="btn primary" data-autofocus id="inst-go" data-install="browser" onClick={install}>
+                <Icon n="install" s="16" />
+                Install
+              </button>
+            ) : (
+              <button
+                className="btn primary"
+                data-autofocus
+                id="inst-go"
+                data-install={inFrame ? 'shown' : 'menu'}
+                onClick={() => set(true)}
+              >
+                <Icon n="install" s="16" />
+                {inFrame ? 'Install' : 'I have installed it'}
+              </button>
+            )}
           </>
         )
       }
@@ -1173,12 +1217,21 @@ export function InstallAppDialog({ p }) {
             </li>
           ) : null}
         </ul>
-        <MBar tone="info">
-          <Proto>Simulated here</Proto>
-          {
-            ' A page inside Claude cannot install anything, so this shows the flow. The hosted build gives every released app its own address, web manifest and this icon, and the browser offers Install for the app alone.'
-          }
-        </MBar>
+        {on ? null : inFrame ? (
+          <MBar tone="info">
+            <Proto>Simulated here</Proto>
+            {
+              ' A page inside a frame cannot install anything, so this shows the flow. Open the link in its own browser tab and the browser offers Install for this app alone.'
+            }
+          </MBar>
+        ) : real ? (
+          <MBar tone="info">Your browser asks you to confirm. The app keeps this name and icon.</MBar>
+        ) : (
+          <MBar tone="info" cls="inst-hint">
+            {asked ? 'The browser did not open its install dialog. ' : 'Your browser installs this app from its own menu. '}
+            {installHint(navigator.userAgent)}
+          </MBar>
+        )}
       </div>
     </Dialog>
   );
