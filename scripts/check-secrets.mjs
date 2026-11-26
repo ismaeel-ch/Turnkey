@@ -11,7 +11,8 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 // src/legacy/icons.js no longer exists but is still in the history that --history scans.
-const SKIP = /^(package-lock\.json|src\/workspace\/icons\.ts|src\/legacy\/icons\.js|public\/vendor\/|.*\.(png|ico|jpg|jpeg|gif|wasm|woff2?|pdf|zip))$/;
+const SKIP =
+  /^(package-lock\.json|src\/workspace\/icons\.ts|src\/legacy\/icons\.js|public\/vendor\/|.*\.(png|ico|jpg|jpeg|gif|wasm|woff2?|pdf|zip))$/;
 const KEY_NAMES =
   '(?:LITELLM|OPENAI|ANTHROPIC|PATENTSVIEW|GITHUB|VERCEL|GOOGLE|AWS|AZURE|SLACK|STRIPE|HF|HUGGINGFACE|GROQ|MISTRAL|COHERE)[A-Z0-9_]*(?:KEY|TOKEN|SECRET)';
 export const PATTERNS = [
