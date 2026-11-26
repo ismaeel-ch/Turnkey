@@ -25,7 +25,7 @@ import {
   stepAuto,
   stepsAt,
 } from './custom';
-import { AgentAv, Icon, STATUS_META } from './ui';
+import { Btn, AgentAv, Icon, STATUS_META } from './ui';
 import { useWidth } from './views-b';
 import { isDirty, relOf } from './release';
 import { LineView } from './shell-a';
@@ -1551,7 +1551,7 @@ export function FlowView({ app, sel }) {
           Sent back
         </span>
         <span className="grow" />
-        <button
+        <Btn
           className="btn sm"
           data-tour="customize"
           title="Approvals, added steps, instructions and attempts"
@@ -1563,9 +1563,9 @@ export function FlowView({ app, sel }) {
         >
           <Icon n="options" s="16" />
           Customize{flowList(fl).length > 0 && <span className="tab-n">{flowList(fl).length}</span>}
-        </button>
+        </Btn>
         <div className="btn-group" role="group" aria-label="Zoom the workflow">
-          <button
+          <Btn
             className="btn subtle icon sm"
             title="Zoom out"
             aria-label="Zoom out"
@@ -1576,8 +1576,8 @@ export function FlowView({ app, sel }) {
             )}
           >
             <Icon n="minimize" s="16" />
-          </button>
-          <button
+          </Btn>
+          <Btn
             className="btn subtle icon sm"
             title="Zoom in"
             aria-label="Zoom in"
@@ -1588,8 +1588,8 @@ export function FlowView({ app, sel }) {
             )}
           >
             <Icon n="add" s="16" />
-          </button>
-          <button
+          </Btn>
+          <Btn
             className="btn subtle sm"
             title="Fit the whole workflow"
             onClick={z((i) =>
@@ -1601,9 +1601,9 @@ export function FlowView({ app, sel }) {
           >
             <Icon n="fit" s="16" />
             <span className="hide-sm">Fit</span>
-          </button>
+          </Btn>
         </div>
-        <button
+        <Btn
           className={cx('btn subtle sm hide-sm', map && 'on')}
           aria-pressed={map}
           title="Show or hide the map"
@@ -1614,8 +1614,8 @@ export function FlowView({ app, sel }) {
         >
           <Icon n="map" s="16" />
           Map
-        </button>
-        <button
+        </Btn>
+        <Btn
           className="btn subtle sm"
           title="Put every node back where it started"
           onClick={() => {
@@ -1626,7 +1626,7 @@ export function FlowView({ app, sel }) {
         >
           <Icon n="reset" s="16" />
           <span className="hide-md">Reset layout</span>
-        </button>
+        </Btn>
       </div>
       <div className="orch">
         <AgentAv id="orchestrator" size="sm" />

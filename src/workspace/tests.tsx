@@ -21,7 +21,7 @@ import { REC } from './builds';
 import { TEAMS, canRunTeam, checkTeam, teamApply } from './team';
 import { RUNS, SPEED, STATIONS } from './line';
 import { CASE_EXPECT } from './tester';
-import { AgentAv, Empty, Icon, Seg, Spinner } from './ui';
+import { Btn, AgentAv, Empty, Icon, Seg, Spinner } from './ui';
 import { AppPane, newPane, stateLabel } from './runtime';
 import { Explorer } from './views-a';
 import { Dash } from './views-b';
@@ -909,10 +909,10 @@ export function TestsView({ app }) {
             run against the real database and endpoints, and anything they write is rolled back.
           </span>
         </div>
-        <button className="btn primary" disabled={busy} onClick={() => runTests(app)}>
+        <Btn className="btn primary" disabled={busy} onClick={() => runTests(app)}>
           <Icon n="play" s="16" />
           {R.running ? 'Running' : 'Run all ' + total + ' tests'}
-        </button>
+        </Btn>
       </div>
       <div className="kpis tk">
         <div className="kpi">
@@ -1003,10 +1003,10 @@ export function TestsView({ app }) {
                 {R.running === s.id ? <Spinner /> : null}
                 {got.length ? ok + ' of ' + s.tests.length : s.tests.length + ' tests'}
               </span>
-              <button className="btn sm" disabled={busy} onClick={() => runTests(app, (x) => x.id === s.id)}>
+              <Btn className="btn sm" disabled={busy} onClick={() => runTests(app, (x) => x.id === s.id)}>
                 <Icon n="play" s="16" />
                 <span className="hide-sm">Run</span>
-              </button>
+              </Btn>
             </header>
             {!shut && <TestRows app={app} suite={s} only={tv.only} q={q} />}
           </section>
@@ -1030,11 +1030,11 @@ export function StationTests({ app, st }) {
           {' tests generated from what this station wrote. They run against the real database and endpoints.'}
         </span>
         <div className="row">
-          <button className="btn sm" disabled={busy} onClick={() => runTests(app, (x) => x.station === st.id)}>
+          <Btn className="btn sm" disabled={busy} onClick={() => runTests(app, (x) => x.station === st.id)}>
             <Icon n="play" s="16" />
             Run these tests
-          </button>
-          <button
+          </Btn>
+          <Btn
             className="btn subtle sm"
             onClick={() => {
               U.view[app.id] = 'tests';
@@ -1042,7 +1042,7 @@ export function StationTests({ app, st }) {
             }}
           >
             All tests
-          </button>
+          </Btn>
         </div>
       </div>
       {suites.map((s) => (

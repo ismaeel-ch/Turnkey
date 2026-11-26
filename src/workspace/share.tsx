@@ -27,7 +27,7 @@ import { REC } from './builds';
 import { runTestsSync, testStats } from './tests';
 import { APPLY, STATIONS, blankDef, blankLine, deleteApp, newRun, pushChat, resetAppData } from './line';
 import { normCases } from './tester';
-import { Dialog, Field, Icon, MBar, Seg, Spinner } from './ui';
+import { Btn, Dialog, Field, Icon, MBar, Seg, Spinner } from './ui';
 import { AppPane, newPane } from './runtime';
 import {
   AppLogo,
@@ -590,12 +590,12 @@ export function ShareDialog({ p }) {
         cls="share"
         foot={
           <>
-            <button className="btn" onClick={closeDialog}>
+            <Btn className="btn" onClick={closeDialog}>
               Not now
-            </button>
-            <button className="btn primary" id="sh-release" data-autofocus disabled={!!block || sh.rbusy} onClick={first}>
+            </Btn>
+            <Btn className="btn primary" id="sh-release" data-autofocus disabled={!!block || sh.rbusy} onClick={first}>
               {sh.rbusy ? <Spinner /> : <Icon n="rocket" s="16" />}Release version 1.0 and make the link
-            </button>
+            </Btn>
           </>
         }
       >
@@ -622,14 +622,14 @@ export function ShareDialog({ p }) {
       cls="share"
       foot={
         <>
-          <button className="btn" disabled={!sh.code} onClick={preview}>
+          <Btn className="btn" disabled={!sh.code} onClick={preview}>
             <Icon n="eye" s="16" />
             Preview what they see
-          </button>
-          <button className="btn primary" data-autofocus disabled={!sh.code} onClick={() => copyText(link, 'Link')}>
+          </Btn>
+          <Btn className="btn primary" data-autofocus disabled={!sh.code} onClick={() => copyText(link, 'Link')}>
             <Icon n="copy" s="16" />
             Copy link
-          </button>
+          </Btn>
         </>
       }
     >
@@ -644,7 +644,7 @@ export function ShareDialog({ p }) {
           </span>
         </div>
         {dirty && (
-          <button
+          <Btn
             className="btn sm"
             onClick={() => {
               closeDialog();
@@ -653,7 +653,7 @@ export function ShareDialog({ p }) {
             }}
           >
             Release the draft
-          </button>
+          </Btn>
         )}
       </div>
       <p>
@@ -725,7 +725,7 @@ export function ShareDialog({ p }) {
             value={sh.busy ? 'Packing the app…' : link}
             onFocus={(e) => e.target.select()}
           />
-          <button
+          <Btn
             className="btn icon"
             title="Copy the link"
             aria-label="Copy the link"
@@ -733,7 +733,7 @@ export function ShareDialog({ p }) {
             onClick={() => copyText(link, 'Link')}
           >
             <Icon n="copy" />
-          </button>
+          </Btn>
         </div>
       </Field>
       <ul className="share-facts">
@@ -797,12 +797,12 @@ export function OpenLinkDialog({ p }) {
           />
         </Field>
         <div className="row end">
-          <button type="button" className="btn" onClick={closeDialog}>
+          <Btn type="button" className="btn" onClick={closeDialog}>
             Cancel
-          </button>
-          <button type="submit" className="btn primary" disabled={!!p.busy}>
+          </Btn>
+          <Btn type="submit" className="btn primary" disabled={!!p.busy}>
             {p.busy ? <Spinner /> : <Icon n="open" s="16" />}Open the app
-          </button>
+          </Btn>
         </div>
       </form>
     </Dialog>
@@ -818,9 +818,9 @@ export function AboutAppDialog({ p }) {
       title={'About ' + app.name}
       onClose={closeDialog}
       foot={
-        <button className="btn primary" data-autofocus onClick={closeDialog}>
+        <Btn className="btn primary" data-autofocus onClick={closeDialog}>
           Close
-        </button>
+        </Btn>
       }
     >
       <div className="install-app">
@@ -961,9 +961,9 @@ export function SoloShell() {
         <div className="solo-note" role="status">
           <Icon n="eye" s="16" />
           <span className="grow">Preview: this is all that someone with the link sees.</span>
-          <button className="btn sm" onClick={exitSolo}>
+          <Btn className="btn sm" onClick={exitSolo}>
             Close preview
-          </button>
+          </Btn>
         </div>
       )}
       {up && (
@@ -982,7 +982,7 @@ export function SoloShell() {
               : 'Your ' + up.kept + ' records were kept.'}
             {app.shared.notes.length ? ' New: ' + app.shared.notes.slice(0, 2).join(' · ') : ''}
           </span>
-          <button
+          <Btn
             className="btn sm"
             onClick={() => {
               up.seen = true;
@@ -990,7 +990,7 @@ export function SoloShell() {
             }}
           >
             OK
-          </button>
+          </Btn>
         </div>
       )}
       {so.from === 'link' && !app.installed && !so.noInstall && (
@@ -1001,7 +1001,7 @@ export function SoloShell() {
             <strong>{app.name}</strong>
             {' to open it from your desktop or home screen, under its own icon.'}
           </span>
-          <button
+          <Btn
             className="btn sm primary"
             id="solo-install"
             onClick={() =>
@@ -1011,8 +1011,8 @@ export function SoloShell() {
             }
           >
             Install
-          </button>
-          <button
+          </Btn>
+          <Btn
             className="btn subtle icon sm"
             aria-label="Not now"
             onClick={() => {
@@ -1021,7 +1021,7 @@ export function SoloShell() {
             }}
           >
             <Icon n="dismiss" s="16" />
-          </button>
+          </Btn>
         </div>
       )}
       <AppPane app={app} pane={so.pane} solo={extra} />

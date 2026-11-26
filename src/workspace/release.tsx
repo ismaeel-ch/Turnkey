@@ -33,7 +33,7 @@ import { buildDatabase } from './engine';
 import { TEAMS } from './team';
 import { runTestsSync, testStats } from './tests';
 import { RUNS, STATIONS, pushChat } from './line';
-import { Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner } from './ui';
+import { Btn, Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner } from './ui';
 import { appFromPack, framed, openShare, openShared, packOf, readPack, squeeze, unsqueeze } from './share';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 
@@ -835,7 +835,7 @@ export function ReleaseView({ app }) {
                   {st.fresh ? st.passed + ' of ' + st.total + ' tests pass' : st.total + ' tests run again before a release'}
                 </span>
               ) : null}
-              <button
+              <Btn
                 className="btn subtle sm"
                 onClick={() => {
                   U.view[app.id] = 'tests';
@@ -843,7 +843,7 @@ export function ReleaseView({ app }) {
                 }}
               >
                 Open the tests
-              </button>
+              </Btn>
             </span>
           </div>
         </section>
@@ -899,7 +899,7 @@ export function ReleaseView({ app }) {
                 tone="warning"
                 action={
                   /tests fail/.test(block) ? (
-                    <button
+                    <Btn
                       className="btn sm"
                       onClick={() => {
                         U.view[app.id] = 'tests';
@@ -907,7 +907,7 @@ export function ReleaseView({ app }) {
                       }}
                     >
                       Open the tests
-                    </button>
+                    </Btn>
                   ) : null
                 }
               >
@@ -915,11 +915,11 @@ export function ReleaseView({ app }) {
               </MBar>
             )}
             <div className="row wrap">
-              <button className="btn primary" id="rel-go" disabled={!can || R.busy} onClick={go}>
+              <Btn className="btn primary" id="rel-go" disabled={!can || R.busy} onClick={go}>
                 {R.busy ? <Spinner /> : <Icon n="rocket" s="16" />}
                 {'Release version '}
                 {v}
-              </button>
+              </Btn>
               <span className="t-cap muted">Every test runs once more first. If one fails, nothing is released.</span>
             </div>
           </section>
@@ -939,14 +939,14 @@ export function ReleaseView({ app }) {
                   : 'A link carries a released version, so release version 1.0 first.'}
               </p>
               <div className="row wrap">
-                <button className="btn primary" id="rel-share" disabled={!rel} onClick={() => openShare(app)}>
+                <Btn className="btn primary" id="rel-share" disabled={!rel} onClick={() => openShare(app)}>
                   <Icon n="share" s="16" />
                   Share by link
-                </button>
-                <button className="btn" disabled={!rel || !rel.pack} onClick={() => openVersion(app, rel)}>
+                </Btn>
+                <Btn className="btn" disabled={!rel || !rel.pack} onClick={() => openVersion(app, rel)}>
                   <Icon n="eye" s="16" />
                   See what they get
-                </button>
+                </Btn>
               </div>
               <ul className="plain ticks">
                 <li>
@@ -971,14 +971,14 @@ export function ReleaseView({ app }) {
                 {logoText(app).toLowerCase()}.
               </span>
               <div className="row wrap">
-                <button className="btn sm" id="rel-logo-next" disabled={!!RUNS[app.id]} onClick={() => redesignLogo(app)}>
+                <Btn className="btn sm" id="rel-logo-next" disabled={!!RUNS[app.id]} onClick={() => redesignLogo(app)}>
                   <Icon n="wand" s="16" />
                   Another design
-                </button>
-                <button className="btn sm" onClick={() => saveLogo(app)}>
+                </Btn>
+                <Btn className="btn sm" onClick={() => saveLogo(app)}>
                   <Icon n="download" s="16" />
                   Save the icon
-                </button>
+                </Btn>
               </div>
             </div>
           </div>
@@ -1020,18 +1020,18 @@ export function ReleaseView({ app }) {
                       {r.inside.pages}
                       {' pages'}
                     </span>
-                    <button
+                    <Btn
                       className="btn subtle sm"
                       disabled={!r.pack}
                       title={r.pack ? 'Open this version on its own' : 'This snapshot was let go to save room'}
                       onClick={() => openVersion(app, r)}
                     >
                       Open
-                    </button>
+                    </Btn>
                     {(i > 0 || dirty) && (
-                      <button className="btn subtle sm" disabled={!r.pack || !!RUNS[app.id]} onClick={() => rollbackTo(app, r)}>
+                      <Btn className="btn subtle sm" disabled={!r.pack || !!RUNS[app.id]} onClick={() => rollbackTo(app, r)}>
                         Go back to this
-                      </button>
+                      </Btn>
                     )}
                   </div>
                   <ul className="rel-notes">
@@ -1071,11 +1071,11 @@ export function ReleaseCard({ app, m }) {
           ))}
       </ul>
       <div className="row wrap">
-        <button className="btn primary sm" disabled={!relOf(app)} onClick={() => openShare(app)}>
+        <Btn className="btn primary sm" disabled={!relOf(app)} onClick={() => openShare(app)}>
           <Icon n="share" s="16" />
           Share by link
-        </button>
-        <button
+        </Btn>
+        <Btn
           className="btn sm"
           onClick={() => {
             U.view[app.id] = 'release';
@@ -1084,7 +1084,7 @@ export function ReleaseCard({ app, m }) {
           }}
         >
           Versions
-        </button>
+        </Btn>
       </div>
     </div>
   );
@@ -1144,25 +1144,25 @@ export function InstallAppDialog({ p }) {
       foot={
         on ? (
           <>
-            <button className="btn" onClick={() => set(false)}>
+            <Btn className="btn" onClick={() => set(false)}>
               Uninstall
-            </button>
-            <button className="btn primary" data-autofocus onClick={closeDialog}>
+            </Btn>
+            <Btn className="btn primary" data-autofocus onClick={closeDialog}>
               Done
-            </button>
+            </Btn>
           </>
         ) : (
           <>
-            <button className="btn" onClick={closeDialog}>
+            <Btn className="btn" onClick={closeDialog}>
               Not now
-            </button>
+            </Btn>
             {real ? (
-              <button className="btn primary" data-autofocus id="inst-go" data-install="browser" onClick={install}>
+              <Btn className="btn primary" data-autofocus id="inst-go" data-install="browser" onClick={install}>
                 <Icon n="install" s="16" />
                 Install
-              </button>
+              </Btn>
             ) : (
-              <button
+              <Btn
                 className="btn primary"
                 data-autofocus
                 id="inst-go"
@@ -1171,7 +1171,7 @@ export function InstallAppDialog({ p }) {
               >
                 <Icon n="install" s="16" />
                 {inFrame ? 'Install' : 'I have installed it'}
-              </button>
+              </Btn>
             )}
           </>
         )
