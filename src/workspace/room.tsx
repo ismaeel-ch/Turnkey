@@ -852,11 +852,12 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
     all: StoredRow[] = list.status === 200 ? list.data : [],
     sc = colOf(it, P.column);
   // open on a case the agents have already worked on, so the room does not start on empty sections
-  const worked = new Set();
+  const worked = new Set<unknown>();
   boardTables(def).forEach((tn) => {
-    const ref = (tableOf(def, tn) || { columns: [] }).columns.find((c) => c.type === 'ref' && c.ref === it.name),
-      l = ref ? fetchApi(app, user, '/api/' + tn, null, src) : null;
-    if (l && l.status === 200) l.data.forEach((x) => x[ref.name] != null && worked.add(x[ref.name]));
+    const ref = tableOf(def, tn)?.columns.find((c) => c.type === 'ref' && c.ref === it.name);
+    if (!ref) return;
+    const l = fetchApi(app, user, '/api/' + tn, null, src);
+    if (l.status === 200) (l.data as StoredRow[]).forEach((x) => x[ref.name] != null && worked.add(x[ref.name]));
   });
   const row =
       all.find((r) => r.id === pane.caseId) ||
