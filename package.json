@@ -16,6 +16,7 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "node tests/e2e/run.mjs",
     "format": "prettier --write \"src/{app,platform,server,shared,workspace,styles}/**/*.{ts,tsx,css}\" \"tests/unit/**/*.ts\" \"scripts/*.mjs\" \"*.{json,md,mjs,ts}\" \"docs/**/*.md\"",
@@ -23,6 +24,7 @@
     "check:secrets": "node scripts/check-secrets.mjs",
     "check": "npm run check:secrets && npm run lint && npm run typecheck && npm run test",
     "icons": "node scripts/gen-icons.cjs",
+    "icons:pwa": "node scripts/gen-pwa-icons.mjs",
     "theme": "node scripts/generate-theme.mjs"
   },
   "dependencies": {
@@ -34,6 +36,7 @@
     "@copilotkit/react-core": "^1.90.2",
     "@copilotkit/react-ui": "^1.90.2",
     "@copilotkit/runtime": "^1.90.2",
+    "@fluentui/react-components": "^9.75.3",
     "@langchain/core": "^1.5.1",
     "@langchain/langgraph": "^1.7.5",
     "@xyflow/react": "12.12.1",

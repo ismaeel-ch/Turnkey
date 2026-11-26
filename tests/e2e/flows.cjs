@@ -70,6 +70,19 @@ async function flowDemo(browser, url) {
   check('database was sent back once', a.retries[0] === 1, a.retries);
   check('3 tables, 8 screens', a.tables.length === 3 && a.screens.length === 8, [a.tables, a.screens]);
   check('acceptance test passed', a.tour.length === 7 && a.tour.every(Boolean), a.tour);
+  // the agent activity panel: who worked, the hand-offs, the send-back, and the workflow they ran on
+  await page.locator('.act-launch').click(); await page.waitForSelector('.act-panel .act-agent');
+  const act = await st(page, (aid) => ({ agents: [...document.querySelectorAll('.act-panel .act-agent')].map((x) => x.dataset.agent + ':' + x.dataset.state), kinds: [...document.querySelectorAll('.act-panel .act-item')].map((x) => x.dataset.kind), model: (({ items, agents }) => ({ handoffs: items.filter((i) => i.kind === 'handoff').map((i) => i.from + '>' + i.agent), back: agents.database.sentBack }))(window.__formwork.activity(aid)) }), a.id);
+  check('agent panel lists every builder agent as done', act.agents.join(',') === 'researcher:done,database:done,backend:done,views:done,ui:done,tester:done', act.agents);
+  check('agent panel shows the hand-offs in order and the send-back to the Database agent', act.model.handoffs.join(',') === 'researcher>database,database>backend,backend>views,views>ui,ui>tester' && act.model.back === 1 && act.kinds.includes('sent_back') && act.kinds.includes('tool_call') && act.kinds.includes('checks'), act.model);
+  await shot(page, '07a-agent-activity');
+  await page.locator('.act-panel [role=tab]', { hasText: 'Tool calls' }).click(); await page.locator('.act-panel .act-more').first().click();
+  check('a tool call opens to show its input and result', (await page.locator('.act-panel pre').count()) >= 1 && (await page.locator('.act-panel .act-item').evaluateAll((l) => l.every((x) => x.dataset.kind === 'tool_call'))));
+  await page.locator('.act-tab-how').click(); await page.waitForSelector('.act-how');
+  const how = await st(page, () => [...document.querySelectorAll('.act-how .hiw-station')].map((x) => x.dataset.station + (x.dataset.state ? ':' + x.dataset.state : '')));
+  check('"How it works" draws the workflow: you, seven stations, the app', how.join(',') === 'request,research:done,database:done,backend:done,views:done,screens:done,walkthrough:done,tests:done,app', how);
+  await shot(page, '07b-how-it-works');
+  await page.locator('.act-launch').click(); await page.waitForSelector('.act-panel', { state: 'detached' });
   await sleep(300); await shot(page, '07-built-line');
   await page.locator('.station').nth(1).click(); await page.getByRole('tab', { name: /^Attempts/ }).click(); await sleep(150); await shot(page, '08-attempts');
   await page.getByRole('button', { name: 'Timeline' }).click(); await sleep(150); await shot(page, '09-timeline');
@@ -330,6 +343,43 @@ async function flowLive(browser, url) {
   c = await build('deny', 'A gym nobody granted access to');
   check('live: a refused permission stops the run and switches Live off', c.status === 'failed' && (await st(page, () => window.__formwork.view().live)) === 'none', [c.status, c.last]);
   await ctx.close();
+  await liveOnStepAgent(browser, url);
+}
+// Live without a stand-in on the page: every prompt goes to the server's step agent over AG-UI. The agent's stream is
+// scripted here (the test server has no model), so this proves the browser side: events in, answer out, steps on the timeline.
+async function liveOnStepAgent(browser, url) {
+  const { ctx, page } = await newPage(browser);
+  const seen = [];
+  await page.route('**/api/health', (route) => route.fulfill({ json: { ok: true, live: true, provider: 'scripted' } }));
+  await page.route('**/api/copilotkit/agent/step/run', async (route) => {
+    const body = route.request().postDataJSON(), prompt = body.forwardedProps.prompt, who = (/^You are the ([\w ]+?) agent/.exec(prompt) || [])[1] || 'other';
+    seen.push(who + ':' + body.forwardedProps.maxAttempts);
+    let out;
+    if (who === 'Tester') { const sc = GYM.screens.screens.find((x) => x.roles && x.roles.length); out = { cases: [{ name: 'The first page opens for its role', why: 'Every role needs a way in.', steps: [{ role: sc.roles[0], do: 'open', screen: sc.name }] }] }; }
+    else out = { Researcher: GYM.research, Database: GYM.database(false), Backend: GYM.backend, 'View advisor': GYM.views, UI: GYM.screens }[who] || { findings: [] };
+    const text = JSON.stringify(out), id = 'draft-1', ev = [
+      { type: 'RUN_STARTED', threadId: body.threadId, runId: body.runId },
+      { type: 'STEP_STARTED', stepName: 'guard' }, { type: 'STEP_FINISHED', stepName: 'guard' },
+      { type: 'STEP_STARTED', stepName: 'draft' }, { type: 'TEXT_MESSAGE_START', messageId: id, role: 'assistant' },
+      { type: 'TEXT_MESSAGE_CONTENT', messageId: id, delta: text.slice(0, 50) }, { type: 'TEXT_MESSAGE_CONTENT', messageId: id, delta: text.slice(50) },
+      { type: 'TEXT_MESSAGE_END', messageId: id }, { type: 'STEP_FINISHED', stepName: 'draft' },
+      { type: 'STEP_STARTED', stepName: 'validate' }, { type: 'STEP_FINISHED', stepName: 'validate' },
+      { type: 'RUN_FINISHED', threadId: body.threadId, runId: body.runId, result: { text, role: 'any', attempts: 1, repaired: false, truncated: false } }];
+    await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: ev.map((e) => 'data: ' + JSON.stringify(e) + '\n\n').join('') });
+  });
+  await page.goto(url); await page.waitForSelector('.ob-card');
+  await page.getByRole('button', { name: 'Get started' }).click(); await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
+  await page.waitForFunction(() => window.__formwork.view().live === 'ready');
+  await page.locator('.choice').nth(1).click(); await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click();
+  await page.waitForSelector('.home'); await setSpeed(page, 'instant');
+  await page.fill('#home-prompt', 'A gym tracks members, class bookings and trainers'); await page.locator('.prompt .btn.primary').click();
+  await waitReady(page, 60000); const a = await appState(page);
+  const steps = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), A = s.apps[t.app], r = A.runs[A.runs.length - 1]; return r.steps.filter((x) => x.station === 'database').map((x) => x.label + ':' + x.ok); });
+  check('live on the step agent: the build is ready, with one server run per agent and one model call each', a.status === 'ready' && a.name === 'FitTrack' && seen.join(',') === 'Researcher:1,Database:1,Backend:1,View advisor:1,UI:1,Tester:1', [a.status, a.name, seen, a.last]);
+  check('live on the step agent: the server\'s draft and format check show on the timeline inside the station\'s model call', steps.join(',') === 'Model call:true,Draft:true,Format check:true,Checks:true', steps);
+  await ctx.close();
 }
 async function flowMisc(browser, url) {
   const { ctx, page } = await newPage(browser, { scheme: 'dark' });
@@ -526,6 +576,13 @@ async function flowQuests(browser, url) {
   check('the check moved through the workflow and has a summary', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Checked' && (await page.locator('.team-done').innerText()).includes('Two of three claims hold'));
   const ev = await st(page, () => { const L = window.__formwork.logs; return { steps: L.EV.filter((e) => e.type === 'STEP_STARTED' && ['extractor', 'researchers', 'verifier'].includes(e.agent)).length, tools: L.TOOLCALLS.filter((x) => x.agent === 'researchers' && x.kind === 'connector').length, api: L.APILOG.filter((x) => x.src === 'team').length }; });
   check('the run is visible as AG-UI events, connector calls and API calls', ev.steps === 3 && ev.tools === 3 && ev.api >= 11, ev);
+  await page.locator('.act-launch').click(); await page.waitForSelector('.act-panel .act-agent');
+  const tact = await st(page, () => ({ agents: [...document.querySelectorAll('.act-panel .act-agent')].map((x) => x.dataset.agent + ':' + x.dataset.state).filter((x) => /^(extractor|researchers|verifier):/.test(x)), tools: [...document.querySelectorAll('.act-panel .act-item[data-kind=tool_call]')].filter((x) => x.dataset.agent === 'researchers').length }));
+  check('agent panel shows the app team at work: three agents done, the researchers\' connector calls', tact.agents.join(',') === 'extractor:done,researchers:done,verifier:done' && tact.tools >= 3, tact);
+  await page.locator('.act-tab-how').click(); await page.waitForSelector('.act-how .hiw-team');
+  check('"How it works" shows the app\'s own team and the sources it calls', await page.locator('.act-how .hiw-team').count() === 3 && (await page.locator('.act-how').innerText()).includes('worldbank'));
+  await shot(page, '81a-team-activity');
+  await page.locator('.act-launch').click(); await page.waitForSelector('.act-panel', { state: 'detached' });
   await page.locator('.team-done .btn', { hasText: 'See the claims' }).click(); await sleep(120);
   check('"See the claims" opens them filtered to this check', await page.locator('.vx .tbl tbody tr').count() === 3 && (await page.locator('.vx .tbl').innerText()).includes('Unverifiable'), await page.locator('.vx .tbl tbody tr').count());
   await vtab(page, 'Board'); check('claims as a board by verdict', await page.locator('.kb-col').count() === 5); await vtab(page, 'Tree'); check('claims as a tree', await page.locator('.tree-row').count() >= 2); await shot(page, '82-factcheck-tree');
@@ -911,7 +968,7 @@ async function flowRound6(browser, url) {
   check('a link opens the app alone: its own title and icon, version 1.0, its room and its test cases, no builder', solo.title === 'BidDesk' && solo.icon && solo.ver === '1.0' && solo.uid && solo.cases === 6 && solo.board === 'scores,options,groups' && solo.builder === 0, solo);
   check('the app offers to install itself', await gp.locator('#solo-install').count() === 1 && /Install BidDesk/.test(await gp.locator('.solo-note.install').innerText()));
   await gp.locator('#solo-install').click(); await gp.waitForSelector('.dialog'); const inst = await gp.locator('.dialog').innerText(); await gp.locator('#inst-go').click(); await sleep(250);
-  check('install: the dialog shows this app, its version and its icon, and says plainly that it is simulated here', /Install BidDesk/.test(inst) && /Version 1\.0 · its own app, not Turnkey/.test(inst) && /Simulated here/.test(inst) && await gp.locator('#solo-install').count() === 0 && await st(gp, () => !!Object.values(window.__formwork.state().apps).find((y) => y.shared).installed), inst.slice(0, 300)); await shot(gp, 'r6-04-solo');
+  check('install: the dialog shows this app, its version and its icon, and says how this browser installs it', /Install BidDesk/.test(inst) && /Version 1\.0 · its own app, not Turnkey/.test(inst) && /Simulated here|browser menu|Safari|Edge|confirm/.test(inst) && await gp.locator('#solo-install').count() === 0 && await st(gp, () => !!Object.values(window.__formwork.state().apps).find((y) => y.shared).installed), inst.slice(0, 300)); await shot(gp, 'r6-04-solo');
   await st(gp, () => { const s = window.__formwork.state(), x = Object.values(s.apps).find((y) => y.shared); window.__formwork.sql(x.id, 'UPDATE "tenders" SET "client" = \'Changed by the person who installed it\' WHERE "id" = 1'); window.__formwork.sql(x.id, 'DELETE FROM "risks" WHERE "id" > 3'); window.__formwork.save(); }); await sleep(900);
   await gp.goto('about:blank'); await gp.goto(url + '#app=' + link11.split('#app=')[1]); await gp.waitForSelector('.solo .app', { timeout: 30000 }); await sleep(400);
   const up = await st(gp, () => { const s = window.__formwork.state(), all = Object.values(s.apps).filter((y) => y.shared), x = all[0]; return { n: all.length, ver: x.shared.ver, updated: x.shared.updated, installed: !!x.installed, notes: x.shared.notes, cols: x.def.tables[0].columns.map((c) => c.name).includes('notes'), client: window.__formwork.sql(x.id, 'SELECT "client" AS c FROM "tenders" WHERE "id" = 1')[0].c, risks: window.__formwork.sql(x.id, 'SELECT COUNT(*) AS n FROM "risks"')[0].n }; });

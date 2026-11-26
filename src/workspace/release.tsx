@@ -1,4 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
+import { useState, useSyncExternalStore } from 'react';
 import { ACC_HEX } from '@/styles/theme.generated';
 import { toStyle, NativeField } from '@/platform/dom';
 import { ICONS } from './icons';
@@ -32,8 +33,9 @@ import { buildDatabase } from './engine';
 import { TEAMS } from './team';
 import { runTestsSync, testStats } from './tests';
 import { RUNS, STATIONS, pushChat } from './line';
-import { Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner } from './ui';
-import { appFromPack, openShare, openShared, packOf, readPack, squeeze, unsqueeze } from './share';
+import { Btn, Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner } from './ui';
+import { appFromPack, framed, openShare, openShared, packOf, readPack, squeeze, unsqueeze } from './share';
+import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 
 /* ===== Turnkey prototype · releases, the app's own icon, and installing the app on its own =====
    Building gives you a draft. Releasing turns the draft into a numbered version: the tests must pass, the notes say
@@ -833,7 +835,7 @@ export function ReleaseView({ app }) {
                   {st.fresh ? st.passed + ' of ' + st.total + ' tests pass' : st.total + ' tests run again before a release'}
                 </span>
               ) : null}
-              <button
+              <Btn
                 className="btn subtle sm"
                 onClick={() => {
                   U.view[app.id] = 'tests';
@@ -841,7 +843,7 @@ export function ReleaseView({ app }) {
                 }}
               >
                 Open the tests
-              </button>
+              </Btn>
             </span>
           </div>
         </section>
@@ -897,7 +899,7 @@ export function ReleaseView({ app }) {
                 tone="warning"
                 action={
                   /tests fail/.test(block) ? (
-                    <button
+                    <Btn
                       className="btn sm"
                       onClick={() => {
                         U.view[app.id] = 'tests';
@@ -905,7 +907,7 @@ export function ReleaseView({ app }) {
                       }}
                     >
                       Open the tests
-                    </button>
+                    </Btn>
                   ) : null
                 }
               >
@@ -913,11 +915,11 @@ export function ReleaseView({ app }) {
               </MBar>
             )}
             <div className="row wrap">
-              <button className="btn primary" id="rel-go" disabled={!can || R.busy} onClick={go}>
+              <Btn className="btn primary" id="rel-go" disabled={!can || R.busy} onClick={go}>
                 {R.busy ? <Spinner /> : <Icon n="rocket" s="16" />}
                 {'Release version '}
                 {v}
-              </button>
+              </Btn>
               <span className="t-cap muted">Every test runs once more first. If one fails, nothing is released.</span>
             </div>
           </section>
@@ -937,14 +939,14 @@ export function ReleaseView({ app }) {
                   : 'A link carries a released version, so release version 1.0 first.'}
               </p>
               <div className="row wrap">
-                <button className="btn primary" id="rel-share" disabled={!rel} onClick={() => openShare(app)}>
+                <Btn className="btn primary" id="rel-share" disabled={!rel} onClick={() => openShare(app)}>
                   <Icon n="share" s="16" />
                   Share by link
-                </button>
-                <button className="btn" disabled={!rel || !rel.pack} onClick={() => openVersion(app, rel)}>
+                </Btn>
+                <Btn className="btn" disabled={!rel || !rel.pack} onClick={() => openVersion(app, rel)}>
                   <Icon n="eye" s="16" />
                   See what they get
-                </button>
+                </Btn>
               </div>
               <ul className="plain ticks">
                 <li>
@@ -969,14 +971,14 @@ export function ReleaseView({ app }) {
                 {logoText(app).toLowerCase()}.
               </span>
               <div className="row wrap">
-                <button className="btn sm" id="rel-logo-next" disabled={!!RUNS[app.id]} onClick={() => redesignLogo(app)}>
+                <Btn className="btn sm" id="rel-logo-next" disabled={!!RUNS[app.id]} onClick={() => redesignLogo(app)}>
                   <Icon n="wand" s="16" />
                   Another design
-                </button>
-                <button className="btn sm" onClick={() => saveLogo(app)}>
+                </Btn>
+                <Btn className="btn sm" onClick={() => saveLogo(app)}>
                   <Icon n="download" s="16" />
                   Save the icon
-                </button>
+                </Btn>
               </div>
             </div>
           </div>
@@ -1018,18 +1020,18 @@ export function ReleaseView({ app }) {
                       {r.inside.pages}
                       {' pages'}
                     </span>
-                    <button
+                    <Btn
                       className="btn subtle sm"
                       disabled={!r.pack}
                       title={r.pack ? 'Open this version on its own' : 'This snapshot was let go to save room'}
                       onClick={() => openVersion(app, r)}
                     >
                       Open
-                    </button>
+                    </Btn>
                     {(i > 0 || dirty) && (
-                      <button className="btn subtle sm" disabled={!r.pack || !!RUNS[app.id]} onClick={() => rollbackTo(app, r)}>
+                      <Btn className="btn subtle sm" disabled={!r.pack || !!RUNS[app.id]} onClick={() => rollbackTo(app, r)}>
                         Go back to this
-                      </button>
+                      </Btn>
                     )}
                   </div>
                   <ul className="rel-notes">
@@ -1069,11 +1071,11 @@ export function ReleaseCard({ app, m }) {
           ))}
       </ul>
       <div className="row wrap">
-        <button className="btn primary sm" disabled={!relOf(app)} onClick={() => openShare(app)}>
+        <Btn className="btn primary sm" disabled={!relOf(app)} onClick={() => openShare(app)}>
           <Icon n="share" s="16" />
           Share by link
-        </button>
-        <button
+        </Btn>
+        <Btn
           className="btn sm"
           onClick={() => {
             U.view[app.id] = 'release';
@@ -1082,18 +1084,40 @@ export function ReleaseCard({ app, m }) {
           }}
         >
           Versions
-        </button>
+        </Btn>
       </div>
     </div>
   );
 }
 
-/* ---------- installing the app on its own (the flow; a page inside Claude cannot really install) ---------- */
+/* ---------- installing the app on its own ---------- */
+/* While an app is open on its own (see SoloShell in share.tsx) the page links that app's manifest and icon, so the
+   browser installs it under its own name and icon, not Turnkey's. The browser's offer comes as an event (Chrome, Edge);
+   Safari and Firefox install from their menu instead. Inside a frame nothing can be installed, so the flow is shown. */
+export function installInputOf(app) {
+  const lg = logoOf(app);
+  return {
+    name: app.name,
+    accent: lg.accent,
+    glyph: lg.glyph,
+    shape: lg.shape,
+    fill: lg.fill,
+    mark: lg.mark,
+    // the same in every version, so the installed app reopens the newest copy saved in this browser
+    key: (app.shared && app.shared.uid) || app.uid || app.id,
+  };
+}
+const noOffer = () => false;
 export function InstallAppDialog({ p }) {
+  const offered = useSyncExternalStore(onInstallPrompt, canPromptInstall, noOffer);
+  const [asked, setAsked] = useState(false);
   const app = S.apps[p.app];
   if (!app) return null;
   const on = !!app.installed,
-    ver = verText(app);
+    ver = verText(app),
+    inFrame = framed(),
+    // the browser made an offer for this app's manifest: its own Install dialog does the work
+    real = offered && !inFrame;
   const set = (v) => {
     if (v) app.installed = Date.now();
     else delete app.installed;
@@ -1102,9 +1126,16 @@ export function InstallAppDialog({ p }) {
     toast(
       v
         ? app.name + ' is installed. It opens in its own window with its own icon.'
-        : app.name + ' was removed from this device. Its link still works.',
+        : app.name +
+            ' is no longer marked as installed here. To remove the app itself, use Uninstall in its own window menu. Its link still works.',
       v ? 'success' : 'info',
     );
+  };
+  const install = async () => {
+    setAsked(true);
+    const out = await promptInstall();
+    if (out === 'accepted') set(true);
+    else if (out === 'dismissed') closeDialog();
   };
   return (
     <Dialog
@@ -1113,22 +1144,35 @@ export function InstallAppDialog({ p }) {
       foot={
         on ? (
           <>
-            <button className="btn" onClick={() => set(false)}>
+            <Btn className="btn" onClick={() => set(false)}>
               Uninstall
-            </button>
-            <button className="btn primary" data-autofocus onClick={closeDialog}>
+            </Btn>
+            <Btn className="btn primary" data-autofocus onClick={closeDialog}>
               Done
-            </button>
+            </Btn>
           </>
         ) : (
           <>
-            <button className="btn" onClick={closeDialog}>
+            <Btn className="btn" onClick={closeDialog}>
               Not now
-            </button>
-            <button className="btn primary" data-autofocus id="inst-go" onClick={() => set(true)}>
-              <Icon n="install" s="16" />
-              Install
-            </button>
+            </Btn>
+            {real ? (
+              <Btn className="btn primary" data-autofocus id="inst-go" data-install="browser" onClick={install}>
+                <Icon n="install" s="16" />
+                Install
+              </Btn>
+            ) : (
+              <Btn
+                className="btn primary"
+                data-autofocus
+                id="inst-go"
+                data-install={inFrame ? 'shown' : 'menu'}
+                onClick={() => set(true)}
+              >
+                <Icon n="install" s="16" />
+                {inFrame ? 'Install' : 'I have installed it'}
+              </Btn>
+            )}
           </>
         )
       }
@@ -1173,12 +1217,21 @@ export function InstallAppDialog({ p }) {
             </li>
           ) : null}
         </ul>
-        <MBar tone="info">
-          <Proto>Simulated here</Proto>
-          {
-            ' A page inside Claude cannot install anything, so this shows the flow. The hosted build gives every released app its own address, web manifest and this icon, and the browser offers Install for the app alone.'
-          }
-        </MBar>
+        {on ? null : inFrame ? (
+          <MBar tone="info">
+            <Proto>Simulated here</Proto>
+            {
+              ' A page inside a frame cannot install anything, so this shows the flow. Open the link in its own browser tab and the browser offers Install for this app alone.'
+            }
+          </MBar>
+        ) : real ? (
+          <MBar tone="info">Your browser asks you to confirm. The app keeps this name and icon.</MBar>
+        ) : (
+          <MBar tone="info" cls="inst-hint">
+            {asked ? 'The browser did not open its install dialog. ' : 'Your browser installs this app from its own menu. '}
+            {installHint(navigator.userAgent)}
+          </MBar>
+        )}
       </div>
     </Dialog>
   );
