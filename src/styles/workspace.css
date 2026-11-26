@@ -49,41 +49,33 @@ ul.dots{list-style:disc;padding-left:18px}
 .input:focus,.select:focus,.textarea:focus{outline:none;border-bottom-color:var(--colorCompoundBrandStroke);box-shadow:inset 0 -1px 0 var(--colorCompoundBrandStroke)}
 .input.sm,.select.sm{min-height:24px;padding:1px 8px;font-size:12px;width:auto}.textarea{resize:vertical;display:block}.input.mono,.textarea.mono{font-family:var(--mono);font-size:12px}
 .input::placeholder,.textarea::placeholder{color:var(--colorNeutralForeground4)}
+/* Native fields drawn to Fluent 2's Input/Select/Textarea spec (they stay native because module code reads their DOM values). */
+.input:hover:not(:disabled):not(:focus),.select:hover:not(:disabled):not(:focus),.textarea:hover:not(:disabled):not(:focus){border-color:var(--colorNeutralStroke1Hover);border-bottom-color:var(--colorNeutralStrokeAccessibleHover)}
+.input:disabled,.select:disabled,.textarea:disabled{border-color:var(--colorNeutralStrokeDisabled);background:var(--colorTransparentBackground);color:var(--colorNeutralForegroundDisabled);cursor:not-allowed}
+.input[aria-invalid=true],.select[aria-invalid=true],.textarea[aria-invalid=true]{border-color:var(--colorPaletteRedBorder2)}
+.input,.select,.textarea{border-radius:var(--borderRadiusMedium,4px);font-family:inherit;font-size:var(--fontSizeBase300,14px)}
 .field{min-width:0}.field-hint{font-size:12px;line-height:16px;color:var(--colorNeutralForeground3)}
 .field-err{font-size:12px;line-height:16px;color:var(--colorStatusDangerForeground1)}.field.has-err .input,.field.has-err .select,.field.has-err .textarea{border-color:var(--colorStatusDangerBorder2)}
-.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;position:relative}.switch input{position:absolute;opacity:0;width:40px;height:20px;margin:0;cursor:pointer}
-.switch .track{width:40px;height:20px;border-radius:10px;border:1px solid var(--colorNeutralStrokeAccessible);display:inline-flex;align-items:center;padding:0 2px;flex:none;transition:background .15s}
-.switch .thumb{width:14px;height:14px;border-radius:50%;background:var(--colorNeutralStrokeAccessible);transition:transform .15s}
-.switch input:checked+.track{background:var(--colorCompoundBrandBackground);border-color:transparent}.switch input:checked+.track .thumb{transform:translateX(20px);background:var(--colorNeutralForegroundInverted)}
-.switch input:focus-visible+.track{outline:2px solid var(--colorStrokeFocus2);outline-offset:1px}.switch.is-off{opacity:.55;cursor:not-allowed}
+.switch{display:inline-flex;align-items:center;gap:4px;cursor:pointer}.switch .fui-Switch{flex:none}.switch.is-off{opacity:.55;cursor:not-allowed}
 .badge{display:inline-flex;align-items:center;gap:4px;min-height:20px;padding:0 7px;border-radius:10px;font-size:12px;line-height:16px;font-weight:600;white-space:nowrap;border:1px solid transparent;vertical-align:middle}
 .b-neutral{background:var(--colorNeutralBackground5);color:var(--colorNeutralForeground2)}.b-outline{border-color:var(--colorNeutralStroke1);color:var(--colorNeutralForeground2);font-weight:400}
 .b-info{background:var(--colorBrandBackground2);color:var(--colorBrandForeground2);border-color:var(--colorBrandStroke2)}
 .b-success{background:var(--colorStatusSuccessBackground1);color:var(--colorStatusSuccessForeground1);border-color:var(--colorStatusSuccessBorder1)}
 .b-warning{background:var(--colorStatusWarningBackground1);color:var(--colorStatusWarningForeground1);border-color:var(--colorStatusWarningBorder1)}
 .b-danger{background:var(--colorStatusDangerBackground1);color:var(--colorStatusDangerForeground1);border-color:var(--colorStatusDangerBorder1)}
-.card{background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke2);border-radius:8px;box-shadow:var(--shadow2)}.card.flat{box-shadow:none}
+.card{background:var(--colorNeutralBackground1);border:1px solid var(--colorTransparentStroke);border-radius:var(--borderRadiusLarge,6px);box-shadow:var(--shadow4)}.card.flat{box-shadow:none;border-color:var(--colorNeutralStroke2)}
 button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStroke1Hover)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}.chip{display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:2px 10px;border-radius:12px;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);font-size:12px;line-height:16px;text-align:left}
-.chip:hover{background:var(--colorNeutralBackground1Hover)}.chip.on{background:var(--colorBrandBackground2);border-color:var(--colorBrandStroke1);color:var(--colorBrandForeground2);font-weight:600}.chip-n{color:var(--colorNeutralForeground3);font-weight:400}
-.tabs{display:flex;gap:2px;min-width:0;overflow-x:auto;scrollbar-width:none}.tab{display:inline-flex;align-items:center;gap:6px;padding:12px 10px;border:0;background:none;color:var(--colorNeutralForeground2);position:relative;white-space:nowrap;border-radius:4px}
-.tab::after{content:"";position:absolute;left:10px;right:10px;bottom:0;height:3px;border-radius:3px;background:transparent}.tab:hover{color:var(--colorNeutralForeground1)}.tab:hover::after{background:var(--colorNeutralStroke1Hover)}
-.tab.on{color:var(--colorNeutralForeground1);font-weight:600}.tab.on::after{background:var(--colorCompoundBrandStroke)}.tabs.sm .tab{padding:8px 8px;font-size:12px}.tabs.sm .tab::after{left:8px;right:8px;height:2px}
+.chip:hover{background:var(--colorNeutralBackground1Hover);border-color:var(--colorNeutralStroke1Hover)}.chip:active{background:var(--colorNeutralBackground1Pressed)}.chip:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:1px}.chip.on{background:var(--colorBrandBackground2);border-color:var(--colorBrandStroke1);color:var(--colorBrandForeground2);font-weight:600}.chip-n{color:var(--colorNeutralForeground3);font-weight:400}
+.tabs{min-width:0;overflow-x:auto;scrollbar-width:none;flex-wrap:nowrap}.tab{white-space:nowrap}.tab .fui-Tab__content{display:inline-flex;align-items:center;gap:6px}
 .tab-n{font-size:11px;line-height:14px;padding:0 5px;border-radius:8px;background:var(--colorNeutralBackground5);color:var(--colorNeutralForeground2);font-weight:400}
 .seg{display:inline-flex;border:1px solid var(--colorNeutralStroke1);border-radius:4px;overflow:hidden;background:var(--colorNeutralBackground1);flex:none}
 .seg button{border:0;border-right:1px solid var(--colorNeutralStroke1);border-radius:0;min-width:0;height:30px;gap:6px;white-space:nowrap}.seg button:last-child{border-right:0}
 .seg button.on{background:var(--colorBrandBackground2);color:var(--colorBrandForeground2);font-weight:600}
-.mbar{display:flex;align-items:center;gap:8px;min-height:36px;padding:6px 12px;border:1px solid var(--colorNeutralStroke1);border-radius:4px;background:var(--colorNeutralBackground3);font-size:13px}.mbar>.ic{color:var(--colorNeutralForeground3)}
-.mbar.m-success{background:var(--colorStatusSuccessBackground1);border-color:var(--colorStatusSuccessBorder1)}.mbar.m-success>.ic{color:var(--colorStatusSuccessForeground1)}
-.mbar.m-warning{background:var(--colorStatusWarningBackground1);border-color:var(--colorStatusWarningBorder1)}.mbar.m-warning>.ic{color:var(--colorStatusWarningForeground1)}
-.mbar.m-danger{background:var(--colorStatusDangerBackground1);border-color:var(--colorStatusDangerBorder1)}.mbar.m-danger>.ic{color:var(--colorStatusDangerForeground1)}
-.mbar.bar{border-radius:0;border-width:0 0 1px}
+.mbar{font-size:13px}.mbar>.fui-MessageBar__icon .ic{width:16px;height:16px}
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:40px 24px;text-align:center}.empty-ic{width:48px;height:48px;border-radius:50%;background:var(--colorNeutralBackground4);color:var(--colorNeutralForeground3);display:grid;place-items:center}.empty p{max-width:44ch}
 .menu-wrap{position:relative;display:inline-flex;flex:none}
-.menu{position:absolute;top:calc(100% + 4px);min-width:210px;max-width:320px;max-height:340px;overflow:auto;background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke2);border-radius:6px;box-shadow:var(--shadow16);padding:4px;z-index:100;color:var(--colorNeutralForeground1)}
-.menu.right{right:0}.menu.left{left:0}
-.mi{display:flex;align-items:center;gap:8px;width:100%;min-height:32px;padding:4px 8px;border:0;background:none;border-radius:4px;text-align:left;color:var(--colorNeutralForeground2)}.mi:hover{background:var(--colorNeutralBackground1Hover);color:var(--colorNeutralForeground1)}
-.mi.danger{color:var(--colorStatusDangerForeground1)}.mi:disabled{color:var(--colorNeutralForegroundDisabled);cursor:not-allowed;background:none}.msep{height:1px;background:var(--colorNeutralStroke2);margin:4px 0}.mlabel{padding:6px 8px 2px;font-size:12px;color:var(--colorNeutralForeground3)}
+.menu{min-width:210px;max-width:320px;max-height:340px;overflow:auto;z-index:100;animation:none!important}.mi.danger{color:var(--colorStatusDangerForeground1)}.mi-row{display:flex;align-items:center;gap:8px;min-width:0}
 .overlay{position:fixed;inset:0;background:var(--colorBackgroundOverlay);display:grid;place-items:center;padding:16px;z-index:200}
 .dialog{width:min(560px,calc(100% - 16px));max-width:none;max-height:calc(100% - 8px);padding:0;overflow:hidden;display:flex;flex-direction:column;outline:none}.dialog.wide{width:min(880px,calc(100% - 16px))}.dlg{display:flex;flex-direction:column;min-height:0;flex:1;gap:0;max-height:inherit;padding:0}
 .dhead{display:flex;align-items:center;gap:8px;padding:20px 24px 8px}.dhead h2{margin:0}.dbody{padding:8px 24px 16px;overflow:auto;display:flex;flex-direction:column;gap:12px;min-height:0;flex:1}.dfoot{display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 20px;flex-wrap:wrap}
