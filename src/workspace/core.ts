@@ -182,6 +182,14 @@ export const accFor = (key: unknown) => ACC_PICK[Math.abs(parseInt(hashStr(Strin
 /** The message of a thrown value, whatever was thrown. */
 export const errText = (e: unknown) => String((e as { message?: unknown } | null | undefined)?.message || e);
 export const MEM: Dict<string> = {};
+/** Tells src/workspace/errors.ts about a save that failed (or works again) on the plain localStorage path. */
+function storageEvent(kind: string, why = '') {
+  try {
+    window.dispatchEvent(new CustomEvent('turnkey:storage-problem', { detail: { kind, why } }));
+  } catch {
+    // no window (tests in Node)
+  }
+}
 export const LS = {
   ok: true,
   why: '',
@@ -213,11 +221,13 @@ export const LS = {
     }
     try {
       localStorage.setItem(BRAND.ns + k, v);
+      if (this.full) storageEvent('ok');
       this.full = false;
       return true;
     } catch (e) {
       this.full = true;
       this.why = errText(e);
+      storageEvent('quota', this.why); // errors.ts shows it; an event, so core.ts does not import errors.ts
       return false;
     }
   },

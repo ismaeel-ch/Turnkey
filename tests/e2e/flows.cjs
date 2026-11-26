@@ -132,8 +132,13 @@ async function flowDemo(browser, url) {
   await shot(page, '20-api');
   await page.getByRole('tab', { name: 'Permission matrix' }).click(); await sleep(100); await shot(page, '21-api-matrix');
   await view(page, 'Connections'); await page.waitForSelector('.conn-card');
-  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await sleep(100);
-  check('connection test shows a sample response', await page.locator('.conn-detail .json').count() === 1);
+  await page.route('**/api/connectors/**', (route) => route.fulfill({ json: { ok: true, items: [{ title: 'Appointment (scheduling)', url: 'https://en.wikipedia.org/wiki/Appointment', text: 'A made-up answer from the server route.', source: 'Wikipedia' }] } }));
+  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await page.waitForSelector('.conn-detail .badge.b-success');
+  check('connection test calls the source through the server route and shows its live answer', await page.locator('.conn-detail .json').count() === 1 && /Live response/.test(await page.locator('.conn-detail').innerText()) && /items \[1\]/.test(await page.locator('.conn-detail .json').innerText()), await page.locator('.conn-detail').innerText());
+  await page.route('**/api/connectors/**', (route) => route.fulfill({ json: { ok: false, code: 'upstream', message: 'Wikipedia did not answer.' } }));
+  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await page.waitForFunction(() => /did not answer/.test((document.querySelector('.conn-detail .json') || {}).innerText || ''));
+  check('when the source fails, the test says why and shows the labelled sample beside it', /Sample response/.test(await page.locator('.conn-detail').innerText()), await page.locator('.conn-detail').innerText());
+  await page.unroute('**/api/connectors/**');
   await shot(page, '22-connections');
   await page.locator('.titlebar .net').click(); await sleep(200);
   check('offline disables connection tests', await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().isDisabled());
@@ -274,6 +279,8 @@ async function flowLive(browser, url) {
         if (/STANDING INSTRUCTION FROM THE OWNER/.test(input)) (window.__noted = window.__noted || []).push(who + ': ' + input.split('STANDING INSTRUCTION FROM THE OWNER')[1].split('\\n')[1]);
         if (/reviewer$/.test(who)) { await new Promise((r) => setTimeout(r, 60)); return { text: JSON.stringify({ findings: window.__findings || [] }), truncated: false }; }
         if (window.__mode === 'deny') { const e = new Error('not granted'); e.code = 'not_granted'; throw e; }
+        if (window.__mode === 'drop') { const e = new Error('the connection to the server was lost'); e.code = 'network'; throw e; }
+        if (window.__mode === 'budget') { const e = new Error('used up'); e.code = 'budget'; throw e; }
         if (window.__mode === 'badjson' && who === 'Researcher') return { text: 'Sorry, I would rather chat about it.', truncated: false };
         if (who === 'Tester') { const sc = G.screens.screens.find((s) => s.roles && s.roles.length); return { text: JSON.stringify({ cases: [{ name: 'The first page opens for its role', why: 'Every role needs a way in.', steps: [{ role: sc.roles[0], do: 'open', screen: sc.name, say: 'Opens the page.' }] }, { name: 'Opening a page twice is safe', why: 'Reading changes nothing.', steps: [{ role: sc.roles[0], do: 'open', screen: sc.name }, { role: sc.roles[0], do: 'open', screen: sc.name }] }] }), truncated: false }; }
         if (who === 'Researcher') out = G.research;
@@ -361,8 +368,13 @@ async function flowLive(browser, url) {
   check('live team: the agent could not set the status itself, the workflow did', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Checked', await page.locator('.team-log .badge').first().innerText());
   await shot(page, '54-live-team');
   await st(page, () => { window.__formwork.view().calls = 0; }); // this flow now makes more model calls than one session's cap allows, so start the count again for the last case
+  c = await build('drop', 'A gym whose connection drops halfway');
+  check('live: a connection lost during a call fails the run and says what to do', c.status === 'failed' && JSON.stringify(c.last || '').includes('could not reach its server'), [c.status, c.last]);
+  c = await build('budget', 'A gym built after the allowance ran out');
+  check("live: a spent daily allowance says so, and that saved builds still work", c.status === 'failed' && JSON.stringify(c.last || '').includes('allowance') && JSON.stringify(c.last || '').includes('Saved builds'), [c.status, c.last]);
   c = await build('deny', 'A gym nobody granted access to');
   check('live: a refused permission stops the run and switches Live off', c.status === 'failed' && (await st(page, () => window.__formwork.view().live)) === 'none', [c.status, c.last]);
+  check('live: the failed run says plainly that no model is connected', JSON.stringify(c.last || '').includes('No model is connected'), c.last);
   await ctx.close();
   await liveOnStepAgent(browser, url);
 }
@@ -498,6 +510,25 @@ async function flowMisc(browser, url) {
   await p2.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 20000 }); await p2.locator('.gcard.ask .opt').first().click(); await waitReady(p2); const m = await appState(p2);
   check('without browser storage the app still builds and says nothing will be kept', m.status === 'ready' && (await p2.locator('.mbar.bar').first().innerText()).includes('not available'), m.status);
   await blocked.ctx.close();
+  // storage that fills up: the next save is refused, a banner and a toast say so plainly, and both go once saving works again
+  const full = await newPage(browser, { init: "window.__turnkeyOptions = { storage: 'localstorage' };" });
+  const p3 = full.page; await enter(p3, url);
+  await st(p3, () => { window.__realSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); }; });
+  await p3.locator('.newtab').click();
+  const fullBar = await p3.waitForSelector('.storage-problem', { timeout: 10000 }).then(() => true, () => false);
+  check('a full browser storage shows a plain banner and a toast with a way forward', fullBar && (await p3.locator('.storage-problem').innerText()).includes('storage is full') && (await p3.locator('.toasts').innerText()).includes('Delete an app'), fullBar);
+  await st(p3, () => { Storage.prototype.setItem = window.__realSetItem; });
+  await p3.locator('.newtab').click();
+  check('the storage banner goes once saving works again', await p3.waitForSelector('.storage-problem', { state: 'detached', timeout: 10000 }).then(() => true, () => false));
+  await full.ctx.close();
+  // the SQLite engine cannot be downloaded: the start screen says why and offers a reload, never a blank page
+  const noSql = await newPage(browser);
+  await noSql.ctx.route('**/vendor/sql-wasm.js*', (route) => route.abort());
+  await noSql.page.goto(url);
+  const sqlMsg = await noSql.page.waitForSelector('.splash[role=alert]', { timeout: 20000 }).then((el) => el.innerText(), () => '');
+  check('when the SQLite engine does not load, the page says so and offers a reload', /could not start/.test(sqlMsg) && /check the connection/.test(sqlMsg) && (await noSql.page.getByRole('button', { name: 'Reload the page' }).count()) === 1, sqlMsg);
+  errors.splice(0, errors.length, ...errors.filter((e) => !/sql-wasm|SQLite engine|Failed to load resource|ERR_FAILED/i.test(e)));
+  await noSql.ctx.close();
 }
 
 async function flowViews(browser, url) {
