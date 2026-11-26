@@ -46,8 +46,9 @@ The model settings (`LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL`) stay
 for **Production**. The workflow pulls them into the build with `vercel pull`; they are never stored in GitHub or
 printed. After changing them, redeploy the current tag as above.
 
-If the production address ever changes, set the repository variable `PRODUCTION_URL` (default
-`https://ssi-ai-hackathon.vercel.app`) so the health check calls the right place.
+The health check after a deploy calls the production address Vercel gives the deployment (its shortest alias, read
+from the Vercel API). To use a custom domain instead, set the repository variable `PRODUCTION_URL` to it, for example
+`https://turnkey.example.com`.
 
 ## Seeing the deployment for a release
 
