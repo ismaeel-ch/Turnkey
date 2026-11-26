@@ -168,3 +168,6 @@ next-env.d.ts
 /playwright-report/
 /tests/e2e/shots/
 .env*.local
+
+# short links saved on this computer (SHARE_STORE_DIR)
+/.data/

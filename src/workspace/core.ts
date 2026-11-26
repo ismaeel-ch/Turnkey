@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { downloadFile } from '@/platform/files';
 import type {
   Account,
   AppRecord,
@@ -240,6 +241,14 @@ export const LS = {
     return v ? v.length + k.length + BRAND.ns.length : 0;
   },
 };
+/**
+ * Puts another storage under `LS`: anything with its surface (`ok`, `why`, `full` and the methods), such as the
+ * IndexedDB adapter's `lsCompat()`. Property descriptors are copied so the adapter's live `ok`, `why` and `full`
+ * getters stay live. Call it before `boot()`.
+ */
+export function attachStorage(s: Partial<typeof LS>) {
+  Object.defineProperties(LS, Object.getOwnPropertyDescriptors(s));
+}
 
 /* ---------- persisted state (S) and view state (U) ---------- */
 export function freshState(): State {
@@ -692,6 +701,7 @@ export async function saveFile(filename: string, data: string | Blob | ArrayBuff
       return false;
     }
   }
+  if (downloadFile(filename, data, mime)) return true;
   toast('Saving files is not available in this view. Use Copy instead.', 'warning');
   return false;
 }

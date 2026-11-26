@@ -75,8 +75,6 @@ describe('prompt policy against the workspace sources', () => {
         'changes.ts changePrompt(app, text)',
         'custom.tsx reviewPrompt(app, id)',
         "line.ts PROMPTS[st.id](app, feedback) + (note ? '\\n\\nSTANDING INSTRUCTION FROM THE OWNER OF THIS APP. Follow it wherever it does not break the format or the rules above:\\n' + note : '')",
-        'team.tsx prompt',
-        "team.tsx prompt + '\\n\\nYour last answer was not usable: ' + e.message + '. Reply with the JSON object only.'",
         'tester.tsx testerPrompt(app)',
         'tester.tsx repairPrompt(app, fails)',
       ].sort(),
@@ -120,20 +118,12 @@ describe('prompt policy against the workspace sources', () => {
     expect(users).toEqual(['changes.ts', 'custom.tsx', 'line.ts', 'tester.tsx']);
   });
 
-  it('accepts the opening that team.tsx builds for an app agent', () => {
-    const src = flat(read('team.tsx'));
-    const opening = "'You are ' + a.name + ', one of ' + team.agents.length + ' agents inside the app \"' + app.name + '\". ' + team.about";
-    expect(src).toContain('return ( ' + opening + ' +');
-    const a = { name: 'The Checker' };
-    const team = { agents: [1, 2, 3], about: 'Checks claims against public sources.' };
-    const app = { name: 'Claim Desk' };
-    const prompt = new Function('a', 'team', 'app', 'return ' + opening)(a, team, app) as string;
-    expect(prompt.startsWith('You are The Checker, one of 3 agents inside the app "Claim Desk". ')).toBe(true);
-    expect(checkPrompt(prompt + '\nYOUR JOB: check')).toEqual({ ok: true, kind: 'team' });
-  });
-
-  it('team.tsx builds its prompt only through teamPrompt()', () => {
-    expect(read('team.tsx')).toMatch(/const prompt = teamPrompt\(app, user, T, a\);/);
+  it('team.tsx asks no model itself: its agents run on /api/agent/team, which checks the team definition', () => {
+    const src = read('team.tsx');
+    expect(src).not.toMatch(/\bcallModel\(/);
+    expect(src).toMatch(/streamTeam\(body,/);
+    // the server side of that route refuses a team whose text gives the model orders (tests/unit/team/policy.test.ts)
+    expect(fs.readFileSync(path.join(process.cwd(), 'src/server/graph/team/run.ts'), 'utf8')).toMatch(/checkTeamPolicy\(req\)/);
   });
 });
 

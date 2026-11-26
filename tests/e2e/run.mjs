@@ -8,6 +8,7 @@
 //   PORT=3105 npm run test:e2e       pick the port (set a different one per worktree when several run at once)
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -65,7 +66,17 @@ async function main() {
       return 1;
     }
     // No model is configured for the checks: Live is exercised with a stand-in the checks inject into the page.
-    const env = { ...process.env, PORT: String(port), LLM_PROVIDER: '', LITELLM_API_KEY: '', OPENAI_API_KEY: '' };
+    // Short links are kept in a fresh folder for each run, never in a real Blob store.
+    const shares = fs.mkdtempSync(path.join(os.tmpdir(), 'tk-e2e-shares-'));
+    const env = {
+      ...process.env,
+      PORT: String(port),
+      LLM_PROVIDER: '',
+      LITELLM_API_KEY: '',
+      OPENAI_API_KEY: '',
+      BLOB_READ_WRITE_TOKEN: '',
+      SHARE_STORE_DIR: shares,
+    };
     server = spawn(path.join(root, 'node_modules', '.bin', 'next'), ['start', '-p', String(port)], {
       cwd: root,
       env,

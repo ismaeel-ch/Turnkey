@@ -54,7 +54,7 @@ import {
   setSaveTimer,
   setU,
 } from './core';
-import { DBX, PEEK, dbCount, dbExists, dbFlush, dbSave, initSqlite, sqlRun } from './db';
+import { DBX, PEEK, backupWorkspace, dbCount, dbExists, dbFlush, dbSave, initSqlite, restoreWorkspace, sqlRun } from './db';
 import { appUsers, reseed } from './engine';
 import { DATA_VIEWS, migrateApp } from './viewspec';
 import { REC, TEMPLATES } from './builds';
@@ -79,7 +79,7 @@ import {
   exitSolo,
   openShared,
   packOf,
-  shareCode,
+  linkCode,
   shareLink,
   squeeze,
   unsqueeze,
@@ -854,6 +854,16 @@ export function ResetDialog() {
         {' keeps is stored in this browser. Choose how far to go.'}
       </p>
       <div className="set-list">
+        <SetRow title="Back up workspace" text="Saves every account, app, database and setting as one JSON file you can restore later.">
+          <Btn className="btn" onClick={backupWorkspace}>
+            Back up
+          </Btn>
+        </SetRow>
+        <SetRow title="Restore a backup" text="Replaces everything in this browser with a backup file, then reloads.">
+          <Btn className="btn" onClick={restoreWorkspace}>
+            Restore
+          </Btn>
+        </SetRow>
         {!out && (
           <SetRow
             title="Restore seed data"
@@ -1671,7 +1681,7 @@ export function boot() {
   });
   // the SQLite engine takes a moment to start, so let the splash paint first
   const fromLink = () => {
-    const code = shareCode(location.hash);
+    const code = linkCode();
     return code
       ? openShared(code).catch((e) => {
           toast(String((e && e.message) || e), 'danger', 9000);

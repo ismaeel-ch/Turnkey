@@ -57,8 +57,9 @@ import { CONNECTORS, REC, allConnectors, callConnector, connOn } from './builds'
 import { TEAMS, checkTeam, stopTeam, teamNeeds } from './team';
 import { checkBoard, normBoard } from './room';
 import { SUITES, TESTS, runTestsSync } from './tests';
-import { REVIEWERS, applyAuto, askGate, flowDefault, flowList, flowOf, runReview, stepAfter, verifyFindings } from './custom';
-import { runTester } from './tester';
+import { REVIEWERS, applyAuto, flowDefault, flowList, flowOf, runReview, showGate, stepAfter, verifyFindings } from './custom';
+import { testerSteps } from './tester';
+import { StoppedError, createRun, workflowFromFlow } from '@/platform/orchestrator';
 import { SHARE } from './share';
 import { LOGO_FILLS, LOGO_MARKS, LOGO_SHAPES, logChange, normLogo } from './release';
 
@@ -113,7 +114,8 @@ export const RUNS = {},
   LIVE = {
     fn: null,
   };
-export class Stopped extends Error {}
+/** Thrown wherever a run is when the owner stops it. The workflow graph knows it as a stop, not a failure. */
+export class Stopped extends StoppedError {}
 export const fatal = (msg) => {
   const e = new Error(msg);
   e.fatal = true;
@@ -999,9 +1001,13 @@ export async function produceLive(app, run, st, attempt, feedback) {
   );
 }
 
-/* ---------- running the line ---------- */
-export function askQuestion(app, run) {
-  // human in the loop: the run pauses until the owner answers in chat
+/* ---------- running the line ----------
+   The owner's workflow is compiled into a LangGraph graph (src/platform/orchestrator). The graph decides the order:
+   stations, gates, send-backs, safe defaults, the Researcher's question, added steps, approvals, the Tester and its
+   repair rounds. The ports below are what each node does to this app. When the graph waits for the owner, the run
+   returns `waiting`; the card in chat answers it and the run resumes. */
+/** Human in the loop: the Researcher's question. The graph waits; this shows the card and records the answer. */
+export function showQuestion(app, run) {
   const q = app.def.brief.question,
     L = app.line.research;
   L.status = 'waiting';
@@ -1012,20 +1018,9 @@ export function askQuestion(app, run) {
     recommended: q.recommended,
     answered: null,
   });
-  emit('CUSTOM', {
-    name: 'interrupt',
-    app: app.id,
-    value: {
-      reason: 'question',
-      text: q.text,
-    },
-  });
   setChat(true);
-  return new Promise((resolve, reject) => {
-    const r = RUNS[app.id];
-    r.answer = (i) => {
-      r.answer = null;
-      r.abort = null;
+  return {
+    answered(i) {
       m.card.answered = i;
       app.answers.q = i;
       app.def.brief.decision = {
@@ -1035,22 +1030,13 @@ export function askQuestion(app, run) {
       L.status = 'ok';
       stepEnd(s, true);
       pushChat(app, 'user', q.options[i]);
-      emit('CUSTOM', {
-        name: 'resume',
-        app: app.id,
-        value: {
-          answer: q.options[i],
-        },
-      });
       commit();
-      resolve();
-    };
-    r.abort = () => {
+    },
+    cancel() {
       stepEnd(s, false);
       m.card.answered = -1;
-      reject(new Stopped());
-    };
-  });
+    },
+  };
 }
 export function answerQuestion(app, i) {
   const r = RUNS[app.id];
@@ -1070,76 +1056,86 @@ export function stopRun(app) {
     } catch (e) {}
   }
 }
-export async function runStation(app, run, st) {
-  const L = app.line[st.id],
-    agent = st.agent,
-    live = app.mode === 'live';
-  let feedback = null,
-    res = null;
-  if (U.follow[app.id] !== false) U.sel[app.id] = st.id;
-  emit('STEP_STARTED', {
-    stepName: st.id,
-    runId: run.id,
-    app: app.id,
-  });
-  L.t0 = Date.now();
-  L.note = null;
-  const flow = flowOf(app),
-    max = flow.attempts >= 1 && flow.attempts <= 3 ? flow.attempts : 3,
-    tries = max === 1 ? 'one attempt' : max === 2 ? 'two attempts' : 'three attempts';
-  if (flow.by[st.id] === 'rules' && FALLBACK[st.id]) {
-    // the owner gave this step to code: no agent, no model call
-    L.status = 'working';
-    L.attempt = 1;
-    L.byRules = true;
-    commit();
-    const s0 = stepStart(run, st.id, 'orchestrator', 'Built-in rules', 'tool');
-    await pace(app, 700);
-    try {
-      res = FALLBACK[st.id](app, run);
-    } catch (e) {
-      console.error(e);
-      res = {
-        checks: [chk('The rules could be applied', false, String((e && e.message) || e))],
-        facts: [],
-      };
-    }
-    stepEnd(s0, true);
-    L.status = 'checking';
-    commit();
-    await pace(app, 420);
-    const s2 = stepStart(run, st.id, 'orchestrator', 'Checks', 'check'),
-      bad = issuesOf(res.checks);
-    stepEnd(s2, !bad.length);
-    L.checks = res.checks;
-    L.facts = res.facts || [];
-    L.attempts.push({
-      n: 1,
-      ok: !bad.length,
-      issues: bad.slice(0, 6),
-    });
-    emit('CUSTOM', {
-      name: 'checks',
-      app: app.id,
-      value: {
-        station: st.id,
-        attempt: 1,
-        passed: res.checks.length - bad.length,
-        failed: bad.length,
-      },
-    });
-    if (bad.length) {
-      L.status = 'failed';
-      commit();
-      const er = new Error(st.name + ' could not be built by the rules. ' + bad[0]);
-      er.expected = true;
-      throw er;
-    }
-  } else
-    for (let attempt = 1; attempt <= max; attempt++) {
+const triesWord = (n) => (n === 1 ? 'one attempt' : n === 2 ? 'two attempts' : 'three attempts');
+const stationOf = (id) => STATIONS[stationIdx(id)];
+
+/** The definition of this run: the owner's workflow, from the station a partial run starts at. */
+export function workflowOf(app, from) {
+  const f = flowOf(app),
+    def = workflowFromFlow(f, (id) => REVIEWERS[id], from);
+  // only stations that have built-in rules can be given to code
+  def.stations = def.stations.map((s) => (s.byRules && !FALLBACK[s.id] ? { ...s, byRules: undefined } : s));
+  return def;
+}
+
+/** What each node of the workflow graph does to this app. `cur` holds what one attempt made until its gate reads it. */
+function linePorts(app, run, ctl, o) {
+  const live = app.mode === 'live',
+    cur = { res: null, unusable: null },
+    tester = testerSteps(app, run);
+  let opened = false;
+  // a thrown error leaves the graph as a failed run; one that is not expected is a bug, so say so in the console
+  const watch =
+    (fn) =>
+    async (...a) => {
+      try {
+        return await fn(...a);
+      } catch (e) {
+        if (!(e instanceof Stopped) && !(e && e.fatal)) console.error(e);
+        throw e;
+      }
+    };
+  return {
+    emit(type, payload) {
+      // added steps log their own step events (they also run outside a build)
+      if ((type === 'STEP_STARTED' || type === 'STEP_FINISHED') && String(payload.stepName || '').startsWith('review_')) return;
+      emit(type, payload);
+      if (type === 'RUN_STARTED' && o.snapshot) emit('STATE_SNAPSHOT', { app: app.id, snapshot: o.snapshot });
+    },
+    stopped: () => !!ctl.stop,
+    runStation: watch(async ({ station: sd, attempt, max, feedback, byRules }) => {
+      if (!opened) {
+        opened = true;
+        await o.open();
+      }
+      const st = stationOf(sd.id),
+        L = app.line[st.id],
+        agent = st.agent;
+      if (attempt === 1) {
+        if (U.follow[app.id] !== false) U.sel[app.id] = st.id;
+        L.t0 = Date.now();
+        L.note = null;
+      }
       L.status = 'working';
       L.attempt = attempt;
+      if (byRules) {
+        // the owner gave this step to code: no agent, no model call
+        L.byRules = true;
+        commit();
+        const s0 = stepStart(run, st.id, 'orchestrator', 'Built-in rules', 'tool');
+        await pace(app, 700);
+        try {
+          cur.res = FALLBACK[st.id](app, run);
+        } catch (e) {
+          console.error(e);
+          cur.res = {
+            checks: [chk('The rules could be applied', false, String((e && e.message) || e))],
+            facts: [],
+          };
+        }
+        stepEnd(s0, true);
+        L.status = 'checking';
+        commit();
+        await pace(app, 420);
+        stepEnd(
+          stepStart(run, st.id, 'orchestrator', 'Checks', 'check'),
+          cur.res.checks.every((c) => c.ok),
+        );
+        return;
+      }
       commit();
+      const fb = cur.unusable || feedback;
+      cur.unusable = null;
       let out = null;
       const first = st.id === 'walkthrough' && attempt === 1;
       const s1 = stepStart(
@@ -1150,42 +1146,45 @@ export async function runStation(app, run, st) {
         first ? 'tool' : 'model',
       );
       try {
-        out = await produce(app, run, st, attempt, feedback);
+        out = await produce(app, run, st, attempt, fb);
       } catch (e) {
         stepEnd(s1, false);
         if (e instanceof Stopped || e.fatal) throw e;
-        feedback = ['The answer was not usable: ' + e.message + '. Return one JSON object in the exact format.'];
-        res = {
+        cur.unusable = ['The answer was not usable: ' + e.message + '. Return one JSON object in the exact format.'];
+        cur.res = {
           checks: [chk('Usable JSON answer', false, e.message)],
           facts: [],
         };
+        return;
       }
-      if (out) {
-        stepEnd(s1, true);
-        L.status = 'checking';
-        commit();
-        await pace(app, 420);
-        const s2 = stepStart(run, st.id, 'orchestrator', 'Checks', 'check');
-        /* With fewer than three attempts, the last one is checked as it stands first; only if that fails does code repair what it can, on the same answer. */
-        const levels = max < 3 && attempt === max ? [Math.min(attempt, 2), 3] : [attempt];
-        for (const lv of levels) {
-          try {
-            res = APPLY[st.id](app, out, run, lv);
-          } catch (e) {
-            console.error(e);
-            res = {
-              checks: [chk('The output could be applied', false, String((e && e.message) || e))],
-              facts: [],
-            };
-          }
-          if (res.checks.every((c) => c.ok)) break;
+      stepEnd(s1, true);
+      L.status = 'checking';
+      commit();
+      await pace(app, 420);
+      const s2 = stepStart(run, st.id, 'orchestrator', 'Checks', 'check');
+      /* With fewer than three attempts, the last one is checked as it stands first; only if that fails does code repair what it can, on the same answer. */
+      const levels = max < 3 && attempt === max ? [Math.min(attempt, 2), 3] : [attempt];
+      for (const lv of levels) {
+        try {
+          cur.res = APPLY[st.id](app, out, run, lv);
+        } catch (e) {
+          console.error(e);
+          cur.res = {
+            checks: [chk('The output could be applied', false, String((e && e.message) || e))],
+            facts: [],
+          };
         }
-        stepEnd(
-          s2,
-          res.checks.every((c) => c.ok),
-        );
+        if (cur.res.checks.every((c) => c.ok)) break;
       }
-      const issues = issuesOf(res.checks);
+      stepEnd(
+        s2,
+        cur.res.checks.every((c) => c.ok),
+      );
+    }),
+    runGate: watch(async ({ station: sd, attempt }) => {
+      const L = app.line[sd.id],
+        res = cur.res,
+        issues = issuesOf(res.checks);
       L.checks = res.checks;
       L.facts = res.facts || [];
       L.attempts.push({
@@ -1193,87 +1192,203 @@ export async function runStation(app, run, st) {
         ok: !issues.length,
         issues: issues.slice(0, 6),
       });
-      emit('CUSTOM', {
-        name: 'checks',
-        app: app.id,
-        value: {
-          station: st.id,
-          attempt,
-          passed: res.checks.length - issues.length,
-          failed: issues.length,
-        },
-      });
-      if (!issues.length) break;
-      if (attempt === max) {
-        const fb = FALLBACK[st.id] ? FALLBACK[st.id](app, run) : null;
-        if (fb && fb.checks.every((c) => c.ok)) {
-          L.checks = fb.checks;
-          L.facts = fb.facts || [];
-          L.fellBack = true;
-          say(app, 'orchestrator', AGENTS[agent].name + ' did not pass after ' + tries + ', so I used the safe default for this station.');
-          break;
-        }
-        L.status = 'failed';
-        commit();
-        const er = new Error(st.name + ' did not pass its checks after ' + tries + '. ' + issues[0]);
-        er.expected = true;
-        throw er;
+      return { issues, passed: res.checks.length - issues.length, total: res.checks.length };
+    }),
+    fallback: watch(async ({ station: sd }) => {
+      const st = stationOf(sd.id),
+        L = app.line[st.id],
+        issues = issuesOf(cur.res.checks),
+        fb = FALLBACK[st.id] ? FALLBACK[st.id](app, run) : null;
+      if (fb && fb.checks.every((c) => c.ok)) {
+        L.checks = fb.checks;
+        L.facts = fb.facts || [];
+        L.fellBack = true;
+        say(
+          app,
+          'orchestrator',
+          AGENTS[st.agent].name + ' did not pass after ' + triesWord(o.def.attempts) + ', so I used the safe default for this station.',
+        );
+        return { ok: true, issues: [] };
       }
+      return { ok: false, issues };
+    }),
+    sentBack: watch(async ({ station: sd, attempt, issues }) => {
+      const st = stationOf(sd.id),
+        L = app.line[st.id],
+        who = AGENTS[st.agent].name;
       run.retries++;
       L.status = 'sentback';
-      feedback = issues;
-      say(app, 'orchestrator', 'A check failed, so I sent the work back to ' + AGENTS[agent].name + '.', {
+      // a step of its own in the timeline, so a send-back shows where it happened
+      const s = stepStart(run, st.id, 'orchestrator', 'Sent back to ' + who, 'check');
+      say(app, 'orchestrator', 'A check failed, so I sent the work back to ' + who + '.', {
         type: 'sentback',
         station: st.id,
         attempt,
         issues: issues.slice(0, 4),
       });
-      emit('CUSTOM', {
-        name: 'sent_back',
+      try {
+        await pace(app, 1100);
+      } finally {
+        stepEnd(s, false);
+      }
+    }),
+    stationDone: watch(async ({ station: sd }) => {
+      const st = stationOf(sd.id),
+        L = app.line[st.id];
+      L.status = 'ok';
+      L.t1 = Date.now();
+      app.rev++;
+      emit('STATE_DELTA', {
         app: app.id,
-        value: {
-          station: st.id,
-          attempt,
-          issues: issues.length,
-        },
+        delta: [
+          {
+            op: 'replace',
+            path: '/' + st.out,
+            value: L.facts.join(', '),
+          },
+        ],
       });
-      await pace(app, 1100);
-    }
-  L.status = 'ok';
-  L.t1 = Date.now();
-  app.rev++;
-  emit('STATE_DELTA', {
-    app: app.id,
-    delta: [
-      {
-        op: 'replace',
-        path: '/' + st.out,
-        value: L.facts.join(', '),
+      say(
+        app,
+        st.id === 'walkthrough' || L.byRules ? 'orchestrator' : st.agent,
+        L.byRules ? 'Built by the built-in rules, as you set it: no agent and no model call. ' + DONE_SAY[st.id] : DONE_SAY[st.id],
+        CARD[st.id](app),
+      );
+    }),
+    handoff: watch(async ({ station: sd }) => {
+      U.handoff[app.id] = stationIdx(sd.id);
+      notify();
+      await pace(app, 520);
+      U.handoff[app.id] = null;
+    }),
+    runStep: watch(async ({ step }) => {
+      // a step the owner removed while the line was running does not run
+      if (REVIEWERS[step.id] && flowOf(app).reviewers.includes(step.id)) await runReview(app, step.id, run, false);
+    }),
+    lateSteps: watch(async () => {
+      // steps added while their station had already passed
+      const f = flowOf(app);
+      return f.reviewers
+        .filter((id) => REVIEWERS[id] && !app.reviews[id])
+        .map((id) => ({ id, name: REVIEWERS[id].name, after: stepAfter(f, id), mode: 'advise' }));
+    }),
+    owner: {
+      question: async (sd) => {
+        const q = sd.id === 'research' && app.def.brief.question;
+        return q && app.answers.q == null ? { text: q.text, options: q.options, recommended: q.recommended } : null;
       },
-    ],
-  });
-  say(
-    app,
-    st.id === 'walkthrough' || L.byRules ? 'orchestrator' : agent,
-    L.byRules ? 'Built by the built-in rules, as you set it: no agent and no model call. ' + DONE_SAY[st.id] : DONE_SAY[st.id],
-    CARD[st.id](app),
-  );
-  emit('STEP_FINISHED', {
-    stepName: st.id,
-    runId: run.id,
-    app: app.id,
-  });
-  if (st.id === 'research' && app.def.brief.question && app.answers.q == null) await askQuestion(app, run);
-  for (const id of flowOf(app).reviewers.slice())
-    if (REVIEWERS[id] && stepAfter(flowOf(app), id) === st.id) await runReview(app, id, run, false); // review steps the owner added after this station
-  if (flowOf(app).approve[st.id]) await askGate(app, run, st); // and the approval, if they asked for one here
-  if (st.id !== 'walkthrough') {
-    U.handoff[app.id] = stationIdx(st.id);
-    notify();
-    await pace(app, 520);
-    U.handoff[app.id] = null;
-  }
+      answered: watch(async ({ index }) => {
+        if (ctl.held) ctl.held.answered(index);
+        ctl.held = null;
+      }),
+      decided: watch(async ({ approved }) => {
+        if (ctl.held) ctl.held.decided(approved);
+        ctl.held = null;
+      }),
+    },
+    ready: watch(async () => {
+      if (app.def.team) {
+        const off = teamNeeds(app.def.team).filter((id) => !connOn(id));
+        if (off.length) {
+          off.forEach((id) => {
+            S.conns[id] = true;
+          });
+          say(
+            app,
+            'orchestrator',
+            "This app's own agents use " +
+              off.map((id) => (allConnectors().find((c) => c.id === id) || { name: id }).name).join(' and ') +
+              ', so I switched ' +
+              (off.length > 1 ? 'those connections' : 'that connection') +
+              ' on for this workspace. You can switch ' +
+              (off.length > 1 ? 'them' : 'it') +
+              ' off under Connections.',
+          );
+        }
+      }
+      app.status = 'ready'; /* the app exists; the Tester now decides whether it is fit to release */
+      const auto = applyAuto(app, run);
+      if (auto.n) await pace(app, 500);
+      logChange(app, o.part ? 'Rebuild from ' + o.first.name : 'Rebuild the app from the request', 'database');
+    }),
+    tester: {
+      write: watch(tester.write),
+      run: watch(tester.run),
+      repair: watch(tester.repair),
+      done: watch(tester.done),
+    },
+    wrapUp: watch(async () => {
+      run.status = 'ok';
+      if (Object.keys(app.reviews || {}).length) {
+        Object.keys(app.reviews).forEach((k) => {
+          app.reviews[k].rev = app.rev;
+        });
+        const v = await verifyFindings(app); /* each review read its own station's output, which later stations did not change */
+        if (v.n)
+          say(
+            app,
+            'orchestrator',
+            'The reviewers proposed ' +
+              v.n +
+              (v.n === 1 ? ' fix' : ' fixes') +
+              '. I tried each one out in a savepoint and put it back: ' +
+              (v.pass === v.n
+                ? (v.n === 1 ? 'it passes' : 'all of them pass') + ' every check.'
+                : v.pass + ' of ' + v.n + ' pass every check.') +
+              ' Nothing is changed until you apply one.',
+          );
+      }
+      say(
+        app,
+        'orchestrator',
+        o.part
+          ? 'Done. ' + o.again.join(', ') + ' ran again and ' + o.kept.join(', ') + (o.kept.length > 1 ? ' were kept.' : ' was kept.')
+          : app.name +
+              ' is ready. ' +
+              app.def.tables.length +
+              ' tables, ' +
+              deriveEndpoints(app.def).length +
+              ' endpoints, ' +
+              Object.keys(app.def.views).reduce((k, t) => k + app.def.views[t].length, 0) +
+              ' views, ' +
+              app.def.screens.length +
+              ' pages' +
+              (app.def.team ? ', a team of ' + app.def.team.agents.length + ' agents' : '') +
+              (run.retries ? ', ' + run.retries + ' send-back' + (run.retries > 1 ? 's' : '') : '') +
+              '.',
+        {
+          type: 'ready',
+        },
+      );
+      toast(o.part ? app.name + ' is ready again.' : app.name + ' is ready. Open the App view to use it.', 'success');
+    }),
+  };
 }
+
+/** Wait for the owner's answer to what the run is waiting for. The chat card calls `answer` or `gate`; Stop rejects. */
+function ownerAnswer(app, run, ctl, wf, ask) {
+  ctl.held = ask.reason === 'question' ? showQuestion(app, run) : showGate(app, run, stationOf(ask.station));
+  return new Promise((resolve, reject) => {
+    const settle = (v) => {
+      ctl.answer = null;
+      ctl.gate = null;
+      ctl.abort = null;
+      resolve(v);
+    };
+    if (ask.reason === 'question') ctl.answer = (i) => settle(i);
+    else ctl.gate = (ok) => settle(!!ok);
+    ctl.abort = () => {
+      ctl.answer = null;
+      ctl.gate = null;
+      ctl.abort = null;
+      if (ctl.held) ctl.held.cancel();
+      ctl.held = null;
+      wf.stop();
+      reject(new Stopped());
+    };
+  });
+}
+
 export async function runBuild(app, from) {
   // from: a station id to start at. The stations before it are kept as they are.
   if (RUNS[app.id]) return;
@@ -1324,26 +1439,9 @@ export async function runBuild(app, from) {
   U.sel[app.id] = STATIONS[i0].id;
   U.follow[app.id] = true;
   U.runSel[app.id] = null;
-  emit('RUN_STARTED', {
-    runId: run.id,
-    threadId: app.id,
-    app: app.id,
-  });
-  if (!part)
-    emit('STATE_SNAPSHOT', {
-      app: app.id,
-      snapshot: {
-        request: app.request,
-        brief: null,
-        schema: null,
-        api: null,
-        screens: null,
-        tour: null,
-        workflow: flowList(flow).map((x) => x.text),
-      },
-    });
   commit();
-  try {
+  // what the orchestrator says before the first station; it runs inside the graph, so Stop works here too
+  const open = async () => {
     if (!part) pushChat(app, 'user', app.request);
     say(
       app,
@@ -1376,87 +1474,51 @@ export async function runBuild(app, from) {
       );
     await pace(app, 600);
     if (i0 <= 1) dbDrop(app.id);
-    for (const st of STATIONS.slice(i0)) await runStation(app, run, st);
-    for (const id of flowOf(app).reviewers.slice())
-      if (REVIEWERS[id] && !app.reviews[id] && flowOf(app).reviewers.includes(id)) await runReview(app, id, run, false); // a review step added while its station had already passed
-    if (app.def.team) {
-      const off = teamNeeds(app.def.team).filter((id) => !connOn(id));
-      if (off.length) {
-        off.forEach((id) => {
-          S.conns[id] = true;
-        });
-        say(
-          app,
-          'orchestrator',
-          "This app's own agents use " +
-            off
-              .map(
-                (id) =>
-                  (
-                    allConnectors().find((c) => c.id === id) || {
-                      name: id,
-                    }
-                  ).name,
-              )
-              .join(' and ') +
-            ', so I switched ' +
-            (off.length > 1 ? 'those connections' : 'that connection') +
-            ' on for this workspace. You can switch ' +
-            (off.length > 1 ? 'them' : 'it') +
-            ' off under Connections.',
-        );
-      }
+  };
+  let res;
+  try {
+    const def = workflowOf(app, part ? STATIONS[i0].id : undefined);
+    const ports = linePorts(app, run, ctl, {
+      def,
+      part,
+      first: STATIONS[i0],
+      again,
+      kept,
+      open,
+      snapshot: part
+        ? null
+        : {
+            request: app.request,
+            brief: null,
+            schema: null,
+            api: null,
+            screens: null,
+            tour: null,
+            workflow: flowList(flow).map((x) => x.text),
+          },
+    });
+    const wf = (ctl.wf = createRun(def, ports, { app: app.id, runId: run.id, threadId: app.id + ':' + run.id }));
+    res = await wf.start();
+    while (res.status === 'waiting') {
+      const answer = await ownerAnswer(app, run, ctl, wf, res.ask);
+      res = await wf.resume(answer);
     }
-    app.status = 'ready'; /* the app exists; the Tester now decides whether it is fit to release */
-    const auto = applyAuto(app, run);
-    if (auto.n) await pace(app, 500);
-    logChange(app, part ? 'Rebuild from ' + STATIONS[i0].name : 'Rebuild the app from the request', 'database');
-    await runTester(app, run);
-    run.status = 'ok';
-    if (Object.keys(app.reviews || {}).length) {
-      Object.keys(app.reviews).forEach((k) => {
-        app.reviews[k].rev = app.rev;
-      });
-      const v = await verifyFindings(app); /* each review read its own station's output, which later stations did not change */
-      if (v.n)
-        say(
-          app,
-          'orchestrator',
-          'The reviewers proposed ' +
-            v.n +
-            (v.n === 1 ? ' fix' : ' fixes') +
-            '. I tried each one out in a savepoint and put it back: ' +
-            (v.pass === v.n
-              ? (v.n === 1 ? 'it passes' : 'all of them pass') + ' every check.'
-              : v.pass + ' of ' + v.n + ' pass every check.') +
-            ' Nothing is changed until you apply one.',
-        );
-    }
-    say(
-      app,
-      'orchestrator',
-      part
-        ? 'Done. ' + again.join(', ') + ' ran again and ' + kept.join(', ') + (kept.length > 1 ? ' were kept.' : ' was kept.')
-        : app.name +
-            ' is ready. ' +
-            app.def.tables.length +
-            ' tables, ' +
-            deriveEndpoints(app.def).length +
-            ' endpoints, ' +
-            Object.keys(app.def.views).reduce((k, t) => k + app.def.views[t].length, 0) +
-            ' views, ' +
-            app.def.screens.length +
-            ' pages' +
-            (app.def.team ? ', a team of ' + app.def.team.agents.length + ' agents' : '') +
-            (run.retries ? ', ' + run.retries + ' send-back' + (run.retries > 1 ? 's' : '') : '') +
-            '.',
-      {
-        type: 'ready',
-      },
-    );
-    toast(part ? app.name + ' is ready again.' : app.name + ' is ready. Open the App view to use it.', 'success');
   } catch (e) {
-    if (keep) {
+    // Stop while the run waited for the owner (the run has already logged its end), or a workflow that would not compile
+    if (e instanceof Stopped) res = { status: 'stopped' };
+    else {
+      console.error(e);
+      res = { status: 'failed', reason: String((e && e.message) || e) };
+      emit('RUN_ERROR', { runId: run.id, app: app.id, message: res.reason });
+      emit('RUN_FINISHED', { runId: run.id, threadId: app.id, app: app.id, status: 'failed' });
+    }
+  }
+  try {
+    const stopped = res.status === 'stopped',
+      msg = res.reason || 'The build failed.';
+    if (res.status === 'ok') {
+      // the wrap-up has said everything
+    } else if (keep) {
       // nothing before the first station of this run was touched, and the database kept its tables: put the app back
       const b = JSON.parse(keep);
       app.def = b.def;
@@ -1471,26 +1533,19 @@ export async function runBuild(app, from) {
       app.tests = b.tests;
       app.rev++;
       app.status = 'ready';
-      run.status = e instanceof Stopped ? 'stopped' : 'failed';
-      if (!(e instanceof Stopped) && !e.fatal && !e.expected) console.error(e);
-      if (!(e instanceof Stopped))
-        emit('RUN_ERROR', {
-          runId: run.id,
-          app: app.id,
-          message: String(e.message || e),
-        });
+      run.status = stopped ? 'stopped' : 'failed';
       say(
         app,
         'orchestrator',
-        (e instanceof Stopped ? 'Stopped.' : 'That did not pass. ' + String(e.message || e)) + ' I put the app back exactly as it was.',
-        e instanceof Stopped
+        (stopped ? 'Stopped.' : 'That did not pass. ' + msg) + ' I put the app back exactly as it was.',
+        stopped
           ? null
           : {
               type: 'error',
             },
       );
       runTestsSync(app);
-    } else if (e instanceof Stopped) {
+    } else if (stopped) {
       run.status = 'stopped';
       app.status = 'stopped';
       STATIONS.forEach((s) => {
@@ -1499,19 +1554,13 @@ export async function runBuild(app, from) {
       });
       say(app, 'orchestrator', 'Stopped. Run it again when you are ready.');
     } else {
-      if (!e.fatal && !e.expected) console.error(e);
       run.status = 'failed';
       app.status = 'failed';
       STATIONS.forEach((s) => {
         const L = app.line[s.id];
         if (L.status === 'working' || L.status === 'checking' || L.status === 'waiting' || L.status === 'sentback') L.status = 'failed';
       });
-      emit('RUN_ERROR', {
-        runId: run.id,
-        app: app.id,
-        message: String(e.message || e),
-      });
-      say(app, 'orchestrator', 'The build stopped. ' + String(e.message || e), {
+      say(app, 'orchestrator', 'The build stopped. ' + msg, {
         type: 'error',
       });
     }
@@ -1520,12 +1569,6 @@ export async function runBuild(app, from) {
     if (RUNS[app.id] === ctl) delete RUNS[app.id];
     U.handoff[app.id] = null;
     U.stream[app.id] = 0;
-    emit('RUN_FINISHED', {
-      runId: run.id,
-      threadId: app.id,
-      app: app.id,
-      status: run.status,
-    });
     app.updated = Date.now();
     commit();
   }

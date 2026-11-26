@@ -81,7 +81,11 @@ self.addEventListener('message', (event) => {
       for (const u of d.urls.slice(0, 200)) {
         if (typeof u !== 'string') continue;
         let url;
-        try { url = new URL(u, self.location.origin); } catch { continue; }
+        try {
+          url = new URL(u, self.location.origin);
+        } catch {
+          continue;
+        }
         if (url.origin !== self.location.origin || !KEEPABLE.test(url.pathname)) continue;
         if (!(await cache.match(url.pathname + url.search))) await put(cache, url.pathname + url.search);
       }
@@ -112,7 +116,21 @@ self.addEventListener('fetch', (event) => {
   if (url.searchParams.has('_rsc') || req.headers.get('rsc')) return;
 
   if (req.mode === 'navigate') {
-    if (path !== '/') return; // /spike and anything else go to the network as before
+    if (/^\/[a-z0-9-]{3,40}\/?$/.test(path)) {
+      // a short link (/clinic-desk): the network when there is one, else the cached workspace, which opens the copy
+      // of that app saved in this browser
+      event.respondWith(
+        (async () => {
+          try {
+            return await fetch(req);
+          } catch {
+            return (await (await caches.open(CACHE)).match('/')) || Response.error();
+          }
+        })(),
+      );
+      return;
+    }
+    if (path !== '/') return; // anything else goes to the network as before
     event.respondWith(
       (async () => {
         const cache = await caches.open(CACHE);

@@ -527,8 +527,6 @@ REC.factcheck = {
               tool: 'get_indicator',
             },
           ],
-          proto:
-            'This page cannot reach other hosts, so no tool results are attached. Work from what you know, set "source" to "model_knowledge" and leave "url" empty. One row per claim.',
         },
         {
           id: 'verifier',
@@ -1694,8 +1692,6 @@ REC.priorart = {
               tool: 'query',
             },
           ],
-          proto:
-            'This page cannot reach other hosts, so no search results are attached. Describe the kinds of earlier work you would expect to find, set "source" to "model_knowledge", leave "ref_code" and "year" empty, and do not name real patents, papers, companies or authors.',
         },
         {
           id: 'analyst',

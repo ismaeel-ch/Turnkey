@@ -7,6 +7,7 @@
  */
 import { Command } from '@langchain/langgraph';
 import { LlmError } from '../../llm';
+import { checkTeamPolicy } from './policy';
 import { Budget, buildTeamGraph, nodeNames, RunFailure, type TeamContext, type TeamState } from './graph';
 import { TeamRequestSchema, type AgentOutput, type Snapshot, type TeamRequest, type TeamStatus } from './types';
 
@@ -38,6 +39,12 @@ export async function runTeamGraph(input: TeamRequest | unknown, ctx: TeamContex
     return { status: 'failed', reason: 'bad_request', outputs: {}, steps: 0, modelCalls: 0 };
   }
   const req = parsed.data;
+  const policy = checkTeamPolicy(req);
+  if (!policy.ok) {
+    ctx.sink.emit({ type: 'RUN_STARTED', threadId: runId, runId });
+    ctx.sink.emit({ type: 'RUN_ERROR', message: 'The team definition was refused: ' + policy.message, code: 'bad_request' });
+    return { status: 'failed', reason: 'bad_request', outputs: {}, steps: 0, modelCalls: 0 };
+  }
   const sink = ctx.sink;
   const budget = new Budget(req.limits, ctx.now, req.resume?.snapshot.used);
   const names = req.team.agents.map((a) => a.id);
