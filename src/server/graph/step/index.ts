@@ -1,8 +1,6 @@
 import { STEP_AGENT_ID, type StepAgent, type StepError, type StepEvent, type StepInput, type StepResult } from '@/shared/agent-contract';
 import { createStepGraph, type StepGraphOptions } from './graph';
 
-export { createStepGraph } from './graph';
-
 /** The agent for the runtime registry. agui-stream wraps `run` in its AG-UI agent class; tests call it directly. */
 export function createStepAgent(options: StepGraphOptions = {}): StepAgent {
   const graph = createStepGraph(options);

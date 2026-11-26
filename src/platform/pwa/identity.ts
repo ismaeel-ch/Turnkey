@@ -50,7 +50,6 @@ export type ParseResult = { ok: true; identity: AppIdentity } | { ok: false; err
 export const DEFAULT_NAME = 'Turnkey app';
 export const MAX_NAME = 40;
 export const MAX_CODE = 6000;
-export const MAX_KEY = 40;
 export const KEY_RE = /^[A-Za-z0-9_-]{1,40}$/;
 
 const GLYPHS = glyphs as Record<string, string>;

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { complete, resolveProvider, withTools, type ChatChunk, type ChatRequest, type Provider, type ToolDef } from '@/server/llm';
 import { MUST_CALL_A_TOOL } from '@/server/llm/features';
 import { createPacer, retryAfterMs, scrub, withRetries } from '@/server/llm/http';

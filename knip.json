@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/app/**/{page,layout,route}.{ts,tsx}",
+    "scripts/*.{mjs,cjs}",
+    "src/platform/orchestrator/scripts/*.mjs",
+    "tests/e2e/*.{cjs,mjs}",
+    "tests/unit/**/*.test.ts",
+    ".claude/hooks/*.mjs",
+    "public/sw.js",
+    "src/platform/pwa/mark.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**", "tests/**/*.{ts,cjs,mjs}"],
+  "ignoreDependencies": ["sharp", "vite"],
+  "ignoreExportsUsedInFile": true
+}

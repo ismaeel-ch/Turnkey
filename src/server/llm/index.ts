@@ -35,9 +35,9 @@ import type { Provider } from './types';
 
 export * from './types';
 export { complete } from './complete';
-export { withTools, toolModeFor, toolModeSetting } from './tools';
-export { EFFORT_BY_TIER, costOf, effortFor, isClaudeModel, priceOf } from './features';
-export { usageTotals, withUsage, type UsageTotals } from './usage';
+export { withTools } from './tools';
+export { EFFORT_BY_TIER } from './features';
+export { usageTotals } from './usage';
 
 /** A plain name for the backend in use, for /api/health and the settings screen. Not secret. */
 export function backendLabel(provider: Pick<Provider, 'id'> | null): string {
