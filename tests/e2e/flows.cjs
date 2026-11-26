@@ -896,9 +896,11 @@ async function flowCustom(browser, url) {
 
   // ----- B3. the step palette: drag a step onto a gate, as in n8n -----
   check('palette: every step the plus offers is a tile above the canvas, and a step already in the flow is greyed out', await page.locator('.flow-palette .fp-tile').count() >= 8 && await page.locator('.fp-tile[data-step=security]').isDisabled() && !(await page.locator('.fp-tile[data-step=normalize]').isDisabled()), await page.locator('.flow-palette').innerText());
+  for (let i = 0, was = ''; i < 40; i++) { const b = JSON.stringify(await page.locator('.fl-gate[data-st=database]').boundingBox()); if (b === was) break; was = b; await sleep(150); }
   await page.locator('.fp-tile[data-step=normalize]').dragTo(page.locator('.fl-gate[data-st=database]')); a = await waitFree(page);
   check('palette: dropping Normalise tables on the Database gate adds it there and runs it', a.flow.reviewers.includes('normalize') && a.reviews.normalize && a.reviews.normalize.status === 'ok', [a.flow.reviewers, a.reviews.normalize]);
-  await page.locator('.fp-tile[data-step=insight]').dragTo(page.locator('.fl-gate[data-st=database]')); await sleep(250); a = await appFull(page);
+  for (let i = 0, was = ''; i < 40; i++) { const b = JSON.stringify(await page.locator('.fl-gate[data-st=database]').boundingBox()); if (b === was) break; was = b; await sleep(150); } // the canvas refits after a step is added: wait until the gate stops moving
+  await page.locator('.fp-tile[data-step=insight]').dragTo(page.locator('.fl-gate[data-st=database]')); await page.waitForFunction(() => Array.from(document.querySelectorAll('.toast')).some((t) => /Insight review reads/.test(t.textContent || '')), null, { timeout: 5000 }).catch(() => {}); a = await appFull(page);
   check('palette: a step dropped where it cannot read anything yet is refused with the reason', !a.flow.reviewers.includes('insight') && /Insight review reads .* so it can go after/.test(await page.locator('.toast').allInnerTexts().then((x) => x.join(' | '))), [a.flow.reviewers, await page.locator('.toast').allInnerTexts()]);
   await say(page, 'Remove the normalise step'); await sleep(250); a = await appFull(page);
   check('palette: the step it added comes out like any other', a.flow.reviewers.join() === 'security', a.flow.reviewers);
