@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ErrorScreen } from '@/platform/error-screen';
 import { flushOnHide, openWorkspaceStorage } from '@/platform/storage';
 import { U, attachStorage, notify } from './core';
+import { listenForStorageProblems, noteStorageProblem } from './errors';
 import { setFlowAvailable } from './flow';
 import { boot, Root } from './shell-c';
 
@@ -17,13 +18,18 @@ let started = false;
 function start() {
   if (started) return;
   started = true;
-  void openWorkspaceStorage((p) => console.warn('[storage]', p.message))
+  listenForStorageProblems();
+  void openWorkspaceStorage((p) => {
+    console.warn('[storage]', p.message);
+    noteStorageProblem(p.kind, p.message);
+  })
     .catch(() => null) // never expected: the adapter falls back to memory instead of failing
     .then((storage) => {
       if (storage) attachStorage(storage.lsCompat());
       boot();
       // after boot(), so its own save on pagehide runs first and this one writes the result to IndexedDB
       if (storage) flushOnHide(storage);
+      preloadWhenIdle();
     })
     .catch((e: unknown) => {
       U.boot = 'error';
@@ -32,6 +38,20 @@ function start() {
     });
   // `window.__turnkeyOptions = { canvas: false }` (set before the page loads) shows the plain line of stations.
   setFlowAvailable((window as unknown as PageOptions).__turnkeyOptions?.canvas !== false);
+}
+
+/**
+ * The build orchestrator (LangGraph) and the AG-UI client load on first use, not with the page. Fetch them once the
+ * page is idle, so the first build does not wait for them and the service worker keeps them for offline use.
+ */
+function preloadWhenIdle() {
+  const load = () => {
+    void import('@/platform/orchestrator/run').catch(() => undefined);
+    void import('@/platform/agui/client').catch(() => undefined);
+    void import('@/shared/agent-contract').catch(() => undefined);
+  };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(load, { timeout: 4000 });
+  else setTimeout(load, 1500);
 }
 
 export default function Workspace() {

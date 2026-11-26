@@ -2,7 +2,7 @@
  * The team runner and its tool boxes on paths the main graph tests do not take: a stop part way, an unexpected
  * failure, a pause that names no agent, and every way a connector can answer.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { runTeamGraph } from '@/server/graph/team';
 import { queryFrom, toolBoxFromConnectors, type ConnectorLike } from '@/server/graph/team/connector-tools';
 import { KNOWN_TOOLS, toolBoxFrom, type ToolBox } from '@/server/graph/team/tools';
@@ -14,6 +14,7 @@ const noTools: ToolBox = {
 };
 import type { Provider } from '@/server/llm';
 import { collect, factRequest, fixtureTools } from './fixtures';
+import { setLogSink } from '@/server/log';
 
 const finals = (events: { type: string }[]) => events.filter((e) => e.type === 'RUN_FINISHED' || e.type === 'RUN_ERROR');
 
@@ -44,16 +45,22 @@ describe('runTeamGraph edges', () => {
         throw new TypeError('secret internals at /var/task/x.js');
       },
     };
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // server logs are structured lines (src/server/log.ts), silent under vitest unless LOG_LEVEL is set
+    const lines: string[] = [];
+    const restoreSink = setLogSink((_level, line) => lines.push(line));
+    const level = process.env.LOG_LEVEL;
+    process.env.LOG_LEVEL = 'error';
     try {
       const { sink, events } = collect();
       const r = await runTeamGraph(factRequest(), { provider, tools: fixtureTools(), sink });
       expect(r).toMatchObject({ status: 'failed', reason: 'The team could not finish this run.' });
       expect(events.at(-1)).toEqual({ type: 'RUN_ERROR', message: 'The team could not finish this run.', code: 'failed' });
       expect(JSON.stringify(events)).not.toContain('/var/task');
-      expect(log).toHaveBeenCalled();
+      expect(lines.some((l) => JSON.parse(l).event === 'team_failed')).toBe(true);
     } finally {
-      log.mockRestore();
+      restoreSink();
+      if (level === undefined) delete process.env.LOG_LEVEL;
+      else process.env.LOG_LEVEL = level;
     }
   });
 

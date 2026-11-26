@@ -162,9 +162,9 @@ describe('anthropic provider edges', () => {
   it('an empty body is reported, not read', async () => {
     const p = make(async () => new Response(null, { status: 200 }));
     const e = await failure(p.stream(ask()));
-    // reported as an LlmError naming the status (its code is bad_request today; upstream would fit better)
+    // the service failed, not the request: reported as upstream, naming the status
     expect(e).toBeInstanceOf(LlmError);
-    expect(e.message).toBe('the model gateway answered 200');
+    expect(e).toMatchObject({ code: 'upstream', message: 'the model gateway answered 200 with no body' });
   });
 
   it('assembles tool input from pieces; empty input is {}, broken input stays text', async () => {

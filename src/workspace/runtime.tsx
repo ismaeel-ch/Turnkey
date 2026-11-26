@@ -1,7 +1,7 @@
 import type { FormEvent } from 'react';
 import type { AppAction, AppDef, AppTable, AppUser, ColumnDef, Row, Screen, StoredRow, TableDef, Transition } from '@/shared/types/app';
 import type { AppRecord, Dict, Pane, PaneForm, RecordRef, Stage, Walk } from '@/shared/types/workspace';
-import { BRAND, U, arr, confirmBox, cx, fmtDate, fmtDateTime, fmtNum, label, needNet, notify, online, toast } from './core';
+import { BRAND, U, arr, confirmBox, cx, fmtDate, fmtDateTime, fmtNum, initials, label, needNet, notify, online, toast } from './core';
 import { DBX, dbExists } from './db';
 import { accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec, type ApiResult } from './engine';
 import { REC, allConnectors, callConnector, connOn } from './builds';
@@ -206,7 +206,7 @@ export function AppPane({ app, pane, solo: given }: { app: AppRecord; pane: Pane
           <button
             className="persona"
             aria-haspopup="dialog"
-            aria-label={'Signed in as ' + user.name + '. People and account'}
+            aria-label={'Account ' + initials(user.name) + ', signed in as ' + user.name}
             onClick={() => {
               pane.sheet = 'me';
               notify();
@@ -220,7 +220,6 @@ export function AppPane({ app, pane, solo: given }: { app: AppRecord; pane: Pane
             title="Switch user or sign out"
             btn={{
               cls: 'persona',
-              label: 'Signed in as ' + user.name,
               body: (
                 <>
                   <Avatar name={user.name} size="sm" />

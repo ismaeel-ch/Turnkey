@@ -8,8 +8,10 @@
 import { createLimiter, lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
 import { parseBody, refuse, refuseCrossSite, refuseVerdict, visitorKey } from '@/server/guard/http';
 import { MAX_CODE, shareRequestSchema } from '@/server/share/records';
+import { shareQuota } from '@/server/share/quota';
 import { saveShare } from '@/server/share/service';
 import { resolveShareStore } from '@/server/share/store';
+import { withRequestLog } from '@/server/log';
 
 export const runtime = 'nodejs';
 
@@ -17,13 +19,13 @@ export const runtime = 'nodejs';
 const saveLimiter = createLimiter();
 const saveLimits = () => ({ ...lightLimitsFrom(), perMinute: Number(process.env.SHARE_SAVES_PER_MINUTE) || 12, globalPerMinute: 200 });
 
-export function GET(request: Request) {
+function get(request: Request) {
   const light = lightLimiter.take(visitorKey(request), lightLimitsFrom());
   if (!light.ok) return refuseVerdict(light);
   return Response.json({ enabled: !!resolveShareStore() }, { headers: { 'cache-control': 'no-store' } });
 }
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   const foreign = refuseCrossSite(request);
   if (foreign) return foreign;
   const verdict = saveLimiter.take(visitorKey(request), saveLimits());
@@ -32,6 +34,9 @@ export async function POST(request: Request) {
   if (!store) return refuse(503, 'not_configured', 'Short links are not set up on this site. The long link works.');
   const body = await parseBody(request, shareRequestSchema, MAX_CODE + 2000);
   if (!body.ok) return body.response;
+  // A newer version under the owner's own name does not take a new name, but it still writes to the store.
+  const quota = shareQuota.take(visitorKey(request), body.data.code.length);
+  if (!quota.ok) return refuse(429, 'rate_limited', quota.message);
   try {
     const r = await saveShare(store, body.data);
     if (!r.ok)
@@ -44,3 +49,7 @@ export async function POST(request: Request) {
     return refuse(503, 'not_configured', 'The short link could not be saved just now. The long link works.');
   }
 }
+
+export const GET = withRequestLog('share.status', get);
+
+export const POST = withRequestLog('share.save', post);

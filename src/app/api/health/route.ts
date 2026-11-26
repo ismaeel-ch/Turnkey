@@ -7,15 +7,17 @@
  * Probes spend a little of the model budget, so they go through the same limits as every other model call.
  * Never returns a key, a gateway address or anything else that is secret. Model names are not secret.
  */
-import { limiter, lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
+import { limiter, lightLimiter, lightLimitsFrom, limitsFrom } from '@/server/guard/limits';
+import { spentToday } from '@/server/llm/usage';
 import { refuseVerdict, visitorKey } from '@/server/guard/http';
 import { EFFORT_BY_TIER, backendLabel, LlmError, resolveProvider, usageTotals, type Provider } from '@/server/llm';
 import pkg from '../../../../package.json';
+import { withRequestLog } from '@/server/log';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-export async function GET(request: Request) {
+async function get(request: Request) {
   const light = lightLimiter.take(visitorKey(request), lightLimitsFrom());
   if (!light.ok) return refuseVerdict(light);
   const provider = resolveProvider();
@@ -33,6 +35,8 @@ export async function GET(request: Request) {
     usage: limiter.usage(),
     // Tokens and cost of the model calls this server instance has made since it started, against the budget.
     spend: usageTotals(),
+    // Dollars spent today (UTC) on this instance, beside the daily cap that stops live calls when reached.
+    today: { spentUsd: Math.round(spentToday() * 1e4) / 1e4, capUsd: limitsFrom().dailySpendUsd },
     time: new Date().toISOString(),
   };
 
@@ -91,3 +95,5 @@ async function toolProbe(provider: Provider) {
     return { ok: false, model, code: error.code, error: error.message, ms: Date.now() - started };
   }
 }
+
+export const GET = withRequestLog('health', get);

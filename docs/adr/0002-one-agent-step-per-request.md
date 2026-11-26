@@ -1,6 +1,6 @@
 # ADR 2: One agent step per request
 
-Status: accepted. Implementation: Built for the model route; the server-side step graph is planned (WP-05).
+Status: accepted. Implementation: Built. Each Live agent turn is one run of the server's step graph.
 
 ## Context
 
@@ -15,6 +15,6 @@ The browser drives the workflow and asks the server for one agent step at a time
 - No request is long. A stopped or reloaded build loses only the step in progress, and the app says so on reload.
 - The guard rails see each call and can refuse one (rate, daily cap, prompt size) without breaking a build half-way in a hidden way: the build stops and says why.
 - The workflow lives in the browser, so the browser must stay open during a build.
-- Planned: the agent step as a LangGraph run on the server (draft, validate, repair, at most three attempts, WP-05), reached through the CopilotKit runtime (WP-08, WP-16).
+- The agent step is a LangGraph run on the server (draft, validate, repair, at most three model calls, `src/server/graph/step`), reached through agent `step` in the CopilotKit runtime. An app team run is one request too; a pause ends it and a second request resumes from a snapshot.
 
 Where to look: `src/app/api/llm/route.ts`, `src/workspace/line.ts`, section 4 of the overview.

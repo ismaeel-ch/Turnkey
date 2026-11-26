@@ -12,11 +12,12 @@ import { parseBody, refuse, refuseCrossSite, refuseVerdict, visitorKey } from '@
 import { limiter, limitsFrom } from '@/server/guard/limits';
 import { LlmError } from '@/server/llm';
 import type { BaseEvent } from '@ag-ui/core';
+import { withRequestLog } from '@/server/log';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   const foreign = refuseCrossSite(request);
   if (foreign) return foreign;
   const limits = limitsFrom();
@@ -67,3 +68,5 @@ export async function POST(request: Request) {
     headers: { 'content-type': encoder.getContentType(), 'cache-control': 'no-store, no-transform', 'x-accel-buffering': 'no' },
   });
 }
+
+export const POST = withRequestLog('agent.team', post);

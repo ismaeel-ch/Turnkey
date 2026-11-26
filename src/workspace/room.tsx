@@ -1333,7 +1333,7 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
                                       ? 'The call did not go through'
                                       : x.real
                                         ? 'Looked up from the server'
-                                        : 'Sample response. The real build makes this call from the server.'
+                                        : 'Sample response, recorded with this saved build.'
                                   }
                                 >
                                   <Icon n="plug" s="12" />

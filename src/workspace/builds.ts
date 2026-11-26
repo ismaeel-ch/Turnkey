@@ -3971,8 +3971,8 @@ export function matchTemplate(text: string) {
 }
 
 /* ---------- connections to third parties ----------
-   The real build calls these from the server route (REST) or through CopilotKit's MCP client.
-   This page cannot reach other hosts, so every response below is a labelled sample. */
+   Five of them have real clients on the server (src/server/connectors, /api/connectors/<id>): the Connections page's Test button
+   calls those for real. Saved builds replay the labelled samples below, so a Demo build costs nothing and needs no network. */
 export const CONNECTORS: Connector[] = [
   {
     id: 'wikipedia',
@@ -4135,7 +4135,7 @@ export const LEARN: [RegExp, string, string][] = [
   [/outlook|mail|calendar|excel|office|365/i, 'Microsoft 365 documentation', 'https://learn.microsoft.com/en-us/microsoft-365/'],
   [/teams|meeting|call/i, 'Microsoft Teams documentation', 'https://learn.microsoft.com/en-us/microsoftteams/'],
 ];
-export const SAMPLE_NOTE = 'Sample response. This prototype cannot reach other hosts; the real build makes this call from the server.';
+export const SAMPLE_NOTE = 'Sample response, recorded with this saved build. Test on the Connections page makes the call for real.';
 // Sample arguments come from saved builds and from what the owner types in the connector panel.
 type SampleArgs = Dict<string | number | undefined>;
 export const SAMPLES: Dict<Dict<(a: SampleArgs) => Dict<unknown>>> = {

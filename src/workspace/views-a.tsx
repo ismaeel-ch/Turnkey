@@ -582,35 +582,37 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
         )}
       </div>
       <div className="vx-bar">
-        <div className="vswitch" role="tablist" aria-label="Ways to view this data" data-tour="vswitch">
-          {rec
-            .concat(
-              recT.includes(view)
-                ? []
-                : [
-                    {
-                      type: view,
-                      why: 'Not recommended by the advisor, but it fits.',
-                    },
-                  ],
-            )
-            .map((v) => (
-              <button
-                key={v.type}
-                role="tab"
-                aria-selected={v.type === view}
-                className={cx('vs-b', v.type === view && 'on')}
-                title={v.why}
-                onClick={() =>
-                  set((s) => {
-                    s.view = v.type;
-                  })
-                }
-              >
-                <Icon n={VIEW_ICON[v.type]} s="16" />
-                <span>{VIEW_LABEL[v.type]}</span>
-              </button>
-            ))}
+        <div className="vswitch" data-tour="vswitch">
+          <div className="vs-tabs" role="tablist" aria-label="Ways to view this data">
+            {rec
+              .concat(
+                recT.includes(view)
+                  ? []
+                  : [
+                      {
+                        type: view,
+                        why: 'Not recommended by the advisor, but it fits.',
+                      },
+                    ],
+              )
+              .map((v) => (
+                <button
+                  key={v.type}
+                  role="tab"
+                  aria-selected={v.type === view}
+                  className={cx('vs-b', v.type === view && 'on')}
+                  title={v.why}
+                  onClick={() =>
+                    set((s) => {
+                      s.view = v.type;
+                    })
+                  }
+                >
+                  <Icon n={VIEW_ICON[v.type]} s="16" />
+                  <span>{VIEW_LABEL[v.type]}</span>
+                </button>
+              ))}
+          </div>
           {more.length > 0 && (
             <Menu
               align="left"
@@ -836,7 +838,6 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
           title="Choose columns"
           btn={{
             cls: 'btn sm',
-            label: 'Columns',
             body: (
               <>
                 <Icon n="layout" s="16" />

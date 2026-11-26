@@ -1,3 +1,4 @@
+import { AreaBoundary } from '@/platform/area-boundary';
 import {
   BRAND,
   LS,
@@ -47,7 +48,8 @@ import { TeamAv } from './team';
 import { StationTests, TestsView, suiteOf, testable } from './tests';
 import { BuildSummary, FlowView } from './flow';
 import { type Station, AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp, rebuild, startBuild, stopRun } from './line';
-import { CustomTab, FlowChips, REVIEWERS, ReviewPanel, answerGate, flowList, flowOf, reviewerAt } from './custom';
+import { CustomTab, FlowChips, ReviewPanel, answerGate, flowList, flowOf, reviewerAt } from './custom';
+import { REVIEWERS } from './reviewers';
 import { TesterPanel } from './tester';
 import {
   AgentAv,
@@ -75,6 +77,8 @@ import { enterSolo, keepShared, openShare, sharedApps } from './share';
 import { AppLogo, ReleaseView, isDirty, relOf } from './release';
 import { ApiView, ChatPanel, ConnView, DataView } from './shell-b';
 import { startTour } from './shell-c';
+import { RerunBar } from './rerun';
+import { touchOf, touchText } from './provenance';
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
 export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
@@ -225,7 +229,7 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
                 }),
             },
             {
-              label: 'What is real in this prototype',
+              label: 'What is real in Turnkey',
               icon: 'info',
               on: () => openDialog('about'),
             },
@@ -295,7 +299,7 @@ export function Home() {
           checking: 'Still connecting to the model. Try again in a moment, or pick a saved build below.',
           nomodel:
             NO_MODEL +
-            ' None of the saved builds matches that sentence, so pick one below. Inside Claude the model comes from the viewer; the hackathon build calls its own server route.',
+            ' None of the saved builds matches that sentence, so pick one below. Live calls the model through Turnkey’s own server route once a model key is set there.',
         };
       if (!tpl) {
         h.note = why[mode.id];
@@ -885,19 +889,21 @@ export function Workspace({ app }: { app: AppRecord }) {
               <Icon n="share" />
             </Btn>
           </div>
-          <div className="view">
-            {chatShown() ? (
-              <ChatPanel app={app} />
-            ) : view === 'app' ? (
-              stageOf(app).tour ? (
-                <StageView app={app} />
+          <AreaBoundary name={chatShown() ? 'The chat' : 'This view'} resetKey={chatShown() ? 'chat' : view}>
+            <div className="view">
+              {chatShown() ? (
+                <ChatPanel app={app} />
+              ) : view === 'app' ? (
+                stageOf(app).tour ? (
+                  <StageView app={app} />
+                ) : (
+                  <AppLauncher app={app} />
+                )
               ) : (
-                <AppLauncher app={app} />
-              )
-            ) : (
-              body
-            )}
-          </div>
+                body
+              )}
+            </div>
+          </AreaBoundary>
         </div>
         <PhoneNav app={app} />
       </div>
@@ -949,11 +955,21 @@ export function Workspace({ app }: { app: AppRecord }) {
         </div>
         {/* On a tablet the chat lies over the view, below the header, so the view tabs and Share stay in reach. */}
         <div className={'view' + (chatShown() && NARROW() ? ' has-chat' : '')}>
-          {view === 'app' ? <StageView app={app} /> : body}
-          {chatShown() && NARROW() && <ChatPanel app={app} />}
+          <AreaBoundary name="This view" resetKey={view}>
+            {view === 'app' ? <StageView app={app} /> : body}
+          </AreaBoundary>
+          {chatShown() && NARROW() && (
+            <AreaBoundary name="The chat">
+              <ChatPanel app={app} />
+            </AreaBoundary>
+          )}
         </div>
       </div>
-      {chatShown() && !NARROW() && <ChatPanel app={app} />}
+      {chatShown() && !NARROW() && (
+        <AreaBoundary name="The chat">
+          <ChatPanel app={app} />
+        </AreaBoundary>
+      )}
     </div>
   );
 }
@@ -1029,6 +1045,7 @@ export function BuildView({ app }: { app: AppRecord }) {
           </Btn>
         )}
       </div>
+      <RerunBar app={app} />
       {app.line.research.status === 'waiting' && app.line.research.hold !== 'approval' && (
         <MBar
           tone="warning"
@@ -1912,7 +1929,7 @@ export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
     return (
       <div>
         <p className="muted t-cap">
-          {'Layout chosen by the UI agent: '}
+          {touchText(touchOf(app, 'theme'), 'Made by the UI agent').replace(/^Made by/, 'Layout chosen by') + ': '}
           <span className={'swatch acc-' + def.theme.accent} />
           {label(def.theme.accent)}
           {' accent, '}
@@ -1936,6 +1953,9 @@ export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
                   {s.date ? ', dated by ' + s.date : ''}
                   {s.range ? ', ' + s.range + ' only' : ''}
                 </span>
+                {touchOf(app, 'screen:' + s.id) && (
+                  <span className="t-cap muted touch-note">{touchText(touchOf(app, 'screen:' + s.id))}</span>
+                )}
                 <span className="row wrap gap4">
                   {s.roles.map((r) => (
                     <span key={r} className="badge b-outline">

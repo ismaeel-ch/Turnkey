@@ -7,6 +7,23 @@ const eslintConfig = defineConfig([
   ...nextTs,
   globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts', 'public/vendor/**', 'tests/e2e/**', 'scripts/gen-icons.cjs']),
   {
+    // Stricter than Next's defaults for all typed code. The block below still turns some of these off for workspace
+    // modules that have not been typed yet.
+    files: ['src/**/*.{ts,tsx}', 'tests/unit/**/*.ts'],
+    rules: {
+      eqeqeq: ['error', 'smart'],
+      'no-var': 'error',
+      'object-shorthand': 'error',
+      'no-console': ['error', { allow: ['info', 'warn', 'error'] }],
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports', disallowTypeAnnotations: false }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none', ignoreRestSiblings: true },
+      ],
+    },
+  },
+  {
     // The workspace modules came from the prototype by an automatic conversion. They keep one mutable store
     // (core.ts: S, U, notify) that components read and write directly, which these rules forbid. Each module moves to
     // typed code and a proper store; remove a rule from this list once no module needs it.
@@ -50,6 +67,32 @@ const eslintConfig = defineConfig([
       'react/no-unescaped-entities': 'off',
       'prefer-spread': 'off',
       'prefer-const': 'off',
+    },
+  },
+  {
+    // CLAUDE.md rule 2: server code (model calls, keys, guard rails) never reaches the browser bundle. Browser-side
+    // and shared code may not import it. Server components under src/app may.
+    files: ['src/platform/**', 'src/workspace/**', 'src/shared/**', 'src/app/(workspace)/WorkspaceLoader.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@/server',
+                '@/server/**',
+                '@/lib/model',
+                '**/src/server/**',
+                '../server/**',
+                '../../server/**',
+                '../../../server/**',
+              ],
+              message: 'Browser and shared code may not import server code (CLAUDE.md rule 2). Call an API route instead.',
+            },
+          ],
+        },
+      ],
     },
   },
 ]);

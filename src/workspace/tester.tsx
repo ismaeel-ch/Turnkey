@@ -65,8 +65,7 @@ export interface Repair {
   text: string;
 }
 type BackedApp = AppRecord & { def: BackedDef };
-export const CASE_DO = ['create', 'see', 'hidden', 'transition', 'denied', 'invalid', 'open'],
-  QA_ROUNDS = 3; // one run, then at most two repair rounds
+export const CASE_DO = ['create', 'see', 'hidden', 'transition', 'denied', 'invalid', 'open'];
 export const CASE_EXPECT: Record<string, string> = {
   create: '201 Created',
   see: 'the record is in the list',
@@ -432,7 +431,7 @@ export function keepFix(
 /**
  * The Tester's part of a build, as the four steps the workflow graph calls: write the cases, run every test, send the
  * failures back for repair, and record the result. The graph decides how often `run` and `repair` happen (at most
- * QA_ROUNDS runs) and emits the `tests` step events itself.
+ * `testerMax` runs, in src/platform/orchestrator/compile.ts) and emits the `tests` step events itself.
  */
 export function testerSteps(app: BackedApp, run: Run) {
   const live = app.mode === 'live' && liveModelOn(),

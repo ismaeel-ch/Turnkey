@@ -880,7 +880,8 @@ export function ShareDialog({ p }: { p: { app: string } }) {
           <li>
             <Icon n="info" s="16" />
             <span>
-              Inside this prototype viewer a link cannot open a new page, so use Preview, or paste the link under Open a shared app.
+              This page is shown inside a frame, where a link cannot open a new page. Use Preview, or paste the link under Open a shared
+              app.
             </span>
           </li>
         )}

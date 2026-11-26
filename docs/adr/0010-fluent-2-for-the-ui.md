@@ -1,7 +1,8 @@
 # ADR 10: Fluent 2 for the interface
 
-Status: accepted. Implementation: In progress (pull request #44 for the first part; workstream 7 for the remaining
-controls).
+Status: accepted. Implementation: Built (#44, #62, #68, #71, #72). Tabs, switches, menus, message bars, inputs,
+selects, chips and cards are Fluent components. Hand-written styles remain for the canvas and the generated app
+screens.
 
 ## Context
 

@@ -82,8 +82,10 @@ import {
   stepEnd,
   stepStart,
 } from './line';
-import { FLOW_HELP, LEVELS, NOTE_FOR, REVIEWERS, agentThe, answerGate, flowChat, flowList, flowOf, parseFlow } from './custom';
+import { FLOW_HELP, LEVELS, NOTE_FOR, agentThe, answerGate, flowChat, flowList, flowOf, parseFlow } from './custom';
+import { REVIEWERS } from './reviewers';
 import { logChange } from './release';
+import { recordTouches, snapshotDef } from './provenance';
 
 /* ===== Turnkey prototype · changes from chat: operations, migrations, partial re-runs, build pack ===== */
 export const COLOR_WORDS: Dict<string> = {
@@ -1182,6 +1184,7 @@ export function applyChangeSync(app: BackedApp, steps: PlannedStep[], ctx: Chang
     seed: app.seed,
     renamed: app.renamed,
     results: app.line.walkthrough.results,
+    touched: app.touched || {},
   });
   const first = Math.min.apply(
       null,
@@ -1195,7 +1198,11 @@ export function applyChangeSync(app: BackedApp, steps: PlannedStep[], ctx: Chang
   });
   dbSavepoint(app.id, 'chg');
   try {
-    steps.forEach((s) => s.run(ctx));
+    steps.forEach((s) => {
+      const snap = snapshotDef(app.def);
+      s.run(ctx);
+      recordTouches(app, snap, STATIONS[stationIdx(s.station)]?.agent || 'orchestrator', 'change', ctx.runN, s.text);
+    });
     app.rev++;
     for (let i = first; i < STATIONS.length; i++) {
       const id = STATIONS[i].id,
@@ -1230,6 +1237,7 @@ export function applyChangeSync(app: BackedApp, steps: PlannedStep[], ctx: Chang
     app.seed = b.seed;
     app.renamed = b.renamed;
     app.line.walkthrough.results = b.results;
+    app.touched = b.touched;
     app.rev++;
   } else dbRelease(app.id, 'chg');
   return {

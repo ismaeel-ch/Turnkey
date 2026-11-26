@@ -55,7 +55,7 @@ describe('with no model configured', () => {
 
   it('/api/share still works: it needs no model', async () => {
     const { GET } = await import('@/app/api/share/route');
-    const res = GET(new Request('http://localhost/api/share', { headers: { 'x-forwarded-for': '198.51.100.249' } }));
+    const res = await GET(new Request('http://localhost/api/share', { headers: { 'x-forwarded-for': '198.51.100.249' } }));
     expect(res.status).toBe(200);
   });
 });

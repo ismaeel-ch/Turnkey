@@ -1,7 +1,7 @@
 import { NativeField } from '@/platform/dom';
 import type { AppTable, BackedDef, BriefedDef, ColumnDef, Untrusted } from '@/shared/types/app';
 import type { FormEvent, ReactNode } from 'react';
-import type { AppFlow, AppRecord, ChatMessage, Dict, AddedAgent, Review, ReviewFinding, ReviewerInfo, Run } from '@/shared/types/workspace';
+import type { AppFlow, AppRecord, ChatMessage, Dict, AddedAgent, Review, ReviewFinding, Run } from '@/shared/types/workspace';
 import type { Station } from './line';
 import {
   NARROW,
@@ -62,6 +62,9 @@ import type { ParsedChange } from './changes';
 import { keepFix } from './tester';
 import { Btn, AgentAv, Dialog, Field, Icon, MBar, Seg, Spinner, Switch } from './ui';
 import { rebuildAsk } from './shell-a';
+import { REVIEWERS, regStep } from './reviewers';
+import type { Reviewer } from './reviewers';
+import { RerunBar, queueRerun, queuedRerun } from './rerun';
 
 /* ===== Turnkey prototype · the workflow is yours: approvals, review steps, instructions, attempts =====
    The build workflow is shared state (app.flow). The owner edits it on the canvas, in the inspector or in the settings dialog.
@@ -81,79 +84,6 @@ export const NOTE_HINT: Dict<string> = {
   views: 'Example: always include a calendar when there is a date',
   ui: 'Example: keep page names to two words',
 };
-/** A reviewer agent from the library, or one the owner described. */
-export type Reviewer = ReviewerInfo;
-export const REVIEWERS: Record<string, Reviewer> = {
-  data: {
-    name: 'Data reviewer',
-    short: 'Data review',
-    after: 'database',
-    icon: 'dbSearch',
-    acc: 'forest',
-    reads: 'the tables',
-    job: 'Reads the tables for gaps: nowhere to write notes, no date to plan by, thin sample data.',
-  },
-  security: {
-    name: 'Security reviewer',
-    short: 'Security review',
-    after: 'backend',
-    icon: 'shieldKey',
-    acc: 'cranberry',
-    reads: 'the access rules',
-    job: 'Reads the access rules for rights that are wider than the user stories need.',
-  },
-  insight: {
-    name: 'Insight reviewer',
-    short: 'Insight review',
-    after: 'views',
-    icon: 'lightbulb',
-    acc: 'lavender',
-    reads: 'the views and the dashboard',
-    job: 'Looks for questions the dashboard cannot answer yet.',
-  },
-  wording: {
-    name: 'Wording reviewer',
-    short: 'Wording review',
-    after: 'screens',
-    icon: 'textEdit',
-    acc: 'steel',
-    reads: 'the pages',
-    job: 'Reads the pages the way a new user would: crowded menus, wide tables, raw labels.',
-  },
-};
-REVIEWERS.normalize = {
-  name: 'Normaliser',
-  short: 'Normalise tables',
-  after: 'database',
-  icon: 'layer',
-  acc: 'teal',
-  reads: 'the tables and their rows',
-  job: 'Tidies the tables: free text that repeats becomes a choice, and a fact kept in two places is kept in one.',
-  auto: true,
-};
-REVIEWERS.style = {
-  name: 'UI stylist',
-  short: 'Style the UI',
-  after: 'screens',
-  icon: 'color',
-  acc: 'pink',
-  reads: 'the pages and the layout',
-  job: 'Fits the layout to the app: compact rows for wide tables, navigation that suits the number of pages.',
-  auto: true,
-};
-export const regStep = (id: string, r: Reviewer) => {
-  r.id = id;
-  REVIEWERS[id] = r;
-  AGENTS['rv_' + id] = {
-    name: r.name,
-    icon: r.icon,
-    acc: r.acc,
-    role: r.job,
-    reviewer: id,
-  };
-  return r;
-};
-Object.keys(REVIEWERS).forEach((id) => regStep(id, REVIEWERS[id]));
 export const STEP_AT = ['database', 'backend', 'views', 'screens', 'walkthrough'],
   STEP_MAX = 8,
   STEP_ICONS = ['bot', 'wand', 'sparkle', 'puzzle', 'target', 'glasses', 'tag', 'wrench'],
@@ -823,6 +753,8 @@ export function flowAfter(app: AppRecord, res: FlowApplied, by: string) {
         },
       );
   }
+  // the stations the change touches run again on their own, a few seconds after the last edit (src/workspace/rerun.tsx)
+  if (from && res.fx.from != null) queueRerun(app, res.fx.from, (a, st, auto) => rerunFrom(a, st, true, auto));
   // a review step that was just added reads the app as it is now. Only the new reviewers work, one after the other; no station runs again.
   if (ready && !busy && !PENDING[app.id])
     (async () => {
@@ -2260,7 +2192,8 @@ export function dismissFinding(app: AppRecord, id: string, fid: string) {
 }
 
 /* ---------- running again from one station: the stations before it are kept ---------- */
-export async function rerunFrom(app: AppRecord, stId: string, viaChat?: boolean) {
+/** `auto`: the re-run queued after a workflow edit (src/workspace/rerun.tsx), which asks only when the database would be rebuilt. */
+export async function rerunFrom(app: AppRecord, stId: string, viaChat?: boolean, auto?: boolean) {
   const i = stationIdx(stId),
     tell = (t: string) => (viaChat ? say(app, 'orchestrator', t) : toast(t, 'info'));
   if (i < 0) return;
@@ -2275,6 +2208,7 @@ export async function rerunFrom(app: AppRecord, stId: string, viaChat?: boolean)
     notify();
   } // on a phone the question must not open behind the sheet it was asked from
   if (
+    !auto &&
     !(await confirmBox({
       title: 'Run again from ' + STATIONS[i].name + '?',
       body:
@@ -3216,7 +3150,8 @@ export function FlowCards({ app, m }: { app: AppRecord; m: ChatMessage }) {
       notify();
     };
   if (c.type === 'flow') {
-    const cur = JSON.stringify(normFlow(flowOf(app))),
+    const latest = m === [...(app.chat || [])].reverse().find((x) => x.card && x.card.type === 'flow'),
+      cur = JSON.stringify(normFlow(flowOf(app))),
       canUndo = !c.undone && cur === c.after && c.before !== c.after;
     return (
       <div className={cx('gcard', !c.quiet && 'ok')}>
@@ -3236,8 +3171,9 @@ export function FlowCards({ app, m }: { app: AppRecord; m: ChatMessage }) {
             ))}
           </ul>
         )}
+        {latest && <RerunBar app={app} compact />}
         <div className="row wrap">
-          {c.from && ready && (
+          {c.from && ready && !(latest && queuedRerun(app.id)) && (
             <Btn className="btn sm" disabled={busy} onClick={() => rerunFrom(app, c.from || '')}>
               <Icon n="rerun" s="16" />
               {'Run again from '}
