@@ -1,0 +1,28 @@
+{
+  "_note": "Hand-written from the public MediaWiki search API and the REST page summary docs. Not a recorded live response.",
+  "search": {
+    "query": {
+      "search": [
+        {
+          "ns": 0,
+          "title": "Lahore",
+          "pageid": 25256,
+          "size": 120000,
+          "wordcount": 15000,
+          "snippet": "<span class=\"searchmatch\">Lahore</span> is the capital of the Pakistani province of Punjab.",
+          "timestamp": "2026-10-01T00:00:00Z"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "type": "standard",
+    "title": "Lahore",
+    "pageid": 25256,
+    "extract": "Lahore is the capital of the Pakistani province of Punjab, and the second-most populous city in Pakistan. It is known for its Mughal-era monuments.",
+    "content_urls": {
+      "desktop": { "page": "https://en.wikipedia.org/wiki/Lahore" },
+      "mobile": { "page": "https://en.m.wikipedia.org/wiki/Lahore" }
+    }
+  }
+}
