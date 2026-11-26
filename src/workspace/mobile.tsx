@@ -647,7 +647,7 @@ export function PhoneSheets({ app }: { app: AppRecord | null }) {
               }),
             )}
           />
-          <SheetRow icon="info" label="What is real in this prototype" onClick={act(() => openDialog('about'))} />
+          <SheetRow icon="info" label="What is real in Turnkey" onClick={act(() => openDialog('about'))} />
         </div>
         <div className="sheet-list">
           <SheetRow icon="settings" label="Settings" onClick={act(() => openDialog('settings'))} />

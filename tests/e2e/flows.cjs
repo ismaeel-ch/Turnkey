@@ -132,8 +132,13 @@ async function flowDemo(browser, url) {
   await shot(page, '20-api');
   await page.getByRole('tab', { name: 'Permission matrix' }).click(); await sleep(100); await shot(page, '21-api-matrix');
   await view(page, 'Connections'); await page.waitForSelector('.conn-card');
-  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await sleep(100);
-  check('connection test shows a sample response', await page.locator('.conn-detail .json').count() === 1);
+  await page.route('**/api/connectors/**', (route) => route.fulfill({ json: { ok: true, items: [{ title: 'Appointment (scheduling)', url: 'https://en.wikipedia.org/wiki/Appointment', text: 'A made-up answer from the server route.', source: 'Wikipedia' }] } }));
+  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await page.waitForSelector('.conn-detail .badge.b-success');
+  check('connection test calls the source through the server route and shows its live answer', await page.locator('.conn-detail .json').count() === 1 && /Live response/.test(await page.locator('.conn-detail').innerText()) && /items \[1\]/.test(await page.locator('.conn-detail .json').innerText()), await page.locator('.conn-detail').innerText());
+  await page.route('**/api/connectors/**', (route) => route.fulfill({ json: { ok: false, code: 'upstream', message: 'Wikipedia did not answer.' } }));
+  await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().click(); await page.waitForFunction(() => /did not answer/.test((document.querySelector('.conn-detail .json') || {}).innerText || ''));
+  check('when the source fails, the test says why and shows the labelled sample beside it', /Sample response/.test(await page.locator('.conn-detail').innerText()), await page.locator('.conn-detail').innerText());
+  await page.unroute('**/api/connectors/**');
   await shot(page, '22-connections');
   await page.locator('.titlebar .net').click(); await sleep(200);
   check('offline disables connection tests', await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().isDisabled());
