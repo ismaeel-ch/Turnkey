@@ -11,6 +11,8 @@
  *   LLM_MAX_PROMPT_CHARS    longest prompt accepted                 (default 120000)
  *   LLM_MAX_OUTPUT_TOKENS   most tokens one answer may use          (default 8000)
  *   LLM_MAX_ANSWER_CHARS    longest answer relayed, in characters   (default 4 x the output token cap)
+ *   LIGHT_RATE_PER_MINUTE   cheap routes (connectors, health) per visitor per minute   (default 60)
+ *   LIGHT_GLOBAL_PER_MINUTE the same, from everyone                  (default 600)
  *   LIVE_MODE               set to `off` to refuse every model call (saved builds keep working)
  */
 type Env = Record<string, string | undefined>;
@@ -79,6 +81,22 @@ export function createLimiter(now: () => number = Date.now) {
 
 /** One limiter per server instance. */
 export const limiter = createLimiter();
+
+/**
+ * Routes that cost no model budget (public-data connectors, health) have their own, looser counters, so they can
+ * neither use up the model allowance nor be hammered without end. LIVE_MODE=off does not apply to them.
+ */
+export function lightLimitsFrom(env: Env = process.env) {
+  const base = limitsFrom(env);
+  return {
+    ...base,
+    perMinute: num(env.LIGHT_RATE_PER_MINUTE, 60),
+    globalPerMinute: num(env.LIGHT_GLOBAL_PER_MINUTE, 600),
+    dailyCap: 1_000_000,
+    off: false,
+  };
+}
+export const lightLimiter = createLimiter();
 
 export function visitorOf(request: Request): string {
   const forwarded = request.headers.get('x-forwarded-for');

@@ -48,3 +48,11 @@ export async function parseBody<T extends z.ZodType>(
 export function visitorKey(request: Request): string {
   return visitorOf(request).slice(0, 64);
 }
+
+/** The refusal for a limiter verdict that said no. */
+export function refuseVerdict(verdict: { code: 'rate_limited' | 'budget' | 'off'; message: string; retryAfter?: number }) {
+  const headers = verdict.retryAfter ? { 'retry-after': String(verdict.retryAfter) } : undefined;
+  return verdict.code === 'off'
+    ? refuse(503, 'not_configured', verdict.message, headers)
+    : refuse(429, verdict.code, verdict.message, headers);
+}

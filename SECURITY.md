@@ -25,7 +25,7 @@ The browser never calls a model provider. It calls `/api/llm`, and the server ad
 | Secrets scan     | Fails `npm run check` and CI if a key-shaped string or an env file is in the repo.                                | `scripts/check-secrets.mjs`   |
 
 The limits are set by environment variables (`LLM_RATE_PER_MINUTE`, `LLM_GLOBAL_PER_MINUTE`, `LLM_DAILY_CALL_CAP`,
-`LLM_MAX_PROMPT_CHARS`, `LLM_MAX_OUTPUT_TOKENS`, `LLM_MAX_ANSWER_CHARS`). Counters are kept in memory by each warm server
+`LLM_MAX_PROMPT_CHARS`, `LLM_MAX_OUTPUT_TOKENS`, `LLM_MAX_ANSWER_CHARS`; `LIGHT_RATE_PER_MINUTE` and `LIGHT_GLOBAL_PER_MINUTE` for the free routes: connectors and health). Counters are kept in memory by each warm server
 instance, so they are a brake and not an exact meter. The gateway's own budget is the hard stop.
 
 There is deliberately no login or passcode: evaluators must be able to use the app without one.

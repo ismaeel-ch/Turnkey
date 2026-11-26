@@ -6,7 +6,8 @@ import {
 } from "@copilotkit/runtime/v2";
 import { litellmModel } from "@/lib/model";
 import { NODE_KINDS } from "@/lib/canvas";
-import { limiter, visitorOf } from "@/server/guard/limits";
+import { limiter, limitsFrom } from "@/server/guard/limits";
+import { refuse, refuseVerdict, visitorKey } from "@/server/guard/http";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -37,10 +38,12 @@ const handler = createCopilotRuntimeHandler({
 // Every run spends model budget, so runs go through the same limits as the other model routes.
 const guarded = async (request: Request) => {
   if (request.method === "POST") {
-    const verdict = limiter.take(visitorOf(request));
-    if (!verdict.ok) {
-      return Response.json({ code: verdict.code, message: verdict.message }, { status: verdict.code === "off" ? 503 : 429 });
-    }
+    const limits = limitsFrom();
+    // A run carries the whole conversation; a very large body is never a real one.
+    const declared = Number(request.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > limits.maxPromptChars * 4) return refuse(413, "too_large", "The request is too large.");
+    const verdict = limiter.take(visitorKey(request), limits);
+    if (!verdict.ok) return refuseVerdict(verdict);
   }
   return handler(request);
 };
