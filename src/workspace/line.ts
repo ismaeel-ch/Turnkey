@@ -60,7 +60,9 @@ import { checkBoard, normBoard } from './room';
 import { SUITES, TESTS, runTestsSync } from './tests';
 import { REVIEWERS, applyAuto, flowDefault, flowList, flowOf, runReview, showGate, stepAfter, verifyFindings } from './custom';
 import { testerSteps } from './tester';
-import { StoppedError, createRun, workflowFromFlow } from '@/platform/orchestrator';
+// Not the orchestrator's index: that pulls in LangGraph (about 800 KB), which loads only when a build starts.
+import { workflowFromFlow } from '@/platform/orchestrator/from-flow';
+import { StoppedError } from '@/platform/orchestrator/types';
 import { SHARE } from './share';
 import { LOGO_FILLS, LOGO_MARKS, LOGO_SHAPES, logChange, normLogo } from './release';
 
@@ -1519,6 +1521,7 @@ export async function runBuild(app, from) {
             workflow: flowList(flow).map((x) => x.text),
           },
     });
+    const { createRun } = await import('@/platform/orchestrator/run');
     const wf = (ctl.wf = createRun(def, ports, { app: app.id, runId: run.id, threadId: app.id + ':' + run.id }));
     res = await wf.start();
     while (res.status === 'waiting') {
