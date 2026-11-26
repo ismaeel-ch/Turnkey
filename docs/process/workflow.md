@@ -23,14 +23,14 @@ process in brief. This page says what the repository does to enforce it.
 `.github/workflows/ci.yml` runs the full checks only when a pull request into `main` is about to be merged: when it
 is not a draft and carries the label `ready-to-merge`. Adding the label starts a run, and each later push to the
 labelled pull request runs it again. It can also be started by hand from the **Actions** tab. Nothing runs on a push
-to `main`. Without the label, only the `ci` job runs, for a few seconds, and fails on purpose with a message saying
-to add the label, so an unchecked pull request never looks green.
+to `main`. Without the label every job is skipped and shows grey: no runner starts and no minutes are used. A skipped
+`ci` means the pull request has not been checked, so do not merge it.
 
-| Job            | What it runs                                                         |
-| -------------- | -------------------------------------------------------------------- |
-| `check`        | secrets scan, lint, typecheck, unit tests, production build          |
-| `e2e` (9 jobs) | one browser flow each, with failure screenshots kept for 3 days      |
-| `ci`           | passes only if the jobs above ran and passed; the one required check |
+| Job            | What it runs                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------- |
+| `check`        | secrets scan, lint, typecheck, unit tests, production build                                       |
+| `e2e` (9 jobs) | one browser flow each, with failure screenshots kept for 3 days                                   |
+| `ci`           | passes only if the jobs above passed; skipped with them without the label; the one required check |
 
 A run takes about four minutes. A job that fails can be reproduced locally with the matching npm script:
 `npm run check:secrets`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e -- <flow>`.
@@ -52,13 +52,12 @@ Update dependencies by hand in their own pull request.
 
 ## Release
 
-A release is a GitHub release on a commit that is already on `main`, tagged `v` and a semantic version (for example
-`v0.2.0`). Publishing it is what deploys to production.
+A release is a version on `main`, tagged `v` and a semantic version (for example `v0.2.0`). Making one is what deploys
+to production.
 
-1. Update `CHANGELOG.md` with the merged pull requests of the milestone, and merge that change through a pull request.
-2. Publish the release: `gh release create v0.2.0 --target main --generate-notes`, or on the website under
-   **Releases**, **Draft a new release**.
-3. `.github/workflows/release.yml` runs. It stops if the tag is not on `main`. Otherwise it runs the checks, builds
-   the commit with the Vercel CLI and deploys it to production, then checks `/api/health`. deploy.md has the details,
-   the secrets it needs, and how to redeploy or roll back.
-4. Check the release page lists the expected pull requests and the run's summary shows the live URL.
+1. Open a pull request `Release v0.2.0` that raises `"version"` in `package.json` and adds the `CHANGELOG.md` section
+   listing the merged pull requests. Merge it when CI is green.
+2. `.github/workflows/release.yml` runs on that merge. It runs the checks, builds the commit with the Vercel CLI,
+   deploys it to production and checks `/api/health`, then creates the tag and the GitHub release with generated
+   notes. deploy.md has the details, the secrets it needs, and how to redeploy or roll back.
+3. Check the release page lists the expected pull requests and the run's summary shows the live URL.

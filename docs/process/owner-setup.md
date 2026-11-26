@@ -19,7 +19,9 @@ steps are the owner's. Do them once, in this order. Each one can be checked afte
 2. Name it `main protection`. Set **Enforcement status** to **Active**.
 3. Under **Target branches**, add the default branch `main`.
 4. Tick **Require a pull request before merging**. Leave the approval count at 0 or 1; the owner merges.
-5. Tick **Require status checks to pass**. Search for **ci** and add it. It is the job name in `ci.yml`; add it only
+5. Tick **Require status checks to pass**. Search for **ci** and add it. Note that GitHub counts a skipped check as
+   passing, and `ci` is skipped on a pull request without the `ready-to-merge` label, so the rule does not stop a
+   merge of an unlabelled pull request; the habit of labelling first does. It is the job name in `ci.yml`; add it only
    after the workflow has run once on a pull request, or GitHub will not find it.
 6. Tick **Block force pushes** and **Restrict deletions**.
 7. Save.
@@ -58,8 +60,8 @@ labelled `ready-to-merge` (docs/process/workflow.md). The other labels in docs/P
 
 ## 6. Checks after setup
 
-- A test pull request without the label gets only a failing `ci` check that says to add `ready-to-merge`. With the
-  label it gets the `check`, nine `e2e` jobs and `ci` checks.
+- A test pull request without the label shows its checks as skipped (grey) and uses no minutes. With the label it
+  gets the `check`, nine `e2e` jobs and `ci` checks.
 - The merge button offers squash only, and the head branch is deleted after the merge.
 - A merge to `main` starts no Actions run and no Vercel deployment. Publishing a release starts **Release and
   deploy**, which ends with the production URL in its summary.

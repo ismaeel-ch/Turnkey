@@ -1,0 +1,123 @@
+%%{init: {'flowchart': {'curve': 'linear'}}}%%
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	st_research(st_research)
+	st_research_gate(st_research_gate)
+	st_research_sendback(st_research_sendback)
+	st_research_fail(st_research_fail)
+	st_research_done(st_research_done)
+	st_research_ask(st_research_ask)
+	st_research_answer(st_research_answer)
+	st_research_handoff(st_research_handoff)
+	st_database(st_database)
+	st_database_gate(st_database_gate)
+	st_database_sendback(st_database_sendback)
+	st_database_fail(st_database_fail)
+	st_database_done(st_database_done)
+	st_database_handoff(st_database_handoff)
+	st_backend(st_backend)
+	st_backend_gate(st_backend_gate)
+	st_backend_sendback(st_backend_sendback)
+	st_backend_fallback(st_backend_fallback)
+	st_backend_fail(st_backend_fail)
+	st_backend_done(st_backend_done)
+	st_backend_handoff(st_backend_handoff)
+	st_views(st_views)
+	st_views_gate(st_views_gate)
+	st_views_sendback(st_views_sendback)
+	st_views_fallback(st_views_fallback)
+	st_views_fail(st_views_fail)
+	st_views_done(st_views_done)
+	st_views_handoff(st_views_handoff)
+	st_screens(st_screens)
+	st_screens_gate(st_screens_gate)
+	st_screens_sendback(st_screens_sendback)
+	st_screens_fallback(st_screens_fallback)
+	st_screens_fail(st_screens_fail)
+	st_screens_done(st_screens_done)
+	st_screens_handoff(st_screens_handoff)
+	st_walkthrough(st_walkthrough)
+	st_walkthrough_gate(st_walkthrough_gate)
+	st_walkthrough_sendback(st_walkthrough_sendback)
+	st_walkthrough_fallback(st_walkthrough_fallback)
+	st_walkthrough_fail(st_walkthrough_fail)
+	st_walkthrough_done(st_walkthrough_done)
+	late_steps(late_steps)
+	ready(ready)
+	tests_write(tests_write)
+	tests_run(tests_run)
+	tests_repair(tests_repair)
+	tests_done(tests_done)
+	wrapup(wrapup)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> st_research;
+	late_steps --> ready;
+	ready --> tests_write;
+	st_backend --> st_backend_gate;
+	st_backend_done --> st_backend_handoff;
+	st_backend_fail --> __end__;
+	st_backend_handoff --> st_views;
+	st_backend_sendback --> st_backend;
+	st_database --> st_database_gate;
+	st_database_done --> st_database_handoff;
+	st_database_fail --> __end__;
+	st_database_handoff --> st_backend;
+	st_database_sendback --> st_database;
+	st_research --> st_research_gate;
+	st_research_answer --> st_research_handoff;
+	st_research_ask --> st_research_answer;
+	st_research_done --> st_research_ask;
+	st_research_fail --> __end__;
+	st_research_handoff --> st_database;
+	st_research_sendback --> st_research;
+	st_screens --> st_screens_gate;
+	st_screens_done --> st_screens_handoff;
+	st_screens_fail --> __end__;
+	st_screens_handoff --> st_walkthrough;
+	st_screens_sendback --> st_screens;
+	st_views --> st_views_gate;
+	st_views_done --> st_views_handoff;
+	st_views_fail --> __end__;
+	st_views_handoff --> st_screens;
+	st_views_sendback --> st_views;
+	st_walkthrough --> st_walkthrough_gate;
+	st_walkthrough_done --> late_steps;
+	st_walkthrough_fail --> __end__;
+	st_walkthrough_sendback --> st_walkthrough;
+	tests_done --> wrapup;
+	tests_write --> tests_run;
+	wrapup --> __end__;
+	st_research_gate -.-> st_research_done;
+	st_research_gate -.-> st_research_sendback;
+	st_research_gate -.-> st_research_fail;
+	st_database_gate -.-> st_database_done;
+	st_database_gate -.-> st_database_sendback;
+	st_database_gate -.-> st_database_fail;
+	st_backend_gate -.-> st_backend_done;
+	st_backend_gate -.-> st_backend_sendback;
+	st_backend_gate -.-> st_backend_fallback;
+	st_backend_fallback -.-> st_backend_done;
+	st_backend_fallback -.-> st_backend_fail;
+	st_views_gate -.-> st_views_done;
+	st_views_gate -.-> st_views_sendback;
+	st_views_gate -.-> st_views_fallback;
+	st_views_fallback -.-> st_views_done;
+	st_views_fallback -.-> st_views_fail;
+	st_screens_gate -.-> st_screens_done;
+	st_screens_gate -.-> st_screens_sendback;
+	st_screens_gate -.-> st_screens_fallback;
+	st_screens_fallback -.-> st_screens_done;
+	st_screens_fallback -.-> st_screens_fail;
+	st_walkthrough_gate -.-> st_walkthrough_done;
+	st_walkthrough_gate -.-> st_walkthrough_sendback;
+	st_walkthrough_gate -.-> st_walkthrough_fallback;
+	st_walkthrough_fallback -.-> st_walkthrough_done;
+	st_walkthrough_fallback -.-> st_walkthrough_fail;
+	tests_run -.-> tests_done;
+	tests_run -.-> tests_repair;
+	tests_repair -.-> tests_run;
+	tests_repair -.-> tests_done;
+	classDef default fill:#f2f0ff,line-height:1.2;
+	classDef first fill-opacity:0;
+	classDef last fill:#bfb6fc;
+
