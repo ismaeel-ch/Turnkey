@@ -667,5 +667,5 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 .fui-Button.ob-skip{align-self:flex-start;min-width:0;padding-left:0;padding-right:0;color:var(--colorBrandForegroundLink)}
 .fui-Button.ob-skip:hover{background:none;text-decoration:underline;color:var(--colorBrandForegroundLink)}
 /* 10: the wide canvas is sized to show node text at a readable size, so it can be taller than the window; its
-   controls (zoom, Fit, Map, Reset layout) stay in view at the bottom while any of it is on screen */
-.flow-wrap>.flow-foot{position:sticky;bottom:0;z-index:5;background:var(--colorNeutralBackground1);padding:8px 0;margin-bottom:-8px}
+   controls (zoom, Fit, Map, Reset layout) and legend sit above it, where they are in view without scrolling */
+.flow-wrap>.flow-foot{order:-1}
