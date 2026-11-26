@@ -5,7 +5,7 @@ import { issuesOf } from '@/server/agents/schemas';
 import type { StepRole } from '@/shared/agent-contract';
 import saved from './fixtures/saved-builds.json';
 
-// Saved answers from src/legacy/builds.js and quests.js (the REC objects), written out by running those modules.
+// Saved answers from src/workspace/builds.ts and quests.ts (the REC objects), written out by running those modules.
 // They are known to pass the browser's checks, so every schema must accept them.
 const builds = saved as unknown as Record<string, Record<string, unknown>>;
 const ROLE_OF: Record<string, StepRole> = {

@@ -1,5 +1,5 @@
 /**
- * Finds the JSON object in a model answer, the way the browser does (`parseJSONLoose` in src/legacy/core.js):
+ * Finds the JSON object in a model answer, the way the browser does (`parseJSONLoose` in src/workspace/core.ts):
  * code fences are removed, and the object runs from the first `{` to the last `}`, so prose around it is ignored.
  */
 export type Parsed = { ok: true; value: Record<string, unknown> } | { ok: false; reason: string };

@@ -1,6 +1,6 @@
 /**
  * One zod schema per agent role, written from the normalisers the browser applies to the same answer
- * (normBrief, normSchema, normBackend, normViews, normUI, normCases, normFindings in src/legacy).
+ * (normBrief, normSchema, normBackend, normViews, normUI, normCases, normFindings in src/workspace).
  *
  * The rule: be as lenient as the browser. A schema may reject only what the browser's own checks would certainly
  * reject (for example a brief with one role, or a dashboard with no widgets). Everything the normalisers repair,

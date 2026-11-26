@@ -2,7 +2,7 @@
 import type { StepRole } from '@/shared/agent-contract';
 
 /**
- * Looks at the prompt the browser builds (PROMPTS in src/legacy/line.js, testerPrompt, repairPrompt, the review and
+ * Looks at the prompt the browser builds (PROMPTS in src/workspace/line.ts, testerPrompt, repairPrompt, the review and
  * change prompts, teamPrompt) and names the role. Anything unrecognised is `any`: it still has to be one JSON object.
  */
 export function detectRole(prompt: string): StepRole {
