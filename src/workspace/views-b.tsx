@@ -349,21 +349,21 @@ export const Tip = ({ tip }: { tip: TipAt | null }) =>
     </div>
   ) : null;
 export function useWidth(ref: RefObject<HTMLElement | null>) {
-  const s = useState(0);
+  const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
     const fit = () => {
       const w = el.clientWidth;
-      s[1]((old) => (w && w !== old ? w : old));
+      setWidth((old) => (w && w !== old ? w : old));
     };
     fit();
     if (typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
-  return s[0] || 640;
+  }, [ref]);
+  return width || 640;
 }
 export const Legend = ({ series }: { series: Group[] }) =>
   series.length > 1 ? (
@@ -396,14 +396,14 @@ export function HBars({
   onPick?: (c: CatBar, s: Group) => void;
   picked?: string | null;
 }) {
-  const T = useTip(),
+  const { ref: tipRef, ...T } = useTip(),
     many = series.length > 1,
     max =
       Math.max(...cats.map((c) => (many ? series.reduce((a, s) => a + Math.max(0, c.vals[s.key] || 0), 0) : Math.max(0, c.total))), 0) || 1,
     sum = cats.reduce((a, c) => a + c.total, 0);
   if (!cats.length) return <p className="muted t-cap">Nothing to plot for these filters.</p>;
   return (
-    <div className="cwrap" ref={T.ref}>
+    <div className="cwrap" ref={tipRef}>
       <Legend series={series} />
       <div className="hb" role="list">
         {cats.map((c) => {
@@ -487,8 +487,8 @@ export function TimePlot({
   onPick?: (i: number) => void;
   about: string;
 }) {
-  const T = useTip(),
-    w = useWidth(T.ref),
+  const { ref: tipRef, ...T } = useTip(),
+    w = useWidth(tipRef),
     s0 = useState(-1),
     hov = s0[0],
     n = buckets.length,
@@ -597,7 +597,7 @@ export function TimePlot({
     });
   };
   return (
-    <div className="cwrap" ref={T.ref}>
+    <div className="cwrap" ref={tipRef}>
       <Legend series={series} />
       <svg className="plot" width={w} height={h} role="img" aria-label={about}>
         {ticks.map((v) => (
@@ -1323,6 +1323,16 @@ export function goRecords(
 }
 /** A dashboard widget this user may see, with its table. */
 type Shown = { w: DashWidget; i: number; t: AppTable };
+type DashState = NonNullable<Pane['ds']>;
+/** The dashboard's date range and picked filters for this pane, made on first use. */
+export function dashOf(pane: Pane): DashState {
+  return pane.ds || (pane.ds = { range: 'all', f: [] });
+}
+/** Changes the dashboard's range or filters and redraws. */
+export function setDash(ds: DashState, patch: Partial<DashState>) {
+  Object.assign(ds, patch);
+  notify();
+}
 export function Dash({
   app,
   user,
@@ -1343,12 +1353,7 @@ export function Dash({
       date: null,
       widgets: [],
     },
-    ds =
-      pane.ds ||
-      (pane.ds = {
-        range: 'all',
-        f: [],
-      }),
+    ds = dashOf(pane),
     src = test || pane.test ? 'check' : 'app',
     cache: Dict<StoredRow[]> = {};
   const W = D.widgets
@@ -1580,23 +1585,13 @@ export function Dash({
                 label: r[1],
               }))}
               value={ds.range}
-              onChange={(v: string) => {
-                ds.range = v;
-                notify();
-              }}
+              onChange={(v: string) => setDash(ds, { range: v })}
             />
           </>
         )}
         {ds.f.map(chip)}
         {(ds.f.length > 0 || ds.range !== 'all') && (
-          <Btn
-            className="btn subtle sm"
-            onClick={() => {
-              ds.f = [];
-              ds.range = 'all';
-              notify();
-            }}
-          >
+          <Btn className="btn subtle sm" onClick={() => setDash(ds, { f: [], range: 'all' })}>
             Clear
           </Btn>
         )}

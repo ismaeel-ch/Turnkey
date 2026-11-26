@@ -11,11 +11,12 @@ import type {
   BoardPanel,
   ColumnDef,
   Row,
+  Screen,
   StoredRow,
   Transition,
   Untrusted,
 } from '@/shared/types/app';
-import type { AppRecord, Dict, Pane } from '@/shared/types/workspace';
+import type { AppRecord, Dict, ExplorerState, Pane, PaneForm, ViewFilter } from '@/shared/types/workspace';
 import { S, U, arr, brief, commit, cx, fmtDate, fmtMs, fmtNum, label, notify, online, snake, str, toast, liveModelOn } from './core';
 import { VIEW_ICON, accOf, apiCall, chk, colOf, roleName, tableOf, tourValues } from './engine';
 import { DATA_VIEWS } from './viewspec';
@@ -29,6 +30,7 @@ import {
   formCols,
   isStatusCol,
   optLabel,
+  patchPane,
   rowTitle,
   saveForm,
   stateLabel,
@@ -802,6 +804,24 @@ export function CaseBoard({
 /* ---------- the room: start a case, watch the agents fill the board, jump in, act on the outcome ---------- */
 /** An app whose definition has a workflow and a team: what the team functions need. */
 type TeamApp = AppRecord & { def: BackedDef & { team: AppTeam } };
+/** The form for starting a new case in the agent room, made on first use. */
+export function teamFormOf(pane: Pane, table: string): PaneForm {
+  return pane.tf || (pane.tf = { table, id: null, vals: {}, errs: {}, err: '' });
+}
+/** Turns on the public sources a team needs and saves. */
+export function switchOn(ids: string[]) {
+  ids.forEach((id) => {
+    S.conns[id] = true;
+  });
+  commit();
+}
+/** Opens a page on the records of one case: its own view, filtered to the case, with no search. */
+export function showCaseRows(pane: Pane, st: ExplorerState, s: Screen, f: ViewFilter | null) {
+  st.view = s.type;
+  st.filters = f ? [f] : [];
+  st.q = '';
+  patchPane(pane, { screen: s.id, rec: null });
+}
 export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boolean }) {
   const def = app.def,
     team = def.team;
@@ -816,22 +836,14 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
     saved = app.tpl ? REC[app.tpl] : undefined,
     cases = (saved && saved.cases) || [],
     src = pane.test ? 'check' : 'app';
-  const f =
-      pane.tf ||
-      (pane.tf = {
-        table: it.name,
-        id: null,
-        vals: {},
-        errs: {},
-        err: '',
-      }),
+  const f = teamFormOf(pane, it.name),
     acc = accOf(def, user.role, it.name),
     may = canRunTeam(def, user.role);
   const cols = formCols(app, user, it, true).filter((c) => c.required || c.name === team.input.column),
     text = f.vals[team.input.column],
     block = teamBlock(tapp, user, str(text));
   const go = (row: StoredRow) => {
-    pane.caseId = row.id;
+    patchPane(pane, { caseId: row.id });
     void runTeam(tapp, user, row.id, !liveModelOn() ? teamCase(tapp, str(row[team.input.column]))?.script : null);
   };
   const start = (e: FormEvent) => {
@@ -845,7 +857,7 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
       cols.concat(it.columns.filter((c) => !cols.includes(c) && f.vals[c.name] != null && !isStatusCol(def, it, c))),
     );
     if (!row) return notify();
-    pane.tf = null;
+    patchPane(pane, { tf: null });
     go(row);
   };
   const list = fetchApi(app, user, '/api/' + it.name, null, src),
@@ -868,33 +880,13 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
       null,
     run = T && row && T.row === row.id ? T : null,
     mine = !!run;
-  const openRec = (tn: string, id: number) => {
-      pane.rec = {
-        table: tn,
-        id,
-      };
-      notify();
-    },
+  const openRec = (tn: string, id: number) => patchPane(pane, { rec: { table: tn, id } }),
     page = (tn: string) => def.screens.find((s) => s.table === tn && DATA_VIEWS.includes(s.type) && s.roles.includes(user.role));
   const see = (tn: string) => {
     const s = page(tn);
     if (!s || !row) return;
-    const st = vxState(pane, s, app, user),
-      fc = tableOf(def, tn)?.columns.find((c) => c.type === 'ref' && c.ref === it.name)?.name;
-    st.view = s.type;
-    st.filters = fc
-      ? [
-          {
-            col: fc,
-            op: 'is',
-            val: row.id,
-          },
-        ]
-      : [];
-    st.q = '';
-    pane.screen = s.id;
-    pane.rec = null;
-    notify();
+    const fc = tableOf(def, tn)?.columns.find((c) => c.type === 'ref' && c.ref === it.name)?.name;
+    showCaseRows(pane, vxState(pane, s, app, user), s, fc ? { col: fc, op: 'is', val: row.id } : null);
   };
   const jump = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -1006,16 +998,9 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
                       key={i}
                       type="button"
                       className={cx('chip', sameText(text, s.values[team.input.column]) && 'on')}
-                      onClick={() => {
-                        pane.tf = {
-                          table: it.name,
-                          id: null,
-                          vals: tourValues(app, it, s.values),
-                          errs: {},
-                          err: '',
-                        };
-                        notify();
-                      }}
+                      onClick={() =>
+                        patchPane(pane, { tf: { table: it.name, id: null, vals: tourValues(app, it, s.values), errs: {}, err: '' } })
+                      }
                     >
                       {s.label}
                     </button>
@@ -1034,16 +1019,7 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
                 tone="warning"
                 action={
                   block.fix ? (
-                    <Btn
-                      type="button"
-                      className="btn sm"
-                      onClick={() => {
-                        (block.fix || []).forEach((id) => {
-                          S.conns[id] = true;
-                        });
-                        commit();
-                      }}
-                    >
+                    <Btn type="button" className="btn sm" onClick={() => switchOn(block.fix || [])}>
                       Switch on
                     </Btn>
                   ) : null
@@ -1077,10 +1053,7 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
                         <button
                           className="rel-open ellipsis grow"
                           aria-current={row && r.id === row.id ? 'true' : undefined}
-                          onClick={() => {
-                            pane.caseId = r.id;
-                            notify();
-                          }}
+                          onClick={() => patchPane(pane, { caseId: r.id })}
                         >
                           {rowTitle(app, user, it, r)}
                         </button>

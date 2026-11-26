@@ -24,7 +24,7 @@ import {
 import { VIEW_ICON, VIEW_LABEL, accOf, apiCall, appUsers, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isNum, viewCfg, viewFit, viewsOf } from './viewspec';
 import { Btn, Empty, FilterChip, Icon, Input, MBar, Menu, Seg, Select, type MenuEntry } from './ui';
-import { Cell, cellText, fetchApi, isStatusCol, optLabel, rowTitle, stateLabel, stateTone } from './runtime';
+import { Cell, cellText, fetchApi, isStatusCol, optLabel, patchPane, rowTitle, stateLabel, stateTone } from './runtime';
 import { VChart, VPivot, VTimeline } from './views-b';
 
 /* ===== Turnkey prototype · the data explorer: one table, many views =====
@@ -246,18 +246,36 @@ export function vxCfg(def: AppDef, t: AppTable, scr: Screen, st: ExplorerState, 
 }
 /** Changes a page's state, remembers it for this person and redraws. */
 export type SetState = (fn: (s: ExplorerState) => void) => void;
+/** The filter being written in a page's filter box, made on first use. */
+export function filterDraftOf(st: ExplorerState, t: AppTable): ViewFilter {
+  return st.fd || (st.fd = { col: t.columns[0].name, op: '', val: '' });
+}
+/** Changes one part of the filter being written; a new column clears the rest. */
+export function setFilterDraft(d: ViewFilter, k: 'col' | 'op' | 'val', v: string) {
+  d[k] = v;
+  if (k === 'col') {
+    d.op = '';
+    d.val = '';
+  }
+  notify();
+}
+/** The columns a table view hides, starting from the ones the page does not list. */
+export function hiddenOf(st: ExplorerState, t: AppTable, scr: Screen): Dict<boolean> {
+  if (!st.hidden) {
+    const h: Dict<boolean> = {};
+    t.columns.forEach((c) => {
+      h[c.name] = !scr.columns.includes(c.name);
+    });
+    st.hidden = h;
+  }
+  return st.hidden;
+}
 export function FilterBox({ app, user, t, st, set }: { app: AppRecord; user: AppUser; t: AppTable; st: ExplorerState; set: SetState }) {
   const s0 = useState(false),
     open = s0[0],
     setOpen = s0[1],
     ref = useRef<HTMLDivElement>(null),
-    d =
-      st.fd ||
-      (st.fd = {
-        col: t.columns[0].name,
-        op: '',
-        val: '',
-      });
+    d = filterDraftOf(st, t);
   useEffect(() => {
     if (!open) return undefined;
     const h = (e: MouseEvent) => {
@@ -265,20 +283,13 @@ export function FilterBox({ app, user, t, st, set }: { app: AppRecord; user: App
     };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
-  }, [open]);
+  }, [open, setOpen]);
   const c = colOf(t, d.col) || t.columns[0],
     ops = opsFor(c),
     op = ops.includes(d.op) ? d.op : ops[0],
     noVal = op === 'empty' || op === 'filled',
     id = 'fl_' + t.name + '_';
-  const upd = (k: 'col' | 'op' | 'val', v: string) => {
-    d[k] = v;
-    if (k === 'col') {
-      d.op = '';
-      d.val = '';
-    }
-    notify();
-  };
+  const upd = (k: 'col' | 'op' | 'val', v: string) => setFilterDraft(d, k, v);
   const add = (e: FormEvent) => {
     e.preventDefault();
     if (!noVal && (d.val === '' || d.val == null)) return;
@@ -414,22 +425,9 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
       if (keep) vxRemember(app, user, scr, st);
       notify();
     },
-    open = (r: StoredRow) => {
-      pane.rec = {
-        table: t.name,
-        id: r.id,
-      };
-      notify();
-    };
-  const openNew = (preset?: Dict<unknown>) => {
-    pane.form = {
-      table: t.name,
-      id: null,
-      vals: Object.assign({}, preset || {}),
-      errs: {},
-    };
-    notify();
-  };
+    open = (r: StoredRow) => patchPane(pane, { rec: { table: t.name, id: r.id } });
+  const openNew = (preset?: Dict<unknown>) =>
+    patchPane(pane, { form: { table: t.name, id: null, vals: Object.assign({}, preset || {}), errs: {} } });
   const drill = (pairs: (DrillPair | null | undefined)[]) =>
     set((s) => {
       pairs.forEach((p) => {
@@ -706,14 +704,7 @@ export const NoRows = ({ t }: { t: AppTable }) => (
   <Empty icon="search" title={'No ' + t.label.toLowerCase() + ' to show'} text="Nothing matches the search and filters." />
 );
 export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewProps) {
-  if (!st.hidden) {
-    const h: Dict<boolean> = {};
-    t.columns.forEach((c) => {
-      h[c.name] = !scr.columns.includes(c.name);
-    });
-    st.hidden = h;
-  }
-  const hidden = st.hidden;
+  const hidden = hiddenOf(st, t, scr);
   const cols = t.columns.filter((c) => !hidden[c.name]),
     sort = st.sort && colOf(t, st.sort.col) ? st.sort : null,
     list = rows.slice(),
@@ -1158,7 +1149,9 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
           ]}
           value={week ? 'week' : 'month'}
           onChange={(v: string) => {
-            st.month = 0;
+            set((s) => {
+              s.month = 0;
+            });
             setCfg('mode', v);
           }}
         />
