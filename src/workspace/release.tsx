@@ -37,6 +37,7 @@ import { runTestsSync, testStats } from './tests';
 import { RUNS, STATIONS, pushChat } from './line';
 import { Btn, Card, Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner, Textarea } from './ui';
 import { appFromPack, framed, openShare, openShared, packOf, readPack, squeeze, unsqueeze } from './share';
+import { exportMarkdown, exportPage, exportPdf, exportSqlite, exportZip } from './export';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 
 /* ===== Turnkey prototype · releases, the app's own icon, and installing the app on its own =====
@@ -987,6 +988,39 @@ export function ReleaseView({ app }: { app: AppRecord }) {
               </div>
             </div>
           </div>
+        </Card>
+        <Card className="card rel-export" id="rel-export">
+          <h3 className="widget-h">Export the deliverable</h3>
+          <p className="muted">
+            One document made from the app as it is now{rel && dirty ? ' (the draft, not version ' + rel.v + ')' : ''}: the brief, tables,
+            rules, screens, tests, which agent made what and the run timeline. Hand it to the team that builds the production version.
+          </p>
+          <div className="row wrap">
+            <Btn className="btn primary" id="exp-md" onClick={() => exportMarkdown(app)}>
+              <Icon n="download" s="16" />
+              Document (.md)
+            </Btn>
+            <Btn className="btn" id="exp-pdf" onClick={() => exportPdf(app)}>
+              <Icon n="download" s="16" />
+              PDF (print)
+            </Btn>
+            <Btn className="btn" id="exp-html" onClick={() => exportPage(app)}>
+              <Icon n="download" s="16" />
+              Page (.html)
+            </Btn>
+            <Btn className="btn" id="exp-sqlite" onClick={() => exportSqlite(app)}>
+              <Icon n="download" s="16" />
+              Database (.sqlite)
+            </Btn>
+            <Btn className="btn" id="exp-zip" onClick={() => exportZip(app)}>
+              <Icon n="download" s="16" />
+              Everything (.zip)
+            </Btn>
+          </div>
+          <span className="t-cap muted">
+            PDF opens your browser&apos;s print dialog: choose Save as PDF. The zip holds the document, the page, the database and the
+            app&apos;s definition.
+          </span>
         </Card>
         <Card className="card rel-hist">
           <h3 className="widget-h">

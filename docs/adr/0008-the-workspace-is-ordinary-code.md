@@ -1,7 +1,7 @@
 # ADR 8: The workspace is ordinary code
 
 Status: accepted. Replaces the first version of this decision ("the legacy modules are not rewritten"). Implementation:
-Built for the move to ES modules; typing module by module is in progress.
+Built. Typing is nearly done (4 files left).
 
 ## Context
 
@@ -22,9 +22,9 @@ an external store. New behaviour still reaches the outside world through the sea
 
 - The type checker, lint and the bundler see the whole product. No second build step.
 - The browser flows are what protect the behaviour while the code changes: every change keeps the flows that exercise
-  it green (`CLAUDE.md` rule 5). There are now 297 checks in 9 flows.
-- At the time of writing, 26 of the 29 files still start with `// @ts-nocheck`. That is visible debt, paid off module
-  by module (workstream 8).
+  it green (`CLAUDE.md` rule 5). There are now 12 browser flows in CI.
+- On 26 Nov after v0.3.2, 4 of the 34 files in `src/workspace` still start with `// @ts-nocheck`, down from 26 of 29
+  when the move was made; the rest type-check under strict settings.
 - Some names (the `formwork:v1:` storage prefix, `window.__formwork`) come from the product's earlier name and are kept
   so saved data stays readable.
 

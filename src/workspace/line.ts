@@ -1,3 +1,4 @@
+import { modelProblem } from '@/shared/api-error';
 import type { AppDef, AppTable, BackedDef, Board, Brief, BriefedDef, Check, Untrusted } from '@/shared/types/app';
 import type {
   AppRecord,
@@ -72,7 +73,8 @@ import { CONNECTORS, REC, allConnectors, callConnector, connOn } from './builds'
 import { TEAMS, checkTeam, stopTeam, teamNeeds } from './team';
 import { checkBoard, normBoard } from './room';
 import { SUITES, TESTS, runTestsSync } from './tests';
-import { REVIEWERS, applyAuto, flowDefault, flowList, flowOf, runReview, showGate, stepAfter, verifyFindings } from './custom';
+import { applyAuto, flowDefault, flowList, flowOf, runReview, showGate, stepAfter, verifyFindings } from './custom';
+import { REVIEWERS } from './reviewers';
 import { testerSteps } from './tester';
 // Not the orchestrator's index: that pulls in LangGraph (about 800 KB), which loads only when a build starts.
 import { workflowFromFlow } from '@/platform/orchestrator/from-flow';
@@ -1000,13 +1002,10 @@ export async function callModel(
     const code = (e as { code?: string } | null)?.code;
     if (code === 'not_granted') U.live = 'none';
     throw fatal(
-      code === 'not_granted'
-        ? 'Access to the model was not granted, so nothing answered the call.'
-        : !online()
-          ? 'The connection dropped during the call, so Live is paused. Run it again when you are back online.'
-          : code === 'rate_limited'
-            ? 'The model is rate limited right now. Try again in a minute.'
-            : 'The model call failed: ' + ((e as { message?: string } | null)?.message || code || 'unknown error'),
+      modelProblem(code, {
+        offline: code !== 'not_granted' && !online(),
+        detail: (e as { message?: string } | null)?.message || code || 'unknown error',
+      }),
     );
   }
   U.stream[app.id] = 0;

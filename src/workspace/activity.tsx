@@ -29,7 +29,8 @@ import type { AppRecord, Dict } from '@/shared/types/workspace';
 import { EV, PHONE, S, cap, cx, emit, fmtClock } from './core';
 import { AGENTS } from './agents';
 import { STATIONS } from './line';
-import { REVIEWERS, flowOf } from './custom';
+import { flowOf } from './custom';
+import { REVIEWERS } from './reviewers';
 import { isDark } from './flow';
 import { Icon } from './ui';
 

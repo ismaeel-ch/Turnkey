@@ -12,7 +12,6 @@ import { AGENTS, RUNS, STATIONS } from './line';
 import {
   APPROVE_AT,
   FlowChips,
-  REVIEWERS,
   STEP_AT,
   answerGate,
   flowEdit,
@@ -23,6 +22,7 @@ import {
   stepAuto,
   stepsAt,
 } from './custom';
+import { REVIEWERS } from './reviewers';
 import { Btn, AgentAv, Icon, STATUS_META } from './ui';
 import { useWidth } from './views-b';
 import { isDirty, relOf } from './release';
