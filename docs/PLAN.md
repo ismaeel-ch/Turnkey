@@ -91,7 +91,7 @@ Environment variables, read only in server code:
 | `LITELLM_MODEL_FAST`                                                                                                               | optional cheap model for the Quick setting                        |
 | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_MODEL_FAST`, `OPENAI_BASE_URL`                                                           | any OpenAI-compatible service                                     |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_MODEL_FAST`                                                                     | Anthropic directly                                                |
-| `LLM_PROVIDER`                                                                                                                     | force one: `litellm`, `openai`, `anthropic`, `claude-cli`, `mock` |
+| `LLM_PROVIDER`                                                                                                                     | force one: `litellm`, `openai`, `anthropic`, `claude-code`, `mock` |
 | `LLM_TOOL_MODE`                                                                                                                    | `auto` (default), `native`, `json`                                |
 | `LLM_RATE_PER_MINUTE`, `LLM_GLOBAL_PER_MINUTE`, `LLM_DAILY_CALL_CAP`, `LLM_MAX_PROMPT_CHARS`, `LLM_MAX_OUTPUT_TOKENS`, `LIVE_MODE` | guard rails (`src/server/guard/limits.ts`)                        |
 | `PATENTSVIEW_API_KEY`                                                                                                              | optional, for the PatentsView connector                           |
@@ -166,10 +166,11 @@ Wave 1 is packages 01 to 15, all at once. Wave 2 is package 16 and whatever wave
 - **Pull requests:** small. Title `WP-nn: what changed`. Body: what, why, how it was verified, `Closes #n`.
 - **Merging:** squash, by the supervisor (or auto-merge once CI is green). Never push to `main`.
 - **CI:** `.github/workflows/ci.yml` runs the secrets scan, lint, typecheck, unit tests, a production build and the
-  browser flows on every pull request and on `main`.
-- **CD:** Vercel's Git integration deploys `main` on every merge. Other branches do not deploy (`vercel.json`),
-  because the free plan allows 100 deployments a day and many agents push at once.
-- **Labels:** `wp`, `area:*`, `crit:C1`…`crit:C5`, `wave:1`, `wave:2`, `blocked`, `bug`.
+  browser flows on a pull request into `main` only once it is out of draft and labelled `ready-to-merge`, to save
+  Actions minutes. Nothing runs on pushes to `main`.
+- **CD:** publishing a GitHub release deploys that tag to production (`.github/workflows/release.yml`, Vercel CLI).
+  Vercel's Git integration is off (`vercel.json`), so merges and pushes never deploy. See docs/process/deploy.md.
+- **Labels:** `ready-to-merge`, `wp`, `area:*`, `crit:C1`…`crit:C5`, `wave:1`, `wave:2`, `blocked`, `bug`.
 - **Status:** the supervisor comments on the Mission control issue at least every hour: merged, open, blocked, next.
 
 ### Working in parallel on one machine

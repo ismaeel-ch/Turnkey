@@ -23,7 +23,3 @@ Closes #
 - [ ] With no model configured the app still works. With `LLM_PROVIDER=mock` the new server path works.
 - [ ] No secret, no client or internal data, no `NEXT_PUBLIC_` variable.
 - [ ] The title is `WP-nn: what changed`. The pull request names its issue (`Closes #n`). It will be squash-merged and its branch deleted.
-
-## Legacy code
-
-- [ ] This pull request does not change `src/legacy/**`, or its title starts with `WP-16` or contains `[legacy]` (CI enforces this).
