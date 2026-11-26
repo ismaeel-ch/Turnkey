@@ -23,14 +23,14 @@ process in brief. This page says what the repository does to enforce it.
 `.github/workflows/ci.yml` runs the full checks only when a pull request into `main` is about to be merged: when it
 is not a draft and carries the label `ready-to-merge`. Adding the label starts a run, and each later push to the
 labelled pull request runs it again. It can also be started by hand from the **Actions** tab. Nothing runs on a push
-to `main`. Without the label, only the `ci` job runs, for a few seconds, and fails on purpose with a message saying
-to add the label, so an unchecked pull request never looks green.
+to `main`. Without the label every job is skipped and shows grey: no runner starts and no minutes are used. A skipped
+`ci` means the pull request has not been checked, so do not merge it.
 
-| Job            | What it runs                                                         |
-| -------------- | -------------------------------------------------------------------- |
-| `check`        | secrets scan, lint, typecheck, unit tests, production build          |
-| `e2e` (9 jobs) | one browser flow each, with failure screenshots kept for 3 days      |
-| `ci`           | passes only if the jobs above ran and passed; the one required check |
+| Job            | What it runs                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------- |
+| `check`        | secrets scan, lint, typecheck, unit tests, production build                                       |
+| `e2e` (9 jobs) | one browser flow each, with failure screenshots kept for 3 days                                   |
+| `ci`           | passes only if the jobs above passed; skipped with them without the label; the one required check |
 
 A run takes about four minutes. A job that fails can be reproduced locally with the matching npm script:
 `npm run check:secrets`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e -- <flow>`.
