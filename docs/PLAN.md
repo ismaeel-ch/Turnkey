@@ -174,6 +174,11 @@ Wave 1 is packages 01 to 15, all at once. Wave 2 is package 16 and whatever wave
 
 ### Working in parallel on one machine
 
+- Shared dependencies are already installed: LangGraph (`@langchain/langgraph`, `@langchain/core`), AG-UI
+  (`@ag-ui/core`, `@ag-ui/client`, `@ag-ui/encoder`), CopilotKit, zod, and for tests jsdom, fake-indexeddb and
+  vitest coverage. Add another dependency only if you must, in a commit of its own, because every change to the
+  lockfile conflicts with every other open pull request.
+- Each checkout already has `node_modules` (a hard-linked copy). Run `npm ci` only after the lockfile changed.
 - Each agent works in its own checkout: `git -C /home/claude/turnkey worktree add /home/claude/wt/<agent> -b <branch> origin/main`.
 - Wrap builds and browser tests: `scripts/heavy.sh npm run build`. Only react-port, integration and the supervisor
   run browser flows locally; everyone else relies on CI for them.
