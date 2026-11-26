@@ -1,3 +1,5 @@
+import { AreaBoundary } from '@/platform/area-boundary';
+import { engineProblem, storageProblem } from './errors';
 import { modelHost } from '@/platform/model-client';
 import { type ReactNode, useState, useLayoutEffect } from 'react';
 import type { BackedDef } from '@/shared/types/app';
@@ -33,6 +35,7 @@ import {
   modeNow,
   myApps,
   netChanged,
+  checkReach,
   netInfo,
   notify,
   online,
@@ -65,7 +68,8 @@ import { TESTS, runTestsSync, suiteOf } from './tests';
 import { FLOW, isDark } from './flow';
 import { LIVE, RUNS, STATIONS, deleteApp, pushChat, resumeInterrupted, runBuild, startBuild, stopRun } from './line';
 import { buildPack, parseChange, planOps, runChange } from './changes';
-import { AddStepDialog, REVIEWERS, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
+import { AddStepDialog, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
+import { REVIEWERS } from './reviewers';
 import { keepFix, suggestCases } from './tester';
 import { AgentAv, Btn, Dialog, Field, Icon, Input, Logo, MBar, Proto, Seg, Select, Spinner, Switch, TONE_ICON } from './ui';
 import { PhoneSheets } from './mobile';
@@ -686,7 +690,7 @@ export function SettingsDialog() {
                 : 'Off: Demo is on. Saved builds and made-up data, no model calls.'
           }
         >
-          <Switch id="set-live" on={mode.on} disabled={!on} onChange={setLive} />
+          <Switch id="set-live" label="Live" on={mode.on} disabled={!on} onChange={setLive} />
         </SetRow>
         <SetRow title="Replay speed" text="How fast saved builds and changes play.">
           <Seg
@@ -727,13 +731,13 @@ export function SettingsDialog() {
           />
         </SetRow>
         <SetRow title="Debug mode" text="AG-UI events, tool calls, model usage, SQL, API calls, state, storage.">
-          <Switch id="set-debug" on={s.debug} onChange={(v) => set('debug', v)} />
+          <Switch id="set-debug" label="Debug mode" on={s.debug} onChange={(v) => set('debug', v)} />
         </SetRow>
         <SetRow title="Simulate offline" text="Pretend the connection is gone, to see Live pause and what keeps working.">
-          <Switch id="set-off" on={s.offline} onChange={setOffline} />
+          <Switch id="set-off" label="Simulate offline" on={s.offline} onChange={setOffline} />
         </SetRow>
         <SetRow title="Agents panel" text="Show the chat beside the canvas.">
-          <Switch id="set-chat" on={s.chat} onChange={(v) => set('chat', v)} />
+          <Switch id="set-chat" label="Agents panel" on={s.chat} onChange={(v) => set('chat', v)} />
         </SetRow>
       </div>
       <p className="muted t-cap" id="set-net">
@@ -1604,11 +1608,18 @@ export function Shell() {
       <a className="skip-link" href="#main">
         Skip to main content
       </a>
-      <Titlebar tabs={tabs} tab={tab} />
+      <AreaBoundary name="The title bar">
+        <Titlebar tabs={tabs} tab={tab} />
+      </AreaBoundary>
       {!LS.ok && (
         <MBar tone="warning" cls="bar">
           Browser storage is not available in this view, so nothing will be kept after you close it. Open the page in its own tab to keep
           your work.
+        </MBar>
+      )}
+      {LS.ok && storageProblem() && (
+        <MBar tone={storageProblem()!.kind === 'write' ? 'warning' : 'danger'} cls="bar storage-problem">
+          {storageProblem()!.text}
         </MBar>
       )}
       {!online() && (
@@ -1628,11 +1639,23 @@ export function Shell() {
         </MBar>
       )}
       <main className="shell-body" id="main" tabIndex={-1}>
-        {app ? <Workspace key={app.id} app={app} /> : <Home />}
+        <AreaBoundary name={app ? 'This app' : 'The home page'} resetKey={app ? app.id : 'home'}>
+          {app ? <Workspace key={app.id} app={app} /> : <Home />}
+        </AreaBoundary>
       </main>
-      {S.settings.debug && <DebugDrawer app={app} />}
-      {PHONE() && <PhoneSheets app={app} />}
-      <AgentActivity app={app} />
+      {S.settings.debug && (
+        <AreaBoundary name="The debug drawer">
+          <DebugDrawer app={app} />
+        </AreaBoundary>
+      )}
+      {PHONE() && (
+        <AreaBoundary name="The phone menu">
+          <PhoneSheets app={app} />
+        </AreaBoundary>
+      )}
+      <AreaBoundary name="The agent panel" resetKey={app ? app.id : 'home'}>
+        <AgentActivity app={app} />
+      </AreaBoundary>
     </div>
   );
 }
@@ -1651,23 +1674,27 @@ function RootInner() {
     );
   if (U.boot === 'error')
     return (
-      <div className="splash">
+      <div className="splash" role="alert">
         <Logo size={44} />
         <strong className="t-sub1">
           {BRAND.name}
           {' could not start'}
         </strong>
-        <p className="muted">
-          {U.bootErr}
-          {' Reload the page. If it keeps happening, the SQLite engine could not be loaded in this view.'}
-        </p>
+        <p className="muted">{engineProblem(U.bootErr)}</p>
+        <Btn className="btn primary" onClick={() => window.location.reload()}>
+          Reload the page
+        </Btn>
       </div>
     );
   if (U.solo && S.apps[U.solo.app]) return [<SoloShell key="solo" />, <DialogHost key="dlg" />, <Toasts key="toasts" />];
   return [
     !S.onboarded ? <Onboarding key="ob" /> : !S.session || !me() ? <SignIn key="si" /> : <Shell key="shell" />,
-    <DialogHost key="dlg" />,
-    <TourLayer key="tour" />,
+    <AreaBoundary key="dlg" name="This dialog">
+      <DialogHost />
+    </AreaBoundary>,
+    <AreaBoundary key="tour" name="The guided tour">
+      <TourLayer />
+    </AreaBoundary>,
     <Toasts key="toasts" />,
   ];
 }
@@ -1764,8 +1791,12 @@ export function boot() {
     } catch {}
   };
   setNetWas(online()); // Live follows the connection: listen for it coming and going
-  window.addEventListener('online', netChanged);
+  window.addEventListener('online', () => {
+    netChanged();
+    void checkReach(); // the browser says the connection is back: make sure the server answers too
+  });
   window.addEventListener('offline', netChanged);
+  void checkReach();
   window.addEventListener('resize', notify);
   try {
     // the Network Information API is not in every browser, nor in the DOM types
@@ -1776,6 +1807,7 @@ export function boot() {
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush();
+    else void checkReach();
   });
   window.__formwork = {
     save: () => {
@@ -1814,6 +1846,7 @@ export function boot() {
       rerun: (app: AppRecord, st: string) => runBuild(lineApp(app), st),
       review: reviewNow,
       mode: modeNow,
+      reach: checkReach,
       runs: () => RUNS,
       dirty: isDirty,
       relOf,

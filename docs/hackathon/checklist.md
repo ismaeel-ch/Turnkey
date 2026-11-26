@@ -9,6 +9,7 @@ Rules and filter: the SSI kickoff deck (Level 1 rules, Level 2 filter), the port
 | --- | -------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Thu 26 Nov 2026, 16:19 UTC (21:19 PKT) | `main` at `353ab5d` (CI on that commit: success)                                  | 2 items open for the owner, 1 gap issue opened (see below)                                                                                                                  |
 | 2   | Thu 26 Nov 2026, 17:45 UTC (22:45 PKT) | `main` at `a88f1c2` (v0.2.0 version bump) plus the docs in the WP-13 pull request | live URL corrected to turnkey-bay.vercel.app and waiting on a release that passes its health check (#47), agentic path still OPEN, everything else PASS. See "Run 2" below. |
+| 3   | Thu 26 Nov 2026, 21:10 UTC (02:10 PKT) | `main` at `2e19715` (#114; CI green on its head)                                  | every filter check PASS; LiteLLM-key rule left to the owner. Full report: `audit.md`.                                                                                       |
 
 Result key: **PASS** = checked and met. **FAIL** = checked and broken, issue opened. **OPEN** = not met yet, but tracked by an open work-package issue. **CANNOT VERIFY YET** = needs a live deployment or a person's action; the owner must do what is listed.
 

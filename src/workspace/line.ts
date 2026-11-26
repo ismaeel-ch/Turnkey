@@ -1,3 +1,4 @@
+import { modelProblem } from '@/shared/api-error';
 import type { AppDef, AppTable, BackedDef, Board, Brief, BriefedDef, Check, Untrusted } from '@/shared/types/app';
 import type {
   AppRecord,
@@ -72,9 +73,12 @@ import { CONNECTORS, REC, allConnectors, callConnector, connOn } from './builds'
 import { TEAMS, checkTeam, stopTeam, teamNeeds } from './team';
 import { checkBoard, normBoard } from './room';
 import { SUITES, TESTS, runTestsSync } from './tests';
-import { REVIEWERS, applyAuto, flowDefault, flowList, flowOf, runReview, showGate, stepAfter, verifyFindings } from './custom';
+import { applyAuto, flowDefault, flowList, flowOf, runReview, showGate, stepAfter, verifyFindings } from './custom';
+import { REVIEWERS } from './reviewers';
 import { testerSteps } from './tester';
-import { StoppedError, createRun, workflowFromFlow } from '@/platform/orchestrator';
+// Not the orchestrator's index: that pulls in LangGraph (about 800 KB), which loads only when a build starts.
+import { workflowFromFlow } from '@/platform/orchestrator/from-flow';
+import { StoppedError } from '@/platform/orchestrator/types';
 import { SHARE } from './share';
 import { LOGO_FILLS, LOGO_MARKS, LOGO_SHAPES, logChange, normLogo } from './release';
 import { recordTouches, snapshotDef } from './provenance';
@@ -998,13 +1002,10 @@ export async function callModel(
     const code = (e as { code?: string } | null)?.code;
     if (code === 'not_granted') U.live = 'none';
     throw fatal(
-      code === 'not_granted'
-        ? 'Access to the model was not granted, so nothing answered the call.'
-        : !online()
-          ? 'The connection dropped during the call, so Live is paused. Run it again when you are back online.'
-          : code === 'rate_limited'
-            ? 'The model is rate limited right now. Try again in a minute.'
-            : 'The model call failed: ' + ((e as { message?: string } | null)?.message || code || 'unknown error'),
+      modelProblem(code, {
+        offline: code !== 'not_granted' && !online(),
+        detail: (e as { message?: string } | null)?.message || code || 'unknown error',
+      }),
     );
   }
   U.stream[app.id] = 0;
@@ -1461,6 +1462,10 @@ function ownerAnswer(app: BuildApp, run: Run, ctl: RunCtl, wf: WorkflowRun, ask:
 
 export async function runBuild(app: BuildApp, from?: string) {
   // from: a station id to start at. The stations before it are kept as they are.
+  if (RUNS[app.id]) return;
+  // LangGraph loads on first use (usually already fetched while the page was idle). Load it before anything changes,
+  // so the app never shows a half-started build while the code downloads.
+  const { createRun } = await import('@/platform/orchestrator/run');
   if (RUNS[app.id]) return;
   const i0 = from ? Math.max(0, stationIdx(from)) : 0,
     part = i0 > 0,

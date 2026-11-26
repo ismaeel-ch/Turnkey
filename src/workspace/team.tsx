@@ -1,3 +1,4 @@
+import { modelProblem } from '@/shared/api-error';
 import type {
   AppDef,
   AppTable,
@@ -495,8 +496,9 @@ async function teamServer(app: TeamApp, user: AppUser, T: TeamRun, finishStep: (
           }
         } else if (e.type === 'RUN_FINISHED') result = e.result || {};
         else if (e.type === 'RUN_ERROR') {
-          const msg = str(e.message) || 'The team could not finish this run.';
-          throw e.code === 'not_configured' || e.code === 'rate_limited' || e.code === 'spend_cap' ? fatal(msg) : new Error(msg);
+          const known = e.code === 'not_configured' || e.code === 'rate_limited' || e.code === 'budget' || e.code === 'spend_cap';
+          const msg = known ? modelProblem(e.code) : str(e.message) || 'The team could not finish this run.';
+          throw known ? fatal(msg) : new Error(msg);
         }
       }
     } catch (e) {

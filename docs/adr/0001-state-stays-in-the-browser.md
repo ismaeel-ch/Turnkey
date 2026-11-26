@@ -16,6 +16,7 @@ State and data live in the browser. The workspace keeps app definitions, setting
 - Every visitor has their own private workspace, which suits a public demo.
 - Data does not follow the owner to another device or browser, and browser storage has a size limit (the app says when it is full).
 - Built apps are single-user prototypes. Real multi-user use needs a server-side store, which is not built.
-- Planned: a storage adapter with IndexedDB, keeping the current format readable, and export and import of an app's SQLite file (WP-10).
+- The workspace and each app's database are kept in IndexedDB (`src/platform/storage`), with the earlier localStorage format still readable, export and import of an app's `.sqlite` file, and backup and restore of the whole workspace (WP-10).
+- One exception, by choice of the person sharing: a shared app saved under a short link is stored in Vercel Blob (`src/server/share`), with a daily limit on saves. Without a store, sharing falls back to the long link that carries the app itself.
 
 Where to look: `src/workspace/core.ts`, `src/workspace/db.ts`, `docs/PLAN.md` section 2, decision 1.

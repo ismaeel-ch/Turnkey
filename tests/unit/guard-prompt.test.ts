@@ -62,7 +62,7 @@ describe('prompt policy against the workspace sources', () => {
 
   it('accepts what HEAD() builds, for every builder, reviewer and added step name', () => {
     const names = ['Researcher', 'Database', 'Backend', 'View advisor', 'UI', 'Tester', 'Orchestrator'];
-    for (const m of read('custom.tsx').matchAll(/name: '([^']+)',\s*short:/g)) names.push(m[1]);
+    for (const f of ['custom.tsx', 'reviewers.ts']) for (const m of read(f).matchAll(/name: '([^']+)',\s*short:/g)) names.push(m[1]);
     expect(names.length).toBeGreaterThan(9);
     for (const n of names) expect(checkPrompt(HEAD(n) + 'BRIEF: {}'), n).toEqual({ ok: true, kind: 'line' });
   });
