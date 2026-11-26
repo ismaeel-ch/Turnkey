@@ -679,10 +679,53 @@ export interface StationAttempt {
   issues: string[];
 }
 
-/** An app's build workflow: stations, approvals, added agents and reviewers. */
+/** A step the owner added to the workflow: an agent of their own that runs after a station. */
+export interface AddedAgent {
+  id: string;
+  name: string;
+  job: string;
+  /** the station it runs after */
+  after: string;
+  /** `apply` changes the app; `advise` only reports */
+  mode: 'apply' | 'advise';
+  icon: string;
+  acc: string;
+}
+
+/** An app's build workflow: stations, approvals, added agents and reviewers (custom.tsx `normFlow` makes it valid). */
 export interface AppFlow {
+  /** attempts per station, 1 to 3 */
+  attempts: number;
+  /** station id to true: stop for the owner's approval after it */
+  approve: Dict<boolean>;
+  /** agent id to a note the owner left for it */
+  notes: Dict<string>;
+  /** station id to 'rules': built by rules, no model */
+  by: Dict<string>;
+  /** reviewer ids, in the order they run */
   reviewers: string[];
-  [field: string]: Loose;
+  agents: AddedAgent[];
+  /** reviewer id to the station it runs after, when moved from its usual place */
+  at: Dict<string>;
+  /** reviewer id to whether it applies its own changes, when that differs from its default */
+  auto: Dict<boolean>;
+}
+
+/** A reviewer or added step that can run after a station (custom.tsx REVIEWERS). */
+export interface ReviewerInfo {
+  id?: string;
+  name: string;
+  short: string;
+  /** the station it runs after by default */
+  after: string;
+  icon: string;
+  acc: string;
+  reads: string;
+  job: string;
+  /** applies its own changes instead of asking */
+  auto?: boolean;
+  /** added by the owner, not one of the library's */
+  custom?: boolean;
 }
 
 /** A reviewer agent's review of an app, with its findings. */
