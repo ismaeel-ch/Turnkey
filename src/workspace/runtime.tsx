@@ -6,7 +6,7 @@ import { accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec } from './
 import { REC, allConnectors, callConnector, connOn } from './builds';
 import { TeamConsole } from './room';
 import { resetAppData } from './line';
-import { Avatar, Empty, Field, Icon, MBar, Menu, Proto, Switch } from './ui';
+import { Btn, Avatar, Empty, Field, Icon, MBar, Menu, Proto, Switch } from './ui';
 import { AppSheets, AppTabs, isCompact, useElWidth } from './mobile';
 import { Explorer } from './views-a';
 import { Dash } from './views-b';
@@ -335,9 +335,9 @@ export function AppLogin({ app, pane, users, solo }) {
               f.p = e.target.value;
             }}
           />
-          <button className="btn primary" type="submit">
+          <Btn className="btn primary" type="submit">
             Sign in
-          </button>
+          </Btn>
         </form>
         {f.err && <MBar tone="danger">{f.err}</MBar>}
         {solo && solo.length > 0 && (
@@ -350,9 +350,9 @@ export function AppLogin({ app, pane, users, solo }) {
             {solo
               .filter((it) => it !== '-' && (it.icon === 'info' || it.icon === 'arrowLeft'))
               .map((it, i) => (
-                <button key={i} type="button" className="btn subtle sm" onClick={it.on}>
+                <Btn key={i} type="button" className="btn subtle sm" onClick={it.on}>
                   {it.label}
-                </button>
+                </Btn>
               ))}
           </div>
         )}
@@ -528,9 +528,9 @@ export function RecordForm({ app, user, pane }) {
       >
         <div className="dhead">
           <h2 className="t-sub1 grow">{f.id ? 'Edit ' + t.one.toLowerCase() : 'New ' + t.one.toLowerCase()}</h2>
-          <button type="button" className="btn subtle icon" aria-label="Close" onClick={close}>
+          <Btn type="button" className="btn subtle icon" aria-label="Close" onClick={close}>
             <Icon n="dismiss" />
-          </button>
+          </Btn>
         </div>
         <div className="dbody">
           <div className="form-grid">
@@ -541,12 +541,12 @@ export function RecordForm({ app, user, pane }) {
           {f.err && <MBar tone="danger">{f.err}</MBar>}
         </div>
         <div className="dfoot">
-          <button type="button" className="btn" onClick={close}>
+          <Btn type="button" className="btn" onClick={close}>
             Cancel
-          </button>
-          <button type="submit" className="btn primary">
+          </Btn>
+          <Btn type="submit" className="btn primary">
             {f.id ? 'Save' : 'Create'}
-          </button>
+          </Btn>
         </div>
       </form>
     </div>
@@ -591,7 +591,7 @@ export function FormScreen({ app, user, pane, scr }) {
           <MBar
             tone="success"
             action={
-              <button
+              <Btn
                 type="button"
                 className="btn sm"
                 onClick={() => {
@@ -603,7 +603,7 @@ export function FormScreen({ app, user, pane, scr }) {
                 }}
               >
                 Open it
-              </button>
+              </Btn>
             }
           >
             {t.one}
@@ -619,10 +619,10 @@ export function FormScreen({ app, user, pane, scr }) {
         </div>
         {f.err && <MBar tone="danger">{f.err}</MBar>}
         <div className="row">
-          <button className="btn primary" type="submit">
+          <Btn className="btn primary" type="submit">
             {'Create '}
             {t.one.toLowerCase()}
-          </button>
+          </Btn>
         </div>
       </form>
     </div>
@@ -639,14 +639,14 @@ export function RecordDrawer({ app, user, pane, compact }) {
   if (!t) return null;
   const res = fetchApi(app, user, '/api/' + t.name + '/' + pane.rec.id);
   const back = compact ? (
-      <button className="btn subtle icon" aria-label="Back" onClick={close}>
+      <Btn className="btn subtle icon" aria-label="Back" onClick={close}>
         <Icon n="arrowLeft" />
-      </button>
+      </Btn>
     ) : null,
     shut = compact ? null : (
-      <button className="btn subtle icon" aria-label="Close" onClick={close}>
+      <Btn className="btn subtle icon" aria-label="Close" onClick={close}>
         <Icon n="dismiss" />
-      </button>
+      </Btn>
     );
   if (res.status !== 200)
     return (
@@ -750,9 +750,9 @@ export function RecordDrawer({ app, user, pane, compact }) {
           <div className="row wrap">
             <span className={'badge b-' + stateTone(def, t, sc, row[P.column])}>{stateLabel(def, t, sc, row[P.column])}</span>
             {trs.map((x, i) => (
-              <button key={x.id} className={cx('btn sm', i === 0 && 'primary')} onClick={() => act(x)}>
+              <Btn key={x.id} className={cx('btn sm', i === 0 && 'primary')} onClick={() => act(x)}>
                 {x.label}
-              </button>
+              </Btn>
             ))}
             {!trs.length && (
               <span className="t-cap muted">
@@ -778,21 +778,21 @@ export function RecordDrawer({ app, user, pane, compact }) {
         {(canEdit || acc.delete || def.actions.some((a) => a.table === t.name)) && (
           <div className="row wrap">
             {canEdit && (
-              <button className="btn sm" onClick={edit}>
+              <Btn className="btn sm" onClick={edit}>
                 <Icon n="edit" s="16" />
                 Edit
-              </button>
+              </Btn>
             )}
             {acc.delete && (
-              <button className="btn sm" onClick={del}>
+              <Btn className="btn sm" onClick={del}>
                 <Icon n="trash" s="16" />
                 Delete
-              </button>
+              </Btn>
             )}
             {def.actions
               .filter((a) => a.table === t.name)
               .map((a) => (
-                <button
+                <Btn
                   key={a.id}
                   className="btn sm"
                   disabled={!online()}
@@ -801,7 +801,7 @@ export function RecordDrawer({ app, user, pane, compact }) {
                 >
                   <Icon n="plug" s="16" />
                   {a.label}
-                </button>
+                </Btn>
               ))}
           </div>
         )}
@@ -879,7 +879,7 @@ export function Related({ app, user, pane, t, k, row }) {
           {res.data.length})
         </h3>
         {accOf(def, user.role, k.name).create && (
-          <button
+          <Btn
             className="btn subtle sm"
             onClick={() => {
               pane.form = {
@@ -895,7 +895,7 @@ export function Related({ app, user, pane, t, k, row }) {
           >
             <Icon n="add" s="16" />
             Add
-          </button>
+          </Btn>
         )}
       </div>
       {res.data.length ? (
@@ -1011,7 +1011,7 @@ export function StageView({ app }) {
             </option>
           ))}
         </NativeField>
-        <button
+        <Btn
           className={cx('btn sm', st.split && 'on')}
           aria-pressed={st.split}
           title="Open the app twice, as two different users, to see the access rules side by side"
@@ -1019,21 +1019,21 @@ export function StageView({ app }) {
         >
           <Icon n="split" s="16" />
           <span className="hide-sm">Two users</span>
-        </button>
+        </Btn>
         <span className="grow" />
         {REC[app.tpl] && (
           <span className="hide-sm">
             <Proto>{'Made-up data' + (REC[app.tpl].sampleNote ? '. ' + REC[app.tpl].sampleNote : '')}</Proto>
           </span>
         )}
-        <button className="btn sm" data-tour="walk" disabled={!def.tour.length} onClick={() => startWalk(app)}>
+        <Btn className="btn sm" data-tour="walk" disabled={!def.tour.length} onClick={() => startWalk(app)}>
           <Icon n="playOutline" s="16" />
           <span className="hide-sm">Play walkthrough</span>
-        </button>
-        <button className="btn sm" onClick={reset}>
+        </Btn>
+        <Btn className="btn sm" onClick={reset}>
           <Icon n="reset" s="16" />
           <span className="hide-sm">Reset data</span>
-        </button>
+        </Btn>
       </div>
       <div className={cx('devices', st.split && 'two')}>
         <div className="device">
@@ -1078,9 +1078,9 @@ export function WalkPlayer({ app, st }) {
     <div className="walk" role="dialog" aria-label="Walkthrough">
       <div className="row between">
         <strong>Walkthrough</strong>
-        <button className="btn subtle icon sm" aria-label="Close walkthrough" onClick={close}>
+        <Btn className="btn subtle icon sm" aria-label="Close walkthrough" onClick={close}>
           <Icon n="dismiss" s="16" />
-        </button>
+        </Btn>
       </div>
       <div className="walk-dots" aria-hidden="true">
         {steps.map((s, i) => (
@@ -1101,12 +1101,12 @@ export function WalkPlayer({ app, st }) {
             }
           </p>
           <div className="row">
-            <button className="btn primary sm" onClick={close}>
+            <Btn className="btn primary sm" onClick={close}>
               Done
-            </button>
-            <button className="btn sm" onClick={() => startWalk(app)}>
+            </Btn>
+            <Btn className="btn sm" onClick={() => startWalk(app)}>
               Play again
-            </button>
+            </Btn>
           </div>
         </>
       ) : (
@@ -1128,7 +1128,7 @@ export function WalkPlayer({ app, st }) {
           )}
           <div className="row">
             {!r ? (
-              <button
+              <Btn
                 className="btn primary sm"
                 onClick={() => {
                   exec(T.i);
@@ -1137,9 +1137,9 @@ export function WalkPlayer({ app, st }) {
               >
                 <Icon n="play" s="16" />
                 Do it
-              </button>
+              </Btn>
             ) : (
-              <button
+              <Btn
                 className="btn primary sm"
                 onClick={() => {
                   T.i++;
@@ -1147,9 +1147,9 @@ export function WalkPlayer({ app, st }) {
                 }}
               >
                 {T.i === steps.length - 1 ? 'Finish' : 'Next step'}
-              </button>
+              </Btn>
             )}
-            <button
+            <Btn
               className="btn subtle sm"
               onClick={() => {
                 for (let i = T.i; i < steps.length; i++) if (!T.res[i]) exec(i);
@@ -1158,7 +1158,7 @@ export function WalkPlayer({ app, st }) {
               }}
             >
               Run all
-            </button>
+            </Btn>
           </div>
         </>
       )}

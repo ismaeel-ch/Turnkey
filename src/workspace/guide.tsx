@@ -1,7 +1,7 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
 import { NativeField } from '@/platform/dom';
 import { NARROW, S, U, activeTab, chatShown, closeDialog, commit, cx, notify, openTab, setChat, str, toast } from './core';
-import { Dialog, Empty, Icon } from './ui';
+import { Btn, Dialog, Empty, Icon } from './ui';
 import { openShare } from './share';
 import { startTour } from './shell-c';
 
@@ -596,10 +596,10 @@ export function GuideDialog({ p }) {
               </ol>
               {x.go && (
                 <div className="row">
-                  <button className="btn sm" onClick={() => guideGo(x.go, app)}>
+                  <Btn className="btn sm" onClick={() => guideGo(x.go, app)}>
                     <Icon n="arrowRight" s="16" />
                     {x.go.label}
-                  </button>
+                  </Btn>
                   {(x.go.view || x.go.act === 'share' || x.go.act === 'chat') && !app ? (
                     <span className="t-cap muted">Needs an open app</span>
                   ) : null}

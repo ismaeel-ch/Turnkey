@@ -1,6 +1,7 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
 import { modelHost } from '@/platform/model-client';
 import { useState, useLayoutEffect } from 'react';
+import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import { render, toStyle, NativeField } from '@/platform/dom';
 import {
   APILOG,
@@ -61,12 +62,12 @@ import { REC, TEMPLATES } from './builds';
 import { QUESTS } from './quests';
 import { TEAMS } from './team';
 import { TESTS, runTestsSync, suiteOf } from './tests';
-import { FLOW } from './flow';
+import { FLOW, isDark } from './flow';
 import { LIVE, RUNS, STATIONS, deleteApp, pushChat, resumeInterrupted, runBuild, startBuild, stopRun } from './line';
 import { buildPack, parseChange, planOps, runChange } from './changes';
 import { AddStepDialog, REVIEWERS, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
 import { keepFix, suggestCases } from './tester';
-import { AgentAv, Dialog, Field, Icon, Logo, MBar, Proto, Seg, Spinner, Switch, TONE_ICON } from './ui';
+import { Btn, AgentAv, Dialog, Field, Icon, Logo, MBar, Proto, Seg, Spinner, Switch, TONE_ICON } from './ui';
 import { PhoneSheets } from './mobile';
 import { APICACHE, stageOf } from './runtime';
 import {
@@ -234,7 +235,7 @@ export function Onboarding() {
           </Field>
         </div>
         {o.err && <MBar tone="warning">{o.err}</MBar>}
-        <button
+        <Btn
           className="btn subtle"
           onClick={() => {
             o.name = 'Demo user';
@@ -246,7 +247,7 @@ export function Onboarding() {
           }}
         >
           Skip and use the demo account (demo / demo)
-        </button>
+        </Btn>
       </>
     ),
     () => (
@@ -342,7 +343,7 @@ export function Onboarding() {
             );
           })}
         </div>
-        <button
+        <Btn
           className={cx('btn subtle', !o.pick && 'on')}
           onClick={() => {
             o.pick = null;
@@ -350,7 +351,7 @@ export function Onboarding() {
           }}
         >
           Start with an empty workspace instead
-        </button>
+        </Btn>
       </>
     ),
     () => (
@@ -417,7 +418,7 @@ export function Onboarding() {
           </div>
           <div className="ob-foot">
             {o.step > 0 && (
-              <button
+              <Btn
                 className="btn"
                 onClick={() => {
                   o.step--;
@@ -426,17 +427,17 @@ export function Onboarding() {
                 }}
               >
                 Back
-              </button>
+              </Btn>
             )}
             <span className="grow" />
             {o.step < steps.length - 1 ? (
-              <button className="btn primary" onClick={next}>
+              <Btn className="btn primary" onClick={next}>
                 {o.step === 0 ? 'Get started' : 'Continue'}
-              </button>
+              </Btn>
             ) : (
-              <button className="btn primary" onClick={finish}>
+              <Btn className="btn primary" onClick={finish}>
                 Open my workspace
-              </button>
+              </Btn>
             )}
           </div>
         </main>
@@ -546,11 +547,11 @@ export function SignIn() {
           />
         </Field>
         {f.err && <MBar tone="danger">{f.err}</MBar>}
-        <button className="btn primary lg" type="submit">
+        <Btn className="btn primary lg" type="submit">
           {f.create ? 'Create account' : 'Sign in'}
-        </button>
+        </Btn>
         <div className="row between">
-          <button
+          <Btn
             type="button"
             className="btn subtle sm"
             onClick={() => {
@@ -560,8 +561,8 @@ export function SignIn() {
             }}
           >
             {f.create ? 'Back to sign in' : 'Create another account'}
-          </button>
-          <button
+          </Btn>
+          <Btn
             type="button"
             className="btn subtle sm"
             onClick={() =>
@@ -571,7 +572,7 @@ export function SignIn() {
             }
           >
             Erase everything
-          </button>
+          </Btn>
         </div>
       </form>
     </div>
@@ -638,9 +639,9 @@ export function SettingsDialog() {
       title="Settings"
       onClose={closeDialog}
       foot={
-        <button className="btn primary" onClick={closeDialog}>
+        <Btn className="btn primary" onClick={closeDialog}>
           Done
-        </button>
+        </Btn>
       }
     >
       <div className="set-list">
@@ -748,7 +749,7 @@ export function InstallDialog() {
       foot={
         s.installed ? (
           <>
-            <button
+            <Btn
               className="btn"
               onClick={() => {
                 s.installed = false;
@@ -758,17 +759,17 @@ export function InstallDialog() {
               }}
             >
               Uninstall
-            </button>
-            <button className="btn primary" onClick={closeDialog}>
+            </Btn>
+            <Btn className="btn primary" onClick={closeDialog}>
               Done
-            </button>
+            </Btn>
           </>
         ) : (
           <>
-            <button className="btn" onClick={closeDialog}>
+            <Btn className="btn" onClick={closeDialog}>
               Not now
-            </button>
-            <button
+            </Btn>
+            <Btn
               className="btn primary"
               data-autofocus
               onClick={() => {
@@ -779,7 +780,7 @@ export function InstallDialog() {
               }}
             >
               Install
-            </button>
+            </Btn>
           </>
         )
       }
@@ -864,25 +865,25 @@ export function ResetDialog() {
               ' and puts the original rows back. Tables, screens and your changes stay.'
             }
           >
-            <button className="btn" disabled={!apps.length} onClick={() => act('data')}>
+            <Btn className="btn" disabled={!apps.length} onClick={() => act('data')}>
               Restore
-            </button>
+            </Btn>
           </SetRow>
         )}
         {!out && (
           <SetRow title="Delete all my apps" text="Removes every app with its database and chat. Your account and settings stay.">
-            <button className="btn" disabled={!apps.length} onClick={() => act('apps')}>
+            <Btn className="btn" disabled={!apps.length} onClick={() => act('apps')}>
               Delete apps
-            </button>
+            </Btn>
           </SetRow>
         )}
         <SetRow
           title="Erase everything"
           text="Removes all accounts, apps, databases and settings from this browser and starts again at the welcome screen."
         >
-          <button className="btn danger" onClick={() => act('all')}>
+          <Btn className="btn danger" onClick={() => act('all')}>
             Erase
-          </button>
+          </Btn>
         </SetRow>
       </div>
     </Dialog>
@@ -900,15 +901,15 @@ export function PackDialog({ p }) {
       foot={
         <>
           {U.dl && (
-            <button className="btn" onClick={() => saveFile(snake(app.name) + '-build-pack.md', md, 'text/markdown')}>
+            <Btn className="btn" onClick={() => saveFile(snake(app.name) + '-build-pack.md', md, 'text/markdown')}>
               <Icon n="download" s="16" />
               Download .md
-            </button>
+            </Btn>
           )}
-          <button className="btn primary" onClick={() => copyText(md, 'Build pack')}>
+          <Btn className="btn primary" onClick={() => copyText(md, 'Build pack')}>
             <Icon n="copy" s="16" />
             Copy
-          </button>
+          </Btn>
         </>
       }
     >
@@ -955,12 +956,12 @@ export function RenameDialog({ p }) {
           />
         </Field>
         <div className="row end">
-          <button type="button" className="btn" onClick={closeDialog}>
+          <Btn type="button" className="btn" onClick={closeDialog}>
             Cancel
-          </button>
-          <button type="submit" className="btn primary">
+          </Btn>
+          <Btn type="submit" className="btn primary">
             Rename
-          </button>
+          </Btn>
         </div>
       </form>
     </Dialog>
@@ -1074,12 +1075,12 @@ export function AddConnDialog({ p }) {
         </Field>
         {p.err && <MBar tone="warning">{p.err}</MBar>}
         <div className="row end">
-          <button type="button" className="btn" onClick={closeDialog}>
+          <Btn type="button" className="btn" onClick={closeDialog}>
             Cancel
-          </button>
-          <button type="submit" className="btn primary">
+          </Btn>
+          <Btn type="submit" className="btn primary">
             Add connection
-          </button>
+          </Btn>
         </div>
       </form>
     </Dialog>
@@ -1099,9 +1100,9 @@ export function AboutDialog() {
       title="What is real in this prototype"
       onClose={closeDialog}
       foot={
-        <button className="btn primary" onClick={closeDialog}>
+        <Btn className="btn primary" onClick={closeDialog}>
           Close
-        </button>
+        </Btn>
       }
     >
       <div className="about">
@@ -1175,12 +1176,12 @@ export function DialogHost() {
           onClose={() => p.done(false)}
           foot={
             <>
-              <button className="btn" onClick={() => p.done(false)}>
+              <Btn className="btn" onClick={() => p.done(false)}>
                 {p.no || 'Cancel'}
-              </button>
-              <button className={cx('btn', p.danger ? 'danger' : 'primary')} data-autofocus onClick={() => p.done(true)}>
+              </Btn>
+              <Btn className={cx('btn', p.danger ? 'danger' : 'primary')} data-autofocus onClick={() => p.done(true)}>
                 {p.yes || 'OK'}
-              </button>
+              </Btn>
             </>
           }
         >
@@ -1226,7 +1227,7 @@ export function Toasts() {
         <div key={t.id} className={'toast m-' + t.tone}>
           <Icon n={TONE_ICON[t.tone] || 'info'} />
           <span className="grow">{t.text}</span>
-          <button
+          <Btn
             className="btn subtle icon sm"
             aria-label="Dismiss"
             onClick={() => {
@@ -1235,7 +1236,7 @@ export function Toasts() {
             }}
           >
             <Icon n="dismiss" s="12" />
-          </button>
+          </Btn>
         </div>
       ))}
     </div>
@@ -1527,18 +1528,18 @@ export function TourLayer() {
         <h3 className="t-sub2">{step.title}</h3>
         <p>{step.body}</p>
         <div className="row between">
-          <button className="btn subtle sm" onClick={end}>
+          <Btn className="btn subtle sm" onClick={end}>
             Skip tour
-          </button>
+          </Btn>
           <div className="row">
             {T.i > 0 && (
-              <button className="btn sm" onClick={() => go(-1)}>
+              <Btn className="btn sm" onClick={() => go(-1)}>
                 Back
-              </button>
+              </Btn>
             )}
-            <button className="btn primary sm" onClick={() => go(1)}>
+            <Btn className="btn primary sm" onClick={() => go(1)}>
               {T.i === T.steps.length - 1 ? 'Done' : 'Next'}
-            </button>
+            </Btn>
           </div>
         </div>
       </div>
@@ -1566,9 +1567,9 @@ export function Shell() {
           cls="bar"
           action={
             S.settings.offline ? (
-              <button className="btn sm" onClick={() => setOffline(false)}>
+              <Btn className="btn sm" onClick={() => setOffline(false)}>
                 Go back online
-              </button>
+              </Btn>
             ) : null
           }
         >
@@ -1582,7 +1583,7 @@ export function Shell() {
     </div>
   );
 }
-export function Root() {
+function RootInner() {
   const force = useForce();
   useLayoutEffect(() => {
     subs.add(force);
@@ -1621,6 +1622,19 @@ export function Root() {
     <TourLayer key="tour" />,
     <Toasts key="toasts" />,
   ];
+}
+/** Everything in the workspace sits inside Fluent's provider; light or dark follows the app's own setting. */
+export function Root() {
+  const force = useForce();
+  useLayoutEffect(() => {
+    subs.add(force);
+    return () => subs.delete(force);
+  }, []);
+  return (
+    <FluentProvider theme={isDark() ? webDarkTheme : webLightTheme} className="fl-provider">
+      <RootInner />
+    </FluentProvider>
+  );
 }
 export function probeClaude(tries) {
   const c = modelHost();

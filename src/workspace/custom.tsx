@@ -54,7 +54,7 @@ import {
 } from './line';
 import { applyChangeSync, handleChat, parseChange, planOps } from './changes';
 import { keepFix } from './tester';
-import { AgentAv, Dialog, Field, Icon, MBar, Seg, Spinner, Switch } from './ui';
+import { Btn, AgentAv, Dialog, Field, Icon, MBar, Seg, Spinner, Switch } from './ui';
 import { rebuildAsk } from './shell-a';
 
 /* ===== Turnkey prototype · the workflow is yours: approvals, review steps, instructions, attempts =====
@@ -2429,17 +2429,17 @@ export function CustomTab({ app, st }) {
           />
         </Field>
         <div className="row wrap">
-          <button className="btn sm primary" disabled={str(draft) === saved} onClick={() => saveNote(draft)}>
+          <Btn className="btn sm primary" disabled={str(draft) === saved} onClick={() => saveNote(draft)}>
             Save instruction
-          </button>
+          </Btn>
           {saved && (
-            <button className="btn sm" onClick={() => saveNote('')}>
+            <Btn className="btn sm" onClick={() => saveNote('')}>
               Clear
-            </button>
+            </Btn>
           )}
           <span className="grow" />
           {ready && st.id !== 'research' && (
-            <button
+            <Btn
               className="btn sm"
               disabled={busy}
               title="Only this station and the ones after it run again"
@@ -2448,9 +2448,9 @@ export function CustomTab({ app, st }) {
               <Icon n="rerun" s="16" />
               {'Run again from '}
               {st.name}
-            </button>
+            </Btn>
           )}
-          <button
+          <Btn
             className="btn sm subtle"
             onClick={() => {
               U.sheet = null;
@@ -2461,7 +2461,7 @@ export function CustomTab({ app, st }) {
           >
             <Icon n="options" s="16" />
             All settings
-          </button>
+          </Btn>
         </div>
       </div>
     </div>
@@ -2519,11 +2519,11 @@ export function WorkflowDialog({ p }) {
       onClose={closeDialog}
       foot={
         <>
-          <button className="btn" disabled={std} onClick={() => edit('reset', {})}>
+          <Btn className="btn" disabled={std} onClick={() => edit('reset', {})}>
             <Icon n="reset" s="16" />
             Reset to standard
-          </button>
-          <button
+          </Btn>
+          <Btn
             className="btn"
             disabled={isDef}
             title="New apps you build start with this workflow"
@@ -2534,10 +2534,10 @@ export function WorkflowDialog({ p }) {
           >
             <Icon n="save" s="16" />
             Save as my default
-          </button>
-          <button className="btn primary" onClick={closeDialog}>
+          </Btn>
+          <Btn className="btn primary" onClick={closeDialog}>
             Done
-          </button>
+          </Btn>
         </>
       }
     >
@@ -2629,14 +2629,14 @@ export function WorkflowDialog({ p }) {
                     )}
                   </td>
                   <td data-l="Instruction">
-                    <button
+                    <Btn
                       className="btn sm subtle wf-note"
                       title={note || 'Add an instruction for ' + agentThe(st.agent, true)}
                       onClick={() => openSt(st.id)}
                     >
                       <Icon n={note ? 'note' : 'edit'} s="16" />
                       <span className="ellipsis">{note || 'Add'}</span>
-                    </button>
+                    </Btn>
                   </td>
                 </tr>
               );
@@ -2750,18 +2750,18 @@ export function Findings({ app, id, compact }) {
               ) : (
                 <>
                   {x.fix && (
-                    <button
+                    <Btn
                       className="btn sm primary"
                       disabled={busy || !ready || x.test === 'fail'}
                       title={!ready ? 'Available when the build has finished' : ''}
                       onClick={() => applyFinding(app, id, x.id)}
                     >
                       Apply
-                    </button>
+                    </Btn>
                   )}
-                  <button className="btn sm" disabled={off} onClick={() => dismissFinding(app, id, x.id)}>
+                  <Btn className="btn sm" disabled={off} onClick={() => dismissFinding(app, id, x.id)}>
                     Dismiss
-                  </button>
+                  </Btn>
                 </>
               )}
               {x.fix &&
@@ -2826,14 +2826,14 @@ export function ReviewPanel({ app, id, bare }) {
           </>
         )}
         <span className="grow" />
-        <button className="btn sm" disabled={busy || !ready} onClick={() => reviewNow(app, id)}>
+        <Btn className="btn sm" disabled={busy || !ready} onClick={() => reviewNow(app, id)}>
           <Icon n="rerun" s="16" />
           Run now
-        </button>
-        <button className="btn sm subtle" disabled={busy && (R || {}).status === 'working'} onClick={() => edit('remove_step', {})}>
+        </Btn>
+        <Btn className="btn sm subtle" disabled={busy && (R || {}).status === 'working'} onClick={() => edit('remove_step', {})}>
           <Icon n="dismiss" s="16" />
           Remove
-        </button>
+        </Btn>
       </div>
       <div className="insp-body col gap12">
         <div className="step-set">
@@ -2924,7 +2924,7 @@ export function ReviewPanel({ app, id, bare }) {
               />
             </Field>
             <div className="row">
-              <button
+              <Btn
                 className="btn sm primary"
                 disabled={D[key] == null || D[key].trim() === ag.job || busy}
                 onClick={() => {
@@ -2936,7 +2936,7 @@ export function ReviewPanel({ app, id, bare }) {
                 }}
               >
                 Save the job
-              </button>
+              </Btn>
             </div>
           </>
         )}
@@ -3138,10 +3138,10 @@ export function AddStepDialog({ p }) {
                     notify();
                   }}
                 />
-                <button className="btn primary" type="submit" id="as-create" disabled={busy && false}>
+                <Btn className="btn primary" type="submit" id="as-create" disabled={busy && false}>
                   <Icon n="add" s="16" />
                   Add this agent
-                </button>
+                </Btn>
               </div>
             </form>
           </>
@@ -3188,18 +3188,18 @@ export function FlowCards({ app, m }) {
         )}
         <div className="row wrap">
           {c.from && ready && (
-            <button className="btn sm" disabled={busy} onClick={() => rerunFrom(app, c.from)}>
+            <Btn className="btn sm" disabled={busy} onClick={() => rerunFrom(app, c.from)}>
               <Icon n="rerun" s="16" />
               {'Run again from '}
               {stName(c.from)}
-            </button>
+            </Btn>
           )}
-          <button className="btn sm subtle" onClick={toCanvas}>
+          <Btn className="btn sm subtle" onClick={toCanvas}>
             <Icon n="flow" s="16" />
             Show on the canvas
-          </button>
+          </Btn>
           {!c.quiet && (
-            <button
+            <Btn
               className="btn sm subtle"
               disabled={!canUndo}
               onClick={() => {
@@ -3221,7 +3221,7 @@ export function FlowCards({ app, m }) {
             >
               <Icon n="undo" s="16" />
               Undo
-            </button>
+            </Btn>
           )}
         </div>
       </div>
@@ -3262,16 +3262,16 @@ export function FlowCards({ app, m }) {
           </span>
         ) : live ? (
           <div className="row wrap">
-            <button className="btn primary sm" onClick={() => answerGate(app, true)}>
+            <Btn className="btn primary sm" onClick={() => answerGate(app, true)}>
               <Icon n="check" s="16" />
               Approve and continue
-            </button>
-            <button className="btn sm" onClick={open}>
+            </Btn>
+            <Btn className="btn sm" onClick={open}>
               See what was made
-            </button>
-            <button className="btn sm" onClick={() => answerGate(app, false)}>
+            </Btn>
+            <Btn className="btn sm" onClick={() => answerGate(app, false)}>
               Stop here
-            </button>
+            </Btn>
           </div>
         ) : (
           <span className="t-cap muted">No longer waiting for an answer.</span>
@@ -3306,7 +3306,7 @@ export function FlowCards({ app, m }) {
         </div>
         <FlowChips app={app} empty="Standard: six stations, a check gate after each, three attempts." />
         <div className="row wrap">
-          <button
+          <Btn
             className="btn sm"
             onClick={() =>
               openDialog('workflow', {
@@ -3316,11 +3316,11 @@ export function FlowCards({ app, m }) {
           >
             <Icon n="options" s="16" />
             Open the settings
-          </button>
-          <button className="btn sm subtle" onClick={toCanvas}>
+          </Btn>
+          <Btn className="btn sm subtle" onClick={toCanvas}>
             <Icon n="flow" s="16" />
             Show on the canvas
-          </button>
+          </Btn>
         </div>
       </div>
     );
