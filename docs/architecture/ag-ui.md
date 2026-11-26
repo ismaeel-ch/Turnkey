@@ -56,6 +56,11 @@ A LangGraph run is mapped by the graph's own module: it calls the sink from its 
 and end become `step`, model tokens become `text`, tool nodes become `toolCall` and `toolResult`, state updates
 become `state`).
 
+Agent `step` (agent-graphs) is wrapped by `wrapStepAgent` in `src/server/agui/step-adapter.ts`, which maps the graph's
+own `StepEvent`s: `step_started` and `step_finished` to `step` and `endStep`, `draft_text` to `text` with the message
+id `draft-<attempt>`, `draft_ended` to `endText`, `issues` to `custom("issues", …)`, and the returned result or error
+to `finish` or `fail`.
+
 ## Browser client
 
 ```ts
