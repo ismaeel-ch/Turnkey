@@ -857,7 +857,7 @@ export function TestRows({ app, suite, only, q }) {
   const rows = suite.tests.filter((x) => (!only || (res[x.id] && !res[x.id].ok)) && (!q || x.name.toLowerCase().indexOf(q) >= 0));
   if (!rows.length) return null;
   return (
-    <ul className="tests">
+    <ul className="tests" tabIndex={0} aria-label={suite.name + ' tests'}>
       {rows.map((x) => {
         const r = res[x.id];
         return (
