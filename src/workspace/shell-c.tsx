@@ -45,11 +45,10 @@ import {
   signIn,
   snake,
   str,
-  subs,
   tabsNow,
   toast,
   uid,
-  useForce,
+  useStore,
   setNetWas,
   setS,
   setSaveTimer,
@@ -1586,12 +1585,7 @@ export function Shell() {
   );
 }
 function RootInner() {
-  const force = useForce();
-  useLayoutEffect(() => {
-    subs.add(force);
-    force();
-    return () => subs.delete(force);
-  }, []); // subscribe before anything else can run, then catch up
+  useStore();
   if (U.boot === 'loading')
     return (
       <div className="splash">
@@ -1627,11 +1621,7 @@ function RootInner() {
 }
 /** Everything in the workspace sits inside Fluent's provider; light or dark follows the app's own setting. */
 export function Root() {
-  const force = useForce();
-  useLayoutEffect(() => {
-    subs.add(force);
-    return () => subs.delete(force);
-  }, []);
+  useStore(); // the theme follows the app's setting
   return (
     <FluentProvider theme={isDark() ? webDarkTheme : webLightTheme} className="fl-provider">
       <RootInner />

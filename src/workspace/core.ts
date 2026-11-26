@@ -1,4 +1,4 @@
-import { useReducer, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 import type {
   Account,
   AppRecord,
@@ -364,8 +364,7 @@ export function saveSoon() {
 }
 /* The store: S and U are plain objects that actions change in place, then call notify() (or commit(), which also saves).
    React reads them through useStore(), which re-renders on the next microtask after any number of changes. */
-/** @deprecated read the store with useStore(); kept until shell-c.tsx moves over */
-export const subs = new Set<() => void>();
+const subs = new Set<() => void>();
 let version = 0;
 let notifyQueued = false;
 export function subscribe(listener: () => void) {
@@ -388,10 +387,6 @@ export function notify() {
 export function commit() {
   saveSoon();
   notify();
-}
-/** @deprecated use useStore(); kept until shell-c.tsx moves over */
-export function useForce() {
-  return useReducer((x: number) => x + 1, 0)[1];
 }
 /** Re-render this component whenever the store changes. Returns the store version. */
 export function useStore() {
