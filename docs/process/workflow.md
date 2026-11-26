@@ -29,7 +29,7 @@ to add the label, so an unchecked pull request never looks green.
 | Job            | What it runs                                                         |
 | -------------- | -------------------------------------------------------------------- |
 | `check`        | secrets scan, lint, typecheck, unit tests, production build          |
-| `e2e` (8 jobs) | one browser flow each, with failure screenshots kept for 3 days      |
+| `e2e` (9 jobs) | one browser flow each, with failure screenshots kept for 3 days      |
 | `ci`           | passes only if the jobs above ran and passed; the one required check |
 
 A run takes about four minutes. A job that fails can be reproduced locally with the matching npm script:

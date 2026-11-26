@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { createRequire } from 'node:module';
+import { describe, expect, it, vi } from 'vitest';
 import { complete, resolveProvider } from '@/server/llm';
 import { roleAnswer, roleOf } from '@/server/llm/providers/mock-roles';
-import { startLine } from './helpers/legacy-line';
+import { startLine } from './helpers/workspace-line';
+
+// The browser loads sql.js as a script from /vendor; here it comes straight from node_modules.
+vi.mock('@/platform/sqlite', () => ({ loadSqlite: () => createRequire(import.meta.url)('sql.js')() }));
 
 const mock = resolveProvider({ LLM_PROVIDER: 'mock' })!;
 const ask = async (prompt: string) => (await complete(mock, { messages: [{ role: 'user', content: prompt }], tier: 'default' })).text;

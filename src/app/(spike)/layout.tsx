@@ -1,10 +1,10 @@
-import type { ReactNode } from "react";
-import "@copilotkit/react-core/v2/styles.css";
-import "./spike/spike.css";
+import type { ReactNode } from 'react';
+import '@copilotkit/react-core/v2/styles.css';
+import './spike/spike.css';
 
 export const metadata = {
-  title: "Turnkey",
-  description: "Describe an app; agents build it on a shared canvas.",
+  title: 'Turnkey',
+  description: 'Describe an app; agents build it on a shared canvas.',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
