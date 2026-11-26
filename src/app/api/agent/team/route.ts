@@ -6,8 +6,10 @@
  *   response  one AG-UI event per `data:` line, ending with RUN_FINISHED or RUN_ERROR
  */
 import { EventEncoder } from '@ag-ui/encoder';
+import { z } from 'zod';
 import { createTeamAgent } from '@/server/graph/team/agent';
-import { limiter, limitsFrom, visitorOf } from '@/server/guard/limits';
+import { parseBody, refuse, refuseVerdict, visitorKey } from '@/server/guard/http';
+import { limiter, limitsFrom } from '@/server/guard/limits';
 import { LlmError } from '@/server/llm';
 import type { BaseEvent } from '@ag-ui/core';
 
@@ -15,18 +17,26 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ code: 'bad_request', message: 'The request body must be JSON.' }, { status: 400 });
-  }
-  const who = visitorOf(request);
   const limits = limitsFrom();
+  if (limits.off) return refuse(503, 'not_configured', 'Live builds are switched off on this deployment. Saved builds still run.');
+  // The prompts are built here from the team definition, so the prompt policy does not apply; the body is read with a
+  // size limit and the run itself validates the team and the input.
+  const parsed = await parseBody(request, z.unknown(), limits.maxPromptChars * 4 + 1000);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const who = visitorKey(request);
+  // the first model call is checked here so a visitor over the limit gets a plain 429 before anything streams
+  const first = limiter.take(who, limits);
+  if (!first.ok) return refuseVerdict(first);
+  let firstCall = true;
   const encoder = new EventEncoder();
   const bytes = new TextEncoder();
   const agent = createTeamAgent({
     beforeModelCall() {
+      if (firstCall) {
+        firstCall = false;
+        return;
+      }
       const v = limiter.take(who, limits);
       if (!v.ok) throw new LlmError(v.code === 'off' ? 'not_configured' : v.code, v.message, 429);
     },

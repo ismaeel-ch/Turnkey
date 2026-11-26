@@ -4,8 +4,16 @@ import { factRequest } from './fixtures';
 
 afterEach(() => vi.unstubAllEnvs());
 
-const post = (body: unknown) =>
-  POST(new Request('http://x/api/agent/team', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) }));
+let n = 0;
+const ip = () => `10.8.${Math.floor(n / 250)}.${(n++ % 250) + 1}`;
+const post = (body: unknown, who = ip()) =>
+  POST(
+    new Request('http://x/api/agent/team', {
+      method: 'POST',
+      headers: { 'x-forwarded-for': who },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    }),
+  );
 const events = async (res: Response) =>
   (await res.text())
     .split('\n')
@@ -34,5 +42,28 @@ describe('POST /api/agent/team', () => {
 
   it('refuses a body that is not JSON', async () => {
     expect((await post('nope')).status).toBe(400);
+  });
+
+  it('refuses a body over the size limit, and every run when live builds are switched off', async () => {
+    vi.stubEnv('LLM_PROVIDER', 'mock');
+    vi.stubEnv('LLM_MAX_PROMPT_CHARS', '1000');
+    expect((await post({ ...factRequest(), pad: 'x'.repeat(6000) })).status).toBe(413);
+    vi.stubEnv('LLM_MAX_PROMPT_CHARS', '');
+    vi.stubEnv('LIVE_MODE', 'off');
+    const off = await post(factRequest());
+    expect(off.status).toBe(503);
+    expect(await off.json()).toMatchObject({ code: 'not_configured' });
+  });
+
+  it('answers 429 before streaming once the visitor is over the limit', async () => {
+    vi.stubEnv('LLM_PROVIDER', 'mock');
+    vi.stubEnv('LLM_GLOBAL_PER_MINUTE', '100000');
+    vi.stubEnv('LLM_DAILY_CALL_CAP', '100000');
+    vi.stubEnv('LLM_RATE_PER_MINUTE', '1');
+    const who = ip();
+    await (await post(factRequest(), who)).text();
+    const res = await post(factRequest(), who);
+    expect(res.status).toBe(429);
+    expect(await res.json()).toMatchObject({ code: 'rate_limited' });
   });
 });
