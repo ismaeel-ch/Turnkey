@@ -9,7 +9,7 @@
 import type { BaseEvent } from '@ag-ui/core';
 // The AG-UI client and the step contract (with zod) load on the first model call, not with the page.
 import type { RunAgentOptions } from '@/platform/agui/client';
-import type { StepErrorCode, StepInput, StepRole } from '@/shared/agent-contract';
+import type { StepInput, StepRole } from '@/shared/agent-contract';
 import { readCallUsage, type CallUsage } from '@/platform/agui/usage';
 
 /** One step of the server's agent graph as the browser sees it: `draft`, `validate`, `repair` (and `guard`, `finish`). */
@@ -172,7 +172,7 @@ export async function sample(prompt: string, opts: SampleOptions = {}): Promise<
     e.name = 'AbortError';
     throw e;
   }
-  const code = run.error.code as StepErrorCode | string;
+  const code = run.error.code;
   if ((code === 'invalid_output' || code === 'truncated') && draft.trim())
     return { text: draft, truncated: code === 'truncated', attempts: attempt, issues };
   if (code === 'network') {

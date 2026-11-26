@@ -194,7 +194,7 @@ export function buildTeamGraph(req: TeamRequest, ctx: TeamContext, budget: Budge
     sink.emit({ type: 'TOOL_CALL_START', toolCallId: id, toolCallName: name });
     sink.emit({ type: 'TOOL_CALL_ARGS', toolCallId: id, delta: JSON.stringify(p.args) });
     sink.emit({ type: 'TOOL_CALL_END', toolCallId: id });
-    let result: { ok: boolean; text: string };
+    let result: { ok: boolean; text: string; unavailable?: boolean };
     try {
       result = await ctx.tools.run(p.connector, p.tool, p.args, ctx.signal);
     } catch (e) {
@@ -205,7 +205,12 @@ export function buildTeamGraph(req: TeamRequest, ctx: TeamContext, budget: Budge
       type: 'TOOL_CALL_RESULT',
       messageId: uid('m'),
       toolCallId: id,
-      content: JSON.stringify({ agent: a.id, ok: result.ok, text: text.slice(0, 600) }),
+      content: JSON.stringify({
+        agent: a.id,
+        ok: result.ok,
+        ...(result.unavailable ? { unavailable: true } : {}),
+        text: text.slice(0, 600),
+      }),
       role: 'tool',
     });
     const label = `${name} ${Object.values(p.args)[0] ?? ''}`.trim();
@@ -250,7 +255,7 @@ export function buildTeamGraph(req: TeamRequest, ctx: TeamContext, budget: Budge
     sink.emit({ type: 'TEXT_MESSAGE_END', messageId: mid });
     const written: Rows = {};
     if (a.writes && draft.rows.length) {
-      const fixed = a.fixed as Record<string, unknown>;
+      const fixed = a.fixed;
       written[a.writes] = draft.rows.map((r) => ({ ...r, ...fixed }));
       for (const r of written[a.writes]) sink.emit({ type: 'STATE_DELTA', delta: [{ op: 'add', path: `/work/${a.writes}/-`, value: r }] });
     }

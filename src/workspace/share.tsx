@@ -75,10 +75,7 @@ export const unb64u = (t: string) => {
 };
 export async function pipeBytes(bytes: Uint8Array<ArrayBuffer>, through: GenericTransformStream, cap?: number) {
   // run bytes through a compression stream, refusing to grow past the cap
-  const reader = new Blob([bytes])
-      .stream()
-      .pipeThrough<Uint8Array>(through as ReadableWritablePair<Uint8Array, Uint8Array>)
-      .getReader(),
+  const reader = new Blob([bytes]).stream().pipeThrough<Uint8Array>(through).getReader(),
     parts: Uint8Array[] = [];
   let n = 0;
   for (;;) {
@@ -300,7 +297,7 @@ export function appFromPack(pack: Pack, key: string, preview?: boolean): AppReco
         by: str(pack.by).slice(0, 60),
         at: Date.now(),
         as: str(pack.as).slice(0, 40),
-        data: (pack.data === 'live' ? 'live' : 'demo') as 'live' | 'demo',
+        data: pack.data === 'live' ? 'live' : 'demo',
         preview: !!preview,
         ver: /^\d+(\.\d+){0,2}$/.test(str(pack.ver)) ? str(pack.ver) : '',
         uid: /^[A-Za-z0-9_-]{4,40}$/.test(str(pack.uid)) ? str(pack.uid) : '',
@@ -380,7 +377,7 @@ export function appFromPack(pack: Pack, key: string, preview?: boolean): AppReco
     delete S.apps[id];
     throw e;
   }
-  app.def.cases = normCases(pack.tests, app.def as BriefedDef);
+  app.def.cases = normCases(pack.tests, app.def);
   app.rev++;
   run.status = 'ok';
   run.t1 = Date.now();

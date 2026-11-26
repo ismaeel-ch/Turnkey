@@ -34,4 +34,53 @@ describe('the team tool box over the real connectors', () => {
       text: 'The source did not answer.',
     });
   });
+
+  it('tells the agent plainly when a source is down, and flags it for the workspace', async () => {
+    for (const code of ['timeout', 'upstream', 'bad_response']) {
+      const lookup: ConnectorLookupLike = () => ({
+        id: 'wikipedia',
+        label: 'Wikipedia',
+        search: async () => ({ ok: false, code, message: 'The source did not answer in time (tried 3 times).' }),
+      });
+      const r = await toolBoxFromConnectors(lookup).run('wikipedia', 'search_pages', { q: 'a' });
+      expect(r.ok).toBe(false);
+      expect(r.unavailable).toBe(true);
+      expect(r.text).toMatch(/^SOURCE UNAVAILABLE: Wikipedia cannot be used right now/);
+      expect(r.text).toContain('do not guess');
+    }
+  });
+
+  it('a connector that throws, or one that is missing, is unavailable rather than a crash', async () => {
+    const throwing: ConnectorLookupLike = () => ({
+      id: 'worldbank',
+      search: async () => {
+        throw new Error('boom');
+      },
+    });
+    expect(await toolBoxFromConnectors(throwing).run('worldbank', 'get_indicator', { country: 'PK', indicator: 'x' })).toMatchObject({
+      ok: false,
+      unavailable: true,
+    });
+    expect(await toolBoxFromConnectors(() => undefined).run('arxiv', 'query', { q: 'a' })).toMatchObject({ ok: false, unavailable: true });
+  });
+
+  it('no record is a result, not a failure', async () => {
+    const lookup: ConnectorLookupLike = () => ({ id: 'x', search: async () => ({ ok: false, code: 'not_found', message: 'No article.' }) });
+    expect(await toolBoxFromConnectors(lookup).run('wikipedia', 'search_pages', { q: 'a' })).toEqual({
+      ok: true,
+      text: 'Nothing found: No article.',
+    });
+  });
+
+  it('a real connector that keeps failing ends as an unavailable source after its retries', async () => {
+    const { doFetch, calls } = fakeFetch(() => new Response('down', { status: 503 }));
+    const lookup: ConnectorLookupLike = (id) => {
+      const c = getConnector(id);
+      return c && { id, label: c.label, search: (q, o) => c.search(q, { ...o, fetch: doFetch }) };
+    };
+    const r = await toolBoxFromConnectors(lookup).run('wikipedia', 'search_pages', { q: 'electron' });
+    expect(r).toMatchObject({ ok: false, unavailable: true });
+    expect(r.text).toContain('tried 3 times');
+    expect(calls).toHaveLength(3);
+  });
 });

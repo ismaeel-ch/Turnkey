@@ -189,7 +189,7 @@ export class TurnkeyStorage {
     const keys = (await req(store.getAllKeys())) as IDBValidKey[];
     const vals = (await req(store.getAll())) as unknown[];
     keys.forEach((k, i) => {
-      if (typeof k === 'string' && typeof vals[i] === 'string') this.mirror.set(k, vals[i] as string);
+      if (typeof k === 'string' && typeof vals[i] === 'string') this.mirror.set(k, vals[i]);
     });
   }
 
@@ -631,7 +631,7 @@ function makeWebStorage(s: TurnkeyStorage): Storage {
       for (const k of keysAll()) api.removeItem(k);
     },
   };
-  return api as unknown as Storage;
+  return api;
 }
 
 /** Opens the storage and fills the mirror. Await this before the workspace starts. Never rejects: the worst case is memory mode. */
