@@ -145,6 +145,7 @@ export async function* sseData(body: ReadableStream<Uint8Array>): AsyncGenerator
       // a partial or non-JSON keep-alive line: ignore it
     }
   };
+  let ended = false;
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -156,8 +157,12 @@ export async function* sseData(body: ReadableStream<Uint8Array>): AsyncGenerator
         buffer = buffer.slice(at + 1);
       }
     }
+    ended = true;
     yield* parse(buffer + decoder.decode());
   } finally {
+    // A caller that stops reading early (the answer hit its size limit, or a step had what it needed) must also stop
+    // the upstream call: releasing the lock alone leaves the response open, and the model keeps writing a billed answer.
+    if (!ended) reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }
