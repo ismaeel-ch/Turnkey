@@ -19,20 +19,20 @@ in your issue.
 
 1. Install `@langchain/langgraph`, `@langchain/core` and `zod` and read their installed type definitions before writing code.
 2. Build the agent-step graph: nodes `guard`, `draft` (model call, streamed), `validate` (parse the JSON, check it against the role's schema), `repair` (ask again with the exact failures), `finish`. Conditional edges, at most three attempts, state typed with annotations.
-3. Write the role registry: for each builder agent (Researcher, Database, Backend, View advisor, UI, Tester) and for review steps and app agents, how to recognise its prompt and the zod schema its answer must satisfy. Derive the schemas from the normalisers in `src/legacy/line.js`, `viewspec.js` and `tester.js`: read them, do not guess.
+3. Write the role registry: for each builder agent (Researcher, Database, Backend, View advisor, UI, Tester) and for review steps and app agents, how to recognise its prompt and the zod schema its answer must satisfy. Derive the schemas from the normalisers in `src/workspace/line.ts`, `viewspec.tsx` and `tester.tsx`: read them, do not guess.
 4. Define `src/shared/agent-contract.ts` first and post it in your issue: the request and event shapes that agui-stream, team-graph and integration build against.
 5. Export `createStepAgent()`: the graph wrapped for the CopilotKit runtime at `/api/copilotkit` (agent id `step`). agui-stream owns the runtime route, the registry and the base class that turns a graph run into AG-UI events; until that lands, emit events through a small interface it can replace, and test the graph directly.
 
 ## Done means
 
 - Unit tests run the graph with the mock provider: valid first time, repaired on the second attempt, and failed after three.
-- A schema test per role using the saved builds in `src/legacy/builds.js` as fixtures.
+- A schema test per role using the saved builds in `src/workspace/builds.ts` as fixtures.
 - A diagram of the graph in your pull request.
 - `npm run check` passes, CI is green on your pull request, and the pull request says how you verified each item.
 
 ## Keep in mind
 
-The legacy browser code still validates everything it receives. The server check is an extra gate, not a replacement.
+The workspace browser code still validates everything it receives. The server check is an extra gate, not a replacement.
 
 ## How you work
 

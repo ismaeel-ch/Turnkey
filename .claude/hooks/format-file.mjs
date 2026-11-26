@@ -18,8 +18,8 @@ process.stdin.on('end', () => {
     while (root !== path.dirname(root) && !fs.existsSync(path.join(root, 'package.json'))) root = path.dirname(root);
     const bin = path.join(root, 'node_modules', '.bin', 'prettier');
     const rel = path.relative(root, file).split(path.sep).join('/');
-    const formatted = /^(src\/(app|platform|server|shared)|tests\/unit|scripts|docs)\/.*\.(ts|tsx|css|mjs|md|json)$/.test(rel) || /^[^/]+\.(json|md|mjs|ts)$/.test(rel);
-    const skipped = /^(src\/legacy|src\/platform\/generated|public\/vendor|tests\/e2e)\//.test(rel) || rel === 'package-lock.json' || rel === 'AGENTS.md';
+    const formatted = /^(src\/(app|platform|server|shared|workspace)|tests\/unit|scripts|docs)\/.*\.(ts|tsx|css|mjs|md|json)$/.test(rel) || /^[^/]+\.(json|md|mjs|ts)$/.test(rel);
+    const skipped = /^(public\/vendor|tests\/e2e)\//.test(rel) || rel === 'package-lock.json' || rel === 'AGENTS.md';
     if (formatted && !skipped && fs.existsSync(bin)) execFileSync(bin, ['--write', '--log-level', 'silent', file], { cwd: root, stdio: 'ignore', timeout: 20000 });
   } catch {
     // ignore

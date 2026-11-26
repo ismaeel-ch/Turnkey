@@ -1,0 +1,89 @@
+# Agent-A-Thon 2026 checklist
+
+Owner: compliance-auditor (WP-14, issue #15). Read-only audit of the code; this file and `THIRD_PARTY_NOTICES.md` are the only files it writes.
+Rules and filter: the SSI kickoff deck (Level 1 rules, Level 2 filter), the portal's submission and LiteLLM guide, and `.claude/skills/hackathon-check/SKILL.md`.
+
+## Audit runs
+
+| Run | Date and time | Commit audited | Result |
+| --- | --- | --- | --- |
+| 1 | Thu 26 Nov 2026, 16:19 UTC (21:19 PKT) | `main` at `353ab5d` (CI on that commit: success) | 2 items open for the owner, 1 gap issue opened (see below) |
+| 2 | (filled in after the second run, about two hours after run 1) | | |
+
+Result key: **PASS** = checked and met. **FAIL** = checked and broken, issue opened. **OPEN** = not met yet, but tracked by an open work-package issue. **CANNOT VERIFY YET** = needs a live deployment or a person's action; the owner must do what is listed.
+
+## Level 2 filter (pass every check, or the entry is out before scoring)
+
+| Check | Rule, in the kickoff wording | Evidence | Result |
+| --- | --- | --- | --- |
+| Own individual work | "One entry per person, in your own repo, deployed from your own account." | Repository `ismaeel-ch/Turnkey` is owned by the entrant's account. Deployment account cannot be seen from here. | PASS (repo). Deployment account: owner to confirm. |
+| Live on a public URL | "Any public URL evaluators can open." | No deployment exists on GitHub (`repos/ismaeel-ch/Turnkey/deployments` is empty). No `vercel.app` address appears anywhere in the repository. | CANNOT VERIFY YET. Opened as a gap issue (see Issues). Owner: create the Vercel project, set `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL` (and `LITELLM_MODEL_FAST` if wanted) in Vercel's environment variables, deploy `main`, and check `<url>/api/health` reports the head commit. |
+| Works end to end | "Get one agent flow working end to end." | CI on `353ab5d`: `e2e (demo)` and the other seven browser flows succeed; the `check` job (secrets, lint, typecheck, unit tests, build) succeeds. The prototype flows run with no model configured. | PASS for the prototype flows. The Live multi-agent path is not on `main` yet (see Agentic below). |
+| No client or internal data | "Entries sit on public URLs, so never client, customer or internal company data." | Seed data in `src/workspace/builds.ts` and `src/workspace/quests.ts` was read. Person names (for example in the quests users list and the builds staff lists) and organisation names (for example "City Hospital Trust", "Riverside Council") look invented. No Slentic, GED Lawyers, Dubai, HTY, Overpower, Supplies Hub or Shopify data appears. The auditor cannot prove that every name is not a real person. | PASS, accepted. Owner to confirm the names are invented before submission. |
+| Safe AI-agent settings | "Use Accept Edits mode, not full auto." | `.claude/settings.json` sets `permissions.defaultMode` to `acceptEdits`. Deny rules block reading `.env`, `.env.local`, `.env.*.local`, force pushes, and `git push origin main` (and `HEAD:main` forms). | PASS |
+| App stays up, no crashes | "Make sure the app does not crash and stays live throughout the judging timeframe." | Cannot be checked before deployment. Keep-alive and crash monitoring are not in the repository. | CANNOT VERIFY YET. Owner: keep the deployment up and running until winners are announced (mid-December). |
+| No API key in the code | "Keep your LiteLLM key in environment variables. Never commit it to GitHub." | `npm run check:secrets`: "109 tracked files, nothing found". Tracked files: only `.env.example` matches the env-file test, and its `LITELLM_BASE_URL` and `LITELLM_API_KEY` values are empty. Full-history search (`git log -p --all`) for a key-shaped `sk-` token found none; the one `sk-` string in `tests/unit/llm.test.ts` is split in the source (`'sk-' + 'abcdef1234567890'`) and is a made-up fixture. | PASS |
+| Agentic, not a single prompt | "Agents that plan, call tools and act on the results, through your LiteLLM key. Not a single prompt. Multi-agents score higher." | On `main` the only model route is `POST /api/llm` (`src/app/api/llm/route.ts`), one model call per request. The server agent graphs (WP-05 `src/server/graph/step`, WP-06 team graph, WP-08 AG-UI, WP-16 wiring) are not merged. The prototype's six builder agents and their checks live in `src/workspace` and run in the browser with a stand-in model. | OPEN. Tracked by #6, #7, #8, #17. Must be merged and shown live before submission. |
+| Public GitHub repo that matches the app | "Provide the public GitHub repo with the code and any supplementary docs for the app." | `ismaeel-ch/Turnkey` is public (`private: false`). README, `docs/`, and this checklist exist. Match with the live app cannot be checked until the app is deployed (`/api/health` reports `commit`). | PASS (public). CANNOT VERIFY YET (match with the live app). |
+
+## Level 1 must-haves and rules
+
+| Item | Rule, in the kickoff wording | Evidence | Result |
+| --- | --- | --- | --- |
+| Must-have 1 | "Agents that plan, call tools and act on the results, through your LiteLLM key." | See Agentic above. | OPEN |
+| Must-have 2 | "Entries sit on public URLs, so never client, customer or internal company data." | See the filter row above. | PASS, accepted (owner to confirm) |
+| Must-have 3 | "A working app evaluators can open and use, with no login." | No login code: no `login`, `signin` or password code under `src/app`, `src/platform`, `src/shared`, `src/server`. | PASS (code). Live URL: CANNOT VERIFY YET. |
+| Must-have 4 | "Get one agent flow working end to end ... Show each agent's steps in the app." | CI browser flows pass. The prototype shows agent steps and checks in the workspace. | PASS for the prototype. Live agent steps: OPEN (see Agentic). |
+| Rule 1 | "Individual work. One entry per person." | See the filter row above. | PASS (owner to confirm deployment account) |
+| Rule 2 | "Provide the public GitHub repo." | Public repository. | PASS |
+| Rule 3 | "Keep your LiteLLM key in environment variables. Never commit it to GitHub." | See the key row above. | PASS |
+| Rule 4 | "Use Accept Edits mode, not full auto." | See the settings row above. | PASS |
+| Rule 5 | "App stays up through judging." | See the filter row above. | CANNOT VERIFY YET |
+
+## Portal guide and LiteLLM guide
+
+| Item | Rule | Evidence | Result |
+| --- | --- | --- | --- |
+| Browser never calls the gateway | The browser must never call the model gateway. | `src/platform/model-client.ts` calls only `/api/health` and `/api/llm` (same origin). Gateway addresses and keys are read only in `src/lib/model.ts`, `src/server/llm/**`, `src/app/api/health`, `src/app/api/llm` and `src/app/api/copilotkit`. The spike pages under `src/app/(spike)` use CopilotKit's browser packages and call `/api/copilotkit`; they hold no key. No file under `src/platform`, `src/workspace` or `src/shared` imports `@/server` or `@/lib/model`. | PASS |
+| No `NEXT_PUBLIC_` variables for secrets | "No NEXT_PUBLIC_ variables for secrets." | `git grep NEXT_PUBLIC_` finds only documentation, the secrets scanner and a comment. Nothing in code declares one. | PASS |
+| Exact variable names | `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL`. | `src/lib/model.ts`, `src/server/llm/index.ts`, `.env.example`. | PASS |
+| Request at most 5 minutes (free plan) | "A request may run 5 minutes at most on the free plan." | `src/app/api/llm/route.ts` sets `maxDuration = 300`. `copilotkit` and `health` routes set 60. | PASS |
+| Search for `sk-` finds nothing | "Searching the repository for `sk-` must find nothing." | Key-shaped search finds nothing (see the key row). A literal `git grep "sk-"` finds 8 files, all harmless: `.gitignore`, `package-lock.json` and `src/styles/workspace.css`, where `task-`, `desk-` and `mask-` end in `sk-`; `tests/e2e/flows.cjs` (`helpdesk-`); `scripts/check-secrets.mjs` (the scanner's own pattern); `.claude/**` (the audit text itself); and the unit-test fixture. | PASS, accepted. The owner should know a literal search is not empty. |
+| Summary at most 600 characters | "The summary is at most 600 characters." | Summary not written yet (planned for M4, WP-13 #14). | CANNOT VERIFY YET. Owner: write it and count it before 30 Nov, 14:00 PKT. |
+| Keep the app up until winners are announced | Portal guide. | Not verifiable before deployment. | CANNOT VERIFY YET |
+
+## Skill checks (`hackathon-check`)
+
+| # | Check | Result | Evidence |
+| --- | --- | --- | --- |
+| 1 | No key in the repo | PASS | Secrets scan, history search, env-file history: only `.env.example`, tracked. |
+| 2 | No public secret variables | PASS | See the portal table. |
+| 3 | Model calls only on the server | PASS | `git grep "LITELLM\|OPENAI_API_KEY\|ANTHROPIC_API_KEY" -- src` matches only `src/lib/model.ts`, `src/server/llm/**` and `src/app/api/**`. `src/lib/model.ts` is on the allowed list in `docs/PLAN.md`. |
+| 4 | Public or made-up data only | PASS, accepted | See the filter row. |
+| 5 | Works with no login and no model | PASS | CI runs the build and the `demo` flow with no model variables set (the workflow passes no secrets). Not re-run locally: the runbook leaves browser flows to CI for this role. |
+| 6 | Agentic, steps visible | OPEN | See Agentic. |
+| 7 | Live URL up and matching the repo | CANNOT VERIFY YET | No deployment. |
+| 8 | Safe agent settings | PASS | `.claude/settings.json`. |
+| 9 | Individual work, public repo | PASS | See the filter. |
+| 10 | Budget | PASS (code), CANNOT VERIFY YET (live) | `src/server/guard/limits.ts`: 20 calls per visitor per minute, 50 for everyone per minute, 600 per day, 120000 prompt characters, 8000 output tokens, and `LIVE_MODE=off` refuses model calls. `/api/health` reports `usage`. |
+
+## Kickoff deck items not in the audit steps
+
+- **Scoring criteria (C1 to C5)** are judged, not audited. Evidence lives in `docs/hackathon/criteria.md` (owned by WP-13).
+- **Submission** needs the GitHub URL, the live URL and the summary. The live URL and summary are not ready.
+- **Dates:** submissions close Mon 30 Nov 2026, 14:00 PKT. Winners announced around mid-December.
+
+## Third-party code and data
+
+Licences are listed in `THIRD_PARTY_NOTICES.md`. Two data sources are not verified: OpenAlex (no dataset licence stated on the pages read) and PatentsView (the USPTO is moving it to the Open Data Portal; see the notices file).
+
+## Issues
+
+- #23 (opened by this audit, run 1): no live public URL yet. Labels `bug`, `crit:C5`.
+- Existing work-package issues cover the open items: #6, #7, #8, #17 (agentic and live multi-agent path), #14 (criteria evidence and README).
+
+## Accepted items (with reasons)
+
+- **Seed names in fixtures look invented.** The auditor cannot confirm this from the code alone. Owner to confirm before submission.
+- **Literal `sk-` matches** are harmless text (see the portal table). A key-shaped search finds nothing.
+- **Fluent System Icons version** is not pinned: the icons are generated from `@fluentui/svg-icons`, which is installed with `--no-save`. The licence (MIT, Microsoft) was checked against the upstream repository.

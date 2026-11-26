@@ -5,12 +5,12 @@ import type { NextConfig } from 'next';
 process.env.COPILOTKIT_TELEMETRY_DISABLED ??= 'true';
 
 const nextConfig: NextConfig = {
-  // The workspace mounts its own React root from an effect; a double-invoked effect in development would start it twice.
+  // The workspace starts once per page (Workspace.tsx guards it); strict mode's double render is not needed here.
   reactStrictMode: false,
   poweredByHeader: false,
   async headers() {
     return [
-      // Static files written by scripts/build-legacy.mjs. Their names or query strings change with their content.
+      // The SQLite engine copied by scripts/copy-sqlite.mjs; its URL carries the sql.js version.
       { source: '/vendor/:path*', headers: [{ key: 'cache-control', value: 'public, max-age=31536000, immutable' }] },
     ];
   },

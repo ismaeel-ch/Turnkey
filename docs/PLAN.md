@@ -31,17 +31,17 @@ state, through CopilotKit's v2 runtime with an in-process agent and LiteLLM. It 
 instructions name: Next.js 16, CopilotKit on AG-UI, no separate server. It lives on at `/spike`.
 
 **Foundation (done, the next pull request):** the prototype's modules now run unchanged in the same Next.js app,
-drawn by React 19. `src/platform/compat` puts React behind the names the modules already use (`html`, `render`,
-hooks), so the built bundle is byte-identical to the prototype's script. All 286 checks pass against the React app.
-A model route (`POST /api/llm`) and a health route exist, so Live mode works as soon as a key is set on Vercel.
+drawn by React 19 through a compatibility layer (`src/platform/compat`), and all 286 checks passed. That layer and
+the build step (`scripts/build-legacy.mjs`) were later removed: the modules are now ES modules with JSX in
+`src/workspace`, one file per former module, and the page loads them as ordinary code. A model route (`POST /api/llm`) and a health route exist, so Live mode works as soon as a key is set on Vercel.
 
 ## 2. Architecture
 
 ```
 Browser                                              Server (Next.js route handlers on Vercel)
 ───────────────────────────────────────────          ─────────────────────────────────────────────
-src/legacy    workspace UI, runtime, checks           /api/health         up? model configured? probes
-src/platform  compat layer, boot, model client        /api/llm            one guarded model call, streamed
+src/workspace workspace UI, runtime, checks           /api/health         up? model configured? probes
+src/platform  DOM helpers, sql.js, model client       /api/llm            one guarded model call, streamed
               orchestrator: the build workflow        /api/copilotkit     CopilotKit runtime (AG-UI), agents in process:
               as a LangGraph graph (browser)            agent `default`     the spike's Architect
               AG-UI client, storage, PWA                agent `step`        one agent step as a LangGraph run:
@@ -78,8 +78,8 @@ Decisions, with the reason for each. Longer versions go in `docs/adr/`.
 7. **JSON first, tool calling where it exists.** The hackathon guide warns that tool calling works only on some
    gateway models. Every agent works by returning one JSON object that code acts on. Native tool calls are used
    only after a probe shows they work.
-8. **The legacy modules are not rewritten.** New behaviour is added beside them in `src/platform` and reached
-   through a few named seams (section 6).
+8. **The workspace is ordinary code.** `src/workspace` is typed and split into components module by module. Shared
+   browser helpers live in `src/platform`, and the model is reached through the seams in section 6.
 
 ### Contracts every agent builds against
 
@@ -91,13 +91,13 @@ Environment variables, read only in server code:
 | `LITELLM_MODEL_FAST`                                                                                                               | optional cheap model for the Quick setting                        |
 | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_MODEL_FAST`, `OPENAI_BASE_URL`                                                           | any OpenAI-compatible service                                     |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_MODEL_FAST`                                                                     | Anthropic directly                                                |
-| `LLM_PROVIDER`                                                                                                                     | force one: `litellm`, `openai`, `anthropic`, `claude-cli`, `mock` |
+| `LLM_PROVIDER`                                                                                                                     | force one: `litellm`, `openai`, `anthropic`, `claude-code`, `mock` |
 | `LLM_TOOL_MODE`                                                                                                                    | `auto` (default), `native`, `json`                                |
 | `LLM_RATE_PER_MINUTE`, `LLM_GLOBAL_PER_MINUTE`, `LLM_DAILY_CALL_CAP`, `LLM_MAX_PROMPT_CHARS`, `LLM_MAX_OUTPUT_TOKENS`, `LIVE_MODE` | guard rails (`src/server/guard/limits.ts`)                        |
 | `PATENTSVIEW_API_KEY`                                                                                                              | optional, for the PatentsView connector                           |
 
 npm scripts: `dev`, `build`, `start`, `lint`, `typecheck`, `test`, `test:e2e [-- flows]`, `check`,
-`check:secrets`, `build:legacy`, `format`. Do not rename them: CI and the hooks call them.
+`check:secrets`, `format`, `theme`. Do not rename them: CI and the hooks call them.
 
 Model tiers: `default` (careful) and `quick` (cheap). Provider interface: `src/server/llm/types.ts`.
 
@@ -131,7 +131,7 @@ that agent alone. Models: the supervisor runs on Opus, workers on Sonnet or Haik
 | WP  | Agent              | Model  | Owns                                                                                                                       | Delivers                                                                                                                                                                                                                                                                 | Serves   | Needs               |
 | --- | ------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------------------- |
 | 01  | supervisor         | Opus   | merges, `docs/STATUS.md`, any file when integrating                                                                        | reviews and merges pull requests, keeps `main` green and deployed, resolves conflicts, cuts releases, posts status on the Mission control issue                                                                                                                          | all      |                     |
-| 02  | react-port         | Sonnet | `src/platform/compat/**`, `src/platform/boot.ts`, `src/platform/LegacyApp.tsx`, `tests/e2e/**`, `scripts/build-legacy.mjs` | all 8 browser flows green in CI as a matrix; React-specific checks (no console errors, keyboard, focus); fixes for any gap the compat layer has                                                                                                                          | C1 C2 C5 |                     |
+| 02  | react-port         | Sonnet | `src/platform/dom.tsx`, `src/platform/error-screen.tsx`, `tests/e2e/**`                                                    | all 8 browser flows green in CI as a matrix; React-specific checks (no console errors, keyboard, focus); fixes for any gap in how the workspace renders on React                                                                                                          | C1 C2 C5 |                     |
 | 03  | backend-gateway    | Sonnet | `src/server/llm/**`, `src/lib/model.ts`, `src/app/api/llm/**`, `src/app/api/health/**`                                     | one provider configuration for everything (the gateway, the spike's AI SDK model, the graphs' LangChain model); Anthropic and Claude Code CLI providers; retries with backoff; tool-call support with a JSON fallback and a probe that picks the mode; a role-aware mock | C1 C2    |                     |
 | 04  | security-guard     | Sonnet | `src/server/guard/**`, `src/proxy.ts`, security headers in `next.config.ts`, `scripts/check-secrets.mjs`, `SECURITY.md`    | prompt policy (only Turnkey's agent prompts are relayed), stronger limits, request validation helpers, content security policy that still allows SQLite's WebAssembly, the secrets scan                                                                                  | C2       |                     |
 | 05  | agent-graphs       | Sonnet | `src/server/graph/step/**`, `src/server/graph/shared/**`, `src/server/agents/**`, `src/shared/**`                          | the agent-step graph in LangGraph (draft, validate, repair, at most 3 attempts), the role registry with a zod schema per builder agent, exported as an agent factory for the runtime                                                                                     | C1 C2    | 03 (interface only) |
@@ -145,7 +145,7 @@ that agent alone. Models: the supervisor runs on Opus, workers on Sonnet or Haik
 | 13  | docs-architect     | Sonnet | `README.md`, `docs/architecture/**`, `docs/adr/**`, `docs/hackathon/**`                                                    | README, architecture diagrams (Mermaid), ADRs, the criteria evidence page, the use-case page, the submission summary                                                                                                                                                     | C5 C4 C2 |                     |
 | 14  | compliance-auditor | Haiku  | `docs/hackathon/checklist.md`, `THIRD_PARTY_NOTICES.md`                                                                    | rule-by-rule audit of the repo and the live URL, repeated after each milestone; opens an issue for every gap                                                                                                                                                             | C2       |                     |
 | 15  | qa-unit            | Haiku  | `tests/unit/**` (files for code that has no owner-written test), `vitest.config.ts`                                        | unit tests for the foundation code, coverage report, test helpers                                                                                                                                                                                                        | C2       |                     |
-| 16  | integration        | Sonnet | `src/legacy/**` (smallest possible seams), `src/platform/bridge/**`, `src/platform/model-client.ts`                        | wave 2: Live mode goes through agent `step` at `/api/copilotkit`; team runs go through agent `team`; the workflow graph drives builds behind a switch; the debug drawer shows server events                                                                              | C1       | 05 06 08 09         |
+| 16  | integration        | Sonnet | `src/workspace/**` (smallest possible seams), `src/platform/bridge/**`, `src/platform/model-client.ts`                     | wave 2: Live mode goes through agent `step` at `/api/copilotkit`; team runs go through agent `team`; the workflow graph drives builds behind a switch; the debug drawer shows server events                                                                              | C1       | 05 06 08 09         |
 
 Wave 1 is packages 01 to 15, all at once. Wave 2 is package 16 and whatever wave 1 left open. The supervisor decides.
 
@@ -166,10 +166,11 @@ Wave 1 is packages 01 to 15, all at once. Wave 2 is package 16 and whatever wave
 - **Pull requests:** small. Title `WP-nn: what changed`. Body: what, why, how it was verified, `Closes #n`.
 - **Merging:** squash, by the supervisor (or auto-merge once CI is green). Never push to `main`.
 - **CI:** `.github/workflows/ci.yml` runs the secrets scan, lint, typecheck, unit tests, a production build and the
-  browser flows on every pull request and on `main`.
-- **CD:** Vercel's Git integration deploys `main` on every merge. Other branches do not deploy (`vercel.json`),
-  because the free plan allows 100 deployments a day and many agents push at once.
-- **Labels:** `wp`, `area:*`, `crit:C1`…`crit:C5`, `wave:1`, `wave:2`, `blocked`, `bug`.
+  browser flows on a pull request into `main` only once it is out of draft and labelled `ready-to-merge`, to save
+  Actions minutes. Nothing runs on pushes to `main`.
+- **CD:** publishing a GitHub release deploys that tag to production (`.github/workflows/release.yml`, Vercel CLI).
+  Vercel's Git integration is off (`vercel.json`), so merges and pushes never deploy. See docs/process/deploy.md.
+- **Labels:** `ready-to-merge`, `wp`, `area:*`, `crit:C1`…`crit:C5`, `wave:1`, `wave:2`, `blocked`, `bug`.
 - **Status:** the supervisor comments on the Mission control issue at least every hour: merged, open, blocked, next.
 
 ### Working in parallel on one machine
@@ -188,19 +189,19 @@ Wave 1 is packages 01 to 15, all at once. Wave 2 is package 16 and whatever wave
 
 ## 6. Seams between the workspace and the platform
 
-The legacy modules reach the outside world through a handful of names. New work plugs in here, not into the modules.
+The workspace modules reach the outside world through a handful of names. New work plugs in here, not into the modules.
 
 | Seam                                                                                            | Today                                              | What plugs in                                                      |
 | ----------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------ |
 | `window.claude.use('sample')` → `(prompt, { modelTier, signal, onText }) → { text, truncated }` | `src/platform/model-client.ts`, calling `/api/llm` | the AG-UI client running agent `step` at `/api/copilotkit` (WP-16) |
 | `window.claude.use('downloads')` → `{ save({ filename, data }) }`                               | browser download                                   | unchanged                                                          |
-| `window.htmPreact`, `window.React`, `window.ReactDOM`, `window.ReactFlow`                       | React, through the compat layer                    | unchanged                                                          |
+| React and React Flow imports in `src/workspace` (no window globals)                             | npm packages, imported as modules                  | unchanged                                                          |
 | `window.initSqlJs`                                                                              | sql.js WebAssembly from `/vendor`                  | unchanged                                                          |
 | browser storage keys `formwork:v1:state`, `formwork:v1:db:<appId>`                              | localStorage                                       | the storage adapter (WP-10)                                        |
 | `window.__formwork`                                                                             | read-only test hook: state, logs, workflow helpers | reading state for the orchestrator and the debug stream            |
 | `window.__turnkeyOptions`                                                                       | `{ canvas: false }` shows the plain line           | further switches, for example `{ orchestrator: 'graph' }`          |
 
-If a feature cannot be built through a seam, WP-16 adds the smallest new seam to `src/legacy` and documents it here.
+If a feature cannot be built through a seam, WP-16 adds the smallest new seam to `src/workspace` and documents it here.
 
 ## 7. Risks and what we do about them
 

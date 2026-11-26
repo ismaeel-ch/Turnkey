@@ -10,8 +10,7 @@ request, and move on. `CLAUDE.md` has the rules, `docs/PLAN.md` the architecture
    Never touch another agent's checkout or `/home/claude/turnkey`.
 2. Read `CLAUDE.md`, `docs/PLAN.md`, your role file in `.claude/agents/`, and your issue:
    `gh api repos/ismaeel-ch/Turnkey/issues/<n> --jq .body`
-3. `node_modules` is already in your checkout. Run `npm run build:legacy` once so the generated files exist.
-4. Comment on your issue that you have started (one line).
+3. `node_modules` is already in your checkout. Comment on your issue that you have started (one line).
 
 ## GitHub from here
 

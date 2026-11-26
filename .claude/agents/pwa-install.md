@@ -17,9 +17,9 @@ in your issue.
 
 ## What to do
 
-1. Make Turnkey installable: manifest, icons in the sizes browsers need (draw them from the existing logo in `src/legacy/ui.js`), theme colours for light and dark.
+1. Make Turnkey installable: manifest, icons in the sizes browsers need (draw them from the existing logo in `src/workspace/ui.tsx`), theme colours for light and dark.
 2. A service worker that keeps the app shell, the workspace stylesheet, the SQLite engine and the page itself available offline. API routes are never cached. A new deployment replaces the old cache.
-3. Per-app install: read `src/legacy/release.js` and `share.js` to learn how an app's identity and icon are stored as data. Add routes that return a manifest and an icon image for one app from that data, so a shared app installs under its own name and icon.
+3. Per-app install: read `src/workspace/release.tsx` and `share.tsx` to learn how an app's identity and icon are stored as data. Add routes that return a manifest and an icon image for one app from that data, so a shared app installs under its own name and icon.
 4. Replace the favicon that came with the project template.
 
 ## Done means
