@@ -93,6 +93,8 @@ import {
 } from './share';
 import { InstallAppDialog, isDirty, logoOf, relOf, releaseApp } from './release';
 import { GUIDE, GuideDialog } from './guide';
+import { HistoryDialog } from './history-ui';
+import { historyHooks } from './history';
 import { Home, Titlebar, Workspace, lineApp } from './shell-a';
 import { DebugDrawer } from './shell-b';
 
@@ -1237,6 +1239,8 @@ export function DialogHost() {
       return <AddStepDialog p={p} />;
     case 'guide':
       return <GuideDialog p={p} />;
+    case 'history':
+      return <HistoryDialog p={p} />;
     default:
       return null;
   }
@@ -1832,6 +1836,7 @@ export function boot() {
       keepFix,
     },
     activity: (appId: string) => activityNow(appId),
+    history: historyHooks,
     runTests: (app: AppRecord) => runTestsSync(app),
     suite: (id: string) =>
       suiteOf(S.apps[id]).map((x) => ({
