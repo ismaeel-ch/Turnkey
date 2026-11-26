@@ -33,8 +33,9 @@ import { REVIEWERS, flowOf } from './custom';
 import { isDark } from './flow';
 import { Icon } from './ui';
 
-// custom.tsx is not typed yet; these say what its exports hold
-const REVS = REVIEWERS as Dict<ReviewerInfo>;
+// custom.tsx is not typed yet; these say what its exports hold. Read REVIEWERS when called, not at module load:
+// custom.tsx imports this module through shell-c.tsx, so at load time REVIEWERS may not be initialised yet.
+const revs = (): Dict<ReviewerInfo> => REVIEWERS as Dict<ReviewerInfo>;
 const flowOfApp = (app: AppRecord): AppFlow => flowOf(app);
 
 /** What the panel shows for one agent. */
@@ -137,7 +138,7 @@ const stepName = (it: StepRef): string => {
   const st = STATIONS.find((x) => x.id === it.step);
   if (st) return st.name;
   if (it.step === 'tests') return 'Tests';
-  if (it.step.startsWith('review_')) return REVS[it.step.slice(7)]?.short || 'a review';
+  if (it.step.startsWith('review_')) return revs()[it.step.slice(7)]?.short || 'a review';
   return cap(it.step.replace(/_/g, ' '));
 };
 // "the Research station", "the security review", "Tests": how a step reads in a sentence
@@ -551,7 +552,7 @@ function HowItWorks({ app, model, c }: { app: AppRecord | null; model: ActivityM
           {stations.map((st, i) => {
             const info = agentInfo(st.agent, app);
             const s = stateOf(st.agent);
-            const reviewers = f ? (f.reviewers || []).filter((r) => REVS[r] && REVS[r].after === st.id) : [];
+            const reviewers = f ? (f.reviewers || []).filter((r) => revs()[r] && revs()[r].after === st.id) : [];
             const asks = f && f.approve && f.approve[st.id];
             const byRules = f && f.by && f.by[st.id] === 'rules';
             return (
@@ -579,8 +580,8 @@ function HowItWorks({ app, model, c }: { app: AppRecord | null; model: ActivityM
                     {(reviewers.length > 0 || asks) && (
                       <div className={c.chips}>
                         {reviewers.map((r) => (
-                          <Badge key={r} appearance="outline" size="small" icon={<Icon n={REVS[r].icon} s="12" />}>
-                            {'Then ' + REVS[r].name}
+                          <Badge key={r} appearance="outline" size="small" icon={<Icon n={revs()[r].icon} s="12" />}>
+                            {'Then ' + revs()[r].name}
                           </Badge>
                         ))}
                         {asks && (

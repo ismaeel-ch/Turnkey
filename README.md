@@ -51,16 +51,23 @@ _The Bid room of the built BidDesk app, with the three agents' results for one t
 
 ## Try it in five minutes
 
-1. Open the live app. Leave **Live** off: Demo replays saved builds and calls no model.
-2. On the home screen pick the saved build **Sales bidding desk** and press build. Watch the **Build** tab: each agent
-   is a node, a check gate sits under each one, and the Backend agent's slip is caught by the Tester and repaired.
-   Switch between **Workflow**, **Timeline** and **Log** to see the same run three ways.
-3. Open the **App** tab and use the app it built: sign in as different roles and see the access rules hold. Open the
-   **Bid room** and run its three agents on a tender.
-4. In the chat sidebar, ask for a change ("add a notes field to tenders"). Only the stations it touches run again,
-   and it rolls back if a check fails.
-5. **Release** a version (its tests must pass) and **Share** it by link. Turn on **Debug mode** (bug icon in the title
-   bar) to see events, tool calls and model usage.
+1. Open the live app and press **Get started**. Choose **Skip and use the demo account**, keep **Demo** selected (it
+   replays saved builds and calls no model), pick **Sales bidding desk** as the first app, and open the workspace.
+2. Watch the **Build** tab. Each agent is a node with a check gate under it. The Tester's first run catches the
+   Backend agent's slip (a bid manager could delete a tender), the Backend repairs it, and run 2 passes all 170 tests.
+   The build takes about 30 seconds. Switch between **Workflow**, **Timeline** and **Log** to see the same run three
+   ways.
+3. Open the **App** tab and sign in as Sana Malik (bid manager), then as Omar Farooq (sales director) from **Preview
+   as**: each role sees only what its rules allow. In the **Bid room**, press **Run** on "Fleet tracking for the port
+   authority". The Qualifier scores it, Pricing prices it, and the run stops for you to add a condition before the
+   Red team gives its verdict.
+4. In the chat sidebar, press **Add a notes field to score lines** (or type a change). The Orchestrator shows a plan,
+   only the stations the change touches run again, and the tests are regenerated.
+5. Open **Release**, release version 1.0 (every test runs first), and press **Share by link**. Turn on debug mode
+   (bug icon in the title bar) to see AG-UI events, tool calls, SQL and model usage.
+
+To see Live agents build from your own words, switch **Live** on in the title bar and type a sentence on a new tab.
+Each Live session is capped at 40 model calls.
 
 ## What is built and what is planned
 
@@ -93,6 +100,7 @@ what is simulated.
 - [`docs/adr/`](docs/adr/README.md): the ten design decisions and why
 - [`docs/architecture/ag-ui.md`](docs/architecture/ag-ui.md): how agents stream their steps over AG-UI
 - [`docs/hackathon/submission.md`](docs/hackathon/submission.md): what goes into the submission form
+- [`docs/hackathon/demo-video.md`](docs/hackathon/demo-video.md): the demo video script and shot list
 - [`docs/hackathon/criteria.md`](docs/hackathon/criteria.md) and [`use-cases.md`](docs/hackathon/use-cases.md)
 - [`docs/PLAN.md`](docs/PLAN.md): the build plan and who owns which folders
 - [`docs/RUNBOOK.md`](docs/RUNBOOK.md): how agents work on this repository in parallel
