@@ -18,6 +18,7 @@ import {
   me,
   modeNow,
   myApps,
+  initials,
   netInfo,
   notify,
   online,
@@ -98,7 +99,7 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
         <Logo />
         <span className="brand-t hide-md">{BRAND.name}</span>
       </button>
-      <div className="tabstrip" role="tablist" aria-label="Workspaces" data-tour="tabs">
+      <nav className="tabstrip" aria-label="Open workspaces" data-tour="tabs">
         {tabs.map((t) => {
           const app = t.app ? S.apps[t.app] : null,
             cur = t.id === tab.id;
@@ -106,30 +107,22 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
             <div
               key={t.id}
               className={cx('wtab', cur && 'on')}
-              role="tab"
-              aria-selected={cur}
-              tabIndex={0}
               title={app ? app.name : 'New tab'}
-              onClick={() => selectTab(t.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  selectTab(t.id);
-                }
-              }}
               onAuxClick={(e) => {
                 if (e.button === 1) closeTab(t.id);
               }}
             >
-              {app ? (
-                <span className={'wtab-ic acc-' + app.accent}>
-                  <Icon n={app.icon} s="12" />
-                </span>
-              ) : (
-                <Icon n="tab" s="16" />
-              )}
-              <span className="wtab-t ellipsis">{app ? app.name : 'New tab'}</span>
-              {app && RUNS[app.id] && <Spinner />}
+              <button className="wtab-b" aria-current={cur ? 'page' : undefined} onClick={() => selectTab(t.id)}>
+                {app ? (
+                  <span className={'wtab-ic acc-' + app.accent}>
+                    <Icon n={app.icon} s="12" />
+                  </span>
+                ) : (
+                  <Icon n="tab" s="16" />
+                )}
+                <span className="wtab-t ellipsis">{app ? app.name : 'New tab'}</span>
+                {app && RUNS[app.id] && <Spinner />}
+              </button>
               <button
                 className="wtab-x"
                 aria-label={'Close ' + (app ? app.name : 'tab')}
@@ -146,7 +139,7 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
         <button className="newtab" aria-label="New tab" title="New tab" onClick={addTab}>
           <Icon n="add" s="16" />
         </button>
-      </div>
+      </nav>
       <div className="tb-right">
         <span data-tour="mode" className={cx('tb-mode', mode.on && 'is-live')}>
           <Switch
@@ -242,7 +235,7 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
           title="Account"
           btn={{
             cls: 'acct',
-            label: 'Account menu',
+            label: 'Account menu ' + initials(acct?.name || ''), // the initials are visible, so the name must contain them (WCAG 2.5.3)
             body: <Avatar name={acct?.name || ''} size="sm" acc="blue" />,
           }}
           items={[

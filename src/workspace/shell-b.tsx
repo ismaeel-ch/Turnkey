@@ -254,7 +254,7 @@ export function DataView({ app }: { app: AppRecord }) {
             }}
           />
         </div>
-        <div className="main-body scroll">
+        <div className="main-body scroll" tabIndex={0} role="region" aria-label={'Table ' + cur.name}>
           {D.tab === 'rows' ? (
             <Grid rows={sqlPeek(app.id, 'SELECT * FROM ' + qi(cur.name) + ' ORDER BY "id" DESC LIMIT 200')} mask />
           ) : D.tab === 'cols' ? (

@@ -1590,6 +1590,9 @@ export function Shell() {
     app = tab && tab.app ? S.apps[tab.app] : null;
   return (
     <div className={cx('shell', S.settings.installed && 'installed', PHONE() && 'phone')}>
+      <a className="skip-link" href="#main">
+        Skip to main content
+      </a>
       <Titlebar tabs={tabs} tab={tab} />
       {!LS.ok && (
         <MBar tone="warning" cls="bar">
@@ -1613,7 +1616,9 @@ export function Shell() {
           builds keep working. Changes through the model and connections wait.
         </MBar>
       )}
-      <div className="shell-body">{app ? <Workspace key={app.id} app={app} /> : <Home />}</div>
+      <main className="shell-body" id="main" tabIndex={-1}>
+        {app ? <Workspace key={app.id} app={app} /> : <Home />}
+      </main>
       {S.settings.debug && <DebugDrawer app={app} />}
       {PHONE() && <PhoneSheets app={app} />}
       <AgentActivity app={app} />
