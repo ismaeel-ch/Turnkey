@@ -1261,9 +1261,11 @@ export function TeamConsole({ app, user, pane, scr }) {
                                   key={k}
                                   className={cx('tool-chip', !x.ok && 'bad')}
                                   title={
-                                    x.ok
-                                      ? 'Sample response. The real build makes this call from the server.'
-                                      : 'The call did not go through'
+                                    !x.ok
+                                      ? 'The call did not go through'
+                                      : x.real
+                                        ? 'Looked up from the server'
+                                        : 'Sample response. The real build makes this call from the server.'
                                   }
                                 >
                                   <Icon n="plug" s="12" />
@@ -1273,9 +1275,15 @@ export function TeamConsole({ app, user, pane, scr }) {
                                   {x.args ? ' “' + brief(x.args, 28) + '”' : ''}
                                 </span>
                               ))}
-                              <Proto>Sample responses</Proto>
+                              {!st.tools.every((x) => x.real) && <Proto>Sample responses</Proto>}
                             </div>
                           )}
+                          {arr(st.checks).map((why, k) => (
+                            <p key={'chk' + k} className="tstep-say muted">
+                              {'Sent back by the check: '}
+                              {why}
+                            </p>
+                          ))}
                           {st.say && <p className="tstep-say">{st.say}</p>}
                           {(st.rows.length > 0 || st.updated > 0) && (
                             <div className="row wrap gap4">

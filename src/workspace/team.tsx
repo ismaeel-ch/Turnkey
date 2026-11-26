@@ -20,12 +20,13 @@ import {
   snake,
   str,
   toast,
+  toolCall,
   uid,
 } from './core';
-import { qi, sqlPeek } from './db';
 import { ACCENTS, accOf, apiCall, appUsers, chk, colOf, seedValue, tableOf } from './engine';
 import { REC, allConnectors, callConnector, connOn } from './builds';
-import { RUNS, SPEED, Stopped, callModel } from './line';
+import { RUNS, SPEED, Stopped } from './line';
+import { TeamStreamError, jsonObject, splitToolName, streamTeam } from './team-stream';
 import { Icon } from './ui';
 import { rowTitle } from './runtime';
 
@@ -286,115 +287,172 @@ export function teamApply(app, user, T, a, out) {
   }
   return did;
 }
-export function teamPrompt(app, user, T, a) {
+/* ---------- Live: the team runs on the server ----------
+   The server (POST /api/agent/team) runs the team as a LangGraph graph with real lookups in public sources, checks
+   each agent's work and can send it back once. The browser owns the app's database, so each accepted answer comes
+   back as an event and is written here through the app's own API, as the person who pressed Run. */
+const TEAM_COL_TYPES = ['text', 'longtext', 'number', 'money', 'date', 'datetime', 'bool', 'select', 'ref', 'user'];
+const cut = (v, n) => str(v).slice(0, n);
+function teamColumn(c) {
+  const type = TEAM_COL_TYPES.includes(c.type) ? c.type : 'text',
+    o = { name: cut(c.name, 60), type };
+  if (type === 'select')
+    o.options = arr(c.options)
+      .map((x) => cut(x, 80))
+      .slice(0, 30);
+  if (type === 'ref' && c.ref) o.ref = cut(c.ref, 60);
+  return o;
+}
+export function teamRequest(app, user, T) {
+  // what the server needs to run the team: the team, the row it works on, and the tables its answers are checked against
   const def = app.def,
     team = def.team,
-    it = tableOf(def, T.table),
     P = def.process,
-    clean = (t, r) => {
-      const o = {};
-      t.columns.forEach((c) => {
-        if (r[c.name] != null && r[c.name] !== '' && c.type !== 'user' && !(c.type === 'ref' && c.ref === T.table))
-          o[c.name] = c.type === 'ref' && T.made[c.ref] ? T.made[c.ref].indexOf(r[c.name]) + 1 : r[c.name];
-      });
-      return o;
-    };
-  const cols = (t, skip) =>
-    t.columns
-      .filter(
-        (c) =>
-          !(c.type === 'ref' && (c.ref === T.table || (!T.made[c.ref] && c.ref !== t.name))) &&
-          !(P.table === t.name && c.name === P.column) &&
-          c.type !== 'user' &&
-          !(skip && c.name in skip),
-      )
-      .map(
-        (c) =>
-          c.name +
-          ':' +
-          c.type +
-          (c.type === 'select'
-            ? '[' + c.options.join('|') + ']'
-            : c.type === 'ref'
-              ? ' (the number of a ' + c.ref + ' row under WORK SO FAR)'
-              : ''),
-      )
-      .join(', ');
-  const row = apiCall(app, user, 'GET', '/api/' + it.name + '/' + T.row, {}, 'team').data || {};
-  const work =
-    Object.keys(T.made)
-      .map((tn) => {
-        const t = tableOf(def, tn);
-        return (
-          tn +
-          ':\n' +
-          T.made[tn]
-            .map(
-              (id, i) =>
-                i + 1 + '. ' + JSON.stringify(clean(t, sqlPeek(app.id, 'SELECT * FROM ' + qi(tn) + ' WHERE id = ?', [id])[0] || {})),
-            )
-            .join('\n')
-        );
-      })
-      .join('\n\n') || '(nothing yet)';
-  const fmt = ['"say":"one sentence on what you did"'];
-  if (a.writes) fmt.push('"rows":[{...}] where each row has these columns of ' + a.writes + ': ' + cols(tableOf(def, a.writes), a.fixed));
-  if (a.updates)
-    fmt.push('"update":[{"row":the number of a ' + a.updates + ' row, ...}] with any of these columns: ' + cols(tableOf(def, a.updates)));
-  if (a.sets.length)
-    fmt.push(
-      '"summary":{...} with these columns of the ' +
-        it.one.toLowerCase() +
-        ': ' +
-        a.sets
-          .map((k) => {
-            const c = colOf(it, k);
-            return k + ':' + c.type + (c.type === 'select' ? '[' + c.options.join('|') + ']' : '');
-          })
-          .join(', '),
-    );
-  return (
-    'You are ' +
-    a.name +
-    ', one of ' +
-    team.agents.length +
-    ' agents inside the app "' +
-    app.name +
-    '". ' +
-    team.about +
-    '\nYOUR JOB: ' +
-    a.job +
-    (a.hint ? ' ' + a.hint : '') +
-    (a.proto ? '\nNOTE: ' + a.proto : '') +
-    '\n\nTHE ' +
-    it.one.toUpperCase() +
-    ' YOU ARE WORKING ON:\n' +
-    JSON.stringify(clean(it, row)) +
-    '\n\nWORK SO FAR:\n' +
-    work +
-    (T.notes.length
-      ? '\n\nADDED BY PEOPLE DURING THIS RUN (take these into account):\n' + T.notes.map((n) => '- ' + n.who + ': ' + n.text).join('\n')
-      : '') +
-    '\n\nReply with ONE JSON object and nothing else, no prose and no code fences: {' +
-    fmt.join(', ') +
-    '}\nRules: at most 6 rows. Keep every text under 280 characters. A choice column takes exactly one of its listed options. Dates are YYYY-MM-DD. Do not invent citations, links or statistics.'
+    it = tableOf(def, T.table),
+    names = [it.name];
+  team.agents.forEach((a) =>
+    [a.writes, a.updates].forEach((n) => {
+      if (n && !names.includes(n)) names.push(n);
+    }),
   );
+  const row = apiCall(app, user, 'GET', '/api/' + it.name + '/' + T.row, {}, 'team').data || {},
+    clean = {};
+  it.columns.forEach((c) => {
+    const v = row[c.name];
+    if (v == null || v === '' || c.type === 'user' || c.type === 'ref' || (P && P.table === it.name && c.name === P.column)) return;
+    clean[c.name] = typeof v === 'string' ? v.slice(0, 2000) : v;
+  });
+  return {
+    runId: T.id,
+    appName: cut(app.name, 120) || 'this app',
+    team: {
+      title: cut(team.title, 100),
+      about: cut(team.about, 600),
+      agents: team.agents.map((a) => ({
+        id: cut(a.id, 60),
+        name: cut(a.name, 60),
+        job: cut(a.job, 600),
+        hint: cut(a.hint, 600),
+        writes: a.writes,
+        updates: a.updates,
+        sets: a.sets.slice(0, 12),
+        fixed: a.fixed,
+        tools: a.tools.slice(0, 6),
+      })),
+      pause: team.pause ? { before: team.pause.before, text: cut(team.pause.text, 300) } : null,
+    },
+    input: { table: it.name, column: team.input.column, text: cut(row[team.input.column], 8000), row: clean },
+    tables: names
+      .map((n) => tableOf(def, n))
+      .filter(Boolean)
+      .slice(0, 12)
+      .map((t) => ({ name: t.name, one: cut(t.one, 60) || undefined, columns: t.columns.slice(0, 40).map(teamColumn) })),
+    notes: T.notes.slice(-10).map((n) => ({ who: cut(n.who, 60), text: cut(n.text, 1500) })),
+  };
 }
-export async function teamLive(app, user, T, a) {
-  const prompt = teamPrompt(app, user, T, a);
-  try {
-    return await callModel(app, T, a.id, prompt, 1, T);
-  } catch (e) {
-    if (e instanceof Stopped || e.fatal) throw e;
-    return callModel(
-      app,
-      T,
-      a.id,
-      prompt + '\n\nYour last answer was not usable: ' + e.message + '. Reply with the JSON object only.',
-      2,
-      T,
-    );
+export function teamServerTool(app, T, i, name, argText, content) {
+  // a lookup the server made: logged like any connector call, and shown on the agent's step
+  const { connector, tool } = splitToolName(str(name)),
+    c = allConnectors().find((x) => x.id === connector) || { name: connector },
+    args = jsonObject(argText),
+    r = jsonObject(content),
+    a = app.def.team.agents[i],
+    ok = r.ok !== false;
+  toolCall(
+    { agent: a ? a.id : str(r.agent), runId: T.id, appId: app.id },
+    c.name + ' · ' + tool,
+    args,
+    () => {
+      if (!ok) throw new Error(str(r.text) || 'The lookup failed.');
+      return { text: str(r.text) };
+    },
+    'connector',
+  );
+  if (T.steps[i]) {
+    T.steps[i].tools.push({ name: c.name, tool, args: Object.values(args)[0], ok, real: true });
+    notify();
   }
+}
+async function teamServer(app, user, T, finishStep) {
+  const team = app.def.team,
+    at = (id) => team.agents.findIndex((a) => a.id === id);
+  let resume = null;
+  for (let leg = 0; leg < 2; leg++) {
+    // one request, and one more after the pause if the team has one
+    const body = teamRequest(app, user, T);
+    if (resume) body.resume = resume;
+    T.ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const calls = {};
+    let snapshot = null,
+      result = null;
+    try {
+      for await (const e of streamTeam(body, T.ctrl ? T.ctrl.signal : undefined)) {
+        if (T.stop) throw new TeamStop();
+        if (e.type === 'STEP_STARTED') {
+          const i = at(e.stepName);
+          if (i < 0) continue;
+          const st = T.steps[i];
+          T.i = i;
+          st.status = 'working';
+          st.t0 = Date.now();
+          T.calls++;
+          U.calls++;
+          emit('STEP_STARTED', { app: app.id, runId: T.id, stepName: team.agents[i].id, agent: team.agents[i].id, where: 'server' });
+          notify();
+        } else if (e.type === 'TOOL_CALL_START') calls[e.toolCallId] = { name: e.toolCallName, args: '' };
+        else if (e.type === 'TOOL_CALL_ARGS' && calls[e.toolCallId]) calls[e.toolCallId].args += str(e.delta);
+        else if (e.type === 'TOOL_CALL_RESULT') {
+          const c = calls[e.toolCallId] || { name: '', args: '' };
+          teamServerTool(app, T, T.i, c.name, c.args, e.content);
+        } else if (e.type === 'CUSTOM' && e.name === 'check') {
+          const v = e.value || {},
+            i = at(v.agent);
+          if (i >= 0 && v.sentBack) {
+            T.steps[i].checks.push(str(v.reason));
+            T.calls++;
+            U.calls++;
+            notify();
+          }
+          emit('CUSTOM', { app: app.id, runId: T.id, name: 'check', agent: v.agent, value: v });
+        } else if (e.type === 'CUSTOM' && e.name === 'interrupt') snapshot = (e.value || {}).snapshot || null;
+        else if (e.type === 'CUSTOM' && e.name === 'cap') emit('CUSTOM', { app: app.id, runId: T.id, name: 'cap', value: e.value });
+        else if (e.type === 'STATE_DELTA') {
+          for (const d of arr(e.delta)) {
+            const m = /^\/outputs\/(.+)$/.exec(str(d && d.path));
+            if (m && at(m[1]) >= 0) await finishStep(at(m[1]), d.value || {});
+          }
+        } else if (e.type === 'RUN_FINISHED') result = e.result || {};
+        else if (e.type === 'RUN_ERROR') {
+          const err = new Error(str(e.message) || 'The team could not finish this run.');
+          if (e.code === 'not_configured' || e.code === 'rate_limited' || e.code === 'spend_cap') err.fatal = true;
+          throw err;
+        }
+      }
+    } catch (e) {
+      if (T.stop || (e instanceof TeamStreamError && e.code === 'aborted')) throw new TeamStop();
+      if (e instanceof TeamStreamError) {
+        const err = new Error(e.message);
+        err.fatal = true;
+        throw err;
+      }
+      throw e;
+    }
+    if (!result) throw new Error('The connection to the server ended before the run finished.');
+    if (result.status === 'paused' && snapshot && !resume) {
+      const before = T.notes.length;
+      await teamWait(app, T);
+      const added = T.notes.slice(before);
+      resume = {
+        snapshot,
+        note: added.length ? { who: cut(added[added.length - 1].who, 60), text: cut(added.map((n) => n.text).join('\n'), 1500) } : null,
+      };
+      continue;
+    }
+    if (result.status === 'stopped') throw new TeamStop();
+    if (result.status !== 'done') throw new Error(str(result.reason) || 'The team stopped before it finished.');
+    return;
+  }
+  throw new Error('The team paused a second time, which this app does not expect.');
 }
 export function teamWait(app, T) {
   // human in the loop: the run pauses so the person can jump in
@@ -477,7 +535,7 @@ export function stopTeam(app) {
   }
 }
 export async function runTeam(app, user, rowId, script) {
-  // script: a saved run (Demo). Without one, every agent makes its own model call (Live).
+  // script: a saved run (Demo). Without one, the team runs on the server with a real model and real lookups (Live).
   const def = app.def,
     team = def.team,
     it = tableOf(def, team.input.table),
@@ -498,6 +556,7 @@ export async function runTeam(app, user, rowId, script) {
       rows: [],
       updated: 0,
       problems: [],
+      checks: [],
     })),
     made: {},
     notes: [],
@@ -533,69 +592,10 @@ export async function runTeam(app, user, rowId, script) {
       const r = api('POST', '/api/' + it.name + '/' + rowId + '/' + team.start);
       if (r.status !== 200) throw new Error('The run could not start. ' + r.status + ' ' + r.error);
     }
-    for (let i = 0; i < team.agents.length; i++) {
+    const finishStep = async (i, out) => {
+      // one agent's accepted work goes into the app, a row at a time so the room fills in as people watch
       const a = team.agents[i],
         st = T.steps[i];
-      let out;
-      if (team.pause && team.pause.before === a.id) await teamWait(app, T);
-      T.i = i;
-      st.status = 'working';
-      st.t0 = Date.now();
-      notify();
-      ev('STEP_STARTED', {
-        stepName: a.id,
-        agent: a.id,
-      });
-      if (script) {
-        const sc = script.find((x) => x.agent === a.id) || {};
-        await tpace(T, 650);
-        for (const tl of arr(sc.tools)) {
-          const c = allConnectors().find((x) => x.id === tl[0]) || {
-              name: tl[0],
-            },
-            r = callConnector(app, a.id, T.id, tl[0], tl[1], tl[2]);
-          st.tools.push({
-            name: c.name,
-            tool: tl[1],
-            args: Object.values(tl[2] || {})[0],
-            ok: r.ok,
-          });
-          notify();
-          await tpace(T, 420);
-        }
-        out =
-          T.notes.length && sc.jumped
-            ? Object.assign({}, sc, {
-                say: str(sc.say) + ' ' + str(sc.jumped.say),
-                rows: arr(sc.rows).concat(
-                  arr(sc.jumped.rows).map((r) => {
-                    const o = {};
-                    Object.keys(r).forEach((k) => {
-                      o[k] = fill(r[k]);
-                    });
-                    return o;
-                  }),
-                ),
-              })
-            : sc;
-        ring(
-          MODELCALLS,
-          {
-            t: Date.now(),
-            app: app.id,
-            run: T.id,
-            agent: a.id,
-            mode: 'replay',
-            model: 'saved run',
-            tokIn: 900 + str(sc.say).length * 4,
-            tokOut: 300 + Math.round(JSON.stringify(sc.rows || sc.update || '').length / 4),
-            ms: 2400,
-            attempt: 1,
-          },
-          200,
-        );
-        await tpace(T, 500 + str(sc.say).length * 7);
-      } else out = await teamLive(app, user, T, a);
       st.say = str(out.say) || a.name + ' finished.';
       const mid = uid('m');
       ev('TEXT_MESSAGE_START', {
@@ -655,8 +655,73 @@ export async function runTeam(app, user, rowId, script) {
       });
       commit();
       if (st.status === 'failed') throw new Error(a.name + ' could not save its work. ' + did.problems[0]);
-      await tpace(T, 450);
-    }
+      if (script) await tpace(T, 450);
+    };
+    if (script) {
+      for (let i = 0; i < team.agents.length; i++) {
+        const a = team.agents[i],
+          st = T.steps[i];
+        if (team.pause && team.pause.before === a.id) await teamWait(app, T);
+        T.i = i;
+        st.status = 'working';
+        st.t0 = Date.now();
+        notify();
+        ev('STEP_STARTED', {
+          stepName: a.id,
+          agent: a.id,
+        });
+        const sc = script.find((x) => x.agent === a.id) || {};
+        await tpace(T, 650);
+        for (const tl of arr(sc.tools)) {
+          const c = allConnectors().find((x) => x.id === tl[0]) || {
+              name: tl[0],
+            },
+            r = callConnector(app, a.id, T.id, tl[0], tl[1], tl[2]);
+          st.tools.push({
+            name: c.name,
+            tool: tl[1],
+            args: Object.values(tl[2] || {})[0],
+            ok: r.ok,
+          });
+          notify();
+          await tpace(T, 420);
+        }
+        const out =
+          T.notes.length && sc.jumped
+            ? Object.assign({}, sc, {
+                say: str(sc.say) + ' ' + str(sc.jumped.say),
+                rows: arr(sc.rows).concat(
+                  arr(sc.jumped.rows).map((r) => {
+                    const o = {};
+                    Object.keys(r).forEach((k) => {
+                      o[k] = fill(r[k]);
+                    });
+                    return o;
+                  }),
+                ),
+              })
+            : sc;
+        ring(
+          MODELCALLS,
+          {
+            t: Date.now(),
+            app: app.id,
+            run: T.id,
+            agent: a.id,
+            mode: 'replay',
+            model: 'saved run',
+            tokIn: 900 + str(sc.say).length * 4,
+            tokOut: 300 + Math.round(JSON.stringify(sc.rows || sc.update || '').length / 4),
+            ms: 2400,
+            attempt: 1,
+          },
+          200,
+        );
+        await tpace(T, 500 + str(sc.say).length * 7);
+
+        await finishStep(i, out);
+      }
+    } else await teamServer(app, user, T, finishStep);
     if (team.done) {
       const r = api('POST', '/api/' + it.name + '/' + rowId + '/' + team.done);
       if (r.status !== 200) throw new Error('The run could not be closed. ' + r.status + ' ' + r.error);
