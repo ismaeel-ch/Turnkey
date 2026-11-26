@@ -1,32 +1,14 @@
-import {
-  BuiltInAgent,
-  CopilotRuntime,
-  createCopilotRuntimeHandler,
-  InMemoryAgentRunner,
-} from "@copilotkit/runtime/v2";
-import { litellmModel } from "@/lib/model";
-import { NODE_KINDS } from "@/lib/canvas";
+import { CopilotRuntime, createCopilotRuntimeHandler, InMemoryAgentRunner } from "@copilotkit/runtime/v2";
 import { limiter, limitsFrom } from "@/server/guard/limits";
 import { refuse, refuseVerdict, visitorKey } from "@/server/guard/http";
+import { resolveAgents } from "@/server/agui/registry";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const architect = new BuiltInAgent({
-  name: "Architect",
-  model: litellmModel(),
-  maxSteps: 3,
-  prompt: [
-    "You are the Architect agent in Turnkey, an app builder.",
-    "The user describes an app. Put its building blocks on the shared canvas.",
-    `Call the add_canvas_node tool once per block. Allowed kinds: ${NODE_KINDS.join(", ")}.`,
-    "Add at most 5 nodes per turn. Keep titles under 6 words.",
-    "After the tool calls, reply in one short sentence.",
-  ].join("\n"),
-});
-
+// The registry decides which agents exist; it is read on every request so late-registered agents show up.
 const copilotRuntime = new CopilotRuntime({
-  agents: { default: architect },
+  agents: async () => await resolveAgents(),
   runner: new InMemoryAgentRunner(),
 });
 
