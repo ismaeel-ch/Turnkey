@@ -4,7 +4,7 @@
  * bus in src/platform/agui/activity.ts, the events of agents that run on the server. A second tab, "How it works",
  * draws the build team and the workflow this app runs on, plus the app's own agent team when it has one.
  */
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   Badge,
   Button,
@@ -25,6 +25,7 @@ import {
 } from '@fluentui/react-components';
 import { deriveActivity, subscribeAgentEvents } from '@/platform/agui/activity';
 import type { ActivityItem, ActivityKind, ActivityModel, AgentState, AgentStatus, RawAgentEvent } from '@/platform/agui/activity';
+import { addUsage, emptyUsage, usageLine } from '@/platform/agui/usage';
 import type { AppRecord, Dict } from '@/shared/types/workspace';
 import { EV, PHONE, S, cap, cx, emit, fmtClock } from './core';
 import { AGENTS } from './agents';
@@ -33,6 +34,9 @@ import { flowOf } from './custom';
 import { REVIEWERS } from './reviewers';
 import { isDark } from './flow';
 import { Icon } from './ui';
+
+// today's spend against the cap, with Fluent's progress bar: loaded when the panel first shows it
+const UsagePanel = lazy(() => import('./usage-panel'));
 
 /** What the panel shows for one agent. */
 export interface AgentCard {
@@ -182,6 +186,8 @@ function sentence(it: ActivityItem, app: AppRecord | null): string {
       return 'Updated the shared state: ' + it.text + '.';
     case 'handoff':
       return agentInfo(it.from, app).name + ' handed the work to ' + who + '.';
+    case 'usage':
+      return it.usage ? who + ' used ' + it.usage.model + ': ' + usageLine(addUsage(emptyUsage(), it.usage)) + '.' : '';
     default:
       return '';
   }
@@ -202,6 +208,7 @@ const KIND_ICON: Record<ActivityKind, string> = {
   resumed: 'forward',
   state: 'braces',
   handoff: 'arrowRight',
+  usage: 'receipt',
 };
 type Filter = 'all' | 'steps' | 'tools' | 'checks';
 const FILTERS: Record<Filter, (it: ActivityItem) => boolean> = {
@@ -329,6 +336,12 @@ type Styles = ReturnType<typeof useStyles>;
 
 /* ---------- the panel ---------- */
 
+/** The panel listens here so a shortcut or the command palette can open and close it. */
+const panelToggles = new Set<() => void>();
+export function toggleAgentsPanel() {
+  panelToggles.forEach((f) => f());
+}
+
 export function AgentActivity({ app }: { app: AppRecord | null }) {
   const c = useStyles();
   const [open, setOpen] = useState(false);
@@ -337,6 +350,13 @@ export function AgentActivity({ app }: { app: AppRecord | null }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [shown, setShown] = useState<Dict<boolean>>({});
   useEffect(() => startActivityBridge(), []);
+  useEffect(() => {
+    const flip = () => setOpen((o) => !o);
+    panelToggles.add(flip);
+    return () => {
+      panelToggles.delete(flip);
+    };
+  }, []);
   const scope = all || !app ? null : app.id;
   const model = activityNow(scope);
   const working = Object.values(model.agents).filter((a) => a.state === 'working' || a.state === 'waiting').length;
@@ -391,6 +411,11 @@ export function AgentActivity({ app }: { app: AppRecord | null }) {
                 {app && <Switch className="act-all" label="All apps" checked={all} onChange={(_, d) => setAll(d.checked)} />}
               </div>
               <div className={c.section}>
+                <Suspense fallback={null}>
+                  <UsagePanel usage={model.usage} scope={scope ? 'This app' : 'All apps'} />
+                </Suspense>
+              </div>
+              <div className={c.section}>
                 <Text weight="semibold" className={c.sectionTitle}>
                   Who is working
                 </Text>
@@ -413,6 +438,11 @@ export function AgentActivity({ app }: { app: AppRecord | null }) {
                               {st.tools ? ' · ' + plural(st.tools, 'tool call') : ''}
                               {st.sentBack ? ' · sent back ' + (st.sentBack === 1 ? 'once' : st.sentBack + ' times') : ''}
                             </Text>
+                            {st.usage && st.usage.calls > 0 && (
+                              <Text size={200} className={mergeClasses('act-agent-usage', c.sub)}>
+                                {plural(st.usage.calls, 'model call') + ' · ' + usageLine(st.usage)}
+                              </Text>
+                            )}
                           </div>
                           <Badge appearance="tint" color={b.color} size="small">
                             {b.text}

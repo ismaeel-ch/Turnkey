@@ -82,18 +82,23 @@ export async function* streamTeam(body: unknown, signal?: AbortSignal, url = '/a
   const reader = res.body.getReader();
   const text = new TextDecoder();
   const parser = new SseParser();
+  let ended = false;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       for (const e of parser.push(text.decode(value, { stream: true }))) yield e;
     }
+    ended = true;
     for (const e of parser.push(text.decode())) yield e;
     for (const e of parser.end()) yield e;
   } catch (e) {
     if (signal?.aborted) throw new TeamStreamError('The run was stopped.', 'aborted');
     throw e instanceof TeamStreamError ? e : new TeamStreamError('The connection to the server was lost.', 'network');
   } finally {
+    // The caller left early (an error event, a step that failed in the browser): close the request too, or the
+    // server's team keeps running and spending model calls nobody will read.
+    if (!ended) reader.cancel().catch(() => undefined);
     try {
       reader.releaseLock();
     } catch {

@@ -8,6 +8,7 @@
  *
  * Pure and browser-safe: no React, nothing from src/server.
  */
+import { addUsage, emptyUsage, readCallUsage, type CallUsage, type UsageSum } from './usage';
 
 /** One AG-UI event as the workspace logs it: the AG-UI fields plus who it belongs to. */
 export interface RawAgentEvent {
@@ -35,7 +36,8 @@ export type ActivityKind =
   | 'waiting'
   | 'resumed'
   | 'state'
-  | 'handoff';
+  | 'handoff'
+  | 'usage';
 
 export interface ActivityItem {
   seq: number;
@@ -66,6 +68,8 @@ export interface ActivityItem {
   from?: string;
   /** For run_finished: the status the run ended with. */
   status?: string;
+  /** For usage: what one model call cost. */
+  usage?: CallUsage;
 }
 
 export type AgentState = 'working' | 'waiting' | 'done' | 'failed' | 'idle';
@@ -79,6 +83,8 @@ export interface AgentStatus {
   tools: number;
   sentBack: number;
   last: number;
+  /** Model calls this agent made on the server: tokens, cache hits and cost. Absent until it makes one. */
+  usage?: UsageSum;
 }
 
 export interface ActivityModel {
@@ -87,6 +93,8 @@ export interface ActivityModel {
   agents: Record<string, AgentStatus>;
   /** True while some run in the events has started and not ended. */
   running: boolean;
+  /** Every model call in the events, added up. */
+  usage: UsageSum;
 }
 
 const str = (v: unknown): string => (v == null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
@@ -152,6 +160,10 @@ export function toActivity(e: RawAgentEvent, agentOf?: (e: RawAgentEvent) => str
       }
       if (name === 'interrupt') return { ...withStep, kind: 'waiting', reason: str(v.reason), text: short(v.text) };
       if (name === 'resume') return { ...withStep, kind: 'resumed' };
+      if (name === 'usage') {
+        const usage = readCallUsage(e.value);
+        return usage ? { ...withStep, kind: 'usage', text: usage.model, usage } : null;
+      }
       return null;
     }
     default:
@@ -182,6 +194,7 @@ export function deriveActivity(
     return a;
   };
   const runKey = (it: ActivityItem) => it.runId ?? it.app ?? '';
+  const usage = emptyUsage();
 
   for (const e of events) {
     const it = toActivity(e, options.agentOf);
@@ -263,11 +276,20 @@ export function deriveActivity(
       case 'resumed':
         if (it.agent && agents[it.agent]?.state === 'waiting') agents[it.agent].state = 'working';
         break;
+      case 'usage':
+        if (it.usage) {
+          addUsage(usage, it.usage);
+          if (it.agent) {
+            const a = status(it.agent, it.t);
+            addUsage((a.usage ??= emptyUsage()), it.usage);
+          }
+        }
+        break;
     }
     items.push(it);
   }
   const limit = options.limit ?? 300;
-  return { items: items.length > limit ? items.slice(-limit) : items, agents, running: open.size > 0 };
+  return { items: items.length > limit ? items.slice(-limit) : items, agents, running: open.size > 0, usage };
 }
 
 /* ---------- the bus: server agent runs publish here, the workspace listens ---------- */
