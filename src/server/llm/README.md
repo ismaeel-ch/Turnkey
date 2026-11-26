@@ -5,8 +5,14 @@ Every model call in Turnkey goes through this folder. Server only: nothing here 
 
 ## Choosing a model
 
-Set `LLM_PROVIDER`, or leave it unset and the first that applies is used: LiteLLM (all three `LITELLM_*` set), OpenAI,
-Anthropic, then, on a developer's machine only, the Claude Code command if it is installed, then the stand-in. In
+Set `LLM_PROVIDER`, or leave it unset and the first that applies is used: Anthropic (`ANTHROPIC_API_KEY` set), LiteLLM
+(all three `LITELLM_*` set), OpenAI, then, on a developer's machine only, the Claude Code command if it is installed,
+then the stand-in.
+
+For now (26 Nov) the backends in use are the **Claude Code command** on a developer's machine (no key: it uses your
+Claude login) and a **Claude API key** on the deployed site (set `ANTHROPIC_API_KEY` in Vercel). LiteLLM stays
+available for later: set its three variables and `LLM_PROVIDER=litellm`, or remove the Anthropic key.
+`/api/health` says which one answers in `backend`. In
 production with nothing configured there is no provider: the app works on its saved builds and Live says that no
 model is connected.
 

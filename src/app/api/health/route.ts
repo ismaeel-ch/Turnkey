@@ -9,7 +9,7 @@
  */
 import { limiter, lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
 import { refuseVerdict, visitorKey } from '@/server/guard/http';
-import { EFFORT_BY_TIER, LlmError, resolveProvider, usageTotals, type Provider } from '@/server/llm';
+import { EFFORT_BY_TIER, backendLabel, LlmError, resolveProvider, usageTotals, type Provider } from '@/server/llm';
 import pkg from '../../../../package.json';
 
 export const runtime = 'nodejs';
@@ -26,6 +26,8 @@ export async function GET(request: Request) {
     commit: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || null,
     live: !!provider,
     provider: provider?.id ?? null,
+    // Which model backend answers: the Claude API key, the local Claude Code command, the SSI gateway, ... Not secret.
+    backend: backendLabel(provider),
     models: provider ? { default: provider.model('default'), quick: provider.model('quick') } : null,
     effort: provider ? EFFORT_BY_TIER : null,
     usage: limiter.usage(),

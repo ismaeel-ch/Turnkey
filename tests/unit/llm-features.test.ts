@@ -6,7 +6,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { complete, resolveProvider, type ChatRequest, type ToolDef } from '@/server/llm';
+import { backendLabel, complete, resolveProvider, type ChatRequest, type ToolDef } from '@/server/llm';
 import { costOf, effortFor, EFFORT_BY_TIER, isClaudeModel, priceOf, withRequiredNote, MUST_CALL_A_TOOL } from '@/server/llm/features';
 import { anthropic } from '@/server/llm/providers/anthropic';
 import { claudeCode, resultUsage, type SpawnFn } from '@/server/llm/providers/claude-code';
@@ -318,6 +318,37 @@ describe('/api/health', () => {
   it('shows the effort of each tier and the spend so far against the budget', async () => {
     const body = await (await health(new Request('http://localhost/api/health'))).json();
     expect(body.effort).toEqual({ default: 'medium', quick: 'low' });
+    expect(body.backend).toBe('Stand-in model (no network, no cost)');
     expect(body.spend).toMatchObject({ calls: 0, costUsd: 0, budgetUsd: 25 });
+  });
+});
+
+describe('Claude API key as the backend', () => {
+  const LITELLM = { LITELLM_BASE_URL: 'gateway.example.com/v1', LITELLM_API_KEY: 'test-key', LITELLM_MODEL: 'claude-sonnet-5-5' };
+  it('an Anthropic key wins over the gateway and the Claude Code command, in production too', () => {
+    for (const env of [
+      { ANTHROPIC_API_KEY: 'test-key', ...LITELLM },
+      { ANTHROPIC_API_KEY: 'test-key', NODE_ENV: 'production', VERCEL: '1' },
+    ]) {
+      const p = resolveProvider(env)!;
+      expect([p.id, p.model('default'), p.model('quick')]).toEqual(['anthropic', 'claude-sonnet-5-5', 'claude-haiku-5-5']);
+    }
+    expect(resolveProvider({ ANTHROPIC_API_KEY: 'test-key', ...LITELLM, LLM_PROVIDER: 'litellm' })!.id).toBe('litellm');
+    expect(resolveProvider(LITELLM)!.id).toBe('litellm');
+  });
+  it('names the backend in plain words', () => {
+    expect(backendLabel({ id: 'anthropic' })).toBe('Claude API (Anthropic key)');
+    expect(backendLabel({ id: 'claude-code' })).toMatch(/Claude Code command/);
+    expect(backendLabel(null)).toBe('No model connected');
+  });
+  it('a declined request is an error, not an empty answer', async () => {
+    const p = anthropic({
+      apiKey: 'test-key',
+      model: 'claude-sonnet-5-5',
+      fetchImpl: asFetch(async () =>
+        sse(['data: {"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":0}}\n\n']),
+      ),
+    });
+    await expect(complete(p, ASK)).rejects.toMatchObject({ code: 'bad_request', message: 'the model declined this request' });
   });
 });

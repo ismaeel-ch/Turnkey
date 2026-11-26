@@ -2,7 +2,8 @@
  * Picks the model provider from environment variables. Server only. Never throws on a missing variable.
  *
  *   LLM_PROVIDER       optional: litellm | openai | anthropic | claude-code | mock
- *                      Unset, the first that applies wins: litellm (all three LITELLM_* set), openai, anthropic, then
+ *                      Unset, the first that applies wins: anthropic (ANTHROPIC_API_KEY set), litellm (all three
+ *                      LITELLM_* set), openai, then
  *                      in development only: claude-code (when the `claude` command is installed), then mock.
  *                      In production with nothing configured there is no provider and the app says so.
  *   LITELLM_BASE_URL   the SSI gateway address, including /v1          (hackathon names, used as given)
@@ -37,6 +38,26 @@ export { complete } from './complete';
 export { withTools, toolModeFor, toolModeSetting } from './tools';
 export { EFFORT_BY_TIER, costOf, effortFor, isClaudeModel, priceOf } from './features';
 export { usageTotals, withUsage, type UsageTotals } from './usage';
+
+/** A plain name for the backend in use, for /api/health and the settings screen. Not secret. */
+export function backendLabel(provider: Pick<Provider, 'id'> | null): string {
+  switch (provider?.id) {
+    case 'anthropic':
+      return 'Claude API (Anthropic key)';
+    case 'claude-code':
+      return 'Claude Code command (local, your Claude login)';
+    case 'litellm':
+      return 'SSI LiteLLM gateway';
+    case 'openai':
+      return 'OpenAI-compatible API';
+    case 'mock':
+      return 'Stand-in model (no network, no cost)';
+    case undefined:
+      return 'No model connected';
+    default:
+      return provider?.id ?? 'unknown';
+  }
+}
 
 type Env = Record<string, string | undefined>;
 const has = (v: string | undefined): v is string => typeof v === 'string' && v.trim() !== '';
@@ -91,6 +112,15 @@ function resolveRaw(env: Env): Provider | null {
     return isDevelopment(env) ? claudeCode(claudeOptions(env)) : null;
   }
 
+  // A Claude API key comes first: it is the backend for the deployed site until the SSI gateway is used.
+  if ((auto || want === 'anthropic') && has(env.ANTHROPIC_API_KEY)) {
+    return anthropic({
+      apiKey: env.ANTHROPIC_API_KEY.trim(),
+      model: opt(env.ANTHROPIC_MODEL) || 'claude-sonnet-5-5',
+      quickModel: opt(env.ANTHROPIC_MODEL_FAST) || 'claude-haiku-5-5',
+      baseUrl: opt(env.ANTHROPIC_BASE_URL),
+    });
+  }
   if (
     (auto || want === 'litellm') &&
     has(env.LITELLM_API_KEY) &&
@@ -114,14 +144,6 @@ function resolveRaw(env: Env): Provider | null {
       apiKey: env.OPENAI_API_KEY.trim(),
       model: env.OPENAI_MODEL.trim(),
       quickModel: opt(env.OPENAI_MODEL_FAST),
-    });
-  }
-  if ((auto || want === 'anthropic') && has(env.ANTHROPIC_API_KEY)) {
-    return anthropic({
-      apiKey: env.ANTHROPIC_API_KEY.trim(),
-      model: opt(env.ANTHROPIC_MODEL) || 'claude-sonnet-5-5',
-      quickModel: opt(env.ANTHROPIC_MODEL_FAST) || 'claude-haiku-5-5',
-      baseUrl: opt(env.ANTHROPIC_BASE_URL),
     });
   }
   // Nothing configured. On a developer's machine the app still runs: the real model through the Claude Code command
