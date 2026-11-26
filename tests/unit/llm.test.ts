@@ -90,6 +90,7 @@ describe('openAiCompatible', () => {
         baseUrl: 'h',
         apiKey: 'k',
         model: 'm',
+        retry: { sleep: async () => undefined },
         fetchImpl: (async () => new Response(body, { status })) as unknown as typeof fetch,
       });
     await expect(collect(make(401).stream({ messages: [], tier: 'default' }))).rejects.toMatchObject({ code: 'unauthorized' });
