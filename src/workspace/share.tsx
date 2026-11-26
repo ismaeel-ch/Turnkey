@@ -45,6 +45,7 @@ import {
 } from './release';
 import { appInstallLinks, holdInstallLinks, setInstallLinks } from '@/platform/pwa/app';
 import { lastInstalledAt, onInstallPrompt, runningInstalled } from '@/platform/pwa/prompt';
+import { loadShortLink, saveShortLink, slugFromPath } from '@/platform/share-link';
 
 /* ===== Turnkey prototype · share an app by link, and the app-only view =====
    A share link carries the app itself: the five definitions the agents wrote and the rows to start with, compressed into the part of
@@ -130,9 +131,22 @@ export const framed = () => {
 export const shareCode = (input) => {
   const s = str(input).trim(),
     m =
-      /#app=([01]\.[A-Za-z0-9_-]+|i\.[A-Za-z0-9_-]{1,40})(?![A-Za-z0-9_-])/.exec(s) ||
-      /^([01]\.[A-Za-z0-9_-]+|i\.[A-Za-z0-9_-]{1,40})$/.exec(s);
-  return m ? m[1] : null;
+      /#app=([01]\.[A-Za-z0-9_-]+|[is]\.[A-Za-z0-9_-]{1,40})(?![A-Za-z0-9_-])/.exec(s) ||
+      /^([01]\.[A-Za-z0-9_-]+|[is]\.[A-Za-z0-9_-]{1,40})$/.exec(s);
+  if (m) return m[1];
+  // a pasted short link: https://<site>/<name>
+  const u = /^https?:\/\/[^/?#\s]+(\/[a-z0-9-]{3,40})\/?$/.exec(s),
+    slug = u ? slugFromPath(u[1]) : null;
+  return slug ? 's.' + slug : null;
+};
+/** The app the address opens: an "#app=" code, or a short name in the path ("/clinic-desk"). */
+export const linkCode = () => {
+  try {
+    const slug = slugFromPath(location.pathname);
+    return shareCode(location.hash) || (slug ? 's.' + slug : null);
+  } catch (e) {
+    return null;
+  }
 };
 /** The saved app an installed app's "i.<id>" start address points at: the newest guest copy with that id, else one
  *  of the owner's own apps. */
@@ -367,6 +381,21 @@ export async function openShared(input, o) {
   const code = shareCode(input);
   if (!code) throw new Error('That is not a Turnkey app link. A link ends with #app= followed by a long code.');
   if (code.length > SHARE.maxCode) throw new Error('That link is too long to be an app.');
+  if (code.startsWith('s.')) {
+    // a short link: the code is kept on the server under the name; offline, the copy saved here opens
+    const slug = code.slice(2),
+      got = await loadShortLink(slug);
+    if (got.ok) return openShared(got.code, Object.assign({}, o, { slug }));
+    const saved = Object.values(S.apps).find(
+      (a) => a.shared && !a.shared.preview && a.shared.slug === slug && a.status === 'ready' && dbExists(a.id),
+    );
+    if (saved) {
+      enterSolo(saved, { from: 'link', back: o.back || null });
+      commit();
+      return saved;
+    }
+    throw new Error(got.reason === 'offline' ? 'This app needs a connection the first time it opens.' : got.message);
+  }
   if (code.startsWith('i.')) {
     // opened from the home screen, the dock or the Start menu: the app is already in this browser
     const saved = installedApp(code.slice(2));
@@ -428,6 +457,7 @@ export async function openShared(input, o) {
     }
   }
   if (!o.preview && app.shared.preview) app.shared.preview = false; // opened for real: keep the copy
+  if (o.slug && !o.preview) app.shared.slug = o.slug;
   enterSolo(app, {
     from: o.preview ? 'preview' : 'link',
     as: app.shared.as,
@@ -458,7 +488,8 @@ export function exitSolo() {
   U.solo = null;
   U.sheet = null;
   try {
-    if (/#app=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
+    if (/#app=/.test(location.hash) || slugFromPath(location.pathname))
+      history.replaceState(null, '', (slugFromPath(location.pathname) ? '/' : location.pathname) + location.search);
   } catch (e) {}
   if (so && so.back && S.apps[so.back]) {
     openTab(so.back);
@@ -545,6 +576,31 @@ export async function makeShare() {
     sh.err = String((e && e.message) || e);
   }
   sh.busy = false;
+  notify();
+  await shortenShare(sh, app);
+}
+/* The short link: the code is saved on the server under a name made from the app's name. The first save gives a
+   token that stays with the app in this browser; later saves send it back, so the same address gets the newer
+   version. When the site keeps no store, or the save fails, the long link is all there is, and it works the same. */
+export async function shortenShare(sh, app) {
+  if (!sh.code || framed()) return;
+  const code = sh.code;
+  sh.short = '';
+  sh.shortBusy = true;
+  notify();
+  const prev = app.short || {};
+  let r = await saveShortLink({ code, name: app.name, slug: prev.slug, token: prev.token });
+  if (!r.ok && r.reason === 'forbidden') {
+    delete app.short; // the name belongs to someone else now: make a new one
+    r = await saveShortLink({ code, name: app.name });
+  }
+  if (U.share !== sh || sh.code !== code) return;
+  sh.shortBusy = false;
+  if (r.ok) {
+    if (r.token) app.short = { slug: r.slug, token: r.token };
+    sh.short = location.origin + r.path;
+    commit();
+  } else sh.shortNote = r.reason === 'off' ? '' : r.message;
   notify();
 }
 export function ShareDialog({ p }) {
@@ -706,13 +762,42 @@ export function ShareDialog({ p }) {
           </NativeField>
         </Field>
       </div>
+      {(sh.short || sh.shortBusy) && (
+        <Field id="sh-short" label="Short link" hint="Opens the newest version you share. Anyone with it can open the app.">
+          <div className="row">
+            <NativeField
+              as="input"
+              className="input grow mono"
+              id="sh-short"
+              readOnly
+              value={sh.shortBusy ? 'Saving the short link…' : sh.short}
+              onFocus={(e) => e.target.select()}
+            />
+            <Btn
+              className="btn icon"
+              title="Copy the short link"
+              aria-label="Copy the short link"
+              disabled={!sh.short}
+              onClick={() => copyText(sh.short, 'Short link')}
+            >
+              <Icon n="copy" />
+            </Btn>
+          </div>
+        </Field>
+      )}
       <Field
         id="sh-link"
-        label="Link"
+        label={sh.short || sh.shortBusy ? 'Long link (holds the whole app, works without the server)' : 'Link'}
         error={sh.err || null}
         hint={
           sh.code
-            ? fmtBytes(link.length) + ' · the app and ' + sh.rows + ' rows, compressed from ' + fmtBytes(sh.raw) + ' · nothing is uploaded'
+            ? fmtBytes(link.length) +
+              ' · the app and ' +
+              sh.rows +
+              ' rows, compressed from ' +
+              fmtBytes(sh.raw) +
+              (sh.short || sh.shortBusy ? '' : ' · nothing is uploaded') +
+              (sh.shortNote ? ' · ' + sh.shortNote : '')
             : 'Packing the app'
         }
       >
@@ -740,7 +825,8 @@ export function ShareDialog({ p }) {
         <li>
           <Icon n="shield" s="16" />
           <span>
-            The link is the app. It is checked again, station by station, in the browser that opens it, and nothing in it runs as code.
+            Either link opens the app on its own. It is checked again, station by station, in the browser that opens it, and nothing in it
+            runs as code.
           </span>
         </li>
         <li>

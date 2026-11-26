@@ -80,7 +80,7 @@ import {
   exitSolo,
   openShared,
   packOf,
-  shareCode,
+  linkCode,
   shareLink,
   squeeze,
   unsqueeze,
@@ -1681,7 +1681,7 @@ export function boot() {
   });
   // the SQLite engine takes a moment to start, so let the splash paint first
   const fromLink = () => {
-    const code = shareCode(location.hash);
+    const code = linkCode();
     return code
       ? openShared(code).catch((e) => {
           toast(String((e && e.message) || e), 'danger', 9000);
