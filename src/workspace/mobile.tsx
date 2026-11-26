@@ -38,6 +38,7 @@ import { startWalk } from './runtime';
 import { enterSolo, openShare } from './share';
 import { AppLogo, isDirty, relOf } from './release';
 import { Inspector, isDetail, rebuildAsk, viewOf } from './shell-a';
+import { openHistory } from './history-ui';
 import { startTour } from './shell-c';
 
 /** A row of the built app's account menu: an action, or '-' for a divider. */
@@ -704,6 +705,13 @@ export function PhoneSheets({ app }: { app: AppRecord | null }) {
                 app: app.id,
               }),
             )}
+          />
+          <SheetRow
+            icon="history"
+            label="Version history"
+            hint="Every change, and undo back to any of them"
+            disabled={!ready}
+            onClick={act(() => openHistory(app))}
           />
           <SheetRow
             icon="edit"
