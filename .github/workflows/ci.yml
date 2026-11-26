@@ -1,0 +1,85 @@
+name: CI
+
+# Every pull request and every push to main: secrets scan, lint, typecheck, unit tests, a production build,
+# and the 286 browser checks (one job per flow). The job named "ci" is the single result branch protection requires.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Secrets scan
+        run: npm run check:secrets
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+
+  e2e:
+    name: e2e (${{ matrix.flow }})
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        flow: [demo, live, misc, views, quests, new, custom, round6]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium
+      - name: Production build
+        run: npm run build
+      - name: Browser checks
+        run: |
+          export CHROME_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
+          npm run test:e2e -- ${{ matrix.flow }}
+      - name: Keep screenshots when a flow fails
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shots-${{ matrix.flow }}
+          path: tests/e2e/shots
+          retention-days: 3
+          if-no-files-found: ignore
+
+  ci:
+    name: ci
+    if: always()
+    needs: [check, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: All required jobs passed
+        run: |
+          echo "check: ${{ needs.check.result }}, e2e: ${{ needs.e2e.result }}"
+          test "${{ needs.check.result }}" = "success"
+          test "${{ needs.e2e.result }}" = "success"

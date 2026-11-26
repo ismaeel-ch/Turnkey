@@ -1,0 +1,8 @@
+.next
+node_modules
+src/legacy
+src/platform/generated
+public/vendor
+tests/e2e
+package-lock.json
+AGENTS.md
