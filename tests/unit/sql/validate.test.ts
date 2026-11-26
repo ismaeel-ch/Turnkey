@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { LIMITS, issueLines, normalizeTables, schemaSql, snake, validateTables, type TableDef } from '@/shared/sql';
-import { savedBuilds } from './legacy-records';
+import { savedBuilds } from './saved-builds';
 
 const col = (name: string, type: string, extra: Record<string, unknown> = {}) => ({ name, type, ...extra });
 const table = (name: string, columns: unknown[], extra: Record<string, unknown> = {}) => ({

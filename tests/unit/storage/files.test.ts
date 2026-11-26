@@ -20,7 +20,7 @@ import {
   type KeyValueStore,
   type SqlJsLike,
 } from '@/platform/storage';
-import { savedBuilds } from '../sql/legacy-records';
+import { savedBuilds } from '../sql/saved-builds';
 
 const require = createRequire(import.meta.url);
 const initSqlJs = require('sql.js/dist/sql-wasm.js');

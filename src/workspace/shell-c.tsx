@@ -54,7 +54,7 @@ import {
   setSaveTimer,
   setU,
 } from './core';
-import { DBX, PEEK, dbCount, dbExists, dbFlush, dbSave, initSqlite, sqlRun } from './db';
+import { DBX, PEEK, backupWorkspace, dbCount, dbExists, dbFlush, dbSave, initSqlite, restoreWorkspace, sqlRun } from './db';
 import { appUsers, reseed } from './engine';
 import { DATA_VIEWS, migrateApp } from './viewspec';
 import { REC, TEMPLATES } from './builds';
@@ -853,6 +853,16 @@ export function ResetDialog() {
         {' keeps is stored in this browser. Choose how far to go.'}
       </p>
       <div className="set-list">
+        <SetRow title="Back up workspace" text="Saves every account, app, database and setting as one JSON file you can restore later.">
+          <button className="btn" onClick={backupWorkspace}>
+            Back up
+          </button>
+        </SetRow>
+        <SetRow title="Restore a backup" text="Replaces everything in this browser with a backup file, then reloads.">
+          <button className="btn" onClick={restoreWorkspace}>
+            Restore
+          </button>
+        </SetRow>
         {!out && (
           <SetRow
             title="Restore seed data"
