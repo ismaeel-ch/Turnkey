@@ -3,6 +3,30 @@
 All notable changes to Turnkey. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 versions are semantic versions. Each release lists the pull requests merged into it.
 
+## [0.3.0] - 2026-11-26
+
+Live builds run on the server through the agent workflow, the workspace moves to Fluent UI, and shared apps get
+short links.
+
+### Added
+
+- Each agent's steps are shown in an activity panel, with a "How it works" page. ([#58](https://github.com/ismaeel-ch/Turnkey/pull/58))
+- Live builds run on the server step agent over AG-UI, and every build goes through the workflow graph.
+  ([#60](https://github.com/ismaeel-ch/Turnkey/pull/60)) ([#48](https://github.com/ismaeel-ch/Turnkey/pull/48))
+- An app's agent team runs as a LangGraph run on the server, and runs in Live. ([#35](https://github.com/ismaeel-ch/Turnkey/pull/35)) ([#52](https://github.com/ismaeel-ch/Turnkey/pull/52))
+- Short links for shared apps. ([#63](https://github.com/ismaeel-ch/Turnkey/pull/63))
+- The workspace is stored in IndexedDB, with .sqlite export and import, backup and restore. ([#53](https://github.com/ismaeel-ch/Turnkey/pull/53))
+
+### Changed
+
+- The workspace UI is built on Fluent UI React v9, including tabs, switches, message bars and menus. ([#44](https://github.com/ismaeel-ch/Turnkey/pull/44)) ([#62](https://github.com/ismaeel-ch/Turnkey/pull/62))
+- A Claude API key is the deployed model backend. ([#66](https://github.com/ismaeel-ch/Turnkey/pull/66))
+- The workspace data modules are typed, with a store hook. ([#56](https://github.com/ismaeel-ch/Turnkey/pull/56))
+
+### Tests
+
+- Unit tests and coverage for the foundation code, and a fix for the model-client tests. ([#22](https://github.com/ismaeel-ch/Turnkey/pull/22)) ([#64](https://github.com/ismaeel-ch/Turnkey/pull/64))
+
 ## [0.2.0] - 2026-11-26
 
 The first release deployed by the release workflow. The `v0.1.0` tag was published as a pre-release and never
