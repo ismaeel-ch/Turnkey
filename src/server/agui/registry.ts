@@ -3,7 +3,7 @@
  * request, so an agent can be registered later (by a module that loads lazily) without touching the route.
  *
  *   default  the spike's Architect (a CopilotKit BuiltInAgent)
- *   step     one agent step as a checked graph run (agent-graphs)
+ *   step     one agent step as a checked graph run (agent-graphs): Live builds run every agent prompt here
  *   team     an app's agent team as a graph run (team-graph)
  *   echo     demo agent, only when LLM_PROVIDER=mock
  */
@@ -12,6 +12,7 @@ import { BuiltInAgent } from "@copilotkit/runtime/v2";
 import { litellmModel } from "@/lib/model";
 import { NODE_KINDS } from "@/lib/canvas";
 import { createEchoAgent, ECHO_AGENT_ID } from "./echo-agent";
+import { wrapStepAgent } from "./step-adapter";
 
 export type AgentMap = Record<string, AbstractAgent> & { default: AbstractAgent };
 
@@ -46,9 +47,31 @@ export function registerAgent(id: string, loader: Loader): void {
   loaded.delete(id);
 }
 
+/** Visitor key for the step agent's repair attempts: the route has no request to hand down, so they share one key. */
+const STEP_REPAIRS = "agent:step:repair";
+
+/**
+ * Agent `step` (src/server/graph/step): the route's limiter has already counted the first model call of the run;
+ * each repair attempt is counted here, so a repair loop is held to the same per-minute and daily caps.
+ */
+export async function createStepAguiAgent(): Promise<AbstractAgent> {
+  const [{ createStepAgent }, { limiter, limitsFrom }] = await Promise.all([import("@/server/graph/step"), import("@/server/guard/limits")]);
+  const limits = limitsFrom();
+  return wrapStepAgent(
+    createStepAgent({
+      maxTokens: limits.maxOutputTokens,
+      admit: (attempt) => {
+        if (attempt === 1) return null;
+        const v = limiter.take(STEP_REPAIRS, limits);
+        return v.ok ? null : { code: v.code === "off" ? "not_configured" : v.code, message: v.message };
+      },
+    }),
+  );
+}
+
 registerAgent("default", createArchitect);
-// `step` and `team` are registered with registerAgent("step", () => import("@/server/graph/step/agent").then(m => m.createStepAgent()))
-// from src/server/agui/graphs.ts once their factories are merged. See docs/architecture/ag-ui.md.
+registerAgent("step", createStepAguiAgent);
+// `team` is registered the same way by team-graph once its factory is merged. See docs/architecture/ag-ui.md.
 
 async function get(id: string): Promise<AbstractAgent | null> {
   const have = loaded.get(id);

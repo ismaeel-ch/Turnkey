@@ -343,6 +343,43 @@ async function flowLive(browser, url) {
   c = await build('deny', 'A gym nobody granted access to');
   check('live: a refused permission stops the run and switches Live off', c.status === 'failed' && (await st(page, () => window.__formwork.view().live)) === 'none', [c.status, c.last]);
   await ctx.close();
+  await liveOnStepAgent(browser, url);
+}
+// Live without a stand-in on the page: every prompt goes to the server's step agent over AG-UI. The agent's stream is
+// scripted here (the test server has no model), so this proves the browser side: events in, answer out, steps on the timeline.
+async function liveOnStepAgent(browser, url) {
+  const { ctx, page } = await newPage(browser);
+  const seen = [];
+  await page.route('**/api/health', (route) => route.fulfill({ json: { ok: true, live: true, provider: 'scripted' } }));
+  await page.route('**/api/copilotkit/agent/step/run', async (route) => {
+    const body = route.request().postDataJSON(), prompt = body.forwardedProps.prompt, who = (/^You are the ([\w ]+?) agent/.exec(prompt) || [])[1] || 'other';
+    seen.push(who + ':' + body.forwardedProps.maxAttempts);
+    let out;
+    if (who === 'Tester') { const sc = GYM.screens.screens.find((x) => x.roles && x.roles.length); out = { cases: [{ name: 'The first page opens for its role', why: 'Every role needs a way in.', steps: [{ role: sc.roles[0], do: 'open', screen: sc.name }] }] }; }
+    else out = { Researcher: GYM.research, Database: GYM.database(false), Backend: GYM.backend, 'View advisor': GYM.views, UI: GYM.screens }[who] || { findings: [] };
+    const text = JSON.stringify(out), id = 'draft-1', ev = [
+      { type: 'RUN_STARTED', threadId: body.threadId, runId: body.runId },
+      { type: 'STEP_STARTED', stepName: 'guard' }, { type: 'STEP_FINISHED', stepName: 'guard' },
+      { type: 'STEP_STARTED', stepName: 'draft' }, { type: 'TEXT_MESSAGE_START', messageId: id, role: 'assistant' },
+      { type: 'TEXT_MESSAGE_CONTENT', messageId: id, delta: text.slice(0, 50) }, { type: 'TEXT_MESSAGE_CONTENT', messageId: id, delta: text.slice(50) },
+      { type: 'TEXT_MESSAGE_END', messageId: id }, { type: 'STEP_FINISHED', stepName: 'draft' },
+      { type: 'STEP_STARTED', stepName: 'validate' }, { type: 'STEP_FINISHED', stepName: 'validate' },
+      { type: 'RUN_FINISHED', threadId: body.threadId, runId: body.runId, result: { text, role: 'any', attempts: 1, repaired: false, truncated: false } }];
+    await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: ev.map((e) => 'data: ' + JSON.stringify(e) + '\n\n').join('') });
+  });
+  await page.goto(url); await page.waitForSelector('.ob-card');
+  await page.getByRole('button', { name: 'Get started' }).click(); await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
+  await page.waitForFunction(() => window.__formwork.view().live === 'ready');
+  await page.locator('.choice').nth(1).click(); await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click();
+  await page.waitForSelector('.home'); await setSpeed(page, 'instant');
+  await page.fill('#home-prompt', 'A gym tracks members, class bookings and trainers'); await page.locator('.prompt .btn.primary').click();
+  await waitReady(page, 60000); const a = await appState(page);
+  const steps = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), A = s.apps[t.app], r = A.runs[A.runs.length - 1]; return r.steps.filter((x) => x.station === 'database').map((x) => x.label + ':' + x.ok); });
+  check('live on the step agent: the build is ready, with one server run per agent and one model call each', a.status === 'ready' && a.name === 'FitTrack' && seen.join(',') === 'Researcher:1,Database:1,Backend:1,View advisor:1,UI:1,Tester:1', [a.status, a.name, seen, a.last]);
+  check('live on the step agent: the server\'s draft and format check show on the timeline inside the station\'s model call', steps.join(',') === 'Model call:true,Draft:true,Format check:true,Checks:true', steps);
+  await ctx.close();
 }
 async function flowMisc(browser, url) {
   const { ctx, page } = await newPage(browser, { scheme: 'dark' });
@@ -796,7 +833,7 @@ async function flowCustom(browser, url) {
 
   // ----- D. a build under the customised workflow: approval, review steps, two attempts -----
   await page.locator('.build-bar .btn', { hasText: 'Run again' }).click(); await confirmYes(page); let atGate = null;
-  r = await drive(page, { onGate: async (at, s) => { atGate = { at, st: s.line[at].s, gateText: await page.locator('.fl-approval').first().innerText(), bar: (await page.locator('.build .mbar').allInnerTexts()).join(' '), card: await page.locator('.gcard.ask').last().innerText(), interrupts: await st(page, () => window.__formwork.logs.EV.filter((e) => e.type === 'CUSTOM' && e.name === 'interrupt' && e.value.reason === 'approval').length) }; await shot(page, 'c11-approval'); } }); a = r.a;
+  r = await drive(page, { onGate: async (at, s) => { await page.locator('.fl-approval', { hasText: 'Waiting for you' }).first().waitFor({ timeout: 5000 }).catch(() => {}); atGate = { at, st: s.line[at].s, gateText: await page.locator('.fl-approval').first().innerText(), bar: (await page.locator('.build .mbar').allInnerTexts()).join(' '), card: await page.locator('.gcard.ask').last().innerText(), interrupts: await st(page, () => window.__formwork.logs.EV.filter((e) => e.type === 'CUSTOM' && e.name === 'interrupt' && e.value.reason === 'approval').length) }; await shot(page, 'c11-approval'); } }); a = r.a;
   check('build: the line stops after Database and waits for the owner', r.seen.join() === 'database' && atGate && atGate.st === 'waiting' && /Waiting for you/.test(atGate.gateText) && /waiting for your approval after Database/.test(atGate.bar) && /Your approval · Database/.test(atGate.card) && atGate.interrupts >= 1, [r.seen, atGate]);
   check('build: once approved it goes on to a finished app, with the approval recorded', a.status === 'ready' && a.run.kind === 'build' && a.run.status === 'ok' && a.line.database.approved && a.line.database.s === 'ok' && a.tests.failed === 0, [a.status, a.run, a.line.database]);
   check('build: the review steps ran inside the line, and their fixes were tried out when the app was whole', a.reviews.security.status === 'ok' && a.reviews.insight.status === 'ok' && [].concat(a.reviews.security.f, a.reviews.insight.f).every((x) => !x.fix || x.test === 'pass') && !a.reviews.security.stale && (await page.locator('.msgs').innerText()).includes('I tried each one out in a savepoint and put it back'), a.reviews);
