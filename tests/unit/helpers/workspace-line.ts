@@ -44,7 +44,7 @@ export async function startLine(respond: (prompt: string) => Promise<string>): P
       return app as LineApp;
     },
     say: async (app, text) => {
-      await changes.handleChat(app, text, undefined);
+      await changes.handleChat(app as unknown as Parameters<typeof changes.handleChat>[0], text, undefined);
     },
   };
 }

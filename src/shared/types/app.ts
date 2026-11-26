@@ -5,10 +5,10 @@
  *
  * Tables and columns use the shared SQL types (`src/shared/sql/types.ts`), which the server validates against too.
  */
-import type { ColumnDef, TableDef } from '@/shared/sql/types';
+import type { ColumnDef, ColumnType, TableDef } from '@/shared/sql/types';
 import type { Dict, Loose } from './workspace';
 
-export type { ColumnDef, TableDef };
+export type { ColumnDef, ColumnType, TableDef };
 
 /**
  * Model output, a saved build or a share link before a normaliser has checked it. Normalisers read it field by field
@@ -49,13 +49,20 @@ export interface Brief {
   stories: Story[];
   rules: string[];
   question: BriefQuestion | null;
-  decision: Loose;
+  /** the owner's answer to the brief's question */
+  decision: { text: string; answer: string } | null;
   sources: Loose[];
 }
 
 /* ---------- station 2: tables and seed users ---------- */
 /** A table of a built app: the Database agent always gives it a label and a name for one record. */
-export type AppTable = TableDef & { label: string; one: string };
+export type AppTable = TableDef & {
+  label: string;
+  one: string;
+  /** the agent that added it, and the change run that did */
+  by?: string;
+  run?: number;
+};
 /** A seeded sign-in of the built app. Passwords are the demo password; the app lives in the visitor's browser. */
 export interface SeedUser {
   name: string;
@@ -107,9 +114,31 @@ export interface Permission {
 /** Permissions by table name, then by role id. */
 export type AccessMap = Dict<Dict<Permission>>;
 /** An app's own agent team (src/workspace/team.tsx). */
+export interface TeamAgent {
+  id: string;
+  name: string;
+  icon: string;
+  acc: string;
+  job: string;
+  hint: string;
+  /** the table it adds rows to, and the one it edits */
+  writes: string | null;
+  updates: string | null;
+  /** columns of the input table it fills */
+  sets: string[];
+  fixed: Dict<Loose>;
+  tools: { connector: string; tool: string }[];
+}
 export interface AppTeam {
   title: string;
+  about: string;
   input: { table: string; column: string };
+  agents: TeamAgent[];
+  /** the workflow actions that open and close a run */
+  start: string | null;
+  done: string | null;
+  /** human in the loop: the run waits before this agent */
+  pause: { before: string; text: string } | null;
   [field: string]: Loose;
 }
 
@@ -155,9 +184,21 @@ export interface Screen {
   type: string;
   table: string;
   roles: string[];
-  columns?: string[];
+  /** the columns a table screen shows */
+  columns: string[];
   icon?: string;
+  /** board: the choice column that makes the columns */
   group?: string;
+  /** calendar and timeline: the date column, and the end date */
+  date?: string;
+  end?: string;
+  /** the column shown as the card or row label */
+  label?: string;
+  range?: string;
+  /** added by code, not by the UI agent */
+  auto?: boolean;
+  /** older dashboard screens kept their own widgets; read as saved */
+  widgets?: Dict<Untrusted>[];
   [field: string]: Loose;
 }
 export interface TourStep {
@@ -173,6 +214,11 @@ export interface TourStep {
   say?: string;
   [field: string]: Loose;
 }
+/** A saved test: tour steps played against the app's API. */
+export interface TestCase {
+  steps: TourStep[];
+  [field: string]: Loose;
+}
 export interface Theme {
   accent: string;
   nav: string;
@@ -180,6 +226,14 @@ export interface Theme {
   density?: string;
 }
 
+/** One schema change made after the first build. */
+export interface Migration {
+  n: number;
+  at: number;
+  by: string;
+  sql: string;
+  note: string;
+}
 export interface AppDef {
   brief: Brief | null;
   tables: AppTable[];
@@ -193,8 +247,8 @@ export interface AppDef {
   theme: Theme;
   tour: TourStep[];
   actions: AppAction[];
-  migrations: Loose[];
-  cases?: Loose[];
+  migrations: Migration[];
+  cases?: TestCase[];
   /** the room layout of an app with a team (src/workspace/room.tsx) */
   board?: Loose;
 }

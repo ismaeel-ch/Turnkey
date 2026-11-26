@@ -1,4 +1,5 @@
 // @ts-nocheck -- converted from the prototype; types are added module by module
+import type { AppRecord, ChatCard, ChatMessage, Dict, Loose, Run, RunStep } from '@/shared/types/workspace';
 import { AGENTS } from './agents';
 import {
   CAP,
@@ -64,7 +65,14 @@ import { SHARE } from './share';
 import { LOGO_FILLS, LOGO_MARKS, LOGO_SHAPES, logChange, normLogo } from './release';
 
 /* ===== Turnkey prototype · the line: five agents, six stations, a code orchestrator ===== */
-export const STATIONS = [
+export interface Station {
+  id: string;
+  name: string;
+  agent: string;
+  out: string;
+  makes: string;
+}
+export const STATIONS: Station[] = [
   {
     id: 'research',
     name: 'Research',
@@ -108,9 +116,18 @@ export const STATIONS = [
     makes: 'Tour as acceptance test',
   },
 ];
-export const stationIdx = (id) => STATIONS.findIndex((s) => s.id === id);
-export const RUNS = {},
-  PENDING = {},
+export const stationIdx = (id: string) => STATIONS.findIndex((s) => s.id === id);
+/** What a run in progress can be told: stop, or the owner's answer to the question or approval it waits at. */
+export interface RunCtl {
+  stop: boolean;
+  runId: string;
+  answer?: ((i: number) => void) | null;
+  gate?: ((ok: boolean) => void) | null;
+  abort?: (() => void) | null;
+  [field: string]: Loose;
+}
+export const RUNS: Dict<RunCtl> = {},
+  PENDING: Dict<(ok: boolean) => void> = {},
   LIVE = {
     fn: null,
   };
@@ -126,7 +143,7 @@ export const SPEED = {
   fast: 0.4,
   instant: 0.03,
 };
-export async function pace(app, ms) {
+export async function pace(app: AppRecord, ms: number) {
   // waits in short slices so Stop takes effect at once
   const end = Date.now() + Math.max(0, ms * (SPEED[S.settings.speed] || 1));
   for (;;) {
@@ -201,8 +218,8 @@ export function newApp(o) {
   S.apps[id] = app;
   return app;
 }
-export function pushChat(app, from, text, card) {
-  const m = {
+export function pushChat(app: AppRecord, from: string, text: string, card?: ChatCard | null) {
+  const m: ChatMessage = {
     id: uid('m'),
     t: Date.now(),
     from,
@@ -213,7 +230,7 @@ export function pushChat(app, from, text, card) {
   if (app.chat.length > 160) app.chat.splice(0, 40);
   return m;
 }
-export function say(app, agent, text, card) {
+export function say(app: AppRecord, agent: string, text: string, card?: ChatCard | null) {
   const m = pushChat(app, agent, text, card);
   emit('TEXT_MESSAGE_START', {
     messageId: m.id,
@@ -252,8 +269,8 @@ export function say(app, agent, text, card) {
   commit();
   return m;
 }
-export const stepStart = (run, station, agent, name, kind) => {
-  const s = {
+export const stepStart = (run: Run, station: string, agent: string, name: string, kind: string) => {
+  const s: RunStep = {
     station,
     agent,
     label: name,
@@ -265,7 +282,7 @@ export const stepStart = (run, station, agent, name, kind) => {
   run.steps.push(s);
   return s;
 };
-export const stepEnd = (s, ok) => {
+export const stepEnd = (s: RunStep, ok?: boolean) => {
   s.t1 = Date.now();
   s.ok = ok !== false;
 };
@@ -275,9 +292,9 @@ export const ctxOf = (app, run, agent) => ({
   appId: app.id,
   runN: run.n,
 });
-export function newRun(app, kind, name, mode) {
+export function newRun(app: AppRecord, kind: string, name: string, mode: string) {
   const n = (app.runs.length ? app.runs[app.runs.length - 1].n : 0) + 1;
-  const run = {
+  const run: Run = {
     id: 'run_' + n,
     n,
     kind,
@@ -887,7 +904,12 @@ const SERVER_STEP = { draft: ['Draft', 'model'], validate: ['Format check', 'che
 export function serverStep(run, agent, app, p) {
   const kind = p && SERVER_STEP[p.name];
   if (!kind) return;
-  emit('CUSTOM', { name: 'agent_step', app: app.id, agent, value: { step: p.name, phase: p.phase, attempt: p.attempt, ok: p.ok, issues: p.issues } });
+  emit('CUSTOM', {
+    name: 'agent_step',
+    app: app.id,
+    agent,
+    value: { step: p.name, phase: p.phase, attempt: p.attempt, ok: p.ok, issues: p.issues },
+  });
   const steps = Array.isArray(run.steps) ? run.steps : [];
   if (p.phase === 'start') {
     const open = steps.findLast && steps.findLast((s) => s.agent === agent && s.kind === 'model' && !s.t1 && !s.sub);
@@ -898,7 +920,7 @@ export function serverStep(run, agent, app, p) {
   }
   notify();
 }
-export async function callModel(app, run, agent, prompt, attempt, ctl) {
+export async function callModel(app, run, agent, prompt, attempt, ctl?) {
   // ctl: who may stop this call (a build by default, or an app's own agent team)
   if (!online()) throw fatal('The connection is gone, so Live is paused. Run it again when you are back online.');
   if (!LIVE.fn) throw fatal(NO_MODEL);

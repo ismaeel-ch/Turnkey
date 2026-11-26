@@ -1,4 +1,5 @@
-// @ts-nocheck -- converted from the prototype; types are added module by module
+import type { AppTable, BackedDef, Check, Migration, ColumnDef, ColumnType, DashWidget, Row, Screen, Untrusted } from '@/shared/types/app';
+import type { AppRecord, Dict, StationLine, ToolContext } from '@/shared/types/workspace';
 import {
   BRAND,
   NO_MODEL,
@@ -7,6 +8,7 @@ import {
   cap,
   commit,
   emit,
+  errText,
   fmtMs,
   isoDate,
   label,
@@ -84,7 +86,7 @@ import { FLOW_HELP, LEVELS, NOTE_FOR, REVIEWERS, agentThe, answerGate, flowChat,
 import { logChange } from './release';
 
 /* ===== Turnkey prototype · changes from chat: operations, migrations, partial re-runs, build pack ===== */
-export const COLOR_WORDS = {
+export const COLOR_WORDS: Dict<string> = {
   teal: 'teal',
   blue: 'blue',
   purple: 'purple',
@@ -108,7 +110,7 @@ export const COLOR_WORDS = {
   grape: 'grape',
   seafoam: 'seafoam',
 };
-export const ACT_WORDS = {
+export const ACT_WORDS: Dict<'list' | 'create' | 'update' | 'delete'> = {
   see: 'list',
   view: 'list',
   read: 'list',
@@ -132,13 +134,13 @@ export const ACT_WORDS = {
   deleting: 'delete',
   removing: 'delete',
 };
-export const ACT_VERB = {
+export const ACT_VERB: Dict<string> = {
   list: 'see',
   create: 'create',
   update: 'edit',
   delete: 'delete',
 };
-export function inferType(name) {
+export function inferType(name: string): { type: string; options?: string[] | null } {
   const n = String(name).toLowerCase();
   if (/\b(date|deadline|due|birthday|expiry|expires|until)\b/.test(n))
     return {
@@ -169,13 +171,19 @@ export function inferType(name) {
     type: 'text',
   };
 }
-export function parseChange(app, text) {
+/** What a request in chat turns into: operations to plan, a special action, or nothing this reader understands. */
+export interface ParsedChange {
+  ops?: Dict<Untrusted>[];
+  special?: string;
+  reply?: string | null;
+}
+export function parseChange(app: unknown, text: string): ParsedChange {
   // Demo mode: a small rule-based reader stands in for the model
   const s = String(text)
     .trim()
     .replace(/[.!?]+$/, '')
     .replace(/^please\s+/i, '');
-  let m;
+  let m: RegExpExecArray | null;
   if (/^(reset|restore) (the |all )?(demo |seed )?data$/i.test(s) || /^re-?seed/i.test(s))
     return {
       special: 'reseed',
@@ -343,8 +351,8 @@ export function parseChange(app, text) {
     };
   if ((m = /^add (?:an? |the )?(?:new )?(.+?)(?: field| column)? (?:to|on|in|for) (?:the |each |every )?(.+)$/i.exec(s))) {
     let name = m[1].trim(),
-      type = null,
-      options = null;
+      type: string | null = null,
+      options: string[] | null = null;
     const pm = /^(.+?)\s*\((?:choice|choices|options?)\s*:\s*(.+)\)$/i.exec(name);
     if (pm) {
       name = pm[1];
@@ -357,11 +365,13 @@ export function parseChange(app, text) {
     const tm = /^(text|number|date|money|yes\/no|long text|choice) (?:field )?(?:called |named )?(.+)$/i.exec(name);
     if (tm) {
       type =
-        {
-          'yes/no': 'bool',
-          'long text': 'longtext',
-          choice: 'select',
-        }[tm[1].toLowerCase()] || tm[1].toLowerCase();
+        (
+          {
+            'yes/no': 'bool',
+            'long text': 'longtext',
+            choice: 'select',
+          } as Dict<string>
+        )[tm[1].toLowerCase()] || tm[1].toLowerCase();
       name = tm[2];
     }
     const inf = type
@@ -386,25 +396,27 @@ export function parseChange(app, text) {
     reply: null,
   };
 }
-export function suggestChanges(app) {
+export function suggestChanges(app: AppRecord) {
   // example chips under the chat box, made from the app's own tables
   const def = app.def;
   if (!def.tables.length || !def.process) return [];
-  const pt = tableOf(def, def.process.table),
-    out = [],
+  const pt = tableOf(def, def.process.table) as AppTable,
+    out: string[] = [],
     other = def.tables.find((t) => t !== pt) || pt;
   out.push('Add a ' + (colOf(other, 'notes') ? 'reference code' : 'notes') + ' field to ' + other.label.toLowerCase());
-  const sel = pt.columns.find((c) => c.type === 'select' && c.name !== def.process.column);
-  if (sel) out.push('Add a board of ' + pt.label.toLowerCase() + ' by ' + sel.label.toLowerCase());
-  const free = (t, c) => !(def.dash && def.dash.widgets.some((w) => w.table === t.name && w.x === c.name)),
-    pairs = [];
+  const status = def.process.column,
+    sel = pt.columns.find((c) => c.type === 'select' && c.name !== status);
+  if (sel) out.push('Add a board of ' + pt.label.toLowerCase() + ' by ' + String(sel.label).toLowerCase());
+  const dash = def.dash;
+  const free = (t: AppTable, c: ColumnDef) => !(dash && dash.widgets.some((w) => w.table === t.name && w.x === c.name)),
+    pairs: [AppTable, ColumnDef][] = [];
   [pt].concat(def.tables.filter((t) => t !== pt)).forEach((t) =>
     t.columns.forEach((c) => {
       if (c.type === 'select' && free(t, c)) pairs.push([t, c]);
     }),
   );
   if (pairs.length)
-    out.push('Add a chart of ' + pairs[0][0].label.toLowerCase() + ' by ' + pairs[0][1].label.toLowerCase() + ' to the dashboard');
+    out.push('Add a chart of ' + pairs[0][0].label.toLowerCase() + ' by ' + String(pairs[0][1].label).toLowerCase() + ' to the dashboard');
   const drop = other.columns.find(
     (c) =>
       !c.required &&
@@ -414,23 +426,24 @@ export function suggestChanges(app) {
       c.type !== 'user' &&
       !def.screens.some((s) => s.table === other.name && (s.group === c.name || s.date === c.name || s.end === c.name)),
   );
-  if (drop) out.push('Remove the ' + drop.label.toLowerCase() + ' field from ' + other.label.toLowerCase());
+  if (drop) out.push('Remove the ' + String(drop.label).toLowerCase() + ' field from ' + other.label.toLowerCase());
   out.push('Make it ' + (def.theme.accent === 'purple' ? 'teal' : 'purple'));
   return out;
 }
 
 /* ---------- turning one operation into a checked step ---------- */
-export const mig = (def, sql, note) => ({
+/** One entry of the app's migration log. */
+export const mig = (def: { migrations: unknown[] }, sql: string, note: string): Migration => ({
   n: def.migrations.length + 1,
   at: Date.now(),
   by: 'database',
   sql,
   note,
 });
-export function renameEverywhere(app, t, old, nn) {
+export function renameEverywhere(app: AppRecord & { def: BackedDef }, t: AppTable, old: string, nn: string) {
   const def = app.def,
     P = def.process,
-    mv = (o) => {
+    mv = (o: Dict<unknown> | null | undefined) => {
       if (o && old in o) {
         o[nn] = o[old];
         delete o[old];
@@ -449,18 +462,18 @@ export function renameEverywhere(app, t, old, nn) {
         if (s[k] === old) s[k] = nn;
       });
     }
-    (s.widgets || []).forEach((w) => {
+    ((s.widgets || []) as Dict<Untrusted>[]).forEach((w) => {
       if (w.table === t.name) {
         if (w.column === old) w.column = nn;
         mv(w.where);
       }
     });
   });
-  (def.views[t.name] || []).forEach((v) => {
+  (def.views[t.name] || []).forEach((v: Dict<Untrusted>) => {
     ['by', 'lane', 'date', 'end', 'start', 'x', 'split', 'rows', 'cols', 'parent'].forEach((k) => {
       if (v[k] === old) v[k] = nn;
     });
-    if (v.levels) v.levels = v.levels.map((x) => (x === old ? nn : x));
+    if (v.levels) v.levels = v.levels.map((x: string) => (x === old ? nn : x));
     if (v.measure && v.measure.split(':')[1] === old) v.measure = v.measure.split(':')[0] + ':' + nn;
   });
   if (def.dash) {
@@ -476,7 +489,7 @@ export function renameEverywhere(app, t, old, nn) {
   def.tour.forEach((st) => {
     if ((st.table || P.table) === t.name) mv(st.values);
   });
-  arr(def.cases).forEach((c) =>
+  (def.cases || []).forEach((c) =>
     c.steps.forEach((st) => {
       if ((st.table || P.table) === t.name) mv(st.values);
     }),
@@ -484,16 +497,25 @@ export function renameEverywhere(app, t, old, nn) {
   def.actions.forEach((a) => {
     if (a.table === t.name && a.arg === old) a.arg = nn;
   });
-  arr(app.seed && app.seed.rows[t.name]).forEach((r) => mv(r));
+  arr<Row>(app.seed && app.seed.rows[t.name]).forEach((r) => mv(r));
 }
-export function planOne(app, o) {
+export interface PlannedStep {
+  station: string;
+  text: string;
+  sql?: string;
+  destructive?: boolean;
+  loss?: string;
+  run(ctx: { runN: number }): void;
+}
+type BackedApp = AppRecord & { def: BackedDef };
+const need = <X>(x: X, msg: string): NonNullable<X> => {
+  if (!x) throw new Error(msg);
+  return x as NonNullable<X>;
+};
+export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
   const def = app.def,
-    need = (x, msg) => {
-      if (!x) throw new Error(msg);
-      return x;
-    },
     roleIds = def.brief.roles.map((r) => r.id);
-  const T = (q) =>
+  const T = (q: string) =>
     need(
       findTable(def, q),
       'I could not find a table called "' + q + '". The tables are ' + def.tables.map((t) => t.label).join(', ') + '.',
@@ -506,10 +528,10 @@ export function planOne(app, o) {
         throw new Error(t.label + ' already has a ' + label(name).toLowerCase() + ' field.');
       if (t.columns.length >= LIMITS.cols) throw new Error(t.label + ' is at the limit of ' + LIMITS.cols + ' fields.');
       const type = TYPES.includes(o.type) ? o.type : TYPE_ALIAS[o.type] || 'text',
-        col = {
+        col: ColumnDef = {
           name,
           label: str(o.label) || label(o.name),
-          type,
+          type: type as ColumnType,
           required: false,
         };
       if (type === 'select') {
@@ -570,7 +592,7 @@ export function planOne(app, o) {
         station: 'database',
         text: 'Remove ' + c.label + ' from ' + t.label,
         sql,
-        destructive: n > 0,
+        destructive: Number(n) > 0,
         loss: n + ' stored value' + (n === 1 ? '' : 's') + ' will be deleted',
         run() {
           sqlRun(app.id, sql, null, 'database');
@@ -588,7 +610,7 @@ export function planOne(app, o) {
           def.tour.forEach((st) => {
             if ((st.table || def.process.table) === t.name && st.values) delete st.values[c.name];
           });
-          arr(def.cases).forEach((k) =>
+          (def.cases || []).forEach((k) =>
             k.steps.forEach((st) => {
               if ((st.table || def.process.table) === t.name && st.values) delete st.values[c.name];
             }),
@@ -635,12 +657,12 @@ export function planOne(app, o) {
           });
           c.type = 'select';
           c.options = opts;
-          const lab = {};
+          const lab: Dict<string> = {};
           vals.forEach((v) => {
             if (label(snake(v)) !== v) lab[snake(v)] = v;
           });
           if (Object.keys(lab).length) c.labels = lab;
-          (((app.seed || {}).rows || {})[t.name] || []).forEach((r) => {
+          arr<Row>(app.seed && app.seed.rows[t.name]).forEach((r) => {
             if (r[c.name] != null && r[c.name] !== '') r[c.name] = snake(String(r[c.name]));
           });
           def.migrations.push(mig(def, sql, 'Turned ' + t.name + '.' + c.name + ' into a choice'));
@@ -694,7 +716,7 @@ export function planOne(app, o) {
       need(roles.length, 'No role may use ' + t.label + ' that way yet.');
       const why = type === 'form' ? null : viewFit(def, t, type);
       if (why) throw new Error('A ' + VIEW_LABEL[type].toLowerCase() + ' of ' + t.label.toLowerCase() + ' ' + why + '.');
-      const scr = {
+      const scr: Screen = {
         id: 's' + (Math.max.apply(null, def.screens.map((s) => +s.id.slice(1) || 0).concat([0])) + 1),
         name: '',
         type,
@@ -711,7 +733,7 @@ export function planOne(app, o) {
       if (type === 'board') {
         if (by && by.type !== 'select')
           throw new Error('A board groups cards by a choice field. ' + by.label + ' is ' + TYPE_LABEL[by.type].toLowerCase() + '.');
-        scr.group = by ? by.name : viewCfg(def, t, 'board', {}).by;
+        scr.group = by ? by.name : (viewCfg(def, t, 'board', {}).by as string);
       }
       if (type === 'calendar' || type === 'timeline') {
         if (by && !isDate(by))
@@ -752,11 +774,11 @@ export function planOne(app, o) {
                           : {},
             );
       const isNew = type !== 'form' && !viewsOf(def, t).some((v) => v.type === type),
-        byText = by && ['chart', 'pivot', 'tree'].includes(type) ? ' by ' + by.label.toLowerCase() : '';
+        byText = by && ['chart', 'pivot', 'tree'].includes(type) ? ' by ' + String(by.label).toLowerCase() : '';
       let name =
         str(o.name) ||
         (type === 'board'
-          ? t.label + ' by ' + colOf(t, scr.group).label.toLowerCase()
+          ? t.label + ' by ' + String(colOf(t, scr.group)?.label).toLowerCase()
           : type === 'form'
             ? 'New ' + t.one.toLowerCase()
             : t.label + ' ' + VIEW_LABEL[type].toLowerCase() + byText);
@@ -794,12 +816,13 @@ export function planOne(app, o) {
     }
     case 'add_widget': {
       const t = T(o.table),
-        c = need(findCol(t, o.by), t.label + ' has no field called "' + o.by + '".');
+        c = need(findCol(t, o.by), t.label + ' has no field called "' + o.by + '".'),
+        dash = need(def.dash, 'This app has no dashboard.');
       need(isCat(c) || isDate(c), 'A chart needs a category or a date. ' + c.label + ' is ' + TYPE_LABEL[c.type].toLowerCase() + '.');
-      if (def.dash.widgets.length >= 10) throw new Error('The dashboard is full at 10 widgets.');
-      const w = {
+      if (dash.widgets.length >= 10) throw new Error('The dashboard is full at 10 widgets.');
+      const w: DashWidget = {
         kind: isDate(c) ? 'line' : 'bar',
-        label: t.label + ' by ' + c.label.toLowerCase(),
+        label: t.label + ' by ' + String(c.label).toLowerCase(),
         table: t.name,
         x: c.name,
         split: null,
@@ -811,10 +834,10 @@ export function planOne(app, o) {
         station: 'views',
         text: 'Add "' + w.label + '" to the dashboard as ' + (w.kind === 'line' ? 'a line over time' : 'bars'),
         run() {
-          def.dash.widgets.splice(
+          dash.widgets.splice(
             Math.max(
               0,
-              def.dash.widgets.findIndex((x) => x.kind === 'recent'),
+              dash.widgets.findIndex((x) => x.kind === 'recent'),
             ),
             0,
             w,
@@ -920,10 +943,10 @@ export function planOne(app, o) {
           t.label.toLowerCase() +
           (dropped.length ? ', and drop the tour step that expected a refusal' : ''),
         run() {
-          A[act] = v;
+          Object.assign(A, { [act]: v });
           if (dropped.length) def.tour = def.tour.filter((st) => !dropped.includes(st));
           if (allow)
-            def.cases = arr(def.cases)
+            def.cases = (def.cases || [])
               .map((k) =>
                 Object.assign({}, k, {
                   steps: k.steps.filter(
@@ -978,7 +1001,7 @@ export function planOne(app, o) {
       nt.columns.forEach((c) => {
         if (c.type === 'ref' && !tableOf(def, c.ref) && c.ref !== nt.name)
           throw new Error(nt.label + '.' + c.label + ' points to ' + c.ref + ', which does not exist.');
-        if (c.type === 'select' && !c.options.length) throw new Error(nt.label + '.' + c.label + ' is a choice with no options.');
+        if (c.type === 'select' && !(c.options || []).length) throw new Error(nt.label + '.' + c.label + ' is a choice with no options.');
       });
       need(nt.title, 'The new table needs at least one column.');
       const sql = createTableSQL(nt),
@@ -989,8 +1012,8 @@ export function planOne(app, o) {
         sql,
         run(ctx) {
           sqlRun(app.id, sql, null, 'database');
-          const problems = [],
-            ro = {};
+          const problems: string[] = [],
+            ro: Dict<Row[]> = {};
           ro[nt.name] = rows;
           insertSeed(app.id, [nt], ro, problems, 'database', def.users);
           if (problems.length) throw new Error(problems.slice(0, 3).join('; '));
@@ -1042,16 +1065,16 @@ export function planOne(app, o) {
       throw new Error('I do not know how to do "' + o.op + '".');
   }
 }
-export function planOps(app, ops) {
-  const steps = [],
-    errors = [];
+export function planOps(app: BackedApp, ops: Untrusted) {
+  const steps: PlannedStep[] = [],
+    errors: string[] = [];
   arr(ops)
     .slice(0, 6)
     .forEach((o) => {
       try {
         steps.push(planOne(app, o || {}));
       } catch (e) {
-        errors.push(String(e.message || e));
+        errors.push(errText(e));
       }
     });
   return {
@@ -1059,10 +1082,17 @@ export function planOps(app, ops) {
     errors,
   };
 }
-export const RECHECK = {
+/** What re-checking one station found. */
+export interface Recheck {
+  checks: Check[];
+  facts: string[];
+  issues?: string[];
+}
+type ChangeCtx = ToolContext & { runN: number; before?: Dict<number> };
+export const RECHECK: Dict<(app: BackedApp, ctx: ChangeCtx, steps: PlannedStep[]) => Recheck> = {
   database(app, ctx, steps) {
     const migs = steps.filter((s) => s.sql),
-      checks = migs.map((s) => chk('Migration ran', true, s.sql.replace(/\s+/g, ' ').slice(0, 110)));
+      checks = migs.map((s) => chk('Migration ran', true, String(s.sql).replace(/\s+/g, ' ').slice(0, 110)));
     if (!checks.length) checks.push(chk('No table changes needed', true, ''));
     checks.push(
       checkLinks(
@@ -1072,14 +1102,15 @@ export const RECHECK = {
         }),
       ),
     );
-    const lost = Object.keys(ctx.before).filter((n) => tableOf(app.def, n) && dbCount(app.id, n) !== ctx.before[n]);
+    const before = ctx.before || {},
+      lost = Object.keys(before).filter((n) => tableOf(app.def, n) && dbCount(app.id, n) !== before[n]);
     checks.push(
       chk(
         'No rows were lost',
         !lost.length,
         lost.length
           ? 'row count changed in ' + lost.join(', ')
-          : app.def.tables.reduce((n, t) => n + dbCount(app.id, t.name), 0) + ' rows still in place',
+          : app.def.tables.reduce((n, t) => n + Number(dbCount(app.id, t.name)), 0) + ' rows still in place',
       ),
     );
     return {
@@ -1141,7 +1172,7 @@ export const RECHECK = {
     };
   },
 };
-export function applyChangeSync(app, steps, ctx) {
+export function applyChangeSync(app: BackedApp, steps: PlannedStep[], ctx: ChangeCtx) {
   // apply everything inside one savepoint, re-check every station from the first one touched, roll back if any check fails
   const backup = JSON.stringify({
     def: app.def,
@@ -1156,11 +1187,11 @@ export function applyChangeSync(app, steps, ctx) {
       null,
       steps.map((s) => stationIdx(s.station)),
     ),
-    per = {};
-  let failed = null;
-  ctx.before = {};
+    per: Dict<Recheck & { issues: string[] }> = {};
+  let failed: string | null = null;
+  const before: Dict<number> = (ctx.before = {});
   app.def.tables.forEach((t) => {
-    ctx.before[t.name] = dbCount(app.id, t.name);
+    before[t.name] = Number(dbCount(app.id, t.name));
   });
   dbSavepoint(app.id, 'chg');
   try {
@@ -1173,9 +1204,9 @@ export function applyChangeSync(app, steps, ctx) {
           ctx,
           steps.filter((s) => s.station === id),
         );
-      r.issues = issuesOf(r.checks);
-      per[id] = r;
-      if (r.issues.length) {
+      const issues = issuesOf(r.checks);
+      per[id] = Object.assign(r, { issues });
+      if (issues.length) {
         failed = id;
         break;
       }
@@ -1184,8 +1215,8 @@ export function applyChangeSync(app, steps, ctx) {
     console.error(e);
     failed = failed || STATIONS[first].id;
     per[failed] = {
-      checks: [chk('The change could be applied', false, String(e.message || e))],
-      issues: [String(e.message || e)],
+      checks: [chk('The change could be applied', false, errText(e))],
+      issues: [errText(e)],
       facts: [],
     };
   }
@@ -1207,13 +1238,13 @@ export function applyChangeSync(app, steps, ctx) {
     failed,
   };
 }
-export async function runChange(app, steps, title) {
+export async function runChange(app: BackedApp, steps: PlannedStep[], title: string) {
   const run = newRun(app, 'change', title, liveModelOn() ? 'live' : 'demo'),
     ctl = (RUNS[app.id] = {
       stop: false,
       runId: run.id,
     }),
-    ctx = {
+    ctx: ChangeCtx = {
       agent: 'orchestrator',
       runId: run.id,
       appId: app.id,
@@ -1226,7 +1257,7 @@ export async function runChange(app, steps, title) {
   });
   const res = applyChangeSync(app, steps, ctx),
     first = res.first,
-    keep = {};
+    keep: Dict<Partial<StationLine>> = {};
   STATIONS.forEach((st, i) => {
     const L = app.line[st.id];
     keep[st.id] = {
@@ -1325,7 +1356,7 @@ export async function runChange(app, steps, title) {
       app.line[st.id].status = 'ok';
     });
     steps.forEach((s) => logChange(app, s.text, s.station));
-    const ts = runTestsSync(app);
+    const ts = runTestsSync(app, undefined);
     run.status = 'ok';
     say(
       app,
@@ -1355,7 +1386,7 @@ export async function runChange(app, steps, title) {
   });
   commit();
 }
-export function askApproval(app, steps) {
+export function askApproval(app: BackedApp, steps: PlannedStep[]): Promise<boolean> {
   // human in the loop: nothing that loses data runs without a yes
   const m = say(app, 'database', 'This change deletes data, so I need your approval first.', {
     type: 'approval',
@@ -1373,7 +1404,7 @@ export function askApproval(app, steps) {
   return new Promise((resolve) => {
     PENDING[app.id] = (ok) => {
       delete PENDING[app.id];
-      m.card.decided = ok ? 'approved' : 'declined';
+      if (m.card) m.card.decided = ok ? 'approved' : 'declined';
       pushChat(app, 'user', ok ? 'Approved' : 'Keep the data');
       emit('CUSTOM', {
         name: 'resume',
@@ -1387,7 +1418,7 @@ export function askApproval(app, steps) {
     };
   });
 }
-export function changePrompt(app, text) {
+export function changePrompt(app: BackedApp, text: string) {
   const def = app.def;
   return (
     HEAD('Orchestrator') +
@@ -1410,14 +1441,14 @@ export function changePrompt(app, text) {
 }
 export const DEMO_HELP =
   'In Demo mode I understand a fixed set of changes: add, rename or remove a field, turn a text field into a choice, add a page in any view (table, board, calendar, timeline, chart, pivot, tree, cards), add a chart to the dashboard, change who may see, create, edit or delete a table, change the colour, navigation or density, rename the app, and reset the data. Try one of the suggestions below, or switch to Live for anything else.';
-export async function handleChat(app, text, opt) {
+export async function handleChat(app: BackedApp, text: string, opt?: { rules?: boolean }) {
   // opt.rules: read this message with the built-in rules whatever the mode (a reviewer's fix that was tried out that way)
   text = str(text);
   if (!text) return;
   const r = RUNS[app.id];
-  if (r && r.answer) {
-    const q = app.def.brief.question,
-      i = /^\d$/.test(text) ? +text - 1 : q.options.findIndex((o) => o.toLowerCase().indexOf(text.toLowerCase()) >= 0);
+  const q = app.def.brief.question;
+  if (r && r.answer && q) {
+    const i = /^\d$/.test(text) ? +text - 1 : q.options.findIndex((o) => o.toLowerCase().indexOf(text.toLowerCase()) >= 0);
     if (i >= 0 && i < q.options.length) return answerQuestion(app, i);
     pushChat(app, 'user', text);
     say(app, 'researcher', 'Pick one of the options on the card so I can continue.');
@@ -1444,7 +1475,7 @@ export async function handleChat(app, text, opt) {
   if (TEAMS[app.id] && TEAMS[app.id].status === 'running')
     return void say(app, 'orchestrator', "The app's own agents are in the middle of a run. I will take changes when they have finished.");
   if (app.status !== 'ready') return void say(app, 'orchestrator', 'The app is not built yet. Use Run again above the line.');
-  let plan;
+  let plan: ParsedChange & { mode?: string };
   const mode =
     opt && opt.rules
       ? {
@@ -1484,10 +1515,10 @@ export async function handleChat(app, text, opt) {
     U.busy = app.id;
     notify();
     try {
-      plan = await callModel(app, tmp, 'orchestrator', changePrompt(app, text), 1);
+      plan = (await callModel(app, tmp, 'orchestrator', changePrompt(app, text), 1)) as ParsedChange;
     } catch (e) {
       plan = {
-        reply: e instanceof Stopped ? 'Stopped.' : 'I could not read that: ' + e.message,
+        reply: e instanceof Stopped ? 'Stopped.' : 'I could not read that: ' + errText(e),
       };
     }
     delete RUNS[app.id];
@@ -1535,10 +1566,10 @@ export async function handleChat(app, text, opt) {
 }
 
 /* ---------- the build pack: one document generated from the canvas state ---------- */
-export function buildPack(app) {
+export function buildPack(app: BackedApp) {
   const def = app.def,
     b = def.brief,
-    L = [],
+    L: string[] = [],
     eps = deriveEndpoints(def),
     run = app.runs[app.runs.length - 1];
   L.push(
@@ -1608,7 +1639,7 @@ export function buildPack(app) {
     ),
   );
   if (def.team) {
-    const tr = (id) => (def.process.transitions.find((x) => x.id === id) || {}).label;
+    const tr = (id: string | null) => def.process.transitions.find((x) => x.id === id)?.label;
     L.push(
       '',
       "## The app's own agents: " + def.team.title,
@@ -1643,7 +1674,7 @@ export function buildPack(app) {
       L.push(
         '',
         'Human in the loop: the run pauses before ' +
-          (def.team.agents.find((a) => a.id === def.team.pause.before) || {}).name +
+          def.team.agents.find((a) => a.id === def.team?.pause?.before)?.name +
           ' so a person can add a point.',
       );
   }
@@ -1736,14 +1767,15 @@ export function buildPack(app) {
     if (fl.notes[a]) L.push('- Instruction for ' + agentThe(a, true) + ': “' + fl.notes[a] + '”');
   });
   Object.keys(app.reviews || {}).forEach((id) => {
-    const R = app.reviews[id];
-    if (!R || R.status !== 'ok' || !REVIEWERS[id]) return;
-    L.push('', '**' + REVIEWERS[id].name + '** (' + (R.by === 'model' ? 'one model call' : 'built-in rules') + ')', '');
+    const R = app.reviews[id],
+      who = (REVIEWERS as Dict<{ name: string }>)[id];
+    if (!R || R.status !== 'ok' || !who) return;
+    L.push('', '**' + who.name + '** (' + (R.by === 'model' ? 'one model call' : 'built-in rules') + ')', '');
     if (!R.findings.length) L.push('- Nothing to change.');
     R.findings.forEach((f) =>
       L.push(
         '- ' +
-          (LEVELS[f.level] || LEVELS.low).text +
+          ((LEVELS as Dict<{ text: string }>)[String(f.level)] || LEVELS.low).text +
           ': ' +
           f.text +
           (f.fix
