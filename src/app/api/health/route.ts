@@ -1,19 +1,23 @@
 /**
- * GET /api/health: is the app up, and is a model configured. Costs nothing.
+ * GET /api/health: is the app up, and is a model configured. Costs nothing. Also shows the effort of each tier and
+ *   `spend`: tokens, cache hits and cost of this server instance's model calls, beside the budget.
  * GET /api/health?probe=1: also makes one real tool call through the active provider (on the fast model) and reports
  *   pass or fail, how long it took, and whether tools go natively or by the JSON protocol. `probe=tools` is the same.
  *
  * Probes spend a little of the model budget, so they go through the same limits as every other model call.
  * Never returns a key, a gateway address or anything else that is secret. Model names are not secret.
  */
-import { limiter, visitorOf } from '@/server/guard/limits';
-import { LlmError, resolveProvider, type Provider } from '@/server/llm';
+import { limiter, lightLimiter, lightLimitsFrom } from '@/server/guard/limits';
+import { refuseVerdict, visitorKey } from '@/server/guard/http';
+import { EFFORT_BY_TIER, LlmError, resolveProvider, usageTotals, type Provider } from '@/server/llm';
 import pkg from '../../../../package.json';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
+  const light = lightLimiter.take(visitorKey(request), lightLimitsFrom());
+  if (!light.ok) return refuseVerdict(light);
   const provider = resolveProvider();
   const out: Record<string, unknown> = {
     ok: true,
@@ -23,14 +27,17 @@ export async function GET(request: Request) {
     live: !!provider,
     provider: provider?.id ?? null,
     models: provider ? { default: provider.model('default'), quick: provider.model('quick') } : null,
+    effort: provider ? EFFORT_BY_TIER : null,
     usage: limiter.usage(),
+    // Tokens and cost of the model calls this server instance has made since it started, against the budget.
+    spend: usageTotals(),
     time: new Date().toISOString(),
   };
 
   // ?probe=1 (or ?probe=tools): one real tool-call round trip. Spends a little of the model budget, so it is limited
   // like every other model call.
   if (new URL(request.url).searchParams.get('probe')) {
-    const verdict = limiter.take('probe:' + visitorOf(request));
+    const verdict = limiter.take('probe:' + visitorKey(request));
     out.probe = !verdict.ok
       ? { ok: false, error: verdict.message }
       : provider
@@ -49,7 +56,8 @@ async function toolProbe(provider: Provider) {
     for await (const chunk of provider.stream({
       messages: [{ role: 'user', content: 'Add a note node titled Hello to the canvas.' }],
       tier: 'quick',
-      maxTokens: 200,
+      maxTokens: 1024, // current Claude models think before answering
+      cache: false,
       tools: [
         {
           name: 'add_canvas_node',

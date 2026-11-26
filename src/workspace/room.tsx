@@ -5,7 +5,7 @@ import { VIEW_ICON, accOf, apiCall, chk, colOf, roleName, tableOf, tourValues } 
 import { DATA_VIEWS } from './viewspec';
 import { REC, allConnectors, connOn } from './builds';
 import { TEAMS, TeamAv, canRunTeam, runTeam, sameText, stopTeam, teamBlock, teamCase, teamJump } from './team';
-import { Avatar, Empty, Icon, MBar, Proto, Spinner } from './ui';
+import { Btn, Avatar, Empty, Icon, MBar, Proto, Spinner } from './ui';
 import { FieldInput, cellText, fetchApi, formCols, isStatusCol, optLabel, rowTitle, saveForm, stateLabel, stateTone } from './runtime';
 import { vxState } from './views-a';
 
@@ -864,10 +864,10 @@ export function TeamConsole({ app, user, pane, scr }) {
           <span className="t-cap muted">{team.about}</span>
         </div>
         {running && (
-          <button className="btn" onClick={() => stopTeam(app)}>
+          <Btn className="btn" onClick={() => stopTeam(app)}>
             <Icon n="stop" s="16" />
             Stop
-          </button>
+          </Btn>
         )}
       </div>
       <ol className="team-flow" aria-label="The agents, in the order they work">
@@ -960,7 +960,7 @@ export function TeamConsole({ app, user, pane, scr }) {
                 tone="warning"
                 action={
                   block.fix ? (
-                    <button
+                    <Btn
                       type="button"
                       className="btn sm"
                       onClick={() => {
@@ -971,7 +971,7 @@ export function TeamConsole({ app, user, pane, scr }) {
                       }}
                     >
                       Switch on
-                    </button>
+                    </Btn>
                   ) : null
                 }
               >
@@ -979,10 +979,10 @@ export function TeamConsole({ app, user, pane, scr }) {
               </MBar>
             ) : null}
             <div className="row">
-              <button className="btn primary" type="submit" disabled={running || !acc.create}>
+              <Btn className="btn primary" type="submit" disabled={running || !acc.create}>
                 <Icon n="play" s="16" />
                 Run the agents
-              </button>
+              </Btn>
               <span className="t-cap muted">
                 {liveModelOn()
                   ? 'Live: each agent makes its own model call'
@@ -1012,7 +1012,7 @@ export function TeamConsole({ app, user, pane, scr }) {
                         </button>
                         <span className={'badge b-' + stateTone(def, it, sc, r[P.column])}>{stateLabel(def, it, sc, r[P.column])}</span>
                         {r[P.column] === P.initial && may ? (
-                          <button
+                          <Btn
                             className="btn sm"
                             disabled={running || !!b}
                             title={
@@ -1026,7 +1026,7 @@ export function TeamConsole({ app, user, pane, scr }) {
                           >
                             <Icon n="play" s="16" />
                             Run
-                          </button>
+                          </Btn>
                         ) : null}
                       </span>
                     </li>
@@ -1062,9 +1062,9 @@ export function TeamConsole({ app, user, pane, scr }) {
                   <h3 className="t-sub2 case-title">{rowTitle(app, user, it, row)}</h3>
                 </div>
                 <span className={'badge b-' + stateTone(def, it, sc, row[P.column])}>{stateLabel(def, it, sc, row[P.column])}</span>
-                <button className="btn subtle sm" onClick={() => openRec(it.name, row.id)}>
+                <Btn className="btn subtle sm" onClick={() => openRec(it.name, row.id)}>
                   Open
-                </button>
+                </Btn>
               </div>
               {intro && <p className="case-text">{intro}</p>}
               {extra.map((c) => (
@@ -1092,15 +1092,15 @@ export function TeamConsole({ app, user, pane, scr }) {
                   {team.jump && (
                     <form className="row" onSubmit={jump}>
                       <NativeField as="input" className="input grow" aria-label={team.jump.label} placeholder={team.jump.label} />
-                      <button className="btn sm" type="submit">
+                      <Btn className="btn sm" type="submit">
                         Add
-                      </button>
+                      </Btn>
                     </form>
                   )}
                   <div className="row">
-                    <button className="btn primary sm" onClick={() => T.resume && T.resume()}>
+                    <Btn className="btn primary sm" onClick={() => T.resume && T.resume()}>
                       Continue
-                    </button>
+                    </Btn>
                   </div>
                 </div>
               )}
@@ -1122,10 +1122,10 @@ export function TeamConsole({ app, user, pane, scr }) {
                     </span>
                   </div>
                   {may && (
-                    <button className="btn primary" disabled={running || !!rb} onClick={() => go(row)}>
+                    <Btn className="btn primary" disabled={running || !!rb} onClick={() => go(row)}>
                       <Icon n="play" s="16" />
                       Run the agents
-                    </button>
+                    </Btn>
                   )}
                 </div>
               )}
@@ -1178,16 +1178,16 @@ export function TeamConsole({ app, user, pane, scr }) {
                     {(tables.length > 0 || trs.length > 0) && (
                       <div className="row wrap">
                         {trs.map((tr) => (
-                          <button key={tr.id} className="btn sm primary" onClick={() => act(tr)}>
+                          <Btn key={tr.id} className="btn sm primary" onClick={() => act(tr)}>
                             {tr.label}
-                          </button>
+                          </Btn>
                         ))}
                         {tables.map((tn) => (
-                          <button key={tn} className="btn sm" onClick={() => see(tn)}>
+                          <Btn key={tn} className="btn sm" onClick={() => see(tn)}>
                             <Icon n={page(tn).icon} s="16" />
                             {'See the '}
                             {tableOf(def, tn).label.toLowerCase()}
-                          </button>
+                          </Btn>
                         ))}
                       </div>
                     )}
@@ -1197,9 +1197,9 @@ export function TeamConsole({ app, user, pane, scr }) {
               {!outcome && !fresh && trs.length > 0 && (
                 <div className="row wrap">
                   {trs.map((tr) => (
-                    <button key={tr.id} className="btn sm" onClick={() => act(tr)}>
+                    <Btn key={tr.id} className="btn sm" onClick={() => act(tr)}>
                       {tr.label}
-                    </button>
+                    </Btn>
                   ))}
                 </div>
               )}
@@ -1225,9 +1225,9 @@ export function TeamConsole({ app, user, pane, scr }) {
                     aria-label={team.jump.label}
                     placeholder={team.jump.label + ' while they work'}
                   />
-                  <button className="btn sm" type="submit">
+                  <Btn className="btn sm" type="submit">
                     Add
-                  </button>
+                  </Btn>
                 </form>
               )}
               {mine && T.status === 'failed' && <MBar tone="danger">{T.error}</MBar>}

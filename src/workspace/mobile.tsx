@@ -29,7 +29,7 @@ import { appUsers, roleName } from './engine';
 import { testStats } from './tests';
 import { AGENTS, PENDING, RUNS, STATIONS, deleteApp, resetAppData } from './line';
 import { REVIEWERS, flowOf } from './custom';
-import { Avatar, Empty, Icon, Logo } from './ui';
+import { Btn, Avatar, Empty, Icon, Logo } from './ui';
 import { startWalk } from './runtime';
 import { enterSolo, openShare } from './share';
 import { AppLogo, isDirty, relOf } from './release';
@@ -128,9 +128,9 @@ export function Sheet({ title, sub, onClose, children, cls, tall }) {
               <h2 className="t-sub2">{title}</h2>
               {sub && <span className="t-cap muted">{sub}</span>}
             </div>
-            <button className="btn subtle icon" aria-label="Close" onClick={onClose}>
+            <Btn className="btn subtle icon" aria-label="Close" onClick={onClose}>
               <Icon n="dismiss" />
-            </button>
+            </Btn>
           </header>
         </div>
         <div className="sheet-body">{children}</div>
@@ -390,10 +390,10 @@ export function AppLauncher({ app }) {
         <AppLogo app={app} size={72} />
         <h2 className="t-sub1">{app.name}</h2>
         <p className="muted">{def.brief ? def.brief.summary : app.request}</p>
-        <button className="btn primary lg" onClick={() => open(null)}>
+        <Btn className="btn primary lg" onClick={() => open(null)}>
           <Icon n="open" />
           Open the app
-        </button>
+        </Btn>
         <span className="t-cap muted">Opens full screen, the way someone you share it with sees it.</span>
       </div>
       <div className="sheet-h">Open as</div>
@@ -474,9 +474,9 @@ export function PhoneSheets({ app }) {
                     selectTab(t.id);
                   }}
                 />
-                <button className="btn subtle icon" aria-label={'Close ' + (a ? a.name : 'tab')} onClick={() => closeTab(t.id)}>
+                <Btn className="btn subtle icon" aria-label={'Close ' + (a ? a.name : 'tab')} onClick={() => closeTab(t.id)}>
                   <Icon n="dismiss" />
-                </button>
+                </Btn>
               </div>
             );
           })}
