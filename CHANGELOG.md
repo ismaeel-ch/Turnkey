@@ -5,6 +5,21 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+### Added
+
+- Motion that follows Fluent 2, in the workspace and in built apps: a quick fade between views and pages, lists and
+  cards that come in one after another, cards and rows that answer the pointer, and dialogs, toasts, the record
+  panel and the form of a built app that play a short exit when closed. Every duration and curve is a Fluent token,
+  and nothing moves when the device asks for reduced motion. ([#292](https://github.com/ismaeel-ch/Turnkey/pull/292))
+
+### Changed
+
+- The main action comes first in every dialog and form ("Create" then "Cancel"), as Fluent 2 asks, and a dialog
+  with a button that closes it no longer has a Close icon as well. "Release version 1.0 and make the link" is
+  "Release and share". ([#292](https://github.com/ismaeel-ch/Turnkey/pull/292))
+- Paddings and gaps are steps of Fluent 2's spacing ramp, and small controls have 44 px of touch room on a phone.
+  ([#292](https://github.com/ismaeel-ch/Turnkey/pull/292))
+
 ## [0.5.6] - 2026-11-27
 
 The workspace follows Fluent 2's type ramp, corner radii and control sizes.

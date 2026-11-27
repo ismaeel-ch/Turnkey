@@ -1226,7 +1226,7 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   const gn = await st(page, () => window.__formwork.guide()); check('the feature guide lists every feature', gn >= 25 && await page.locator('.guide-i').count() === gn, gn); await shot(page, '98-guide');
   await page.fill('#guide-q', 'share'); await sleep(150); const few = await page.locator('.guide-i').count(); await page.fill('#guide-q', 'test suite'); await sleep(150);
   await page.locator('.guide-i .btn', { hasText: 'Open the tests' }).click(); await page.waitForSelector('.tests-view');
-  check('the guide can be searched, and Show me jumps to the feature', few > 0 && few < gn && await page.locator('.dialog').count() === 0);
+  await page.waitForFunction(() => !document.querySelector('.dialog'), null, { timeout: 2000 }).catch(() => {}); check('the guide can be searched, and Show me jumps to the feature', few > 0 && few < gn && await page.locator('.dialog').count() === 0);
   await ctx.close();
   // React Flow blocked: the plain line of stations takes over
   const n2 = await newPage(browser, { init: NO_CANVAS }), c2 = n2.ctx, p2 = n2.page; await enter(p2, url); await setSpeed(p2, 'instant'); await buildTpl(p2, 'leave'); await sleep(500);
@@ -1242,7 +1242,7 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   check('phone: Data, API, Connections and the app actions are under More', ['Data', 'API', 'Connections', 'Share by link', 'Delete app'].every((x) => more.some((m) => m.indexOf(x) === 0)), more);
   await pp.locator('.sheet-i', { hasText: 'Share by link' }).click(); await pp.waitForSelector('.dialog.share'); await sleep(450); const db = await pp.locator('.dialog.share').boundingBox();
   check('phone: dialogs rise from the bottom as sheets', db.width === 390 && Math.round(db.y + db.height) === 844, db);
-  await pp.locator('.dialog .dhead .btn').click(); await sleep(200); await pp.locator('.titlebar .acct').click(); await pp.waitForSelector('.sheet'); const menu = await pp.locator('.sheet .sheet-l').allInnerTexts();
+  await pp.locator('.dialog .dfoot .btn', { hasText: 'Not now' }).click(); await sleep(400); await pp.locator('.titlebar .acct').click(); await pp.waitForSelector('.sheet'); const menu = await pp.locator('.sheet .sheet-l').allInnerTexts();
   check('phone: the menu holds Live, Online, Debug, the guide and the account', ['Live', 'Online', 'Debug mode', 'Feature guide', 'Sign out'].every((x) => menu.includes(x)), menu); await shot(pp, '99c-phone-menu');
   await ph.ctx.close();
   await firstUse(browser, url);
@@ -2051,7 +2051,7 @@ async function flowReact(browser, url) {
   check('choosing from a select runs its handler once, and the field shows the choice', sel.calls === 1 && sel.v !== '', sel);
   await page.focus('#sh-as'); await page.keyboard.press('Escape'); await sleep(250); // the Release button that had focus is gone from the page, so focus goes back into the dialog first
   check('Escape closes the dialog', await page.locator('.dialog.share').count() === 0);
-  await page.locator('[data-tour="share"]').click(); await page.waitForSelector('.dialog.share'); await page.locator('.dialog .dhead .btn').click(); await sleep(150);
+  await page.locator('[data-tour="share"]').click(); await page.waitForSelector('.dialog.share'); await page.locator('.dialog .dhead .btn').click(); await sleep(400);
   check('the Close button closes it too, and a dialog can be opened again', await page.locator('.dialog').count() === 0);
   await st(page, () => { window.__changeCalls = 0; });
   const sw = page.locator('#sw-live'), on0 = await sw.isChecked(), dis = await sw.isDisabled();

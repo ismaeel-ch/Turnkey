@@ -78,18 +78,30 @@ export function ToastMotion({ children }: { children: ReactElement[] }) {
 const Closing = createContext(false);
 /** False once the dialog around this has been closed and is on its way out. */
 export const useDialogOpen = () => !useContext(Closing);
-// Fluent's dialog surface leaves in durationGentle; a little over that, and the closed dialog is dropped
-const DIALOG_OUT = motionTokens.durationGentle + 50;
+/** How a dialog leaves: sooner than it came, accelerating (Fluent's own default takes as long out as in). */
+export const DIALOG_EXIT = { exitDuration: motionTokens.durationFast, exitEasing: OUT };
+// a little over the exit, and the closed dialog is dropped
+const DIALOG_OUT = motionTokens.durationFast + 50;
 
 export function DialogMotion({ children }: { children?: ReactElement | null }) {
-  const [last, setLast] = useState<ReactElement | null>(children || null);
-  if (children && children !== last) setLast(children);
+  // `nth` counts openings: a dialog opened while the last one is still leaving starts afresh, with its own state
+  const [held, setHeld] = useState<{ el: ReactElement | null; open: boolean; nth: number }>({
+    el: children || null,
+    open: !!children,
+    nth: 0,
+  });
+  if (children ? children !== held.el || !held.open : held.open)
+    setHeld({ el: children || held.el, open: !!children, nth: held.nth + (children && !held.open ? 1 : 0) });
   useEffect(() => {
-    if (children || !last) return;
-    const t = setTimeout(() => setLast(null), DIALOG_OUT);
+    if (held.open || !held.el) return;
+    const t = setTimeout(() => setHeld((h) => (h.open ? h : { ...h, el: null })), DIALOG_OUT);
     return () => clearTimeout(t);
-  }, [children, last]);
-  const el: ReactNode = children || last;
+  }, [held.open, held.el]);
+  const el: ReactNode = children || held.el;
   if (!el) return null;
-  return <Closing.Provider value={!children}>{el}</Closing.Provider>;
+  return (
+    <Closing.Provider key={held.nth} value={!children}>
+      {el}
+    </Closing.Provider>
+  );
 }

@@ -61,7 +61,7 @@ import { NativeField } from '@/platform/dom';
 import { ICONS } from './icons';
 import { accFor, cx, initials } from './core';
 import { AGENTS } from './line';
-import { useDialogOpen } from './motion';
+import { DIALOG_EXIT, useDialogOpen } from './motion';
 
 /* ===== Turnkey prototype · small Fluent-style building blocks ===== */
 /** A class name part that may be left out. */
@@ -612,6 +612,8 @@ export function refocus(targets: string[], within?: ParentNode | null) {
   if (typeof document === 'undefined') return;
   let n = 0;
   const look = () => {
+    // a dialog on its way out still holds the focus for a moment: wait for it to go
+    if (document.activeElement?.closest('[data-closing]')) return void (++n < 24 && setTimeout(look, 50));
     if (!focusLost()) return;
     const root = within && (within as Node).isConnected ? within : document;
     for (const sel of targets) {
@@ -684,12 +686,13 @@ export function Dialog({
   return (
     <FluentDialog
       open={open}
+      surfaceMotion={DIALOG_EXIT}
       modalType="modal"
       onOpenChange={(e, d) => {
         if (open && !d.open && onClose) onClose();
       }}
     >
-      <DialogSurface className={cx('dialog', wide && 'wide', cls)}>
+      <DialogSurface className={cx('dialog', wide && 'wide', cls)} backdropMotion={DIALOG_EXIT} data-closing={open ? undefined : ''}>
         <DialogBody className={cx('dlg', !acts.length && 'no-foot')}>
           <div className="dhead">
             <DialogTitle as="h2" className="t-sub1 grow">
