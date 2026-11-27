@@ -92,11 +92,12 @@ export function fmtTokens(n: number): string {
   return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
 }
 
-/** "12.4k tokens · 63% from cache · $0.0042", the parts that apply. */
+/** "12.4k tokens · 63% from cache · $0.0042", the parts that apply. Calls the server could not price are named. */
 export function usageLine(u: UsageSum): string {
   const parts = [fmtTokens(promptTokens(u) + u.output) + ' tokens'];
   const rate = cacheRate(u);
   if (rate !== null && u.cacheRead > 0) parts.push(Math.round(rate * 100) + '% from cache');
   parts.push((u.estimated ? '~' : '') + fmtUsd(u.costUsd));
+  if (u.unpriced > 0) parts.push(u.unpriced + (u.unpriced === 1 ? ' call' : ' calls') + ' not priced');
   return parts.join(' · ');
 }
