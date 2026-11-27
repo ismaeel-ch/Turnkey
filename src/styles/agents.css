@@ -4,7 +4,7 @@
 /* agent avatars: a presence dot while the agent is working */
 .msg-av,.chat-av{position:relative;display:inline-flex;flex:none}
 .msg-av .av{width:28px;height:28px;border-radius:var(--borderRadiusLarge)}
-.msg-av.live::after,.chat-av.live::after{content:"";position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--colorPaletteLightGreenBackground3,#13a10e);border:2px solid var(--colorNeutralBackground2);animation:ag-pulse 1.6s ease-in-out infinite}
+.msg-av.live::after,.chat-av.live::after{content:"";position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--colorPaletteLightGreenBackground3);border:2px solid var(--colorNeutralBackground2);animation:ag-pulse 1.6s ease-in-out infinite}
 .chat-head .chat-av.live::after{border-color:var(--colorNeutralBackground1)}
 .chat-avs{display:flex;align-items:center;gap:4px}
 .chat-av.live::after{width:8px;height:8px}
@@ -18,10 +18,10 @@
 .chat-now.n-ask .chat-now-t>span{color:var(--colorStatusWarningForeground1);font-weight:600}
 .chat-now-n{flex:none;font-variant-numeric:tabular-nums}
 .chat-now-bar{display:flex;gap:3px}.chat-now-bar i{flex:1;height:4px;border-radius:2px;background:var(--colorNeutralBackground5)}
-.chat-now-bar .s-ok{background:var(--colorStatusSuccessForeground3,var(--colorStatusSuccessForeground1))}
+.chat-now-bar .s-ok{background:var(--colorStatusSuccessForeground3)}
 .chat-now-bar .s-working,.chat-now-bar .s-checking{background:linear-gradient(90deg,var(--colorBrandStroke2),var(--colorBrandBackground),var(--colorBrandStroke2));background-size:200% 100%;animation:ag-slide 1.4s linear infinite}
-.chat-now-bar .s-waiting{background:var(--colorStatusWarningForeground3,var(--colorStatusWarningBorderActive))}
-.chat-now-bar .s-failed,.chat-now-bar .s-sentback{background:var(--colorStatusDangerForeground1)}
+.chat-now-bar .s-waiting,.chat-now-bar .s-sentback{background:var(--colorStatusWarningForeground3)}
+.chat-now-bar .s-failed{background:var(--colorStatusDangerForeground1)}
 @keyframes ag-slide{to{background-position:-200% 0}}
 
 /* the thin line where one agent hands over to the next */

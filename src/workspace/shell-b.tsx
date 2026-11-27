@@ -1460,7 +1460,7 @@ function handoversOf(chat: ChatMessage[]): Set<string> {
 /** The agent whose station is working or being checked right now, if a build is running. */
 function workingAgent(app: AppRecord): string | null {
   if (!RUNS[app.id]) return null;
-  const st = STATIONS.find((s) => ['working', 'checking'].includes(app.line[s.id].status));
+  const st = STATIONS.find((s) => ['working', 'checking', 'sentback'].includes(app.line[s.id].status));
   return st ? st.agent : null;
 }
 /** The strip under the chat's title: who is working on what, one segment per station, and where the build stands. */
@@ -1469,7 +1469,7 @@ function ChatNow({ app }: { app: AppRecord }) {
     lines = STATIONS.map((s) => ({ s, st: app.line[s.id].status })),
     done = lines.filter((x) => x.st === 'ok').length,
     wait = lines.find((x) => x.st === 'waiting'),
-    on = lines.find((x) => x.st === 'working' || x.st === 'checking'),
+    on = lines.find((x) => x.st === 'working' || x.st === 'checking' || x.st === 'sentback'),
     bad = lines.find((x) => x.st === 'failed');
   if (!busy && app.status !== 'ready' && app.status !== 'failed') return null;
   const tone = wait ? 'ask' : busy ? 'on' : app.status === 'failed' ? 'bad' : 'ok';
@@ -1479,7 +1479,9 @@ function ChatNow({ app }: { app: AppRecord }) {
     : on
       ? on.st === 'checking'
         ? 'Checking the ' + on.s.makes.toLowerCase()
-        : 'Making the ' + on.s.makes.toLowerCase()
+        : on.st === 'sentback'
+          ? 'Fixing the ' + on.s.makes.toLowerCase()
+          : 'Making the ' + on.s.makes.toLowerCase()
       : busy
         ? done === lines.length
           ? 'Testing every rule'
