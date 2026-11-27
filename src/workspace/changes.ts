@@ -781,14 +781,6 @@ export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
         };
       if (colOf(t, nn) || ['id', 'created_at', 'created_by'].includes(nn))
         throw new Error(t.label + ' already has a field called ' + lab + '.');
-      const readBy = usesOfField(def, t.name, c.name);
-      if (readBy.length)
-        throw new Error(
-          c.label +
-            ' is used by ' +
-            readBy.slice(0, 2).join(' and ') +
-            ', which reads it by name. Ask for a new label instead, or change that first.',
-        );
       const sql = 'ALTER TABLE ' + qi(t.name) + ' RENAME COLUMN ' + qi(c.name) + ' TO ' + qi(nn);
       return {
         station: 'database',
