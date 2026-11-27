@@ -308,7 +308,11 @@ async function liveBuild(browser, errors) {
     });
     const started = Date.now();
     await page.fill('#home-prompt', CLINIC);
-    await page.locator('.prompt .btn.primary').click();
+    await page.locator('#home-go').click();
+    // the Planner's questions come first: take the usual choices, then approve the plan it writes
+    await page.waitForSelector('.iv-ask, .iv-act .iv-build', { timeout: 3 * 60 * 1000 });
+    if (await page.locator('.iv-usual').count()) await page.locator('.iv-usual').click();
+    await page.locator('.iv-act .iv-build').click({ timeout: 3 * 60 * 1000 });
     const a = await waitBuilt(page, 8 * 60 * 1000);
     const calls = await page.evaluate(() => window.__formwork.view().calls);
     const took = Math.round((Date.now() - started) / 1000);

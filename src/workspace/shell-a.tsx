@@ -45,7 +45,6 @@ import { TYPE_LABEL, VIEW_ICON, VIEW_LABEL, accOf, colOf, deriveEndpoints, roleN
 import { DATA_VIEWS, VIEW_WHAT, viewFit, viewsOf } from './viewspec';
 import { HOME_TEMPLATES, REC, matchTemplate } from './builds';
 import { beginInterview, interviewNow } from './interview';
-import { InterviewView } from './interview-ui';
 import { QUESTS } from './quests';
 import { TEAMS, TeamAv } from './team';
 import { StationTests, TestsView, suiteOf, testable } from './tests';
@@ -89,6 +88,8 @@ import { HistoryButtons, openHistory } from './history-ui';
 
 // The meeting view of a run loads the first time it is picked.
 const MeetingView = lazy(() => import('./meeting').then((m) => ({ default: m.MeetingView })));
+/** The questions and the plan are loaded when a sentence is first sent, so they stay out of the first page load. */
+const InterviewView = lazy(() => import('./interview-ui').then((m) => ({ default: m.InterviewView })));
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
 export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
@@ -530,7 +531,12 @@ export function Home() {
     </>
   );
   const mine = apps.length ? mine0 : null;
-  if (interviewNow()) return <InterviewView />;
+  if (interviewNow())
+    return (
+      <Suspense fallback={null}>
+        <InterviewView />
+      </Suspense>
+    );
   return (
     <div className="home scroll">
       <div className="home-in">

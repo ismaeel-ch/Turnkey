@@ -229,6 +229,13 @@ async function demo(browser) {
   for (let i = 0; i < 900; i++) {
     const a = await app(page);
     if (a && (a.status === 'ready' || a.status === 'failed')) break;
+    // the questions and the plan come before the build: answer each card, look at the plan, then build it
+    const next = page.locator('.iv-ask .iv-opt, .iv-done .iv-review, .iv-act .iv-build').first();
+    if (await next.count()) {
+      await sleep(1100);
+      await next.click().catch(() => {});
+      continue;
+    }
     const o = page.locator('.gcard.ask .opt:not([disabled])');
     if (await o.count()) {
       await sleep(900);
