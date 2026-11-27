@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { connectors, getConnector, listConnectorTools } from '@/server/connectors';
 
 describe('connector registry', () => {
-  it('lists the five public sources', () => {
-    expect(connectors.map((c) => c.id)).toEqual(['wikipedia', 'worldbank', 'openalex', 'arxiv', 'patentsview']);
+  it('lists the six public sources', () => {
+    expect(connectors.map((c) => c.id)).toEqual(['wikipedia', 'worldbank', 'openalex', 'arxiv', 'patentsview', 'mslearn']);
   });
 
   it('finds a connector by id and returns undefined for an unknown one', () => {
