@@ -7,8 +7,8 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [0.5.4] - 2026-11-27
 
-A tidier row of view tabs on every list page of a built app, and fixes found by ten more real builds on new
-sentences.
+A tidier row of view tabs on every list page of a built app, fixes found by ten more real builds on new sentences,
+and plain words with a way on to Demo when no model can be reached.
 
 ### Fixed
 
@@ -19,6 +19,9 @@ sentences.
   says someone cannot see other people's records passes when their list leaves those records out, two pages never
   share a name, and a model answer that corrects itself is read without a repair call.
   ([#270](https://github.com/ismaeel-ch/Turnkey/pull/270))
+- When no model can be reached, the guided questions and a failed build say why in plain words and offer "Use Demo
+  instead". A busy model provider counts as busy, and the bars over Build no longer hide their buttons under the
+  canvas. ([#265](https://github.com/ismaeel-ch/Turnkey/pull/265))
 
 ## [0.5.3] - 2026-11-27
 
