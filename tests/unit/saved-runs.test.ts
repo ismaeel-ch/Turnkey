@@ -110,6 +110,8 @@ beforeAll(async () => {
   };
   M.core.S.settings.demo = true;
   M.core.S.settings.speed = 'instant';
+  // the saved builds load on first use in the browser; here they are loaded up front
+  await (await import('@/workspace/catalog')).loadSaved();
   await M.db.initSqlite();
 });
 
