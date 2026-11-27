@@ -28,11 +28,12 @@ const SAVED = [...HOME_TEMPLATES, ...QUESTS];
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const shape = (p: PlanSpec) => ({ people: p.people, lists: p.lists, stages: p.stages, permissions: p.permissions, rules: p.rules });
 
+const WIRED = { ask: PLANNER.ask, write: PLANNER.write };
 afterEach(() => {
   U.home.interview = null;
   U.home.text = '';
-  PLANNER.ask = null;
-  PLANNER.write = null;
+  PLANNER.ask = WIRED.ask;
+  PLANNER.write = WIRED.write;
 });
 
 describe('a saved build as a plan', () => {
@@ -356,11 +357,34 @@ describe('the interview for a sentence the model builds from', () => {
     expect(iv.plan?.name).toBe(COMPANY_EXPENSES.name); // past the cap the plan is the draft with the answers laid over it
   });
 
-  it('an answer from a call that came back after Start over is dropped', async () => {
-    plug();
+  it('Start over stops the call that is out, and its answer is dropped when it comes back', async () => {
+    const { ask } = plug();
     beginInterview('an expense app', null);
+    const ctl = (ask.mock.calls[0] as unknown as [string, { stop: boolean; ctrl?: AbortController | null }])[1];
+    expect(ctl.stop).toBe(false);
     leaveInterview();
+    expect(ctl.stop).toBe(true);
+    expect(ctl.ctrl?.signal.aborted).toBe(true);
     await tick();
     expect(interviewNow()).toBeNull();
+  });
+
+  it('says what was understood once, however the Planner started its sentence', async () => {
+    plug();
+    PLANNER.ask = async () => ({
+      reflect: 'Got it: employees claim expenses and managers approve them',
+      cards: CARDS,
+      draft: COMPANY_EXPENSES,
+    });
+    const iv = beginInterview('an expense app', null);
+    await tick();
+    expect(iv.reflect).toBe(
+      "Got it. Employees claim expenses and managers approve them. A few quick questions so I build the right one. Skip any of them and I'll use the usual choice.",
+    );
+  });
+
+  it('is connected to the Planner unless a test swaps it', () => {
+    expect(WIRED.ask).toBeTypeOf('function');
+    expect(WIRED.write).toBeTypeOf('function');
   });
 });
