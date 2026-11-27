@@ -7,6 +7,7 @@ import {
   PHONE,
   S,
   U,
+  NARROW,
   arr,
   cap,
   chatShown,
