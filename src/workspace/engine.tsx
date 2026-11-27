@@ -30,6 +30,7 @@ import {
   createTableSQL,
   dbDrop,
   dbExists,
+  dbRelease,
   dbRollback,
   dbSavepoint,
   lastId,
@@ -42,6 +43,8 @@ import {
 } from './db';
 import { demoReady, isSettingsTable, tempDemoData } from './demo-data';
 import { canRunTeam, normTeam } from './team';
+import type { AppLogic } from '@/shared/logic';
+import { brokenRule, isLocked, logicIssues, moveBlock, normRules, recalcAfter, recalcAll } from './logic';
 import { AppPane, newPane } from './runtime';
 
 /* ===== Turnkey prototype · engine: definitions, station checks, the role-guarded API, acceptance runner ===== */
@@ -355,6 +358,11 @@ export function normSchema(o: Untrusted, brief: Brief, repair?: boolean, maxRows
             }
           }
           if (col.type === 'user') col.role = roleIds.includes(snake(c.role)) ? snake(c.role) : null;
+          // a calculated field: nobody types into it, so it cannot be required
+          if (str(c.formula) && col.type !== 'ref' && col.type !== 'user') {
+            col.formula = str(c.formula).slice(0, 400);
+            col.required = false;
+          }
           return col;
         })
         .filter((c) => c.name && !['id', 'created_by', 'created_at', DEMO_COL].includes(c.name) && !used[c.name] && (used[c.name] = 1))
@@ -467,6 +475,16 @@ export function checkSchemaShape(sc: SchemaDraft, brief: Brief) {
     }),
   );
   out.push(chk('Every link points to a table that exists', !bad.length, bad.join('; ') || 'all links resolve'));
+  if (sc.tables.some((t) => t.columns.some((c) => c.formula))) {
+    const wrong = logicIssues({ tables: sc.tables as AppTable[], process: null, logic: null });
+    out.push(
+      chk(
+        'Every calculated field has a formula that can be worked out',
+        !wrong.length,
+        wrong.slice(0, 4).join('; ') || 'all formulas read real fields',
+      ),
+    );
+  }
   const noTitle = sc.tables.filter((t) => !t.title || !t.columns.length).map((t) => t.name);
   out.push(chk('Every table has columns and a title column', !noTitle.length, noTitle.length ? 'fix: ' + noTitle.join(', ') : ''));
   const pt = sc.tables.find((t) => t.name === brief.process.entity);
@@ -707,6 +725,8 @@ export function insertSeed(
       if (got[k]) ids[t.name][pos] = Number(got[k].id);
     });
   }
+  // the starting records carry no worked-out values: totals and other calculated fields are filled in now
+  recalcAll(appId, { tables: tables as AppTable[], process: null, logic: null });
   return total;
 }
 export function buildDatabase(app: AppRecord, sc: SchemaDraft, ctx: ToolContext) {
@@ -825,6 +845,8 @@ export interface BackendDraft {
   process: Process;
   access: Dict<Dict<Permission>>;
   team: ReturnType<typeof normTeam>;
+  /** rules that refuse a save; the conditions of moves are on the transitions */
+  logic: AppLogic;
 }
 export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
   o = o || {};
@@ -863,7 +885,7 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
         Object.keys(x.set).forEach((k) => {
           if (t && colOf(t, snake(k))) set[snake(k)] = x.set[k];
         });
-      return {
+      const tr: Transition = {
         id: snake(x.id || x.label),
         label: str(x.label) || label(x.id),
         from: list1(x.from).map(snake).filter(Boolean),
@@ -873,6 +895,15 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
           .filter((r) => roleIds.includes(r)),
         set,
       };
+      if (str(x.when)) {
+        tr.when = str(x.when).slice(0, 400);
+        if (str(x.unless)) tr.unless = str(x.unless).slice(0, 200);
+      }
+      const needs = list1(x.needs)
+        .map(snake)
+        .filter((f) => t && colOf(t, f) && f !== column);
+      if (needs.length) tr.needs = needs;
+      return tr;
     })
     .filter((x) => x.id);
   const access: Dict<Dict<Permission>> = {};
@@ -928,13 +959,18 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
     initial: none ? '' : snake(st.initial) || (states[0] ? states[0].id : ''),
     transitions,
   };
+  const locked = list1(st.locked)
+    .map(snake)
+    .filter((id) => states.some((x) => x.id === id) && id !== P.initial);
+  if (locked.length) P.locked = locked;
   return {
     process: P,
     access,
     team: normTeam(o.team, def, P),
+    logic: { rules: normRules((o.logic && o.logic.rules) || o.rules, def.tables) },
   };
 }
-export function checkBackendShape(def: BriefedDef, be: Pick<BackendDraft, 'process' | 'access'>) {
+export function checkBackendShape(def: BriefedDef, be: Pick<BackendDraft, 'process' | 'access'> & { logic?: AppLogic }) {
   const P = be.process,
     t = tableOf(def, P.table),
     col = colOf(t, P.column),
@@ -1007,6 +1043,19 @@ export function checkBackendShape(def: BriefedDef, be: Pick<BackendDraft, 'proce
           : def.brief.roles.length + ' roles, ' + def.tables.length + ' tables',
     ),
   );
+  const rules = be.logic?.rules || [],
+    conds = P.transitions.filter((x) => x.when || x.needs).length,
+    calcs = def.tables.reduce((n, tb) => n + tb.columns.filter((c) => c.formula).length, 0);
+  if (rules.length || conds || calcs) {
+    const wrong = logicIssues({ tables: def.tables, process: P, logic: be.logic || null });
+    out.push(
+      chk(
+        'Calculated fields, rules and conditions can be worked out',
+        !wrong.length,
+        wrong.slice(0, 4).join('; ') || calcs + ' calculated fields, ' + rules.length + ' rules, ' + conds + ' moves with a condition',
+      ),
+    );
+  }
   return out;
 }
 /** One endpoint of a built app's API, and which roles may call it with which scope. */
@@ -1257,6 +1306,8 @@ export function readBody(app: AppRecord, t: AppTable, user: AppUser, body: Dict<
       if (partial && body[c.name] !== undefined) fields[c.name] = 'Status changes go through the workflow actions';
       continue;
     }
+    // a calculated field is worked out after the save; what a caller sends for it is ignored
+    if (c.formula) continue;
     const r = coerceField(c, body[c.name]);
     let v = r[0];
     if (r[1]) {
@@ -1326,6 +1377,31 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
     T = qi(t.name),
     P = def.process && def.process.table === t.name ? def.process : null;
   const deny = (verb: string) => httpErr(403, roleName(def, user.role) + ' cannot ' + verb + ' ' + t.label.toLowerCase());
+  const lockedText = (row: Row) =>
+    (/^[aeiou]/i.test(label(row[P ? P.column : '']) || '') ? 'An ' : 'A ') +
+    label(row[P ? P.column : '']).toLowerCase() +
+    ' ' +
+    t.one.toLowerCase() +
+    ' can no longer be changed';
+  /**
+   * A save with the app's logic around it: the write, then the calculated fields that read it, then the rules. A
+   * broken rule takes the whole save back, totals included, and the person is told why.
+   */
+  const guarded = <V,>(write: () => { value: V; rows: { table: string; id: number }[]; before?: { table: string; row: Row }[] }): V => {
+    const rules = !!def.logic && def.logic.rules.length > 0;
+    if (rules) dbSavepoint(id0, 'lg');
+    try {
+      const w = write();
+      const touched = recalcAfter(id0, def, w.rows, w.before);
+      const broken = rules ? brokenRule(id0, def, w.rows.concat(touched)) : null;
+      if (broken) throw httpErr(400, broken.message || 'A rule of this app does not allow that');
+      if (rules) dbRelease(id0, 'lg');
+      return w.value;
+    } catch (e) {
+      if (rules) dbRollback(id0, 'lg');
+      throw e;
+    }
+  };
   const id = seg[1] && /^\d+$/.test(seg[1]) ? +seg[1] : null;
   const getRow = (scope?: string) =>
     sqlRows(
@@ -1413,12 +1489,15 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
     r.vals.created_by = user.id;
     r.vals.created_at = nowStamp();
     const keys = Object.keys(r.vals);
-    sqlRun(
-      id0,
-      'INSERT INTO ' + T + ' (' + keys.map(qi).join(', ') + ') VALUES (' + keys.map(() => '?').join(', ') + ')',
-      keys.map((k) => r.vals[k]),
-    );
-    const nid = lastId(id0);
+    const nid = guarded(() => {
+      sqlRun(
+        id0,
+        'INSERT INTO ' + T + ' (' + keys.map(qi).join(', ') + ') VALUES (' + keys.map(() => '?').join(', ') + ')',
+        keys.map((k) => r.vals[k]),
+      );
+      const made = Number(lastId(id0));
+      return { value: made, rows: [{ table: t.name, id: made }] };
+    });
     logAct(app, user, t.name, nid, 'created', '');
     return {
       status: 201,
@@ -1433,6 +1512,8 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
     if (!row) throw httpErr(404, t.one + ' not found');
     const state = row[P.column] as string;
     if (!tr.from.includes(state)) throw httpErr(409, 'Cannot ' + tr.label.toLowerCase() + ' while it is ' + label(state).toLowerCase());
+    const block = moveBlock(id0, def, t, row, tr);
+    if (block) throw httpErr(409, block);
     const sets = [qi(P.column) + ' = ?'],
       ps: SqlValue[] = [tr.to];
     Object.keys(tr.set || {}).forEach((k) => {
@@ -1445,6 +1526,7 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
       'UPDATE ' + T + ' SET ' + sets.join(', ') + ' WHERE "id" = ? AND ' + qi(P.column) + ' IN (' + tr.from.map(() => '?').join(', ') + ')',
       ps.concat([id], tr.from),
     );
+    recalcAfter(id0, def, [{ table: t.name, id }]);
     logAct(app, user, t.name, id, tr.label.toLowerCase(), label(state) + ' → ' + label(tr.to));
     return {
       status: 200,
@@ -1453,16 +1535,21 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
   }
   if (method === 'PATCH' && id != null) {
     if (acc.update === 'none') throw deny('change');
-    if (!getRow(acc.update)) throw httpErr(404, t.one + ' not found');
+    const was = getRow(acc.update);
+    if (!was) throw httpErr(404, t.one + ' not found');
+    if (isLocked(P, was)) throw httpErr(409, lockedText(was));
     const r = readBody(app, t, user, body, true);
     if (Object.keys(r.fields).length) throw httpErr(400, 'Some fields need attention', r.fields);
     const keys = Object.keys(r.vals);
     if (!keys.length) throw httpErr(400, 'Nothing to change');
-    sqlRun(
-      id0,
-      'UPDATE ' + T + ' SET ' + keys.map((k) => qi(k) + ' = ?').join(', ') + ' WHERE "id" = ?',
-      keys.map((k) => r.vals[k]).concat([id]),
-    );
+    guarded(() => {
+      sqlRun(
+        id0,
+        'UPDATE ' + T + ' SET ' + keys.map((k) => qi(k) + ' = ?').join(', ') + ' WHERE "id" = ?',
+        keys.map((k) => r.vals[k]).concat([id]),
+      );
+      return { value: id, rows: [{ table: t.name, id }], before: [{ table: t.name, row: was }] };
+    });
     logAct(app, user, t.name, id, 'updated', keys.map(label).join(', '));
     return {
       status: 200,
@@ -1471,12 +1558,16 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
   }
   if (method === 'DELETE' && id != null) {
     if (!acc.delete) throw deny('delete');
-    if (!getRow(acc.list === 'own' ? 'own' : 'all')) throw httpErr(404, t.one + ' not found');
+    const was = getRow(acc.list === 'own' ? 'own' : 'all');
+    if (!was) throw httpErr(404, t.one + ' not found');
+    if (isLocked(P, was)) throw httpErr(409, lockedText(was));
     try {
       sqlRun(id0, 'DELETE FROM ' + T + ' WHERE "id" = ?', [id]);
     } catch {
       throw httpErr(409, 'Other records still point to this ' + t.one.toLowerCase() + '. Remove those first.');
     }
+    // the totals that counted this record are worked out again without it
+    recalcAfter(id0, def, [], [{ table: t.name, row: was }]);
     logAct(app, user, t.name, id, 'deleted', '');
     return {
       status: 200,

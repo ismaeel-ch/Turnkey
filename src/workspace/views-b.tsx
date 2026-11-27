@@ -8,6 +8,7 @@ import { DATA_VIEWS, isCat, isDate, isMeasure } from './viewspec';
 import { Btn, Card, Empty, FilterChip, Icon, Seg, Switch } from './ui';
 import { cellText, fetchApi, patchPane, rowTitle, stateLabel, stateTone } from './runtime';
 import { EmptyDash } from './firstrun';
+import { Inbox } from './record-extras';
 import { Pick, asText, choices, passes, vxState, type DrillPair, type ViewProps } from './views-a';
 
 /* ===== Turnkey prototype · charts, pivot, timeline and the dashboard =====
@@ -1604,6 +1605,7 @@ export function Dash({
           </Btn>
         )}
       </div>
+      {!test && !pane.test && <Inbox app={app} user={user} pane={pane} src={src} />}
       {bare && main ? (
         <EmptyDash
           app={app}

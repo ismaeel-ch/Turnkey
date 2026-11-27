@@ -5,6 +5,7 @@ import {
   backendFromPlan,
   briefFromPlan,
   checkPlan,
+  formulasFromPlan,
   mendToPlan,
   outlineOf,
   outlineProblems,
@@ -537,6 +538,8 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
     const plan = planOf(app);
     // on the last attempt code brings the tables back to the plan instead of failing the build
     if (plan && attempt >= 3) sc.tables = mendToPlan(plan, sc.tables);
+    // which fields are calculated, and how, is the plan's word, not the agent's
+    if (plan) formulasFromPlan(plan, sc.tables);
     let checks = checkSchemaShape(sc, app.def.brief);
     if (plan) {
       const off = outlineProblems(plan, sc.tables);
@@ -590,12 +593,37 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
   },
   backend(app, out, run) {
     const be = normBackend(out, app.def);
+    const plan = planOf(app);
+    if (plan) {
+      // the rules, the conditions of moves and the locked stages are the owner's approved plan: whatever the
+      // agent wrote in their place is replaced by the plan's own
+      const planned = normBackend(backendFromPlan(plan), app.def);
+      be.logic = planned.logic;
+      if (planned.process.locked) be.process.locked = planned.process.locked.filter((s) => be.process.states.some((x) => x.id === s));
+      else delete be.process.locked;
+      for (const tr of be.process.transitions) {
+        const same = planned.process.transitions.find(
+          (p) =>
+            p.to === tr.to &&
+            p.from.length === tr.from.length &&
+            p.from.every((f) => tr.from.includes(f)) &&
+            p.roles.some((r) => tr.roles.includes(r)),
+        );
+        delete tr.when;
+        delete tr.unless;
+        delete tr.needs;
+        if (same?.when) tr.when = same.when;
+        if (same?.unless) tr.unless = same.unless;
+        if (same?.needs) tr.needs = same.needs;
+      }
+    }
     let checks = checkBackendShape(app.def, be),
       n = 0;
     if (checks.every((c) => c.ok)) {
       app.def.process = be.process;
       app.def.access = be.access;
       app.def.team = be.team;
+      app.def.logic = be.logic;
       n = deriveEndpoints(app.def).length;
       checks = checks.concat(checkBackendLive(app, ctxOf(app, run, 'backend')));
       if (be.team) checks.push(checkTeam(app.def, be.team));
@@ -902,7 +930,8 @@ export const pTables = (def: AppDef) =>
                   : c.type === 'user' && c.role
                     ? '(' + c.role + ')'
                     : '') +
-              (c.required ? '*' : ''),
+              (c.required ? '*' : '') +
+              (c.formula ? ' = ' + c.formula : ''),
           )
           .join(', '),
     )
@@ -922,8 +951,21 @@ export const pAccess = (def: BriefedDef) =>
           .join(' | '),
     )
     .join('\n');
+/** What the app enforces beyond roles, for the agents that write steps against it: they must not write a step it refuses. */
+export const pLogic = (def: AppDef) => {
+  const P = def.process,
+    out: string[] = [];
+  const calcs = def.tables.flatMap((t) => t.columns.filter((c) => c.formula).map((c) => t.name + '.' + c.name));
+  if (calcs.length) out.push('Calculated by the app, never send a value for them: ' + calcs.join(', ') + '.');
+  for (const r of def.logic?.rules || []) out.push('A ' + r.table + ' record is refused (400) unless: ' + r.when + '.');
+  if (P && (P.locked || []).length)
+    out.push('A ' + P.table + ' record in ' + (P.locked || []).join(' or ') + ' cannot be updated or deleted (409).');
+  return out.length
+    ? '\nRULES THE APP ENFORCES (a step that breaks one is refused, so do not write such a step as a passing one):\n' + out.join('\n')
+    : '';
+};
 export const pFlow = (def: BackedDef) =>
-  !def.process.states.length
+  (!def.process.states.length
     ? 'none: records in this app do not move through stages, so there are no transitions'
     : 'table ' +
       def.process.table +
@@ -932,7 +974,20 @@ export const pFlow = (def: BackedDef) =>
       ', initial ' +
       def.process.initial +
       '\n' +
-      def.process.transitions.map((x) => x.id + ': ' + x.from.join('|') + ' -> ' + x.to + ' by ' + x.roles.join('|')).join('\n');
+      def.process.transitions
+        .map(
+          (x) =>
+            x.id +
+            ': ' +
+            x.from.join('|') +
+            ' -> ' +
+            x.to +
+            ' by ' +
+            x.roles.join('|') +
+            (x.when ? ' only when ' + x.when : '') +
+            (x.needs?.length ? ' needs ' + x.needs.join(', ') + ' filled in first' : ''),
+        )
+        .join('\n')) + pLogic(def);
 export const pRoom = (def: AppDef) => {
   const tm = def.team;
   if (!tm) return '';
@@ -1013,6 +1068,9 @@ const pPlanLists = (app: BuildApp) => {
         '\n\nThe owner approved these lists before the build. Build exactly these tables: the same names, every column with the same name and type, the same title and owner. Do not add or leave out a table. You may add at most ' +
         EXTRA_FIELDS +
         ' columns to a table, and only when the seed data or an "only their own records" rule needs them.' +
+        (/ = /.test(outlineOf(plan))
+          ? ' A column written with " = formula" is calculated by the app from that formula: give it the type shown, do not mark it required, and leave it out of every row.'
+          : '') +
         (plan.demoData ? '' : ' The owner starts with no demo data, so the rows you write are used for the tests only.')
     : '';
 };
@@ -1022,7 +1080,7 @@ const pPlanRules = (app: BuildApp) => {
   return plan
     ? '\n\nRULES OF THE PLAN: ' +
         JSON.stringify(backendFromPlan(plan)) +
-        '\n\nThe owner approved these rules before the build. Keep the states, who may make each transition, and the access of every role on every table as they are. You add the craft: a tone for each state, and "set" where a transition should stamp the acting user or the date.'
+        '\n\nThe owner approved these rules before the build. Keep the states, who may make each transition, and the access of every role on every table as they are. Keep every "when", "unless", "needs", "locked" and "logic" exactly as written. You add the craft: a tone for each state, and "set" where a transition should stamp the acting user or the date.'
     : '';
 };
 export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {

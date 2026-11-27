@@ -70,6 +70,11 @@ export interface ColumnDef {
   ref?: string;
   /** type `user`: limit the person to one role */
   role?: string | null;
+  /**
+   * a calculated field: the formula (src/shared/logic/expr.ts) its value is worked out from on every save. Nobody
+   * types into it.
+   */
+  formula?: string;
 }
 
 export interface TableDef {

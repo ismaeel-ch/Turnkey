@@ -854,3 +854,25 @@ html:not(.tk-seen) #boot,html.tk-seen #boot-welcome,html.tk-up #boot,html.tk-up 
 .boot-btn:hover{background:var(--colorNeutralBackground1Hover);border-color:var(--colorNeutralStroke1Hover)}.boot-btn:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:1px}
 .boot-btn.primary{background:var(--colorBrandBackground);border-color:transparent;color:var(--colorNeutralForegroundOnBrand)}.boot-btn.primary:hover{background:var(--colorBrandBackgroundHover)}
 html.tk-opening .boot-btn{cursor:progress}.boot-wait{align-self:center}
+/* ---- built apps: calculated fields, stage path, moves with conditions, line items, "Waiting for you" (record-extras.tsx) ---- */
+.lg-moves{display:inline-flex;flex-direction:column;gap:6px;min-width:0}.lg-held{display:flex;align-items:flex-start;gap:6px;color:var(--colorNeutralForeground3)}.lg-held .ic{flex:none;margin-top:1px}
+.lg-path{list-style:none;margin:0;padding:0;display:flex;align-items:flex-start;gap:0;overflow-x:auto}
+.lg-step{flex:1 1 0;min-width:56px;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;text-align:center;font-size:12px;line-height:16px;color:var(--colorNeutralForeground3)}
+.lg-step::before{content:"";position:absolute;top:10px;left:calc(-50% + 12px);right:calc(50% + 12px);height:2px;background:var(--colorNeutralStroke2)}.lg-step:first-child::before{display:none}.lg-step.done::before,.lg-step.on::before{background:var(--colorBrandStroke1)}
+.lg-dot{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;background:var(--colorNeutralBackground1);border:2px solid var(--colorNeutralStroke1);color:var(--colorNeutralForeground3);position:relative;z-index:1}
+.lg-step.done .lg-dot{background:var(--colorBrandBackground);border-color:var(--colorBrandBackground);color:var(--colorNeutralForegroundOnBrand)}.lg-step.on .lg-dot{border-color:var(--colorBrandStroke1);color:var(--colorBrandForeground1)}.lg-step.on{color:var(--colorNeutralForeground1);font-weight:600}
+.lg-step.on.tone-danger .lg-dot{border-color:var(--colorStatusDangerBorder2);color:var(--colorStatusDangerForeground1)}.lg-step.on.tone-success .lg-dot{background:var(--colorStatusSuccessBackground3);border-color:var(--colorStatusSuccessBackground3);color:var(--colorNeutralForegroundOnBrand)}
+.lg-step-l{max-width:100%;overflow-wrap:anywhere}
+.lg-calc{display:inline-flex;vertical-align:-2px;margin-left:4px;color:var(--colorBrandForeground1)}
+.lg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}.lg-stat{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:8px;background:var(--colorNeutralBackground2);border:1px solid var(--colorNeutralStroke2);min-width:0}
+.lg-stat-l{font-size:12px;line-height:16px;color:var(--colorNeutralForeground3)}.lg-stat-v{font-size:20px;line-height:26px;font-weight:600;font-variant-numeric:tabular-nums}.lg-stat.neg .lg-stat-v{color:var(--colorStatusDangerForeground1)}.lg-stat-s{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lg-locked{display:flex;align-items:center;gap:6px}
+.lg-tbox{overflow-x:auto;border:1px solid var(--colorNeutralStroke2);border-radius:8px}.lg-tbl{width:100%;border-collapse:collapse;font-size:13px;line-height:18px}
+.lg-tbl th{text-align:left;font-weight:600;font-size:12px;color:var(--colorNeutralForeground3);padding:6px 10px;background:var(--colorNeutralBackground2);border-bottom:1px solid var(--colorNeutralStroke2);white-space:nowrap}
+.lg-tbl td{padding:7px 10px;border-bottom:1px solid var(--colorNeutralStroke3);vertical-align:middle}.lg-tbl tbody tr:last-child td{border-bottom:0}.lg-tbl .num{text-align:right;font-variant-numeric:tabular-nums}
+.lg-row{cursor:pointer}.lg-row:hover,.lg-row:focus-visible{background:var(--colorSubtleBackgroundHover);outline:0}.lg-row:focus-visible{box-shadow:inset 0 0 0 2px var(--colorStrokeFocus2)}
+.lg-tbl tfoot td{font-weight:600;border-top:1px solid var(--colorNeutralStroke1);border-bottom:0;background:var(--colorNeutralBackground2)}.lg-tbox>p{padding:6px 10px}
+.lg-inbox,.fui-Card.lg-inbox{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;border-left:3px solid var(--colorBrandStroke1)}.lg-inbox .widget-h{display:flex;align-items:center;gap:6px}
+.lg-todo{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}.lg-todo-i{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--colorNeutralStroke2)}.lg-todo-i:first-child{border-top:0}
+.lg-todo-open{flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:0;border:0;background:none;text-align:left;color:inherit;padding:2px 4px;border-radius:4px}.lg-todo-open:hover{background:var(--colorSubtleBackgroundHover)}
+.iv-logic .iv-rule{align-items:flex-start}.iv-logic .badge{flex:none}
