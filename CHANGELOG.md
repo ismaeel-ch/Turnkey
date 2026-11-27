@@ -31,7 +31,8 @@ the first release.
 
 ### Changed
 
-- Build opens on a plain list of steps; the workflow canvas is behind "Show how it was built". ([#209](https://github.com/ismaeel-ch/Turnkey/pull/209))
+- Build opens on a plain list of steps; the workflow canvas is behind "Show how it was built". Saved builds show
+  their plan in the same words, and an app with no stages no longer reads "0 stages". ([#209](https://github.com/ismaeel-ch/Turnkey/pull/209)) ([#220](https://github.com/ismaeel-ch/Turnkey/pull/220))
 - Going back a version or updating keeps every record, and installed apps find updates by themselves. ([#207](https://github.com/ismaeel-ch/Turnkey/pull/207))
 - The cost line of a planned build counts the Planner's own calls. ([#226](https://github.com/ismaeel-ch/Turnkey/pull/226))
 
