@@ -46,14 +46,14 @@ const describeApp = async (page, text, pick) => { await page.fill('#home-prompt'
 const ivNow = (page) => st(page, () => { const iv = window.__formwork.view().home.interview, q = (s) => document.querySelector(s), all = (s) => [...document.querySelectorAll(s)].map((x) => x.innerText.replace(/\s+/g, ' ').trim()); return iv ? { step: iv.step, attr: q('.iv') && q('.iv').dataset.step, steps: all('.iv-st'), on: (q('.iv-st[aria-current=step]') || {}).innerText, name: (q('#iv-name') || {}).innerText, sum: (q('#iv-sum') || {}).innerText, people: all('.iv-person strong'), card: q('.iv-ask') ? q('.iv-ask').dataset.card : null, demo: q('#iv-demo') ? q('#iv-demo').checked : null, demoText: (q('#iv-demo-text') || {}).innerText, n: (q('.iv-ask .iv-n') || {}).innerText, opts: all('.iv-ask .iv-opt'), answered: all('.iv-answered li'), assumed: all('.iv-assumed li'), access: Object.fromEntries([...document.querySelectorAll('.iv-access tbody tr')].map((r) => [r.querySelector('th').innerText.trim(), [...r.querySelectorAll('td')].map((c) => c.innerText.trim()).join()])), agents: [...document.querySelectorAll('.iv-agent[data-agent]')].map((x) => x.dataset.agent), plan: !!iv.plan, apps: Object.keys(window.__formwork.state().apps).length } : null; });
 const land = async (page) => { await page.waitForSelector('.app-nav .nav-i'); await page.locator('.app-nav .nav-i').nth(1).click(); await sleep(80); }; // the Overview is first now, so the page that used to open first is the second one
 const nav = (page, name) => page.locator('.app-nav .nav-i', { hasText: name }).first().click();
-// The row under a list page's title: view tabs, the More views button, Filter and Copy CSV. Measures that they sit on one row at one height, that
+// The row under a list page's title: view tabs, the More views button, Filter and Copy CSV. Measures that they sit on one row (the buttons at one height, the tabs as tall as the bar so their underline sits on its edge), that
 // More views is a frameless square like the tabs (it was once a 96 px framed box), and that the tabs scroll inside the row rather than wrap.
 const vxBarLook = (page) => st(page, () => {
   const box = (e) => { const r = e.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; };
   const bar = document.querySelector('.vx-bar'), tabs = [...document.querySelectorAll('.vswitch [role=tab]')], more = document.querySelector('.vswitch .menu-wrap > button'), acts = [...document.querySelectorAll('.vx-acts > .menu-wrap > button, .vx-acts > button')];
   if (!bar || !tabs.length || !more || acts.length !== 2) return { ok: false, missing: { bar: !!bar, tabs: tabs.length, more: !!more, acts: acts.length } };
   const t = box(tabs[0]), m = box(more), a = acts.map(box), strip = document.querySelector('.vs-tabs'), cs = getComputedStyle(more);
-  const mid = (b) => b.y + b.h / 2, row = [t, m, ...a].every((b) => Math.abs(mid(b) - mid(t)) <= 1), same = [m, ...a].every((b) => b.h === t.h);
+  const mid = (b) => b.y + b.h / 2, row = [t, m, ...a].every((b) => Math.abs(mid(b) - mid(t)) <= 1), same = [m, ...a].every((b) => b.h === m.h) && t.h >= m.h;
   const square = m.w === m.h && cs.borderTopWidth === '0px', inside = a.every((b) => b.x + b.w <= box(bar).x + box(bar).w + 1) && m.x + m.w <= a[0].x;
   const oneRow = tabs.every((e) => Math.abs(box(e).y - t.y) <= 1) && strip.scrollHeight <= strip.clientHeight + 1;
   return { ok: row && same && square && inside && oneRow, row, same, square, inside, oneRow, tab: t, more: m, acts: a };
@@ -923,7 +923,7 @@ async function flowViews(browser, url) {
   for (const w of [1440, 1100]) { // wide and normal: one tidy row, whatever fits
     await page.setViewportSize({ width: w, height: 900 }); await sleep(150);
     const b = await vxBarLook(page);
-    check('view tabs bar at ' + w + ' px: tabs, More views, Filter and Copy CSV on one row, the same height, More views a small square with no frame', b.ok, b);
+    check('view tabs bar at ' + w + ' px: tabs, More views, Filter and Copy CSV on one row, the buttons the same height, More views a small square with no frame', b.ok, b);
   }
   await page.setViewportSize({ width: 1440, height: 900 }); await sleep(150);
   const expect = { Board: '.kb-col', Calendar: '.cal-grid .cal-chip', Timeline: '.gt .gt-item', Table: '.vx .tbl tbody tr', Chart: '.hb-row .hb-seg', Pivot: '.tbl.pivot .pv-b', Tree: '.tree .tree-row' }, drawn = {};
@@ -1470,6 +1470,7 @@ async function firstUse(browser, url) {
   const stops = [];
   for (let i = 0; i < 6 && await page.locator('.fr-pop').count(); i++) {
     await page.waitForFunction((n) => { const p = document.querySelector('.fr-pop'); return p && p.dataset.i === String(n) && document.activeElement === p; }, i);
+    await page.waitForSelector('.fr-hole', { timeout: 2000 }).catch(() => {}); // the tour measures what it points at a moment after a stop opens
     stops.push(await st(page, () => { const p = document.querySelector('.fr-pop'), h = document.querySelector('.fr-hole'), a = document.querySelector('.fr-tour').getBoundingClientRect(), r = p.getBoundingClientRect(); return { text: p.innerText.replace(/\n+/g, ' | '), hole: !!h, inside: r.left >= a.left && r.right <= a.right + 1 && r.top >= a.top && r.bottom <= a.bottom + 1, bubbles: document.querySelectorAll('.fr-pop').length }; }));
     if (i === 1) await shot(page, 'fu-04-tour');
     await page.keyboard.press('ArrowRight'); await sleep(60);
