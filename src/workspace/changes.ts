@@ -1550,6 +1550,11 @@ export async function handleChat(app: BackedApp, text: string, opt?: { rules?: b
   if (!plan.ops || !plan.ops.length) return void say(app, 'orchestrator', str(plan.reply) || help + ' ' + FLOW_HELP);
   const p = planOps(app, plan.ops);
   if (!p.steps.length) return void say(app, 'orchestrator', p.errors[0] || help + ' ' + FLOW_HELP);
+  await proposeAndRun(app, p, str(plan.reply), text);
+}
+
+/** Shows the plan card, asks before anything that deletes data, then runs only the stations the change touches. */
+async function proposeAndRun(app: BackedApp, p: { steps: PlannedStep[]; errors: string[] }, reply: string, title: string) {
   const first = Math.min.apply(
     null,
     p.steps.map((s) => stationIdx(s.station)),
@@ -1557,7 +1562,7 @@ export async function handleChat(app: BackedApp, text: string, opt?: { rules?: b
   say(
     app,
     'orchestrator',
-    (str(plan.reply) ? str(plan.reply) + ' ' : '') + 'Here is the plan.' + (p.errors.length ? ' I left out one part: ' + p.errors[0] : ''),
+    (reply ? reply + ' ' : '') + 'Here is the plan.' + (p.errors.length ? ' I left out one part: ' + p.errors[0] : ''),
     {
       type: 'plan',
       steps: p.steps.map((s) => ({
@@ -1570,7 +1575,31 @@ export async function handleChat(app: BackedApp, text: string, opt?: { rules?: b
   );
   if (p.steps.some((s) => s.destructive) && !(await askApproval(app, p.steps)))
     return void say(app, 'orchestrator', 'Nothing was changed.');
-  await runChange(app, p.steps, text.length > 46 ? text.slice(0, 44) + '…' : text);
+  await runChange(app, p.steps, title.length > 46 ? title.slice(0, 44) + '…' : title);
+}
+
+/** Why a direct edit cannot start now, or null when it can. The same rules as a change asked for in chat. */
+export function editBlocked(app: AppRecord): string | null {
+  if (!app.def || app.status !== 'ready') return 'Edits open once the app is built.';
+  if (RUNS[app.id]) return 'A run is in progress. Edit when it finishes.';
+  if (PENDING[app.id]) return 'Answer the approval card in the chat first.';
+  if (TEAMS[app.id] && TEAMS[app.id].status === 'running') return "The app's own agents are in the middle of a run.";
+  return null;
+}
+/** An edit the owner makes on the canvas itself (the Data page), not in chat. It goes through the same plan as a
+ *  chat change: the edit is written to the chat as the owner's, the plan card shows what runs again, anything that
+ *  deletes data asks first, and only the stations from the first one the edit touches run again. Returns the reason
+ *  when nothing was changed. */
+export async function editFromCanvas(app: BackedApp, op: Untrusted, where: string): Promise<string | null> {
+  const blocked = editBlocked(app);
+  if (blocked) return blocked;
+  const p = planOps(app, [op]);
+  if (!p.steps.length) return p.errors[0] || 'That edit could not be made.';
+  const what = p.steps.map((s) => s.text).join('; ');
+  pushChat(app, 'user', 'On the ' + where + ': ' + what);
+  commit();
+  await proposeAndRun(app, p, 'You changed this on the ' + where + '.', what);
+  return null;
 }
 
 /* ---------- the build pack: one document generated from the canvas state ---------- */
