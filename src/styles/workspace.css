@@ -919,3 +919,8 @@ html.tk-opening .boot-btn{cursor:progress}.boot-wait{align-self:center}
 .pv-b:active{background:var(--colorSubtleBackgroundPressed)}
 .choice:disabled,.kpi.mini:disabled{color:var(--colorNeutralForegroundDisabled);cursor:not-allowed}
 .lg-todo-open:active{background:var(--colorSubtleBackgroundPressed)}
+/* control heights are Fluent's: 24 (small), 32 (medium), 40 (large) */
+.fp-tile{min-height:32px}
+.opt{min-height:32px}
+.th-btn{min-height:24px}
+.cal-add{width:24px;height:24px}
