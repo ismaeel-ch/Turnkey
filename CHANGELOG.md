@@ -7,6 +7,21 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ### Added
 
+- A form with seven fields or more is filled in step by step in a built app: what the record needs first, then who
+  and what it belongs to, then dates and amounts, then the rest, and a last step that shows every answer before
+  anything is saved. Next stays on a step while a required field is empty. Shorter forms and edits stay on one page.
+
+### Changed
+
+- Renaming a field that a formula reads is no longer refused. Every calculated field, rule and move condition that
+  reads it is rewritten to the new name, in the app and in its plan, and the worked-out values stay the same.
+
+## [0.5.9] - 2026-11-28
+
+Every built app gets its own Settings page, and the person menu in its header has a proper avatar.
+
+### Added
+
 - Every built app has its own Settings page, opened from a gear in the app's header by the people who run it. It
   has up to seven sections. General: the app's name, colour, navigation and row height. People: add a person, rename them,
   change what kind of person they are, remove them, and choose which kinds of people may open Settings. Stages: what
@@ -16,14 +31,13 @@ versions are semantic versions. Each release lists the pull requests merged into
   add back the demo data, download or restore the database, and Start over. Each choice applies at once with no
   agent run, is kept with the app (so a share link, a release and an earlier version carry it), and is noted for the
   next release. The builder has a Settings button above the app that opens the page as someone who may.
-- A form with seven fields or more is filled in step by step in a built app: what the record needs first, then who
-  and what it belongs to, then dates and amounts, then the rest, and a last step that shows every answer before
-  anything is saved. Next stays on a step while a required field is empty. Shorter forms and edits stay on one page.
+  ([#290](https://github.com/ismaeel-ch/Turnkey/pull/290))
 
-### Changed
+### Fixed
 
-- Renaming a field that a formula reads is no longer refused. Every calculated field, rule and move condition that
-  reads it is rewritten to the new name, in the app and in its plan, and the worked-out values stay the same.
+- The person menu in a built app's header shows a full-size avatar that is white with the person's own colour for
+  the initials, in light and in dark. In dark it was a small grey circle.
+  ([#294](https://github.com/ismaeel-ch/Turnkey/issues/294))
 
 ## [0.5.8] - 2026-11-28
 

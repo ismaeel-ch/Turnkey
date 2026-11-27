@@ -262,7 +262,7 @@ export function AppPane({
   ]);
   const who = (
     <>
-      <Avatar name={user.name} size="sm" />
+      <Avatar name={user.name} />
       <span className="col gap0 persona-t">
         <span className="t-strong ellipsis">{user.name}</span>
         <span className="t-cap muted">{roleName(def, user.role)}</span>
