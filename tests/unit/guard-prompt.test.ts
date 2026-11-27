@@ -101,7 +101,7 @@ describe('prompt policy against the workspace sources', () => {
     ['planner.ts', /export function planPrompt\([^)]*\) \{[\s\S]*?\n\}/],
     ['changes.ts', /export function changePrompt\([^)]*\) \{[\s\S]*?\n\}/],
     ['custom.tsx', /export function reviewPrompt\([^)]*\) \{[\s\S]*?\n\}/],
-    ['tester.tsx', /export const testerPrompt = \([^)]*\) =>\s*\S+/],
+    ['tester.tsx', /export function testerPrompt\([^)]*\) \{[\s\S]*?\n\}/],
     ['tester.tsx', /export const repairPrompt = \([^)]*\) =>\s*\S+/],
   ])('%s builder starts with HEAD()', (file, re) => {
     const src = re.exec(read(file));
