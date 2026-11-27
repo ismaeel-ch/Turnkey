@@ -1399,7 +1399,7 @@ export function flowKit(): FlowKit {
             sig = JSON.stringify([at, n.width, n.data]);
           return o && o.type === n.type && o.sig === sig && o.position.x === at.x && o.position.y === at.y
             ? o
-            : ({ ...(o && o.type === n.type ? o : null), ...n, position: at, sig });
+            : { ...(o && o.type === n.type ? o : null), ...n, position: at, sig };
         }),
       );
     }, [p.sig]); // a node that did not change keeps its object, so React Flow leaves it alone
@@ -1521,10 +1521,27 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
     ready = FLOW.state === 'ready';
   useEffect(() => {
     if (!ready || !ref.current) return undefined;
-    const r = createEagerRoot(ref.current);
+    const r = createEagerRoot(ref.current),
+      el = ref.current,
+      // a zoom that is still animating when the canvas loses its size (hidden, or the page changes around it) divides
+      // by a size of 0 and draws the background and minimap at NaN: stop it where it is as soon as the size goes
+      still = () => {
+        try {
+          if (FLOW.inst) void FLOW.inst.setViewport(FLOW.inst.getViewport());
+        } catch {}
+      },
+      ro =
+        typeof ResizeObserver === 'function'
+          ? new ResizeObserver(() => {
+              if (!el.clientWidth || !el.clientHeight) still();
+            })
+          : null;
+    if (ro) ro.observe(el);
     root.current = r;
     notify();
     return () => {
+      if (ro) ro.disconnect();
+      still(); // the root lives on for a moment after the canvas leaves the page
       root.current = null;
       FLOW.inst = null;
       setTimeout(() => {
