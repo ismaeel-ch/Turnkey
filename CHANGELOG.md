@@ -5,6 +5,17 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-11-27
+
+Change a built app and release a new version from the agents chat alone.
+
+### Added
+
+- Type "release" in the chat, or tap "Release version X" under it, and a card comes up with the version, the kind of
+  release, notes to edit, what new people start with and the tests. Press Release or type "yes"; Not now or "no"
+  stops it. "Release again" with nothing changed waits for a reason. After a release, a change typed in the chat
+  shows its plan and waits for "go ahead", then asks you to try it. ([#275](https://github.com/ismaeel-ch/Turnkey/pull/275))
+
 ## [0.5.4] - 2026-11-27
 
 A tidier row of view tabs on every list page of a built app, fixes found by ten more real builds on new sentences,
