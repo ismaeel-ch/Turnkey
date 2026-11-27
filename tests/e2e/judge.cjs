@@ -7,6 +7,8 @@
 //   TK_URL=https://turnkey-bay.vercel.app node tests/e2e/judge.cjs
 //   TK_URL=http://localhost:3000 JUDGE_SHOTS=/tmp/judge node tests/e2e/judge.cjs
 //   npm run test:e2e -- judge          against a local production build, like the other flows
+//   JUDGE_VIDEO=/tmp/video JUDGE_SLOWMO=250 ...   also records each part as a .webm, slowed down so a person can
+//                                      follow it (a silent rough cut for the demo video)
 //
 // The "Judge walk" workflow runs it by hand against the live site and keeps the screenshots as an artifact.
 // Unlike flows.cjs it does not read or set the app's state through the test hook: what a judge cannot see or click,
@@ -196,7 +198,8 @@ async function guidedWalk(page) {
 }
 
 async function main() {
-  const browser = await chromium.launch();
+  const slowMo = Number(process.env.JUDGE_SLOWMO) || 0;
+  const browser = await chromium.launch(slowMo ? { slowMo } : {});
   const errors = [];
   const watch = (page) => {
     page.on('pageerror', (e) => errors.push(firstLine(e)));
@@ -206,18 +209,26 @@ async function main() {
       if (r.status() >= 500 && !(r.status() === 503 && u.pathname.startsWith('/api/share'))) errors.push(`HTTP ${r.status()} on ${u.pathname}`);
     });
   };
-  const opts = { viewport: { width: 1440, height: 900 }, acceptDownloads: true };
+  const video = process.env.JUDGE_VIDEO;
+  if (video) fs.mkdirSync(video, { recursive: true });
+  const opts = {
+    viewport: { width: 1440, height: 900 },
+    acceptDownloads: true,
+    ...(video ? { recordVideo: { dir: video, size: { width: 1440, height: 900 } } } : {}),
+  };
   const gctx = await browser.newContext(opts);
   const gpage = await gctx.newPage();
   watch(gpage);
-  const ctx = await browser.newContext(opts);
-  const page = await ctx.newPage();
-  watch(page);
+  // part 2's browser opens when part 1 is done, so a recording of it does not start with minutes of blank page
+  /** @type {import('playwright').Page} */
+  let page = gpage;
 
   try {
     // ---- part 1: the guided build ----
     await guidedWalk(gpage);
     await gctx.close();
+    page = await (await browser.newContext(opts)).newPage();
+    watch(page);
 
     // ---- part 2: Try a sample and the agents' teamwork, in a fresh browser ----
     // ---- 1. the welcome screen (shot 1) ----
@@ -501,6 +512,8 @@ async function main() {
       expect(!errors.length, errors.slice(0, 3).join(' | '));
     });
   } finally {
+    // closing the context first lets a recording finish writing
+    await page.context().close().catch(() => {});
     await browser.close();
   }
 
