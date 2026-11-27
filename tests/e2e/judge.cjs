@@ -7,6 +7,8 @@
 //   TK_URL=https://turnkey-bay.vercel.app node tests/e2e/judge.cjs
 //   TK_URL=http://localhost:3000 JUDGE_SHOTS=/tmp/judge node tests/e2e/judge.cjs
 //   npm run test:e2e -- judge          against a local production build, like the other flows
+//   JUDGE_VIDEO=/tmp/video JUDGE_SLOWMO=250 ...   also records each part as a .webm, slowed down so a person can
+//                                      follow it (a silent rough cut for the demo video)
 //
 // The "Judge walk" workflow runs it by hand against the live site and keeps the screenshots as an artifact.
 // Unlike flows.cjs it does not read or set the app's state through the test hook: what a judge cannot see or click,
@@ -26,6 +28,8 @@ fs.mkdirSync(shots, { recursive: true });
 
 /** @type {{ n: number, name: string, status: 'pass' | 'fail', detail: string, ms: number }[]} */
 const results = [];
+/** When each part's recording started, so a step's place in the video can be written out (JUDGE_VIDEO only). */
+const rec = { part: 0, t0: Date.now() };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 const firstLine = (e) =>
@@ -48,7 +52,7 @@ async function step(page, name, fn) {
   }
   const file = `${String(n).padStart(2, '0')}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50)}.png`;
   await page.screenshot({ path: path.join(shots, file) }).catch(() => {});
-  results.push({ n, name, status, detail, ms: Date.now() - started });
+  results.push({ n, name, status, detail, ms: Date.now() - started, part: rec.part, at: (started - rec.t0) / 1000, end: (Date.now() - rec.t0) / 1000 });
   console.log(`${status.toUpperCase().padEnd(4)} ${n}. ${name}${detail ? '  (' + detail + ')' : ''}`);
   return status === 'pass';
 }
@@ -156,15 +160,24 @@ async function guidedWalk(page) {
     await page.waitForSelector('.app .demo-bar:has-text("Demo data removed")', { timeout: 30000 });
     return bar.slice(0, 120);
   });
-  await step(page, 'Guided: release 1.0, then a change gets a plan before it is made', async () => {
-    await openTab(page, 'Release');
-    await page.waitForSelector('#rel-go', { timeout: 15000 });
-    await page.locator('#rel-go').click();
-    await page.waitForFunction(() => /Version 1\.0 · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''), null, {
+  // shots 7 and 8 of the demo video: the release, the change and the next release all happen in the agents chat
+  const relCard = '.gcard.relask[data-card="relask"]';
+  const chatSaid = (re) =>
+    page.waitForFunction((src) => new RegExp(src).test([...document.querySelectorAll('.chat .msg-t')].map((x) => x.innerText).join(' ')), re, {
       timeout: 60000,
     });
-    await page.fill('#improve-text', 'Add a notes field to patients');
-    await page.locator('#improve-go').click();
+  const say = async (text) => {
+    await page.fill('.composer textarea', text);
+    await page.press('.composer textarea', 'Enter');
+    await sleep(400);
+  };
+  await step(page, 'Guided: release 1.0 from the chat, then a change typed in the chat gets a plan first', async () => {
+    const tip = page.locator('.chat .rel-tips .chip', { hasText: 'Release version 1.0' });
+    await tip.click();
+    await page.waitForSelector(relCard, { timeout: 15000 });
+    await page.locator(relCard + ' [data-act="release"]').click();
+    await chatSaid('Version 1\\.0 is released');
+    await say('Add a notes field to patients');
     const go = page.locator('.gcard.cplan [data-act="go"]');
     for (let i = 0; i < 100 && !(await go.count()); i++) {
       const o = page.locator('.gcard.ask .opt:not([disabled])');
@@ -172,21 +185,22 @@ async function guidedWalk(page) {
       await sleep(300);
     }
     expect(await go.count(), 'no plan card with Go ahead');
-    const plan = clean(await page.locator('.gcard.cplan').last().innerText());
-    await go.last().click();
+    return clean(await page.locator('.gcard.cplan').last().innerText()).slice(0, 120);
+  });
+  await step(page, 'Guided: "go ahead", "it works" and "release" typed in the chat ship version 1.1', async () => {
+    await say('go ahead');
     await page.waitForSelector('.gcard.tryit', { timeout: 120000 });
     const a = await waitBuilt(page, 120000);
     expect(a.tests && a.tests.failed === 0, 'tests ' + JSON.stringify(a.tests));
-    return plan.slice(0, 120);
-  });
-  await step(page, 'Guided: try it, then release the change as 1.1', async () => {
-    await page.locator('.gcard.tryit [data-act="works"]').last().click();
-    await page.locator('.gcard.tryit [data-act="release"]').last().click({ timeout: 30000 });
-    await page.waitForSelector('#rel-go', { timeout: 15000 });
-    await page.locator('#rel-go').click();
-    await page.waitForFunction(() => /Version 1\.1 · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''), null, {
-      timeout: 60000,
-    });
+    await say('it works');
+    await say('release');
+    await page.waitForSelector(relCard, { timeout: 15000 });
+    await page.locator(relCard + ' .seg button', { hasText: 'New feature' }).click();
+    const card = clean(await page.locator(relCard).innerText());
+    expect(/Release version 1\.1\b/.test(card), 'release card: ' + card.slice(0, 160));
+    await say('yes');
+    await chatSaid('Version 1\\.1 is released');
+    await openTab(page, 'Release');
     await page.locator('.rel-hist').evaluate((el) => el.scrollIntoView({ block: 'center' }));
     await sleep(400);
     const v = clean(await page.locator('.rel-hist').innerText());
@@ -196,7 +210,8 @@ async function guidedWalk(page) {
 }
 
 async function main() {
-  const browser = await chromium.launch();
+  const slowMo = Number(process.env.JUDGE_SLOWMO) || 0;
+  const browser = await chromium.launch(slowMo ? { slowMo } : {});
   const errors = [];
   const watch = (page) => {
     page.on('pageerror', (e) => errors.push(firstLine(e)));
@@ -206,18 +221,28 @@ async function main() {
       if (r.status() >= 500 && !(r.status() === 503 && u.pathname.startsWith('/api/share'))) errors.push(`HTTP ${r.status()} on ${u.pathname}`);
     });
   };
-  const opts = { viewport: { width: 1440, height: 900 }, acceptDownloads: true };
+  const video = process.env.JUDGE_VIDEO;
+  if (video) fs.mkdirSync(video, { recursive: true });
+  const opts = {
+    viewport: { width: 1440, height: 900 },
+    acceptDownloads: true,
+    ...(video ? { recordVideo: { dir: video, size: { width: 1440, height: 900 } } } : {}),
+  };
   const gctx = await browser.newContext(opts);
   const gpage = await gctx.newPage();
+  Object.assign(rec, { part: 1, t0: Date.now() });
   watch(gpage);
-  const ctx = await browser.newContext(opts);
-  const page = await ctx.newPage();
-  watch(page);
+  // part 2's browser opens when part 1 is done, so a recording of it does not start with minutes of blank page
+  /** @type {import('playwright').Page} */
+  let page = gpage;
 
   try {
     // ---- part 1: the guided build ----
     await guidedWalk(gpage);
     await gctx.close();
+    page = await (await browser.newContext(opts)).newPage();
+    Object.assign(rec, { part: 2, t0: Date.now() });
+    watch(page);
 
     // ---- part 2: Try a sample and the agents' teamwork, in a fresh browser ----
     // ---- 1. the welcome screen (shot 1) ----
@@ -501,11 +526,15 @@ async function main() {
       expect(!errors.length, errors.slice(0, 3).join(' | '));
     });
   } finally {
+    // closing the context first lets a recording finish writing
+    await page.context().close().catch(() => {});
     await browser.close();
   }
 
   const failed = results.filter((r) => r.status === 'fail').length;
   console.log(`\n${results.length - failed} of ${results.length} steps passed. Screenshots in ${shots}`);
+  // where each step sits in the part's recording, in seconds, for cutting a narrated video from it
+  if (video) fs.writeFileSync(path.join(video, 'steps.json'), JSON.stringify(results.map(({ n, name, part, at, end }) => ({ n, name, part, at, end })), null, 1));
   if (process.env.GITHUB_STEP_SUMMARY) {
     const rows = results.map((r) => `| ${r.status === 'pass' ? '✅' : '❌'} | ${r.n}. ${r.name} | ${Math.round(r.ms / 1000)} s | ${r.detail.replace(/\|/g, '\\|')} |`);
     fs.appendFileSync(

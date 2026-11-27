@@ -8,13 +8,24 @@ versions are semantic versions. Each release lists the pull requests merged into
 ## [0.5.5] - 2026-11-27
 
 A release now reaches every browser on its next visit, a built app can be changed and released from the agents chat,
-and smaller view fixes.
+the agents at work are shown in a new way, and smaller fixes.
 
 ### Added
 
 - The agents chat can change a built app and release it: say "release" and a card offers the version, the kind of
   change, what new people start with and the notes. After a release, a change typed in chat gets questions and a plan
   first. ([#275](https://github.com/ismaeel-ch/Turnkey/pull/275))
+
+### Changed
+
+- The agents chat, the Meeting view, the Timeline and the Log are redesigned. Under the chat's title a strip says
+  who is working on what, with one segment per step. An agent's turn reads as one block, a thin line marks each
+  handover, cards are white Fluent cards, and the message box is one framed field with a note that agents can make
+  mistakes. The Meeting view shows a card per agent with its state, what it is doing and how long it worked, next
+  to the build line as a rail. The Log is a feed down one rail instead of a table.
+  ([#284](https://github.com/ismaeel-ch/Turnkey/pull/284))
+- The welcome note no longer names the organiser, and the docs have a demo video script.
+  ([#271](https://github.com/ismaeel-ch/Turnkey/pull/271))
 
 ### Fixed
 
