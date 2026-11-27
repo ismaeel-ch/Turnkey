@@ -11,7 +11,7 @@ import type {
   Screen,
   Untrusted,
 } from '@/shared/types/app';
-import type { AppRecord, Dict, StationLine, ToolContext } from '@/shared/types/workspace';
+import type { AppRecord, ChangePlan, Dict, StationLine, ToolContext } from '@/shared/types/workspace';
 import {
   BRAND,
   NO_MODEL,
@@ -98,7 +98,9 @@ import {
 } from './line';
 import { FLOW_HELP, LEVELS, NOTE_FOR, agentThe, answerGate, flowChat, flowList, flowOf, parseFlow } from './custom';
 import { REVIEWERS } from './reviewers';
-import { logChange } from './release';
+import { logChange, relOf } from './release';
+import { changePlan, stationsFor } from './change-plan';
+import type { StepFacts } from './change-plan';
 import { AWAY_DAYS, bringBackColumn, putAwayColumn } from './carry';
 import { recordTouches, snapshotDef } from './provenance';
 
@@ -525,12 +527,9 @@ export function renameEverywhere(app: AppRecord & { def: BackedDef }, t: AppTabl
   });
   arr<Row>(app.seed && app.seed.rows[t.name]).forEach((r) => mv(r));
 }
-export interface PlannedStep {
-  station: string;
-  text: string;
+/** One step of a change: what the plan card needs to know about it (`StepFacts`), and how to make it. */
+export interface PlannedStep extends StepFacts {
   sql?: string;
-  destructive?: boolean;
-  loss?: string;
   run(ctx: { runN: number }): void;
 }
 type BackedApp = AppRecord & { def: BackedDef };
@@ -971,6 +970,7 @@ export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
           r.name + ' ' + (v && v !== 'none' ? 'can already ' : 'already cannot ') + ACT_VERB[act] + ' ' + t.label.toLowerCase() + '.',
         );
       const allow = v && v !== 'none',
+        reach = (x: unknown) => (x === 'all' || x === true ? 2 : x === 'own' ? 1 : 0),
         dropped = allow
           ? def.tour.filter((st) => st.do === 'denied' && st.role === r.id && st.table === t.name && (st.action || 'create') === act)
           : [];
@@ -991,6 +991,13 @@ export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
               ' ') +
           t.label.toLowerCase() +
           (dropped.length ? ', and drop the tour step that expected a refusal' : ''),
+        also: ['screens'], // who may see a list decides who gets its pages
+        access: {
+          who: r.name,
+          people: def.users.filter((u) => u.role === r.id).length,
+          gains: reach(v) > reach(A[act]),
+          what: ACT_VERB[act] + ' ' + (v === 'own' || (!allow && A[act] === 'own') ? 'their own ' : '') + t.label.toLowerCase(),
+        },
         run() {
           Object.assign(A, { [act]: v });
           if (dropped.length) def.tour = def.tour.filter((st) => !dropped.includes(st));
@@ -1222,7 +1229,7 @@ export const RECHECK: Dict<(app: BackedApp, ctx: ChangeCtx, steps: PlannedStep[]
   },
 };
 export function applyChangeSync(app: BackedApp, steps: PlannedStep[], ctx: ChangeCtx) {
-  // apply everything inside one savepoint, re-check every station from the first one touched, roll back if any check fails
+  // apply everything inside one savepoint, re-check the stations the change needs, roll back if any check fails
   const backup = JSON.stringify({
     def: app.def,
     name: app.name,
@@ -1237,6 +1244,7 @@ export function applyChangeSync(app: BackedApp, steps: PlannedStep[], ctx: Chang
       null,
       steps.map((s) => stationIdx(s.station)),
     ),
+    need = stationsFor(steps), // the stations the steps change, and the ones that read what those write
     per: Dict<Recheck & { issues: string[] }> = {};
   let failed: string | null = null;
   const before: Dict<number> = (ctx.before = {});
@@ -1251,13 +1259,12 @@ export function applyChangeSync(app: BackedApp, steps: PlannedStep[], ctx: Chang
       recordTouches(app, snap, STATIONS[stationIdx(s.station)]?.agent || 'orchestrator', 'change', ctx.runN, s.text);
     });
     app.rev++;
-    for (let i = first; i < STATIONS.length; i++) {
-      const id = STATIONS[i].id,
-        r = RECHECK[id](
-          app,
-          ctx,
-          steps.filter((s) => s.station === id),
-        );
+    for (const id of need) {
+      const r = RECHECK[id](
+        app,
+        ctx,
+        steps.filter((s) => s.station === id),
+      );
       const issues = issuesOf(r.checks);
       per[id] = Object.assign(r, { issues });
       if (issues.length) {
@@ -1289,11 +1296,12 @@ export function applyChangeSync(app: BackedApp, steps: PlannedStep[], ctx: Chang
   } else dbRelease(app.id, 'chg');
   return {
     first,
+    need,
     per,
     failed,
   };
 }
-export async function runChange(app: BackedApp, steps: PlannedStep[], title: string) {
+export async function runChange(app: BackedApp, steps: PlannedStep[], title: string, kind?: 'fix' | 'feature' | null) {
   const run = newRun(app, 'change', title, liveModelOn() ? 'live' : 'demo'),
     ctl = (RUNS[app.id] = {
       stop: false,
@@ -1311,26 +1319,27 @@ export async function runChange(app: BackedApp, steps: PlannedStep[], title: str
     app: app.id,
   });
   const res = applyChangeSync(app, steps, ctx),
-    first = res.first,
     keep: Dict<Partial<StationLine>> = {};
-  STATIONS.forEach((st, i) => {
+  STATIONS.forEach((st) => {
     const L = app.line[st.id];
     keep[st.id] = {
       checks: L.checks,
       facts: L.facts,
       attempts: L.attempts,
     };
-    if (i < first) L.note = 'No change';
+    if (!res.need.includes(st.id)) L.note = 'No change';
     else {
       L.status = 'idle';
       L.note = null;
     }
   });
+  const order = res.need.map((id) => stationIdx(id)),
+    names = (on: boolean) => STATIONS.filter((st) => res.need.includes(st.id) === on).map((st) => st.name);
   U.runSel[app.id] = null;
   U.follow[app.id] = true;
   commit();
   try {
-    for (let i = first; i < STATIONS.length; i++) {
+    for (const i of order) {
       const st = STATIONS[i],
         L = app.line[st.id],
         r = res.per[st.id];
@@ -1339,7 +1348,7 @@ export async function runChange(app: BackedApp, steps: PlannedStep[], title: str
       L.status = 'working';
       L.attempt = 1;
       commit();
-      const s1 = stepStart(run, st.id, st.agent, i === first ? 'Apply change' : 'Re-run', 'tool');
+      const s1 = stepStart(run, st.id, st.agent, steps.some((s) => s.station === st.id) ? 'Apply change' : 'Re-run', 'tool');
       await pace(app, 650);
       stepEnd(s1, true);
       L.status = 'checking';
@@ -1374,7 +1383,7 @@ export async function runChange(app: BackedApp, steps: PlannedStep[], title: str
         await pace(app, 900);
         break;
       }
-      if (i < STATIONS.length - 1) {
+      if (i !== order[order.length - 1]) {
         U.handoff[app.id] = i;
         notify();
         await pace(app, 380);
@@ -1386,10 +1395,10 @@ export async function runChange(app: BackedApp, steps: PlannedStep[], title: str
   }
   if (res.failed) {
     const bad = res.per[res.failed];
-    STATIONS.forEach((st, i) => {
+    STATIONS.forEach((st) => {
       const L = app.line[st.id];
       L.status = 'ok';
-      if (i >= first) {
+      if (res.need.includes(st.id)) {
         L.note = 'Change not applied';
         if (st.id !== res.failed) Object.assign(L, keep[st.id]);
       }
@@ -1410,7 +1419,7 @@ export async function runChange(app: BackedApp, steps: PlannedStep[], title: str
     STATIONS.forEach((st) => {
       app.line[st.id].status = 'ok';
     });
-    steps.forEach((s) => logChange(app, s.text, s.station));
+    steps.forEach((s) => logChange(app, s.text, s.station, kind));
     const ts = runTestsSync(app, undefined);
     run.status = 'ok';
     say(
@@ -1423,8 +1432,8 @@ export async function runChange(app: BackedApp, steps: PlannedStep[], title: str
       {
         type: 'changed',
         items: steps.map((s) => s.text),
-        reran: STATIONS.slice(first).map((s) => s.name),
-        skipped: STATIONS.slice(0, first).map((s) => s.name),
+        reran: names(true),
+        skipped: names(false),
       },
     );
     toast('Change applied to ' + app.name, 'success');
@@ -1440,6 +1449,7 @@ export async function runChange(app: BackedApp, steps: PlannedStep[], title: str
     status: run.status,
   });
   commit();
+  return !res.failed;
 }
 export function askApproval(app: BackedApp, steps: PlannedStep[]): Promise<boolean> {
   // human in the loop: nothing that loses data runs without a yes
@@ -1496,40 +1506,8 @@ export function changePrompt(app: BackedApp, text: string) {
 }
 export const DEMO_HELP =
   'In Demo mode I understand a fixed set of changes: add, rename or remove a field, turn a text field into a choice, add a page in any view (table, board, calendar, timeline, chart, pivot, tree, cards), add a chart to the dashboard, change who may see, create, edit or delete a table, change the colour, navigation or density, rename the app, and remove or add the demo data. Try one of the suggestions below, or switch to Live for anything else.';
-export async function handleChat(app: BackedApp, text: string, opt?: { rules?: boolean }) {
-  // opt.rules: read this message with the built-in rules whatever the mode (a reviewer's fix that was tried out that way)
-  text = str(text);
-  if (!text) return;
-  const r = RUNS[app.id];
-  const q = app.def.brief.question;
-  if (r && r.answer && q) {
-    const i = /^\d$/.test(text) ? +text - 1 : q.options.findIndex((o) => o.toLowerCase().indexOf(text.toLowerCase()) >= 0);
-    if (i >= 0 && i < q.options.length) return answerQuestion(app, i);
-    pushChat(app, 'user', text);
-    say(app, 'researcher', 'Pick one of the options on the card so I can continue.');
-    return;
-  }
-  if (r && r.gate) {
-    // the line is waiting at an approval the owner asked for
-    if (/^(approve|approved|ok|okay|yes|continue|go on|go ahead|carry on|looks good|fine)\b/i.test(text)) return answerGate(app, true);
-    if (/^(stop|no|cancel|halt)\b/i.test(text)) return answerGate(app, false);
-    pushChat(app, 'user', text);
-    say(
-      app,
-      'orchestrator',
-      'Approve to continue, or stop here: the card above has both. To change what an agent made, stop, give that agent an instruction under Customize, and run again from its station.',
-    );
-    return;
-  }
-  pushChat(app, 'user', text);
-  commit();
-  if (PENDING[app.id]) return void say(app, 'orchestrator', 'Answer the approval card first.');
-  const wf = opt && opt.rules ? null : parseFlow(text, app);
-  if (wf) return void flowChat(app, wf); // the workflow is shared state: it can be changed at any time, also while a build runs
-  if (r) return void say(app, 'orchestrator', 'A run is in progress. I will take changes when it finishes.');
-  if (TEAMS[app.id] && TEAMS[app.id].status === 'running')
-    return void say(app, 'orchestrator', "The app's own agents are in the middle of a run. I will take changes when they have finished.");
-  if (app.status !== 'ready') return void say(app, 'orchestrator', 'The app is not built yet. Use Run again above the line.');
+/** Reads a message into operations: the model when Live is on, the built-in rules otherwise (it says why, once). */
+export async function readChange(app: BackedApp, text: string, opt?: { rules?: boolean }): Promise<ParsedChange & { mode?: string }> {
   let plan: ParsedChange & { mode?: string };
   const mode =
     opt && opt.rules
@@ -1579,6 +1557,43 @@ export async function handleChat(app: BackedApp, text: string, opt?: { rules?: b
     delete RUNS[app.id];
     U.busy = null;
   }
+  return plan;
+}
+export async function handleChat(app: BackedApp, text: string, opt?: { rules?: boolean }) {
+  // opt.rules: read this message with the built-in rules whatever the mode (a reviewer's fix that was tried out that way)
+  text = str(text);
+  if (!text) return;
+  const r = RUNS[app.id];
+  const q = app.def.brief.question;
+  if (r && r.answer && q) {
+    const i = /^\d$/.test(text) ? +text - 1 : q.options.findIndex((o) => o.toLowerCase().indexOf(text.toLowerCase()) >= 0);
+    if (i >= 0 && i < q.options.length) return answerQuestion(app, i);
+    pushChat(app, 'user', text);
+    say(app, 'researcher', 'Pick one of the options on the card so I can continue.');
+    return;
+  }
+  if (r && r.gate) {
+    // the line is waiting at an approval the owner asked for
+    if (/^(approve|approved|ok|okay|yes|continue|go on|go ahead|carry on|looks good|fine)\b/i.test(text)) return answerGate(app, true);
+    if (/^(stop|no|cancel|halt)\b/i.test(text)) return answerGate(app, false);
+    pushChat(app, 'user', text);
+    say(
+      app,
+      'orchestrator',
+      'Approve to continue, or stop here: the card above has both. To change what an agent made, stop, give that agent an instruction under Customize, and run again from its station.',
+    );
+    return;
+  }
+  pushChat(app, 'user', text);
+  commit();
+  if (PENDING[app.id]) return void say(app, 'orchestrator', 'Answer the approval card first.');
+  const wf = opt && opt.rules ? null : parseFlow(text, app);
+  if (wf) return void flowChat(app, wf); // the workflow is shared state: it can be changed at any time, also while a build runs
+  if (r) return void say(app, 'orchestrator', 'A run is in progress. I will take changes when it finishes.');
+  if (TEAMS[app.id] && TEAMS[app.id].status === 'running')
+    return void say(app, 'orchestrator', "The app's own agents are in the middle of a run. I will take changes when they have finished.");
+  if (app.status !== 'ready') return void say(app, 'orchestrator', 'The app is not built yet. Use Run again above the line.');
+  const plan = await readChange(app, text, opt);
   if (plan.special === 'demo_remove') {
     const x = removeDemoData(app);
     return void say(
@@ -1636,12 +1651,18 @@ export async function handleChat(app: BackedApp, text: string, opt?: { rules?: b
   await proposeAndRun(app, p, str(plan.reply), text);
 }
 
+/** A change as the owner reads it: who works on it, what happens to the records, and the version it goes out as. */
+export const planOf = (app: AppRecord, steps: StepFacts[], title: string, kind?: 'fix' | 'feature' | null): ChangePlan =>
+  changePlan({
+    title,
+    steps,
+    lists: app.def.tables.map((t) => ({ label: t.label, n: Number(dbCount(app.id, t.name)) || 0 })),
+    live: relOf(app)?.v || '',
+    kind,
+  });
 /** Shows the plan card, asks before anything that deletes data, then runs only the stations the change touches. */
 async function proposeAndRun(app: BackedApp, p: { steps: PlannedStep[]; errors: string[] }, reply: string, title: string) {
-  const first = Math.min.apply(
-    null,
-    p.steps.map((s) => stationIdx(s.station)),
-  );
+  const need = stationsFor(p.steps);
   say(
     app,
     'orchestrator',
@@ -1652,8 +1673,9 @@ async function proposeAndRun(app: BackedApp, p: { steps: PlannedStep[]; errors: 
         text: s.text,
         sql: s.sql || '',
       })),
-      rerun: STATIONS.slice(first).map((s) => s.name),
-      skip: STATIONS.slice(0, first).map((s) => s.name),
+      rerun: STATIONS.filter((s) => need.includes(s.id)).map((s) => s.name),
+      skip: STATIONS.filter((s) => !need.includes(s.id)).map((s) => s.name),
+      plan: planOf(app, p.steps, title),
     },
   );
   if (p.steps.some((s) => s.destructive) && !(await askApproval(app, p.steps)))

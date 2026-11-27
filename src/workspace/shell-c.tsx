@@ -123,6 +123,9 @@ const ShortcutsDialog = lazy(() => import('./palette').then((m) => ({ default: m
 // The debug drawer loads the first time debug mode is on.
 const DebugDrawer = lazy(() => import('./debug').then((m) => ({ default: m.DebugDrawer })));
 const GuideDialog = lazy(() => import('./guide').then((m) => ({ default: m.GuideDialog })));
+// "Report a problem" and the before and after view load the first time one opens.
+const ReportDialog = lazy(() => import('./improve').then((m) => ({ default: m.ReportDialog })));
+const CompareDialog = lazy(() => import('./improve').then((m) => ({ default: m.CompareDialog })));
 
 /* ===== Turnkey prototype · shell: first-run onboarding, sign-in, dialogs, guided tour, boot ===== */
 /* The forms below keep their state in the view store (U), so it outlives a re-render. Components read it through a
@@ -1296,6 +1299,18 @@ export function DialogHost() {
       return <InstallAppDialog p={p} />;
     case 'goback':
       return <GoBackDialog p={p} />;
+    case 'report':
+      return (
+        <Suspense fallback={null}>
+          <ReportDialog p={p} />
+        </Suspense>
+      );
+    case 'compare':
+      return (
+        <Suspense fallback={null}>
+          <CompareDialog p={p} />
+        </Suspense>
+      );
     case 'addstep':
       return <AddStepDialog p={p} />;
     case 'guide':
