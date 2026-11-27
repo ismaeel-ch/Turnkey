@@ -116,8 +116,9 @@ function StepRow({ app, st, i }: { app: AppRecord; st: BuildStep; i: number }) {
       )}
       <div className="step-body">
         <div className="step-top">
-          <strong>{st.title}</strong>
-          <span className="t-cap muted grow">{st.who}</span>
+          <span className="step-name grow">
+            <strong>{st.title}</strong> <span className="t-cap muted">{st.who}</span>
+          </span>
           <span className={'badge b-' + TONE[st.state]}>
             {st.state === 'now' && <Spinner />}
             {LABEL[st.state]}
