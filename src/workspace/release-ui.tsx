@@ -25,7 +25,7 @@ import {
 } from './core';
 import { testStats } from './tests';
 import { RUNS } from './line';
-import { Btn, Card, Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner, Textarea } from './ui';
+import { Btn, Card, Chip, Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner, Textarea } from './ui';
 import { framed, openShare, openShared, settingsLists, startWith } from './share';
 import { appBusy } from './history';
 import { verNext } from './record-steps';
@@ -58,6 +58,10 @@ import {
   bringBack,
   AWAY_KEPT,
   verText,
+  relDraft,
+  waitingRelease,
+  releaseFromChat,
+  declineRelease,
 } from './release';
 
 export function GoBackDialog({ p }: { p: { app: string; v: string } }) {
@@ -656,6 +660,117 @@ export function ReleaseCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
           }}
         >
           Versions
+        </Btn>
+      </div>
+    </div>
+  );
+}
+/** The release card in the chat: the version, what kind it is, its notes and the tests, then Release or Not now. */
+export function ReleaseAskCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
+  const c = m.card || { type: 'relask' },
+    open = c.decided == null && waitingRelease(app) === c;
+  if (!open)
+    return (
+      <div className={cx('gcard', 'relask', c.decided === 'released' && 'ok')}>
+        <div className="gc-h">
+          <Icon n="rocket" s="16" />
+          {c.decided === 'released' ? 'Released as version ' + String(c.v) : 'Release'}
+        </div>
+        <span className={c.decided === 'released' ? 'badge b-success' : 't-cap muted'}>
+          {c.decided === 'released'
+            ? 'You pressed Release'
+            : c.decided === 'later'
+              ? 'Not released'
+              : c.decided === 'replaced'
+                ? 'Replaced by a newer card below'
+                : 'No longer waiting'}
+        </span>
+      </div>
+    );
+  const d = relDraft(app),
+    block = releaseBlock(app),
+    st = testStats(app),
+    rel = d.rel,
+    can = !block && !d.R.busy && (!d.again || d.notes.length > 0),
+    starts: { id: StartWith; name: string }[] = [
+      { id: 'empty', name: 'Empty' },
+      { id: 'demo', name: 'Demo data' },
+      { id: 'live', name: 'Records as they are' },
+    ];
+  return (
+    <div className="gcard ask relask" data-card="relask">
+      <div className="gc-h">
+        <Icon n="rocket" s="16" />
+        <span className="grow">{'Release version ' + d.v}</span>
+        <span className="badge b-info" data-kind={d.kind}>
+          {REL_KIND[d.kind] || d.kind}
+        </span>
+      </div>
+      {rel && (
+        <Seg
+          label="Kind of release"
+          items={(['fix', 'feature', 'major'] as const).map((k) => ({
+            id: k,
+            label: (k === 'fix' ? 'Fix' : k === 'feature' ? 'New feature' : 'Big change') + ' · ' + verNext(rel.v, k),
+          }))}
+          value={d.kind}
+          onChange={(k) => setRelForm(app.id, { kind: k })}
+        />
+      )}
+      {rel ? (
+        <span className="t-cap" data-part="start">
+          {'New people start with ' +
+            (starts.find((x) => x.id === d.start)?.name || 'Empty').toLowerCase() +
+            '. People who already have it keep their records.'}
+        </span>
+      ) : (
+        <div className="col gap4" data-part="start">
+          <span className="t-cap muted">What should your people start with?</span>
+          <div className="row wrap gap4" role="group" aria-label="What people start with">
+            {starts.map((x) => (
+              <Chip key={x.id} on={x.id === d.start} data-start={x.id} onClick={() => setRelForm(app.id, { start: x.id })}>
+                {x.name}
+              </Chip>
+            ))}
+          </div>
+        </div>
+      )}
+      <label className="col gap4">
+        <span className="t-cap muted">
+          {d.again ? 'Why it goes out again (people see this when they update)' : 'What is new (one line each, edit freely)'}
+        </span>
+        <Textarea
+          native
+          className="textarea relask-notes"
+          rows={Math.min(6, Math.max(2, d.text.split('\n').length))}
+          value={d.text}
+          placeholder={d.again ? 'For example: new people now start with the demo data' : ''}
+          onInput={(e) => setRelForm(app.id, { text: (e.target as HTMLTextAreaElement).value })}
+        />
+      </label>
+      <span className={cx('ck', 't-cap', st && st.fresh && st.failed ? 'bad' : 'ok')}>
+        <Icon n={st && st.fresh && st.failed ? 'warning' : 'checkCircle'} s="16" />
+        {block ||
+          (st && st.fresh ? st.passed + ' of ' + st.total + ' tests pass. They run once more first.' : 'Every test runs once more first.')}
+      </span>
+      <div className="row wrap">
+        <Btn className="btn primary sm" data-act="release" disabled={!can} onClick={() => void releaseFromChat(app)}>
+          {d.R.busy ? <Spinner /> : <Icon n="rocket" s="16" />}
+          {'Release version ' + d.v}
+        </Btn>
+        <Btn className="btn sm" data-act="later" disabled={d.R.busy} onClick={() => declineRelease(app)}>
+          Not now
+        </Btn>
+        <Btn
+          className="btn subtle sm"
+          data-act="page"
+          onClick={() => {
+            U.view[app.id] = 'release';
+            if (NARROW() && chatShown()) setChat(false);
+            notify();
+          }}
+        >
+          Open Release
         </Btn>
       </div>
     </div>
