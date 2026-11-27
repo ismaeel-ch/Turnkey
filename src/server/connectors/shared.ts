@@ -101,6 +101,16 @@ export async function requestJson(
   }
 }
 
+/** The raw answer, for a source that needs its headers or reads its own body format (the MCP connector). */
+export async function requestResponse(
+  doFetch: Fetcher,
+  url: string,
+  init: { method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: unknown } = {},
+): Promise<{ ok: true; response: Response } | ConnectorError> {
+  const res = await send(doFetch, url, init);
+  return res.ok ? res : res.error;
+}
+
 /** Same as requestJson, but returns the body as text (for Atom XML). */
 export async function requestText(
   doFetch: Fetcher,

@@ -168,6 +168,17 @@ async function flowDemo(browser, url) {
   check('when the source fails, the test says why and shows the labelled sample beside it', /Sample response/.test(await page.locator('.conn-detail').innerText()), await page.locator('.conn-detail').innerText());
   await page.unroute('**/api/connectors/**');
   await shot(page, '22-connections');
+  // Microsoft Learn: the search tool goes through the server's MCP client, the fetch tool stays a sample
+  await page.locator('.conn-card .conn-main', { hasText: 'Microsoft Learn' }).click(); await page.waitForFunction(() => /MCP server/.test((document.querySelector('.conn-detail') || {}).innerText || ''));
+  if (!(await page.locator('#conn-mslearn').isChecked().catch(() => true))) { await page.locator('#conn-mslearn').click(); await sleep(100); }
+  let learnUrl = '';
+  await page.route('**/api/connectors/**', (route) => { learnUrl = route.request().url(); return route.fulfill({ json: { ok: true, items: [{ title: 'Reset a user password', url: 'https://learn.microsoft.com/en-us/entra/', text: 'A made-up answer from the server route.', source: 'Microsoft Learn' }] } }); });
+  await page.locator('.conn-detail tr', { hasText: 'microsoft_docs_search' }).locator('.btn', { hasText: 'Test' }).click(); await page.waitForSelector('.conn-detail .badge.b-success');
+  check('Microsoft Learn search is called through the server route, which speaks to its MCP server', /\/api\/connectors\/mslearn\?.*q=reset/.test(learnUrl) && /Live response/.test(await page.locator('.conn-detail').innerText()), learnUrl);
+  learnUrl = '';
+  await page.locator('.conn-detail tr', { hasText: 'microsoft_docs_fetch' }).locator('.btn', { hasText: 'Test' }).click(); await sleep(200);
+  check('the Microsoft Learn fetch tool has no server client and shows a labelled sample', learnUrl === '' && /Sample response/.test(await page.locator('.conn-detail').innerText()), await page.locator('.conn-detail').innerText());
+  await page.unroute('**/api/connectors/**');
   await page.locator('.titlebar .net').click(); await sleep(200);
   check('offline disables connection tests', await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().isDisabled());
   await shot(page, '23-offline');

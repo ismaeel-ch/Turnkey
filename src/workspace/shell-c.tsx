@@ -1198,7 +1198,7 @@ export function AboutDialog() {
           {li([
             "Demo replays recorded agent output, for builds and for the quest apps' agent runs. It makes no model calls, and its token figures are samples.",
             'In Demo the four review steps are rules written in code, and a standing instruction has nothing to act on, because recorded work is replayed.',
-            'Connections without a server client (Microsoft Learn, MCP servers you add) show a labelled sample.',
+            'MCP servers you add on the Connections page have no server client, so Test shows a labelled sample. Microsoft Learn search is the one MCP server Turnkey calls for real.',
             'Everyone who opens a share link works in their own copy, in their own browser. One database shared by everyone would need a store on the server, which the free hosting plan does not keep.',
             'Sign-in to a built app is local to this browser. It shows roles and permissions; it is not an account system.',
             'Live calls are capped per session and per day, to protect the model budget.',
