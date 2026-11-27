@@ -5,6 +5,10 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-11-28
+
+Every built app gets its own Settings page, and the person menu in its header has a proper avatar.
+
 ### Added
 
 - Every built app has its own Settings page, opened from a gear in the app's header by the people who run it. It
@@ -16,6 +20,13 @@ versions are semantic versions. Each release lists the pull requests merged into
   add back the demo data, download or restore the database, and Start over. Each choice applies at once with no
   agent run, is kept with the app (so a share link, a release and an earlier version carry it), and is noted for the
   next release. The builder has a Settings button above the app that opens the page as someone who may.
+  ([#290](https://github.com/ismaeel-ch/Turnkey/pull/290))
+
+### Fixed
+
+- The person menu in a built app's header shows a full-size avatar that is white with the person's own colour for
+  the initials, in light and in dark. In dark it was a small grey circle.
+  ([#294](https://github.com/ismaeel-ch/Turnkey/issues/294))
 
 ### Changed
 
