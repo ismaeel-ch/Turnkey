@@ -5,7 +5,7 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
-## [0.5.6] - 2026-11-27
+## [0.5.7] - 2026-11-27
 
 Built apps look like Fluent 2 products.
 
@@ -19,6 +19,22 @@ Built apps look like Fluent 2 products.
   the first column as the record's name. Dashboards, boards, the calendar, the record pane, sign-in and the
   first-use cards use the same surfaces, in light, dark and on a phone.
   ([#283](https://github.com/ismaeel-ch/Turnkey/pull/283))
+
+## [0.5.6] - 2026-11-27
+
+The workspace follows Fluent 2's type ramp, corner radii and control sizes.
+
+### Changed
+
+- Text sizes and corner radii across the welcome, Home, questions, plan, build steps, Release and Details screens
+  are steps of Fluent 2's ramps: captions are 12 px, body text is 14 px. The Home prompt has one frame, and main
+  actions such as "Build this app" and "Open the app" are standard size.
+  ([#286](https://github.com/ismaeel-ch/Turnkey/pull/286))
+
+### Fixed
+
+- In dark, the step markers on Release and a title bar tab under the pointer no longer turn pure black.
+  ([#286](https://github.com/ismaeel-ch/Turnkey/pull/286))
 
 ## [0.5.5] - 2026-11-27
 
