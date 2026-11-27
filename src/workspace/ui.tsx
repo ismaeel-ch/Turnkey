@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   type CSSProperties,
+  type ButtonHTMLAttributes,
   type ChangeEvent,
   type InputHTMLAttributes,
   type ReactNode,
@@ -14,6 +15,7 @@ import {
   type TextareaHTMLAttributes,
 } from 'react';
 import type {
+  AvatarProps,
   ButtonProps,
   CardProps,
   InputProps as FluentInputProps,
@@ -24,8 +26,11 @@ import type {
 } from '@fluentui/react-components';
 import type { Check } from '@/shared/types/app';
 import {
+  Avatar as FluentAvatar,
   Button,
   Card as FluentCard,
+  Link,
+  Tooltip,
   Input as FluentInput,
   InteractionTag,
   InteractionTagPrimary,
@@ -88,22 +93,52 @@ export function Logo({ size }: { size?: number }) {
     </svg>
   );
 }
+/** Fluent's Avatar sizes behind the old size names: xs 20, sm 24, (none) 32, lg 40. */
+const AV_SIZE: Record<string, AvatarProps['size']> = { xs: 20, sm: 24, lg: 40 };
+/**
+ * A person: Fluent's Avatar with their initials. It keeps `.av` and the accent class, which gives it the colour of the
+ * person's role. The name is read out by the text beside it, so the picture itself is hidden from screen readers.
+ */
 export function Avatar({ name, size, acc }: { name: string; size?: string; acc?: string }) {
   return (
-    <span className={cx('av', size && 'av-' + size, 'acc-' + (acc || accFor(name)))} aria-hidden="true">
-      {initials(name)}
-    </span>
+    <FluentAvatar
+      className={cx('av', size && 'av-' + size, 'acc-' + (acc || accFor(name)))}
+      size={AV_SIZE[size || ''] || 32}
+      initials={initials(name)}
+      aria-hidden="true"
+    />
+  );
+}
+/** An agent, a step or a tool: Fluent's square Avatar around an icon, in the accent colour it was given. */
+export function IconAv({ icon, acc, size, title, cls }: { icon: string; acc?: string; size?: string; title?: string; cls?: Cls }) {
+  return (
+    <FluentAvatar
+      className={cx('av sq', size && 'av-' + size, acc && 'acc-' + acc, cls)}
+      shape="square"
+      size={AV_SIZE[size || ''] || 32}
+      icon={<Icon n={icon} s={size === 'xs' ? '12' : size === 'lg' ? '24' : '16'} />}
+      title={title}
+      aria-hidden={title ? undefined : 'true'}
+      aria-label={title}
+    />
   );
 }
 export function AgentAv({ id, size }: { id: string; size?: string }) {
   const a = AGENTS[id];
   if (!a) return <Avatar name="You" size={size} acc="steel" />;
-  return (
-    <span className={cx('av sq', size && 'av-' + size, 'acc-' + a.acc)} title={a.name + ' agent'}>
-      <Icon n={a.icon} s={size === 'xs' ? '12' : size === 'lg' ? '24' : '16'} />
-    </span>
-  );
+  return <IconAv icon={a.icon} acc={a.acc} size={size} title={a.name + ' agent'} />;
 }
+/** Text that acts: Fluent's Link drawn on a button, for "Change", "Skip" and other actions inside a sentence. */
+export const LinkBtn = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { quiet?: boolean }>(function LinkBtn(
+  { className, quiet, children, ...rest },
+  ref,
+) {
+  return (
+    <Link as="button" ref={ref} className={className} appearance={quiet ? 'subtle' : 'default'} inline {...rest}>
+      {children}
+    </Link>
+  );
+});
 /** Fluent's spinner, small enough to sit in a line of text. */
 export function Spinner() {
   return <FluentSpinner className="spin" size="extra-tiny" role="status" aria-label="Working" />;
@@ -112,24 +147,38 @@ export function Spinner() {
  * Every button in the workspace. The old class names stay on the element (`btn primary sm`, `btn subtle icon` ...)
  * because tests and layout CSS use them; they also pick the Fluent appearance and size.
  */
-export const Btn = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProps>(function Btn({ className, children, ...rest }, ref) {
+export const Btn = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProps>(function Btn(
+  { className, children, title, ...rest },
+  ref,
+) {
   const t = String(className || '').split(/\s+/);
   const has = (x: string) => t.includes(x);
   const appearance = has('primary') || has('danger') ? 'primary' : has('subtle') ? 'subtle' : 'secondary';
   // `.btn.icon` holds only an icon. Fluent sizes an icon-only button square when the icon comes in its `icon` slot;
   // as a child it keeps the 64px minimum width and the text line height (a 64x20 close button on a toast).
   const iconOnly = has('icon') && isValidElement(children);
-  return (
+  const button = (
     <Button
       ref={ref}
       className={className}
       appearance={appearance}
       size={has('sm') ? 'small' : has('lg') ? 'large' : 'medium'}
       icon={iconOnly ? children : undefined}
+      // a button with words keeps its `title`: where the words are hidden (a narrow toolbar) it is the button's name
+      title={iconOnly ? undefined : title}
       {...rest}
     >
       {iconOnly ? undefined : children}
     </Button>
+  );
+  if (!title || !iconOnly) return button;
+  // Fluent's Tooltip in place of the browser's own on a button that shows only an icon: it is the button's name,
+  // unless the button already has one, and then it describes it.
+  const named = !!(rest as { 'aria-label'?: string })['aria-label'];
+  return (
+    <Tooltip content={title} relationship={named ? 'description' : 'label'} withArrow positioning="below">
+      {button}
+    </Tooltip>
   );
 });
 /**
@@ -475,20 +524,25 @@ function menuEntry(it: MenuEntry | '-', i: number): ReactNode {
       disabled={it.disabled}
       icon={it.icon ? <Icon n={it.icon} /> : undefined}
       secondaryContent={it.hint || undefined}
+      checkmark={it.check ? { className: 'mi-check', children: <Icon n="check" s="16" /> } : undefined}
+      aria-current={it.check ? 'true' : undefined}
       onClick={() => {
         if (it.on) it.on();
       }}
     >
       <span className="mi-row">
         <span className="grow">{it.label}</span>
-        {it.check && <Icon n="check" s="16" />}
       </span>
     </MenuItem>
   );
   if (!it.sub) return item;
   return (
     // not inline: inside the parent's scrolling list, the submenu would be pushed back over the parent
-    <FluentMenu key={i} positioning={{ position: 'after', align: 'top', offset: 2 }}>
+    <FluentMenu
+      key={i}
+      hasCheckmarks={it.sub.some((x) => x !== '-' && !!x.check)}
+      positioning={{ position: 'after', align: 'top', offset: 2 }}
+    >
       <MenuTrigger disableButtonEnhancement>{item}</MenuTrigger>
       <MenuPopover className="menu sub">
         <MenuList>{it.sub.map(menuEntry)}</MenuList>
@@ -515,6 +569,7 @@ export function Menu({
       <FluentMenu
         inline
         hasIcons={list.some((it) => it !== '-' && !!it.icon)}
+        hasCheckmarks={list.some((it) => it !== '-' && !!it.check)}
         positioning={{ position: 'below', align: align === 'left' ? 'start' : 'end', offset: 4 }}
       >
         <MenuTrigger disableButtonEnhancement>

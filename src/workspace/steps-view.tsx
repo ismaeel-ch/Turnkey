@@ -11,7 +11,7 @@ import { AGENT_NAMES, planFromDef, teamFor } from '@/shared/plan';
 import type { AppRecord } from '@/shared/types/workspace';
 import { U, cx, notify, setChat } from './core';
 import { showHow } from './build-mode';
-import { AgentAv, Avatar, Btn, Card, Icon, Spinner, refocus, useFocusOnArrive } from './ui';
+import { AgentAv, Avatar, Btn, Card, Icon, IconAv, Spinner, refocus, useFocusOnArrive } from './ui';
 import { RUNS, stopRun } from './line';
 import { answerGate, flowOf, stepAfter } from './custom';
 import { REVIEWERS } from './reviewers';
@@ -110,9 +110,7 @@ function StepRow({ app, st, i }: { app: AppRecord; st: BuildStep; i: number }) {
       ) : st.kind === 'approval' ? (
         <Avatar name="You" size="sm" acc="steel" />
       ) : (
-        <span className={cx('av sq av-sm', 'acc-' + (st.acc || 'steel'))} aria-hidden="true">
-          <Icon n={st.icon || 'code'} s="16" />
-        </span>
+        <IconAv icon={st.icon || 'code'} acc={st.acc || 'steel'} size="sm" />
       )}
       <div className="step-body">
         <div className="step-top">

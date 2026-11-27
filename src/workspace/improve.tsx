@@ -11,7 +11,7 @@ import { inverseSteps } from './record-steps';
 import { aloneOffered, draftSteps, isDirty, relOf, suggestKind, verNext } from './release';
 import { appFromPack, readPack, unsqueeze } from './share';
 import { AppPane, newPane, stageOf } from './runtime';
-import { Btn, Dialog, Field, Icon, Spinner, Textarea } from './ui';
+import { Btn, Dialog, Field, Icon, LinkBtn, Spinner, Textarea } from './ui';
 
 /* ===== Turnkey · changing an app after it is built =====
    The owner says what is wrong or what is missing, in their own words: in the box on the Release page, or with
@@ -704,9 +704,9 @@ export function UnderstandBox({ app, c }: { app: AppRecord; c: UnderstandCard })
         <Icon n="questionChat" s="16" />
         <span className="grow">{c.kind === 'fix' ? 'A problem to fix' : 'A new feature'}</span>
         {open && (
-          <button className="link-btn" data-act="kind" onClick={() => setImproveKind(app, c.flow, c.kind === 'fix' ? 'feature' : 'fix')}>
+          <LinkBtn className="link-btn" data-act="kind" onClick={() => setImproveKind(app, c.flow, c.kind === 'fix' ? 'feature' : 'fix')}>
             {c.kind === 'fix' ? 'It is a new feature' : 'It is a problem to fix'}
-          </button>
+          </LinkBtn>
         )}
       </div>
       {c.questions.map((q, i) => (

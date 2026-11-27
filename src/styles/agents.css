@@ -4,7 +4,7 @@
 /* agent avatars: a presence dot while the agent is working */
 .msg-av,.chat-av{position:relative;display:inline-flex;flex:none}
 .msg-av .av{width:28px;height:28px;border-radius:var(--borderRadiusLarge)}
-.msg-av.live::after,.chat-av.live::after{content:"";position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--colorPaletteLightGreenBackground3);border:2px solid var(--colorNeutralBackground2);animation:ag-pulse 1.6s ease-in-out infinite}
+.msg-av.live::after,.chat-av.live::after{content:"";position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:var(--borderRadiusCircular);background:var(--colorPaletteLightGreenBackground3);border:2px solid var(--colorNeutralBackground2);animation:ag-pulse 1.6s ease-in-out infinite}
 .chat-head .chat-av.live::after{border-color:var(--colorNeutralBackground1)}
 .chat-avs{display:flex;align-items:center;gap:4px}
 .chat-av.live::after{width:8px;height:8px}
@@ -13,11 +13,11 @@
 /* who is working on what, under the chat's title */
 .chat-now{display:flex;flex-direction:column;gap:8px;padding:4px 12px 10px;background:var(--colorNeutralBackground1);border-bottom:1px solid var(--colorNeutralStroke2);flex:none}
 .chat-now-top{display:flex;align-items:center;gap:8px;min-height:24px;min-width:0}.chat-now-top>.ic{flex:none}
-.chat-now-t{flex:1;min-width:0;display:flex;gap:6px;align-items:baseline;font-size:13px;line-height:18px;white-space:nowrap;overflow:hidden}.chat-now-t>span{overflow:hidden;text-overflow:ellipsis;color:var(--colorNeutralForeground2)}
+.chat-now-t{flex:1;min-width:0;display:flex;gap:6px;align-items:baseline;font-size:var(--fontSizeBase300);line-height:var(--lineHeightBase300);white-space:nowrap;overflow:hidden}.chat-now-t>span{overflow:hidden;text-overflow:ellipsis;color:var(--colorNeutralForeground2)}
 .chat-now.n-ok .chat-now-top>.ic{color:var(--colorStatusSuccessForeground1)}.chat-now.n-bad .chat-now-top>.ic{color:var(--colorStatusDangerForeground1)}.chat-now.n-on .chat-now-top>.ic{color:var(--colorBrandForeground1)}
-.chat-now.n-ask .chat-now-t>span{color:var(--colorStatusWarningForeground1);font-weight:600}
+.chat-now.n-ask .chat-now-t>span{color:var(--colorStatusWarningForeground1);font-weight:var(--fontWeightSemibold)}
 .chat-now-n{flex:none;font-variant-numeric:tabular-nums}
-.chat-now-bar{display:flex;gap:3px}.chat-now-bar i{flex:1;height:4px;border-radius:2px;background:var(--colorNeutralBackground5)}
+.chat-now-bar{display:flex;gap:3px}.chat-now-bar i{flex:1;height:4px;border-radius:var(--borderRadiusSmall);background:var(--colorNeutralBackground5)}
 .chat-now-bar .s-ok{background:var(--colorStatusSuccessForeground3)}
 .chat-now-bar .s-working,.chat-now-bar .s-checking{background:linear-gradient(90deg,var(--colorBrandStroke2),var(--colorBrandBackground),var(--colorBrandStroke2));background-size:200% 100%;animation:ag-slide 1.4s linear infinite}
 .chat-now-bar .s-waiting,.chat-now-bar .s-sentback{background:var(--colorStatusWarningForeground3)}
@@ -29,10 +29,10 @@
 .msg-sep::before,.msg-sep::after{content:"";flex:1;height:1px;background:var(--colorNeutralStroke2)}
 .msg-sep>span{display:inline-flex;align-items:center;gap:4px}
 .msg.cont.me{padding-left:0}
-.msg-who>strong{font-size:14px;line-height:20px}
-.msg:not(.me) .msg-t{font-size:14px;line-height:20px;color:var(--colorNeutralForeground1)}
+.msg-who>strong{font-size:var(--fontSizeBase300);line-height:var(--lineHeightBase300)}
+.msg:not(.me) .msg-t{font-size:var(--fontSizeBase300);line-height:var(--lineHeightBase300);color:var(--colorNeutralForeground1)}
 .msg-typing{display:flex;align-items:center;gap:8px;color:var(--colorNeutralForeground2);min-height:28px}
-.typing{display:inline-flex;gap:3px}.typing i{width:6px;height:6px;border-radius:50%;background:var(--colorBrandForeground1);animation:ag-type 1.2s ease-in-out infinite}.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+.typing{display:inline-flex;gap:3px}.typing i{width:6px;height:6px;border-radius:var(--borderRadiusCircular);background:var(--colorBrandForeground1);animation:ag-type 1.2s ease-in-out infinite}.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
 @keyframes ag-type{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
 
 /* the message box: one frame around the text and Send, Fluent's underline on focus */
@@ -47,7 +47,7 @@
 .chat-tips .chip,.chat-tips .fui-Button{border-radius:var(--borderRadiusCircular)}
 
 /* the meeting: a card per agent with what it is doing, and the build line everyone is looking at */
-.meet-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}.meet-title{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.meet-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}.meet-title{margin:0;font-size:var(--fontSizeBase400);line-height:var(--lineHeightBase400);font-weight:var(--fontWeightSemibold)}
 .meet .meet-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,320px);gap:16px;align-items:start}
 .meet-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin:0;padding:0}
 .meet-cell{display:flex;min-width:0}
@@ -61,33 +61,33 @@
 .meet-tile.m-flag{border-color:var(--colorStatusDangerBorder2)}
 .meet-tile.m-idle .av{filter:grayscale(1);opacity:.6}
 .meet-av{position:relative;display:inline-flex;flex:none}
-.meet-av.live::after{content:"";position:absolute;right:-3px;bottom:-3px;width:12px;height:12px;border-radius:50%;background:var(--colorPaletteLightGreenBackground3);border:2px solid var(--colorNeutralBackground1);animation:ag-pulse 1.6s ease-in-out infinite}
-.meet-hand{position:absolute;right:-6px;top:-6px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--colorStatusWarningBackground3);color:var(--colorNeutralForegroundOnBrand);border:2px solid var(--colorNeutralBackground1);animation:meet-wave 1.4s ease-in-out infinite}
+.meet-av.live::after{content:"";position:absolute;right:-3px;bottom:-3px;width:12px;height:12px;border-radius:var(--borderRadiusCircular);background:var(--colorPaletteLightGreenBackground3);border:2px solid var(--colorNeutralBackground1);animation:ag-pulse 1.6s ease-in-out infinite}
+.meet-hand{position:absolute;right:-6px;top:-6px;width:20px;height:20px;border-radius:var(--borderRadiusCircular);display:grid;place-items:center;background:var(--colorStatusWarningBackground3);color:var(--colorNeutralForegroundOnBrand);border:2px solid var(--colorNeutralBackground1);animation:meet-wave 1.4s ease-in-out infinite}
 @keyframes meet-wave{50%{transform:rotate(-14deg)}}
 .meet-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .meet-head{display:flex;align-items:center;gap:8px;min-width:0}
-.meet-name{flex:1;min-width:0;font-size:14px;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meet-name{flex:1;min-width:0;font-size:var(--fontSizeBase300);line-height:var(--lineHeightBase300);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .meet-state{flex:none}
-.meet-cap{font-size:12px;line-height:16px;color:var(--colorNeutralForeground2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.meet-cap{font-size:var(--fontSizeBase200);line-height:var(--lineHeightBase200);color:var(--colorNeutralForeground2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .meet-work{color:var(--colorNeutralForeground3);font-variant-numeric:tabular-nums}
-.meet-eq{width:6px;height:6px;border-radius:50%;background:currentColor;animation:ag-pulse 1s ease-in-out infinite}
+.meet-eq{width:6px;height:6px;border-radius:var(--borderRadiusCircular);background:currentColor;animation:ag-pulse 1s ease-in-out infinite}
 .meet-screen{border:1px solid var(--colorNeutralStroke2);border-radius:var(--borderRadiusXLarge);background:var(--colorNeutralBackground2);padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
-.meet-screen-head{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;color:var(--colorNeutralForeground1);font-size:13px;line-height:18px}.meet-screen-head>.ic{margin-top:1px;color:var(--colorNeutralForeground3)}.meet-screen-head>.grow{flex:1 1 160px}
+.meet-screen-head{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;color:var(--colorNeutralForeground1);font-size:var(--fontSizeBase300);line-height:var(--lineHeightBase300)}.meet-screen-head>.ic{margin-top:1px;color:var(--colorNeutralForeground3)}.meet-screen-head>.grow{flex:1 1 160px}
 .meet-board{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .meet-step{position:relative;display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 8px;border-radius:var(--borderRadiusMedium)}
 .meet-step.on{background:var(--colorNeutralBackground1);box-shadow:var(--shadow2)}
-.meet-rail{position:relative;z-index:1;flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground3)}
+.meet-rail{position:relative;z-index:1;flex:none;width:20px;height:20px;border-radius:var(--borderRadiusCircular);display:grid;place-items:center;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground3)}
 .meet-step+.meet-step::before{content:"";position:absolute;left:17px;top:-12px;height:24px;width:2px;background:var(--colorNeutralStroke2)}
 .meet-step.s-ok .meet-rail{background:var(--colorStatusSuccessBackground3);border-color:var(--colorStatusSuccessBackground3);color:var(--colorNeutralForegroundOnBrand)}
 .meet-step.s-ok+.meet-step::before{background:var(--colorStatusSuccessBackground3)}
 .meet-step.s-working .meet-rail,.meet-step.s-checking .meet-rail{border-color:var(--colorBrandStroke1)}
 .meet-step.s-waiting .meet-rail{border-color:var(--colorStatusWarningBorderActive);background:var(--colorStatusWarningBackground1)}
 .meet-step.s-failed .meet-rail,.meet-step.s-sentback .meet-rail{border-color:var(--colorStatusDangerBorder2);background:var(--colorStatusDangerBackground1)}
-.meet-step-b{flex:1;min-width:0;display:flex;flex-direction:column}.meet-step-n{font-size:13px;line-height:18px;font-weight:600}
+.meet-step-b{flex:1;min-width:0;display:flex;flex-direction:column}.meet-step-n{font-size:var(--fontSizeBase300);line-height:var(--lineHeightBase300);font-weight:var(--fontWeightSemibold)}
 .meet-note{display:flex;align-items:center;gap:8px;margin:0;padding:8px 12px;border-radius:var(--borderRadiusMedium);border:1px solid var(--colorStatusWarningBorder1);background:var(--colorStatusWarningBackground1);color:var(--colorStatusWarningForeground1)}
 .meet-captions{padding:8px 12px;border-radius:var(--borderRadiusXLarge);border:1px solid var(--colorNeutralStroke2);background:var(--colorNeutralBackground2);display:flex;flex-direction:column;gap:6px}
-.meet-captions-h{font-weight:600;color:var(--colorNeutralForeground3)}
-.meet-line{display:flex;align-items:center;gap:8px;font-size:12px;line-height:16px;min-width:0}
+.meet-captions-h{font-weight:var(--fontWeightSemibold);color:var(--colorNeutralForeground3)}
+.meet-line{display:flex;align-items:center;gap:8px;font-size:var(--fontSizeBase200);line-height:var(--lineHeightBase200);min-width:0}
 .meet-line>.muted{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.meet-line>.meet-at{flex:none;font-variant-numeric:tabular-nums}
 @media (max-width:1000px){.meet .meet-stage{grid-template-columns:1fr}}
 @media (max-width:600px){.meet-grid{grid-template-columns:1fr}}
@@ -101,7 +101,7 @@
 .log-dot{position:relative;z-index:1;display:inline-flex;flex:none;border-radius:var(--borderRadiusLarge);box-shadow:0 0 0 3px var(--colorNeutralBackground1)}
 .log-i:hover .log-dot{box-shadow:0 0 0 3px var(--colorNeutralBackground1Hover)}
 .log-b{flex:1;min-width:0;display:flex;flex-direction:column}
-.log-t{font-size:14px;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.log-t>span{color:var(--colorNeutralForeground2)}
+.log-t{font-size:var(--fontSizeBase300);line-height:var(--lineHeightBase300);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.log-t>span{color:var(--colorNeutralForeground2)}
 .log-took{flex:none;color:var(--colorNeutralForeground3)}
 .log-i>.badge{flex:0 0 auto;min-width:44px;justify-content:center}
 .log-i.bad{background:var(--colorStatusWarningBackground1)}.log-i.bad .log-dot{box-shadow:0 0 0 3px var(--colorStatusWarningBackground1)}
