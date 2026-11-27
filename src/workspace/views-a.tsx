@@ -341,7 +341,12 @@ export function FilterBox({ app, user, t, st, set }: { app: AppRecord; user: App
     );
   return (
     <div className="menu-wrap" ref={ref}>
-      <Btn className={cx('btn subtle sm', st.filters.length && 'on')} aria-expanded={open} title="Filter rows" onClick={() => setOpen(!open)}>
+      <Btn
+        className={cx('btn subtle sm', st.filters.length && 'on')}
+        aria-expanded={open}
+        title="Filter rows"
+        onClick={() => setOpen(!open)}
+      >
         <Icon n="filter" s="16" />
         <span className="hide-sm">Filter</span>
         {st.filters.length > 0 && <span className="vx-count">{st.filters.length}</span>}
