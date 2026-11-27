@@ -18,6 +18,9 @@
 //      workspace caps a session at 40), and one tool call through /api/health?probe=1. Both go through the site's own
 //      rate limits and spend cap. SMOKE_LIVE_BUILD=0 skips the build. With no model configured the app still works
 //      (a project rule), so the model checks are a warning, not a failure.
+//   5. With SMOKE_GUIDED=1 (the "Live site check" workflow's `guided` input), the rest of the guided flow on the app
+//      just built: the app's first use, removing the demo data, release 1.0, one change asked for after the release,
+//      and the next release. Never part of a release's own smoke run.
 //
 // Every share leaves one small record in the short-link store, named "release-check" (then -2 … -5, then random).
 // Exits 1 if any check fails. Writes a table to $GITHUB_STEP_SUMMARY when that is set. Prints no secrets: it reads
@@ -32,6 +35,9 @@ const SHARE_NAME = 'Release check';
 const CLINIC =
   'A clinic front desk books patient appointments, doctors work from their own schedule and write visit notes, and the manager tracks no-shows.';
 const LIVE_BUILD = process.env.SMOKE_LIVE_BUILD !== '0';
+// SMOKE_GUIDED=1 carries on after the Live build, in the same app: first use, removing the demo data, release 1.0, one
+// change asked for after the release and the release that follows it. A few more model calls; off unless asked for.
+const GUIDED = process.env.SMOKE_GUIDED === '1';
 
 if (!/^https?:\/\/[^/\s]+$/.test(base)) {
   console.error('Give the site address, for example: node tests/e2e/smoke.cjs https://turnkey-bay.vercel.app');
@@ -317,9 +323,10 @@ async function liveBuild(browser, errors) {
     const calls = await page.evaluate(() => window.__formwork.view().calls);
     const took = Math.round((Date.now() - started) / 1000);
     const t = a.tests;
-    if (a.status === 'ready' && a.mode === 'live' && t && t.total > 0 && t.failed === 0)
+    if (a.status === 'ready' && a.mode === 'live' && t && t.total > 0 && t.failed === 0) {
       record(name, 'pass', `${a.name}: ${calls} model calls, ${took} s, ${t.total} tests pass`);
-    else {
+      if (GUIDED) await guidedWalk(page);
+    } else {
       const bad = t && t.failed ? await failingTests(page) : '';
       record(
         name,
@@ -334,6 +341,146 @@ async function liveBuild(browser, errors) {
   } finally {
     await ctx.close();
   }
+}
+
+/** The open app, as the guided walk reads it. */
+const walkNow = (page) =>
+  page.evaluate(() => {
+    const F = window.__formwork;
+    const s = F.state();
+    const t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]);
+    const a = t && t.app ? s.apps[t.app] : null;
+    if (!a) return null;
+    const c = F.demo.counts(a.id);
+    return {
+      status: a.status,
+      plan: a.plan ? { people: a.plan.people.length, lists: a.plan.lists.length, stages: a.plan.stages ? a.plan.stages.stages.length : 0 } : null,
+      first: a.runs[0] && a.runs[0].steps[0] ? a.runs[0].steps[0].label : '',
+      demo: c.demo,
+      own: c.own,
+      releases: (a.releases || []).map((r) => r.v),
+      list: a.def.tables[0] ? a.def.tables[0].label : '',
+      fields: a.def.tables[0] ? a.def.tables[0].columns.length : 0,
+      tests: a.tests || null,
+      calls: F.view().calls,
+    };
+  });
+const tab = (page, name) => page.locator('.views .tab', { hasText: name }).first().click();
+const flat = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+
+/**
+ * The rest of the guided flow, on the app the Live build just made: its plan, its first use, removing the demo data,
+ * release 1.0, one change asked for after the release, and the release that follows. Each step is its own line in the
+ * summary; a step that fails does not stop the ones that can still run.
+ */
+async function guidedWalk(page) {
+  const step = async (name, fn) => {
+    try {
+      record(name, 'pass', flat(await fn()).slice(0, 220));
+      return true;
+    } catch (e) {
+      record(name, 'fail', firstLine(e));
+      return false;
+    }
+  };
+  const must = (ok, detail) => {
+    if (!ok) throw new Error(flat(detail).slice(0, 280));
+  };
+
+  await step('Guided: the build followed the plan approved in the interview', async () => {
+    const a = await walkNow(page);
+    must(a.plan && a.first === 'Plan you approved', `plan ${JSON.stringify(a.plan)}, first step "${a.first}"`);
+    return `${a.plan.people} kinds of people, ${a.plan.lists} lists, ${a.plan.stages} stages`;
+  });
+
+  const opened = await step('Guided: the app opens for its first user with a welcome', async () => {
+    await tab(page, 'App');
+    await page.waitForSelector('.persona-btn, .app-nav .nav-i', { timeout: 30000 });
+    if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click();
+    await page.waitForSelector('.fr-welcome', { timeout: 30000 });
+    return await page.locator('.fr-welcome').innerText();
+  });
+
+  if (opened)
+    await step('Guided: demo data is removed in one step and the tests still pass', async () => {
+      const before = await walkNow(page);
+      must(before.demo > 0, `the app holds ${before.demo} demo records, so there is nothing to remove`);
+      await page.locator('.app .demo-bar .btn', { hasText: 'Remove demo data' }).click();
+      await page.locator('.dialog .btn.danger', { hasText: 'Remove demo data' }).click();
+      await page.waitForFunction(
+        () => {
+          const s = window.__formwork.state();
+          const t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]);
+          return window.__formwork.demo.counts(t.app).demo === 0;
+        },
+        null,
+        { timeout: 30000 },
+      );
+      const bar = await page.locator('.app .demo-bar').innerText();
+      must(/Demo data removed/.test(bar), bar);
+      const run = await page.evaluate(() => {
+        const s = window.__formwork.state();
+        const t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]);
+        const r = window.__formwork.runTests(s.apps[t.app]);
+        return r ? { total: r.total, failed: r.failed } : null;
+      });
+      must(run && run.total > 0 && run.failed === 0, `tests after removing: ${JSON.stringify(run)}`);
+      return `${before.demo} demo records removed, ${run.total} tests pass on the emptied app`;
+    });
+
+  const released = await step('Guided: release 1.0', async () => {
+    await tab(page, 'Release');
+    await page.waitForSelector('#rel-go', { timeout: 30000 });
+    await page.locator('#rel-go').click();
+    await page.waitForFunction(() => /Version 1\.0 · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''), null, {
+      timeout: 60000,
+    });
+    return await page.locator('#rel-state').innerText();
+  });
+  if (!released) return;
+
+  let asked = '';
+  const changed = await step('Guided: a change asked for after the release gets a plan first, then is built', async () => {
+    const before = await walkNow(page);
+    asked = `Add an internal note field to ${before.list.toLowerCase()}`;
+    await page.fill('#improve-text', asked);
+    await page.locator('#improve-go').click();
+    // one question may come first (what kind of field): take the recommended answer, then the plan arrives
+    const go = page.locator('.gcard.cplan [data-act="go"]');
+    for (const until = Date.now() + 4 * 60 * 1000; !(await go.count()); ) {
+      must(Date.now() < until, 'no plan for the change after 4 minutes');
+      const ask = page.locator('.gcard.ask .opt:not([disabled])');
+      if (await ask.count()) await ask.first().click().catch(() => {});
+      await sleep(400);
+    }
+    const plan = flat(await page.locator('.gcard.cplan').last().innerText());
+    const waiting = await walkNow(page);
+    must(waiting.fields === before.fields, 'the change was made before the owner said go ahead');
+    await page.locator('.gcard.cplan [data-act="go"]').last().click();
+    await page.waitForSelector('.gcard.tryit', { timeout: 8 * 60 * 1000 });
+    const a = await waitBuilt(page, 8 * 60 * 1000);
+    const after = await walkNow(page);
+    must(a.status === 'ready' && after.fields === before.fields + 1, `status ${a.status}, fields ${before.fields} to ${after.fields}`);
+    must(a.tests && a.tests.failed === 0, `tests after the change: ${JSON.stringify(a.tests)}`);
+    return `"${asked}": ${plan.slice(0, 120)}`;
+  });
+
+  if (changed)
+    await step('Guided: the change goes out as the next release', async () => {
+      await page.locator('.gcard.tryit [data-act="works"]').last().click();
+      await page.locator('.gcard.tryit [data-act="release"]').last().click({ timeout: 30000 });
+      await page.waitForSelector('#rel-go', { timeout: 30000 });
+      const label = flat(await page.locator('#rel-go').innerText());
+      await page.locator('#rel-go').click();
+      await page.waitForFunction(
+        () => /Version 1\.(1|0\.1) · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''),
+        null,
+        { timeout: 60000 },
+      );
+      const a = await walkNow(page);
+      must(a.releases[0] === '1.1', `released as ${a.releases[0]} ("${label}"); a new field should be version 1.1`);
+      return `${flat(await page.locator('#rel-state').innerText())}; releases ${a.releases.join(', ')}; ${a.calls} model calls in the session`;
+    });
 }
 
 /** The names and reasons of the failing tests, read from the Tests view, for the summary. */
