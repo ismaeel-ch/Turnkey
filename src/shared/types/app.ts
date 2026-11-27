@@ -318,6 +318,32 @@ export interface Theme {
   logo?: Logo | null;
 }
 
+/* ---------- the app's own settings (src/workspace/app-settings.ts) ---------- */
+/** How the app writes numbers, money, dates and times. Every field left out keeps the app's usual way. */
+export interface AppFormats {
+  /** a currency code from the fixed list (USD, EUR, PKR and so on); '' shows money as a plain number */
+  currency: string;
+  /** thousands and decimal marks: 1,234.5 · 1.234,5 · 1 234,5 */
+  numbers: 'comma' | 'dot' | 'space';
+  /** `words` is "Fri 27 Nov" with Today and Tomorrow; the others are day/month/year, month/day/year and year-month-day */
+  dates: 'words' | 'dmy' | 'mdy' | 'iso';
+  clock: '24' | '12';
+  weekStart: 'mon' | 'sun';
+}
+/**
+ * What the people who run a built app set on its Settings page. It is part of the definition, so a copy, a release and
+ * an earlier version each carry their own. Nothing here is written by a model.
+ */
+export interface AppSettings {
+  formats: AppFormats;
+  /** the page each kind of person lands on, by role id; a role left out lands on its first page */
+  home: Dict<string>;
+  /** the view each list page opens in, by screen id; a page left out opens as it was built */
+  views: Dict<string>;
+  /** the kinds of person who may open Settings; empty means the one with the widest access */
+  admins: string[];
+}
+
 /** One schema change made after the first build. */
 /** One change to a table that every device's records must follow when it updates (src/workspace/record-steps.ts). */
 export type RecordStep =
@@ -353,6 +379,8 @@ export interface AppDef {
   cases?: TestCase[];
   /** the room layout of an app with a team (src/workspace/room.tsx) */
   board?: Board | null;
+  /** set on the app's own Settings page; missing until someone changes a setting */
+  settings?: AppSettings;
   /** rules that refuse a save (src/shared/logic). Present on every app built since calculated fields and rules exist. */
   logic?: AppLogic | null;
 }
