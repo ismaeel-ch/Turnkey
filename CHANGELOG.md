@@ -5,6 +5,37 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-27
+
+The guided build. Turnkey asks a few questions, shows a plan in plain words, builds exactly that plan with a team
+picked for it, and lets the owner remove the demo data, hand the app to its first users, and fix or extend it after
+the first release.
+
+### Added
+
+- Before a Live build Turnkey asks up to five questions (who it is for, approvals, who sees what, demo data), each
+  with the usual choice marked, then shows the plan: people, lists and fields, stages, who can do what, and what is
+  not in this version. The build starts when the owner approves it. ([#214](https://github.com/ismaeel-ch/Turnkey/pull/214)) ([#223](https://github.com/ismaeel-ch/Turnkey/pull/223)) ([#225](https://github.com/ismaeel-ch/Turnkey/pull/225))
+- The Planner: the agent that reads the sentence, writes the questions and the plan, and replaces the Researcher's
+  call in a planned build. The plan is one shared type with its own checks. ([#205](https://github.com/ismaeel-ch/Turnkey/pull/205)) ([#211](https://github.com/ismaeel-ch/Turnkey/pull/211))
+- A build follows the plan the owner approved. The lists and fields are held to it, the team is picked by code from
+  it (five agents for a personal tracker, seven for a company app, never more than eight), and apps for one person
+  and apps with no stages build end to end. ([#221](https://github.com/ismaeel-ch/Turnkey/pull/221))
+- Demo data is marked, can be removed in one step, and never takes the owner's own records with it. ([#216](https://github.com/ismaeel-ch/Turnkey/pull/216))
+- First use of a built app: choose who you are, a welcome, a short tour, a checklist, and screens that say what to
+  do when they are empty. ([#215](https://github.com/ismaeel-ch/Turnkey/pull/215))
+- After a release the owner says what is wrong or missing and gets a plan before anything changes; only the steps
+  the change needs run again. ([#224](https://github.com/ismaeel-ch/Turnkey/pull/224))
+- Release 1.0 asks what people start with (empty, demo data or the owner's records), and the Release page says what
+  is live and what is in the draft. ([#218](https://github.com/ismaeel-ch/Turnkey/pull/218))
+
+### Changed
+
+- Build opens on a plain list of steps; the workflow canvas is behind "Show how it was built". Saved builds show
+  their plan in the same words, and an app with no stages no longer reads "0 stages". ([#209](https://github.com/ismaeel-ch/Turnkey/pull/209)) ([#220](https://github.com/ismaeel-ch/Turnkey/pull/220))
+- Going back a version or updating keeps every record, and installed apps find updates by themselves. ([#207](https://github.com/ismaeel-ch/Turnkey/pull/207))
+- The cost line of a planned build counts the Planner's own calls. ([#226](https://github.com/ismaeel-ch/Turnkey/pull/226))
+
 ## [0.4.7] - 2026-11-27
 
 A faster first load, a UI pass over the newest features, and steadier CI.
