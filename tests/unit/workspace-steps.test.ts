@@ -230,7 +230,10 @@ describe('the build as a list of steps', () => {
     expect(stepsHeadline(app('ready', lines), failing, false).sub).toBe('One step needs a look: test everything.');
     // a new build has reset the line: an old test result does not make the last step look done
     const again = buildSteps(input(app('building', { research: line('working') }), { running: true, tests: pass }));
-    expect(again.steps[5].state).toBe('wait');
+    expect(again.steps[5]).toMatchObject({ state: 'wait', text: 'Runs last, as each kind of person.' });
+    // a built app that was changed since its checks ran says so
+    const stale = buildSteps(input(app('ready', lines), { tests: { ...pass, fresh: false } }));
+    expect(stale.steps[5]).toMatchObject({ state: 'wait', text: 'The app changed since the checks last ran.' });
   });
 
   it('names a stopped build and where it stopped', () => {

@@ -331,7 +331,7 @@ export function buildSteps({ app, flow, reviewers, after, tests, running, names,
               : 'Testing did not finish.'
             : state === 'now'
               ? p.now
-              : tests && !tests.fresh
+              : tried && tests && !tests.fresh
                 ? 'The app changed since the checks last ran.'
                 : planned('tests')?.why || p.wait,
     });
