@@ -341,12 +341,7 @@ export function FilterBox({ app, user, t, st, set }: { app: AppRecord; user: App
     );
   return (
     <div className="menu-wrap" ref={ref}>
-      <Btn
-        className={cx('btn sm', st.filters.length && 'on')}
-        aria-expanded={open}
-        aria-label={st.filters.length ? 'Filter, ' + st.filters.length + ' on' : 'Filter'}
-        onClick={() => setOpen(!open)}
-      >
+      <Btn className={cx('btn sm', st.filters.length && 'on')} aria-expanded={open} title="Filter rows" onClick={() => setOpen(!open)}>
         <Icon n="filter" s="16" />
         <span className="hide-sm">Filter</span>
         {st.filters.length > 0 && <span className="vx-count">{st.filters.length}</span>}
@@ -695,7 +690,7 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
         </div>
         <div className="vx-acts">
           <FilterBox app={app} user={user} t={t} st={st} set={set} />
-          <Btn className="btn sm" title="Copy the rows you see as CSV" aria-label="Copy as CSV" onClick={csv}>
+          <Btn className="btn sm" title="Copy the rows you see as CSV" onClick={csv}>
             <Icon n="copy" s="16" />
             <span className="hide-sm">Copy CSV</span>
           </Btn>
