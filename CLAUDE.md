@@ -10,13 +10,13 @@ git rules, the shared machine, and the flow of one work package.
 
 ## Commands
 
-| Command                    | What it does                                                                                                                   |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `npm ci`                   | install (use this, not `npm install`, unless you are changing dependencies)                                                    |
-| `npm run dev`              | local server on http://localhost:3000                                                                                          |
-| `npm run build`            | production build; also what Vercel runs                                                                                        |
-| `npm run check`            | secrets scan, lint, typecheck, unit tests. **Run before every push.**                                                          |
-| `npm run test:e2e -- demo` | one browser flow (`demo live misc views quests new custom round6 react sizes history offline a11y`), about 2 to 4 minutes each |
+| Command                    | What it does                                                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm ci`                   | install (use this, not `npm install`, unless you are changing dependencies)                                                           |
+| `npm run dev`              | local server on http://localhost:3000                                                                                                 |
+| `npm run build`            | production build; also what Vercel runs                                                                                               |
+| `npm run check`            | secrets scan, lint, typecheck, unit tests. **Run before every push.**                                                                 |
+| `npm run test:e2e -- demo` | one browser flow (`demo live misc views quests new custom round6 react sizes history offline a11y visual`), about 2 to 4 minutes each |
 
 Run with a stand-in model, no key needed: `LLM_PROVIDER=mock npm run dev`.
 
