@@ -1026,6 +1026,8 @@ async function plainSteps(browser, url) { // Build opens on a plain list of step
   await waitReady(page); v = await list();
   check('steps: when the app is built every step is done and says what it made in plain words', v.rows.every((x) => /:done$/.test(x)) && v.rows.length === 6 && /^3 kinds of people and 3 lists planned\./.test(v.text[0]) && /^3 lists with \d+ fields, and \d+ example records\.$/.test(v.text[1]) && /^4 stages, 4 ways to move a record, and who can see what for 3 kinds of people\.$/.test(v.text[2]) && /^\d+ views and an overview with \d+ tiles\.$/.test(v.text[3]) && /^10 screens for 3 kinds of people\.$/.test(v.text[4]) && /^\d+ checks, all pass\.$/.test(v.text[5]), v.text);
   check('steps: the heading says the app is built, the bar is full and the tags count what was made', v.head === 'TimeOff is built' && v.sub === 'All 6 steps are done. Every check passes.' && v.bar === '6/6' && /^3 lists\|4 stages\|\d+ views\|10 screens\|\d+ checks pass$/.test((await page.locator('.steps-tag').allInnerTexts()).join('|')), v);
+  const note = (await page.locator('.steps-skipped').allInnerTexts()).join(' ').replace(/\s+/g, ' ').trim();
+  check('steps: a saved build has a plan too, read off what was built, so the agent it did not need is named with the reason', note === 'Not needed for this app, so it did not run: List checker. 3 lists are few enough to check by rule.', note);
   await shot(page, 'steps-2-built');
   await page.locator('#steps-open').click(); await page.waitForSelector('.stage');
   check('steps: Open the app goes to the working app', (await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return window.__formwork.view().view[t.app]; })) === 'app');
