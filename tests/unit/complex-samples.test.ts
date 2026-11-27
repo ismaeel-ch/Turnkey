@@ -155,3 +155,29 @@ describe('logic an agent got wrong', () => {
     expect(logicIssues(def).join(' ')).toMatch(/"Approve" and "Approve large order" make the same move on the same condition/);
   });
 });
+
+describe('what the real builds taught', () => {
+  it('a walkthrough booking that lands on a taken time moves to the next free day', () => {
+    const app = APPS.vet;
+    const taken = M.db.sqlRows(app.id, "SELECT vet, starts_at, ends_at, pet, client FROM visits WHERE status = 'booked' LIMIT 1", null)[0];
+    const st = { rows: {}, last: null };
+    const r = M.engine.tourExec(app, st, {
+      role: 'front_desk',
+      do: 'create',
+      table: 'visits',
+      values: {
+        reason: 'Same time as another visit',
+        pet: 1,
+        client: 1,
+        vet: taken.vet,
+        starts_at: taken.starts_at,
+        ends_at: taken.ends_at,
+      },
+      say: 'Sara books a visit.',
+    } as Parameters<typeof M.engine.tourExec>[2]);
+    expect(r.ok).toBe(true);
+    const made = M.db.sqlRows(app.id, 'SELECT starts_at FROM visits WHERE id = ?', [r.rec!.id])[0];
+    expect(String(made.starts_at).slice(11)).toBe(String(taken.starts_at).slice(11));
+    expect(made.starts_at).not.toBe(taken.starts_at);
+  });
+});

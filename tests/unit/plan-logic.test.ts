@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backendFromPlan, checkPlan, formulasFromPlan, logicLines, normPlan, type PlanSpec } from '@/shared/plan';
+import { backendFromPlan, checkPlan, formulasFromPlan, logicLines, matchMoves, normPlan, type PlanSpec } from '@/shared/plan';
 import type { ColumnDef } from '@/shared/sql/types';
 import '@/workspace/saved';
 import { planFromSaved } from '@/workspace/interview';
@@ -58,5 +58,20 @@ describe('calculated fields and rules in a plan', () => {
     ];
     const tables = formulasFromPlan(plan, bare);
     expect(tables[0].columns[0].formula).toBe('quantity * unit_price');
+  });
+
+  it('gives each condition to the move it belongs to, even when two moves join the same stages', () => {
+    const be = backendFromPlan(orders());
+    const planned = be.status!.transitions;
+    // the Rules agent renamed both approvals and listed the large one first
+    const built = [
+      { id: 'director_approves', label: 'Director approves', from: ['submitted'], to: 'approved', roles: ['director'] },
+      { id: 'manager_approves', label: 'Manager approves', from: ['submitted'], to: 'approved', roles: ['manager'] },
+      { id: 'submit', label: 'Submit', from: ['draft'], to: 'submitted', roles: ['requester'] },
+    ];
+    const m = matchMoves(planned, built);
+    expect(m.get(built[0])?.when).toBe('total > 5000');
+    expect(m.get(built[1])?.when).toBe('total <= 5000');
+    expect(m.get(built[2])?.when).toBe('line_count > 0 and total <= department.remaining');
   });
 });

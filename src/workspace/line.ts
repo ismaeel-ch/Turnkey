@@ -3,6 +3,7 @@ import type { AppDef, AppTable, BackedDef, Brief, BriefedDef, Check, Untrusted }
 import {
   EXTRA_FIELDS,
   backendFromPlan,
+  matchMoves,
   briefFromPlan,
   checkPlan,
   formulasFromPlan,
@@ -601,14 +602,9 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
       be.logic = planned.logic;
       if (planned.process.locked) be.process.locked = planned.process.locked.filter((s) => be.process.states.some((x) => x.id === s));
       else delete be.process.locked;
+      const match = matchMoves(planned.process.transitions, be.process.transitions);
       for (const tr of be.process.transitions) {
-        const same = planned.process.transitions.find(
-          (p) =>
-            p.to === tr.to &&
-            p.from.length === tr.from.length &&
-            p.from.every((f) => tr.from.includes(f)) &&
-            p.roles.some((r) => tr.roles.includes(r)),
-        );
+        const same = match.get(tr);
         delete tr.when;
         delete tr.unless;
         delete tr.needs;

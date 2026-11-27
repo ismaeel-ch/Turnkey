@@ -209,3 +209,40 @@ export function backendFromPlan(plan: PlanSpec) {
     ),
   };
 }
+
+/** A move as the plan and the built app both describe it. */
+interface MoveShape {
+  id: string;
+  label: string;
+  from: string[];
+  to: string;
+  roles: string[];
+}
+/**
+ * Pairs each move the Rules agent wrote with the move of the plan it stands for, so the plan's condition lands on the
+ * right one: first by name, then by the same stages and the same people, then by the same stages and one shared kind
+ * of person. A planned move is used once. Two moves between the same stages ("Finish" when within budget, "Sign off"
+ * by the director) must never end up with one condition, or nothing could make the move when it is not met.
+ */
+export function matchMoves<P extends MoveShape, B extends MoveShape>(planned: readonly P[], built: readonly B[]): Map<B, P> {
+  const left = planned.slice();
+  const fits = (p: P, b: B) => p.to === b.to && p.from.length === b.from.length && p.from.every((f) => b.from.includes(f));
+  const score = (p: P, b: B) =>
+    p.id === b.id || p.label.toLowerCase() === b.label.toLowerCase()
+      ? 3
+      : !fits(p, b)
+        ? 0
+        : p.roles.length === b.roles.length && p.roles.every((r) => b.roles.includes(r))
+          ? 2
+          : p.roles.some((r) => b.roles.includes(r))
+            ? 1
+            : 0;
+  const match = new Map<B, P>();
+  for (const want of [3, 2, 1])
+    for (const b of built) {
+      if (match.has(b)) continue;
+      const at = left.findIndex((p) => score(p, b) === want);
+      if (at >= 0) match.set(b, left.splice(at, 1)[0]);
+    }
+  return match;
+}

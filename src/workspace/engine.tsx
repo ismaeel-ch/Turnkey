@@ -23,7 +23,7 @@ import type {
 } from '@/shared/types/app';
 import type { SqlValue } from '@/shared/types/sqljs';
 import type { AppRecord, Dict, ToolContext } from '@/shared/types/workspace';
-import { APILOG, arr, errText, dayOffset, label, nowStamp, pad2, ring, singular, snake, str, toolCall } from './core';
+import { APILOG, arr, errText, dayOffset, isoDate, label, nowStamp, pad2, ring, singular, snake, str, toolCall } from './core';
 import {
   DEMO_COL,
   SYS_SQL,
@@ -1730,6 +1730,13 @@ export function renderTest(app: AppRecord) {
 }
 
 /* ---------- station 5: the tour, played as an acceptance test ---------- */
+/** The same date or date and time, `days` later. */
+const laterDay = (v: string, days: number) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(v);
+  if (!m) return v;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days);
+  return isoDate(d) + m[4];
+};
 export function tourValues(app: AppRecord, t: AppTable, values: Dict<unknown> | null | undefined, made?: Dict<number>) {
   const same = (a: unknown, b: unknown) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase(),
     out: Dict<SqlValue> = {};
@@ -1831,7 +1838,19 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
   if (!t) return fail('No table called ' + tn);
   const id = st.rows[t.name];
   if (step.do === 'create') {
-    const r = apiCall(app, u, 'POST', '/api/' + tn, tourValues(app, t, step.values, st.rows), 'tour');
+    const values = tourValues(app, t, step.values, st.rows);
+    let r = apiCall(app, u, 'POST', '/api/' + tn, values, 'tour');
+    // A booking that must succeed can land on a time the demo data already took. The step is about making a booking,
+    // not about that hour, so it is tried again on the following days until the time is free.
+    const clash = (def.logic?.rules || []).find((x) => x.table === t.name && /\boverlaps\(/.test(x.when) && x.message === r.error);
+    if (r.status === 400 && clash) {
+      const times = t.columns.filter((c) => (c.type === 'date' || c.type === 'datetime') && typeof values[c.name] === 'string');
+      for (let k = 1; k <= 21 && r.status === 400 && r.error === clash.message; k++) {
+        const later = { ...values };
+        times.forEach((c) => (later[c.name] = laterDay(String(values[c.name]), k)));
+        r = apiCall(app, u, 'POST', '/api/' + tn, later, 'tour');
+      }
+    }
     if (r.status !== 201)
       return fail(
         r.status +
