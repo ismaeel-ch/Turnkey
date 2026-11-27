@@ -292,7 +292,10 @@ export function waitingFor(
   if (!P.transitions.some((x) => x.roles.includes(user.role))) return null;
   const res = fetchApi(app, user, '/api/' + t.name, null, src);
   if (res.status !== 200) return null;
+  // someone who may change only their own records is not waited on for a colleague's
+  const own = accOf(app.def, user.role, t.name).update === 'own' && t.owner ? t.owner : null;
   const rows = (res.data as StoredRow[])
+    .filter((row) => !own || row[own] === user.id)
     .map((row) => ({ row, moves: movesFor(app, user, t, row) }))
     // A record waits for someone when they can take it forward now, or could once they fill in what the move needs.
     // One they could only cancel, or that is held back by a condition, is not theirs to act on yet.

@@ -1882,6 +1882,7 @@ async function flowRound6(browser, url) {
   check('a finished app reopens on the app itself, not on its build', await page.locator('.views .tab.on').innerText() === 'App' || /^App/.test(await page.locator('.views .tab.on').innerText()), await page.locator('.views .tab.on').innerText());
   await ctx.close();
   await samplesChecks(browser, url);
+  await complexChecks(browser, url);
 }
 /* ---------- The two more business apps on Home: a grant desk with its own agent team, and purchase requests ---------- */
 async function samplesChecks(browser, url) {
@@ -1912,6 +1913,40 @@ async function samplesChecks(browser, url) {
   const empty = await st(page, () => { const F = window.__formwork, s = F.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), A = s.apps[t.app]; return { tpl: A.tpl, want: A.plan.demoData, rows: A.def.tables.map((x) => x.name + ':' + F.sql(A.id, 'SELECT COUNT(*) AS n FROM ' + x.name)[0].n).join(), people: F.sql(A.id, 'SELECT COUNT(*) AS n FROM users')[0].n, chat: A.chat.map((m) => m.text || '') }; });
   check('"No, start empty": the choice is in the chat, the build passes its checks, and the finished app has no demo records but keeps the people who sign in', a.status === 'ready' && a.tests.failed === 0 && empty.tpl === 'helpdesk' && empty.want === false && empty.rows === 'devices:0,tickets:0,work_notes:0' && empty.people > 0 && empty.chat.includes('No, start empty') && empty.chat.some((x) => /You asked to start empty, so I took out the \d+ demo records/.test(x)), [a.status, a.tests, empty]);
   await ctx.close();
+}
+/* ---------- Apps that work things out: calculated fields, rules, moves held back by a condition, the inbox ---------- */
+async function complexChecks(browser, url) {
+  const { ctx, page } = await newPage(browser); await enter(page, url); let a;
+  check('home: four apps that work things out sit under their own heading', await page.locator('[data-home="complex"]').count() === 1 && (await Promise.all(['orders', 'vet', 'projects', 'dispatch'].map((id) => page.locator('[data-tpl="' + id + '"]').count()))).join() === '1,1,1,1');
+  await buildTpl(page, 'orders'); a = await appFull(page);
+  const od = await st(page, () => { const F = window.__formwork, s = F.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), A = s.apps[t.app], d = A.def; return { calcs: d.tables.reduce((n, x) => n + x.columns.filter((c) => c.formula).length, 0), rules: d.logic.rules.length, locked: d.process.locked.join(), held: d.process.transitions.filter((x) => x.when || (x.needs || []).length).length, first: F.sql(A.id, 'SELECT line_count, total FROM purchase_orders WHERE id = 1')[0], marketing: F.sql(A.id, 'SELECT committed, remaining, budget_state FROM departments WHERE id = 3')[0] }; });
+  check('order desk: every station passed first time and every generated test passes', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && a.tests.failed === 0 && a.tests.fresh, [a.status, a.line, a.tests]);
+  check('order desk: seven calculated fields, four rules, four moves with a condition and three locked stages', od.calcs === 7 && od.rules === 4 && od.held === 4 && od.locked === 'approved,ordered,received', od);
+  check('order desk: the demo orders are totalled from their lines, and each budget shows what is left', od.first.line_count === 2 && od.first.total === 4890 && od.marketing.committed === 4460 && od.marketing.remaining === 740 && od.marketing.budget_state === 'nearly_spent', od);
+  await view(page, 'App'); await page.waitForSelector('.persona-btn'); await page.locator('.persona-btn').first().click(); await page.waitForSelector('.app-nav .nav-i');
+  await page.selectOption('select[aria-label="Preview as"]', { label: 'Omar Farooq · Department manager' }); await sleep(300); await nav(page, 'Overview'); await page.waitForSelector('.lg-inbox');
+  check('inbox: the manager sees the two submitted orders waiting, each with its Approve button', await page.locator('.lg-inbox').getAttribute('data-waiting') === '2' && await page.locator('.lg-inbox [data-move="approve"]:not([disabled])').count() === 2 && /2 to do/.test(await page.locator('.lg-inbox').innerText()), await page.locator('.lg-inbox').innerText());
+  await page.locator('.lg-todo-open', { hasText: 'Printer toner and paper' }).click(); await page.waitForSelector('.drawer .lg-path');
+  const dr = async () => (await page.locator('.drawer').innerText()).replace(/\s+/g, ' ');
+  check('record: the stage path, the worked-out numbers and the order lines with their total', await page.locator('.drawer .lg-path li').count() >= 4 && await page.locator('.drawer .lg-stat').count() === 2 && await page.locator('.drawer [data-lines="order_lines"] tbody tr').count() === 2 && /792/.test(await page.locator('.drawer [data-lines="order_lines"] tfoot').innerText()) && /792/.test(await page.locator('.drawer .lg-stats').innerText()), (await dr()).slice(0, 600));
+  await page.locator('.drawer [data-move="approve"]').click(); await sleep(300);
+  check('record: approving locks the order, says so, and takes it off the inbox', /Approve: now approved/.test((await page.locator('.toast').allInnerTexts()).join(' ')) && await page.locator('.drawer .lg-locked').count() === 1 && await page.locator('.lg-inbox').getAttribute('data-waiting') === '1', [await page.locator('.toast').allInnerTexts(), await page.locator('.lg-inbox').getAttribute('data-waiting')]);
+  const ops = await st(page, () => { const F = window.__formwork, s = F.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return F.sql(t.app, 'SELECT committed, remaining FROM departments WHERE id = 2')[0]; });
+  check('budget: the approved order now counts against its department', ops.committed === 3330 + 792 && ops.remaining === 9000 - 3330 - 792, ops);
+  await page.selectOption('select[aria-label="Preview as"]', { label: 'Nadia Hussain · Director' }); await sleep(300); await nav(page, 'Overview'); await page.waitForSelector('.lg-inbox');
+  check('inbox: nothing waits for the director, whose approval is only for orders over 5,000', await page.locator('.lg-inbox').getAttribute('data-waiting') === '0' && /All done/.test(await page.locator('.lg-inbox').innerText()), await page.locator('.lg-inbox').innerText());
+  await page.locator('.app-nav .nav-i').nth(1).click(); await sleep(200); await page.getByText('Test phones for the mobile team').first().click(); await page.waitForSelector('.drawer [data-move="approve_large_order"]');
+  check('record: a move held back by its condition stays visible, switched off, with the reason in plain words', await page.locator('.drawer [data-move="approve_large_order"]').isDisabled() && /Orders up to 5,000 are approved by the department manager/.test(await page.locator('.drawer .lg-held').innerText()), (await dr()).slice(0, 500));
+  // a rule that refuses a save: the message is the app's own sentence
+  await page.selectOption('select[aria-label="Preview as"]', { label: 'Bilal Ahmed · Requester' }); await sleep(300); await nav(page, 'My orders'); await page.getByText('Whiteboards for the workshop room').first().click(); await page.waitForSelector('.drawer [data-lines="order_lines"]');
+  check('record: a draft is the requester\'s to submit, and lines can be added to it', await page.locator('.drawer [data-move="submit"]:not([disabled])').count() === 1 && await page.locator('.drawer [data-lines="order_lines"] button').count() >= 1);
+  await ctx.close();
+  // the plan screen says what will be worked out and checked, before anything is built
+  { const { ctx, page } = await newPage(browser); await enter(page, url);
+    await page.fill('#home-prompt', 'A vet practice books visits for pets without booking a vet twice, bills treatments and takes payments'); await page.locator('#home-go').click(); await page.waitForSelector('.iv-ask, .iv-act .iv-build', { timeout: 30000 }); if (await page.locator('.iv-usual').count()) await page.locator('.iv-usual').click(); await page.waitForSelector('.iv-act .iv-build'); await page.waitForSelector('.iv-logic');
+    const lg = (await page.locator('.iv-logic').innerText()).replace(/\s+/g, ' ');
+    check('plan: a section says in plain words what the app works out and checks', /What the app works out and checks/.test(lg) && /Still owed On visits: bill − paid/.test(lg) && /This vet already has a visit at that time/.test(lg) && /A closed visit is locked/.test(lg) && !/sum\(|_/.test(lg), lg.slice(0, 500));
+    await ctx.close(); }
 }
 /* ---------- What only React can get wrong: warnings, carets, handlers fired twice, focus, the other pages ---------- */
 // Counts how often a handler that was added straight to a form field for its `change` event runs. NativeField
