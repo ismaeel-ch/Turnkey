@@ -74,7 +74,7 @@ import {
   sqlRun,
 } from './db';
 import { appUsers, reseed, tourExec } from './engine';
-import { tempDemoData } from './demo-data';
+import { demoCounts, demoUndo, planDemoRemoval, tempDemoData } from './demo-data';
 import { DATA_VIEWS, migrateApp } from './viewspec';
 import { REC, TEMPLATES } from './builds';
 import { QUESTS } from './quests';
@@ -1965,6 +1965,11 @@ export function boot() {
     },
     activity: (appId: string) => activityNow(appId),
     history: historyHooks,
+    demo: {
+      counts: (id: string) => demoCounts(S.apps[id]),
+      plan: (id: string) => planDemoRemoval(S.apps[id]),
+      canUndo: (id: string) => !!demoUndo(S.apps[id]),
+    },
     runTests: (app: AppRecord) => runTestsSync(app),
     /** Runs one walkthrough step against an app's data and undoes what it changed. */
     tourStep: (id: string, step: TourStep | TourStep[], rows?: Dict<number>) => {
