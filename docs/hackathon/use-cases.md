@@ -1,6 +1,6 @@
 # Use cases
 
-This page says what Turnkey builds for the three suggested quests, for a sales bidding desk, and where a team at SSI
+This page says what Turnkey builds for the three suggested quests, for a sales bidding desk, and where a team at a software house
 or a client could use it. Claims are kept to what can be checked in the repository or in the live app
 (https://turnkey-bay.vercel.app/). Updated after release v0.3.2.
 
@@ -93,7 +93,7 @@ For: a community foundation, or any team that gives money against applications.
 Applications and organisations in this app are made up. Saved build: `src/workspace/samples.ts`, next to a plain
 purchase-requests app where nothing is ordered without approval.
 
-## Where an SSI team or a client could use Turnkey
+## Where a software house or its clients could use Turnkey
 
 These are places where the pattern fits, not claims about any existing deployment. Turnkey's output is a prototype with
 browser-side data. Each item says what would have to be true.
