@@ -7428,6 +7428,10 @@ body > .fui-FluentProvider.fl-provider {
   flex-direction: column;
   gap: 16px;
 }
+.iv-canvas:focus-visible {
+  outline: 2px solid var(--colorStrokeFocus2);
+  outline-offset: -2px;
+}
 .iv-canvas > * {
   flex: none;
   width: 100%;

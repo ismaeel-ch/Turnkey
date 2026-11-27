@@ -639,7 +639,7 @@ function Questions({ iv, plan }: { iv: Interview; plan: PlanSpec | null }) {
     open = (slot: string) => asked.find((c) => c.id === slot && !iv.answers[c.id]) || null;
   return (
     <div className="iv-shell">
-      <section className="iv-canvas" aria-label="Your plan so far">
+      <section className="iv-canvas" aria-label="Your plan so far" tabIndex={0}>
         <div className="row between wrap gap8">
           <div className="col gap0">
             <h2 className="t-sub1" id="iv-name">
@@ -689,7 +689,7 @@ function PlanScreen({ iv, plan }: { iv: Interview; plan: PlanSpec }) {
   );
   return (
     <div className="iv-shell">
-      <section className="iv-canvas" aria-label="The plan">
+      <section className="iv-canvas" aria-label="The plan" tabIndex={0}>
         <div className="col gap4">
           <span className="t-cap muted">{"Here is what I'll build"}</span>
           <h1 className="t-title2" id="iv-name">
