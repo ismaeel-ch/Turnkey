@@ -701,15 +701,15 @@ function PlanScreen({ iv, plan }: { iv: Interview; plan: PlanSpec }) {
     head = useFocusOnArrive<HTMLHeadingElement>();
   const actions = (big?: boolean) => (
     <div className="row wrap gap8">
+      <Btn className={cx('btn primary iv-build', big && 'lg')} onClick={buildIt}>
+        <Icon n="sparkle" />
+        Build it
+      </Btn>
       {iv.cards.length > 0 && (
         <Btn className="btn iv-change" onClick={backToQuestions}>
           Change something
         </Btn>
       )}
-      <Btn className={cx('btn primary iv-build', big && 'lg')} onClick={buildIt}>
-        <Icon n="sparkle" />
-        Build it
-      </Btn>
     </div>
   );
   return (

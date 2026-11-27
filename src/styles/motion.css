@@ -1,0 +1,361 @@
+/*
+  Motion, after Fluent 2 (fluent2.microsoft.design/motion). Durations and curves are Fluent's tokens only.
+
+  The rules this file follows:
+  - Moving between destinations (a workspace view, a page of a built app, a details tab) is a quick fade. Large
+    surfaces are never slid on or off the screen.
+  - What comes in (a card, a panel, a message) decelerates: it arrives fast and settles. What leaves accelerates and
+    takes less time than it took to arrive. Something that changes in place (a bar that grows, a hole that moves)
+    eases in and out.
+  - Small things move for a shorter time than large ones: a hover is 100 ms, a card 200 to 250 ms, a panel 300 ms.
+  - A set of items comes in one after another with a short offset, and only the first few are offset, so a long
+    list never keeps anyone waiting.
+  - Linear is for things that turn or run at a steady rate (a spinner, a running bar).
+  - With "reduce motion" on, nothing here runs: the whole file sits inside the media query, and workspace.css also
+    switches off every animation and transition.
+
+  Things that come and go under React's control (toasts, dialogs, the record panel and form of a built app) use
+  Fluent's motion components instead: see src/workspace/motion.tsx.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes tk-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes tk-rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  @keyframes tk-drop {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+  }
+  @keyframes tk-from-end {
+    from {
+      opacity: 0;
+      transform: translateX(16px);
+    }
+  }
+  @keyframes tk-scale {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  @keyframes tk-sheet {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes tk-grow-x {
+    from {
+      transform: scaleX(0);
+    }
+  }
+
+  /* ---------- destinations: a quick fade ---------- */
+  .view > :not(.chat),
+  .details-body > *,
+  .shell-body > .home,
+  .app-main > .scr,
+  .app-main > .empty,
+  .vx-body,
+  .ob-body,
+  .sheet-wrap,
+  .app-login,
+  .launch {
+    animation: tk-fade var(--durationFast) var(--curveLinear) backwards;
+  }
+
+  /* ---------- things that arrive ---------- */
+  /* the chat beside the canvas, the built app's record panel on a phone, the first-run tour bubble */
+  .work > .chat,
+  .tour-pop,
+  .fr-pop {
+    animation: tk-from-end var(--durationGentle) var(--curveDecelerateMid) backwards;
+  }
+  /* one message, one card in the chat, one event in the log */
+  .msg,
+  .msg-sep,
+  .log-i,
+  .ev {
+    animation: tk-rise var(--durationNormal) var(--curveDecelerateMid) backwards;
+  }
+  .app-dialog,
+  .gcard,
+  .iv-ask,
+  .iv-done,
+  .palette,
+  .login-card {
+    animation: tk-scale var(--durationGentle) var(--curveDecelerateMid) backwards;
+    transform-origin: 50% 0;
+  }
+  /* bars that tell someone something: they come down from where they sit */
+  .mbar,
+  .demo-bar,
+  .fr-welcome,
+  .steps-ready,
+  .chat-now {
+    animation: tk-drop var(--durationNormal) var(--curveDecelerateMid) backwards;
+  }
+  /* sheets on a phone come up from the bottom edge */
+  .sheet,
+  .fr-sheet {
+    animation: tk-sheet var(--durationSlow) var(--curveDecelerateMid) backwards;
+    transition: transform var(--durationNormal) var(--curveDecelerateMid);
+  }
+  /* menus: a fade only, so the list is in place for the pointer at once */
+  .menu {
+    animation: tk-fade var(--durationFaster) var(--curveLinear) backwards !important;
+  }
+
+  /* ---------- sets of items: one after another ---------- */
+  .tpl-grid > *,
+  .apps > *,
+  .how > *,
+  .steps-list > *,
+  .iv-agents > *,
+  .persona-grid > *,
+  .conn-grid > *,
+  .rel-list > *,
+  .guide-list > *,
+  .kpis > *,
+  .dash-grid > *,
+  .cards > *,
+  .kb-list > *,
+  .fr-items > *,
+  .fr-points > *,
+  .meet-grid > *,
+  .tbl:not(.pv) > tbody > tr {
+    animation: tk-rise var(--durationGentle) var(--curveDecelerateMid) backwards;
+  }
+  :is(
+      .tpl-grid,
+      .apps,
+      .how,
+      .steps-list,
+      .iv-agents,
+      .persona-grid,
+      .conn-grid,
+      .rel-list,
+      .guide-list,
+      .kpis,
+      .dash-grid,
+      .cards,
+      .kb-list,
+      .fr-items,
+      .fr-points,
+      .meet-grid
+    )
+    > :nth-child(2),
+  .tbl > tbody > tr:nth-child(2) {
+    animation-delay: 30ms;
+  }
+  :is(
+      .tpl-grid,
+      .apps,
+      .how,
+      .steps-list,
+      .iv-agents,
+      .persona-grid,
+      .conn-grid,
+      .rel-list,
+      .guide-list,
+      .kpis,
+      .dash-grid,
+      .cards,
+      .kb-list,
+      .fr-items,
+      .fr-points,
+      .meet-grid
+    )
+    > :nth-child(3),
+  .tbl > tbody > tr:nth-child(3) {
+    animation-delay: 60ms;
+  }
+  :is(
+      .tpl-grid,
+      .apps,
+      .how,
+      .steps-list,
+      .iv-agents,
+      .persona-grid,
+      .conn-grid,
+      .rel-list,
+      .guide-list,
+      .kpis,
+      .dash-grid,
+      .cards,
+      .kb-list,
+      .fr-items,
+      .fr-points,
+      .meet-grid
+    )
+    > :nth-child(4),
+  .tbl > tbody > tr:nth-child(4) {
+    animation-delay: 90ms;
+  }
+  :is(
+      .tpl-grid,
+      .apps,
+      .how,
+      .steps-list,
+      .iv-agents,
+      .persona-grid,
+      .conn-grid,
+      .rel-list,
+      .guide-list,
+      .kpis,
+      .dash-grid,
+      .cards,
+      .kb-list,
+      .fr-items,
+      .fr-points,
+      .meet-grid
+    )
+    > :nth-child(5),
+  .tbl > tbody > tr:nth-child(5) {
+    animation-delay: 110ms;
+  }
+  :is(
+      .tpl-grid,
+      .apps,
+      .how,
+      .steps-list,
+      .iv-agents,
+      .persona-grid,
+      .conn-grid,
+      .rel-list,
+      .guide-list,
+      .kpis,
+      .dash-grid,
+      .cards,
+      .kb-list,
+      .fr-items,
+      .fr-points,
+      .meet-grid
+    )
+    > :nth-child(6),
+  .tbl > tbody > tr:nth-child(6) {
+    animation-delay: 130ms;
+  }
+  /* from the seventh on they come together: the offsets get shorter, then stop */
+  :is(
+      .tpl-grid,
+      .apps,
+      .how,
+      .steps-list,
+      .iv-agents,
+      .persona-grid,
+      .conn-grid,
+      .rel-list,
+      .guide-list,
+      .kpis,
+      .dash-grid,
+      .cards,
+      .kb-list,
+      .fr-items,
+      .fr-points,
+      .meet-grid
+    )
+    > :nth-child(n + 7),
+  .tbl > tbody > tr:nth-child(n + 7) {
+    animation-delay: 150ms;
+  }
+
+  /* ---------- elevation: a card answers the pointer ---------- */
+  .tpl,
+  .app-row,
+  .kpi,
+  .kb-card,
+  .rcard,
+  .scard,
+  .conn-card,
+  .persona-btn,
+  .fp-tile,
+  .choice,
+  .iv-opt,
+  .opt,
+  .meet-tile,
+  .nav-i,
+  .side-i,
+  .sheet-i,
+  .palette-opt,
+  .cal-chip,
+  .wtab,
+  .chip,
+  .tbl tbody tr {
+    transition:
+      box-shadow var(--durationFaster) var(--curveEasyEase),
+      background-color var(--durationFaster) var(--curveEasyEase),
+      border-color var(--durationFaster) var(--curveEasyEase),
+      transform var(--durationFaster) var(--curveEasyEase);
+  }
+  .tpl:hover,
+  .kb-card:hover,
+  .persona-btn:hover {
+    transform: translateY(-1px);
+  }
+  .tpl:active,
+  .kb-card:active,
+  .persona-btn:active,
+  .choice:active,
+  .iv-opt:active {
+    transform: scale(0.99);
+    transition-duration: var(--durationUltraFast);
+  }
+
+  /* ---------- progress and agents at work ---------- */
+  /* a bar that fills grows to its value from the start edge */
+  .bd-meter-fill,
+  .hb-seg,
+  .tl-bar,
+  .gt-item {
+    animation: tk-grow-x var(--durationSlower) var(--curveDecelerateMid) backwards;
+    transform-origin: 0 50%;
+  }
+  .ring-fg {
+    transition: stroke-dashoffset var(--durationSlower) var(--curveEasyEase);
+  }
+  /* each step of the build changes colour as it starts, is checked and is done */
+  .chat-now-bar i,
+  .steps-bar i,
+  .step-dot,
+  .ob-n,
+  .iv-st-n,
+  .tab-ic,
+  .switch-pill,
+  .switch-pill i {
+    transition:
+      background-color var(--durationNormal) var(--curveEasyEase),
+      border-color var(--durationNormal) var(--curveEasyEase),
+      color var(--durationNormal) var(--curveEasyEase),
+      transform var(--durationNormal) var(--curveEasyEase),
+      width var(--durationGentle) var(--curveEasyEase);
+  }
+  /* the tour's highlight travels from one thing to the next */
+  .tour-hole,
+  .fr-hole {
+    transition:
+      left var(--durationSlow) var(--curveEasyEaseMax),
+      top var(--durationSlow) var(--curveEasyEaseMax),
+      width var(--durationSlow) var(--curveEasyEaseMax),
+      height var(--durationSlow) var(--curveEasyEaseMax);
+  }
+  /* a badge that has just changed state */
+  .badge.b-success,
+  .steps-tag,
+  .meet-state {
+    animation: tk-fade var(--durationNormal) var(--curveLinear) backwards;
+  }
+}
+
+/* A dialog with no row of buttons keeps Fluent's 24 px under its content. */
+.dlg.no-foot .dbody {
+  padding-bottom: 24px;
+}
