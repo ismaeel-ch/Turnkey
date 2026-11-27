@@ -49,7 +49,10 @@ export function registerAgent(id: string, loader: Loader): void {
   loaded.delete(id);
 }
 
-/** Visitor key for the step agent's repair attempts: the route has no request to hand down, so they share one key. */
+/**
+ * Visitor key for a step repair when no visitor is charged. The route runs the agent inside `chargeTo`, so a repair
+ * normally counts against the visitor who started the step, not against one key that every visitor shares.
+ */
 const STEP_REPAIRS = "agent:step:repair";
 
 /**
@@ -57,10 +60,11 @@ const STEP_REPAIRS = "agent:step:repair";
  * each repair attempt is counted here, so a repair loop is held to the same per-minute and daily caps.
  */
 export async function createStepAguiAgent(): Promise<AbstractAgent> {
-  const [{ createStepAgent }, { limiter, limitsFrom }, { checkPrompt }] = await Promise.all([
+  const [{ createStepAgent }, { limiter, limitsFrom }, { checkPrompt }, { chargedTo }] = await Promise.all([
     import("@/server/graph/step"),
     import("@/server/guard/limits"),
     import("@/server/guard/prompt"),
+    import("@/server/llm/usage"),
   ]);
   const limits = limitsFrom();
   return wrapStepAgent(
@@ -68,7 +72,7 @@ export async function createStepAguiAgent(): Promise<AbstractAgent> {
       maxTokens: limits.maxOutputTokens,
       admit: (attempt) => {
         if (attempt === 1) return null;
-        const v = limiter.take(STEP_REPAIRS, limits);
+        const v = limiter.take(chargedTo() ?? STEP_REPAIRS, limits);
         return v.ok ? null : { code: v.code === "off" ? "not_configured" : v.code, message: v.message };
       },
     })),

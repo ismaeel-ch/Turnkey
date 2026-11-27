@@ -12,6 +12,7 @@
 import { z } from 'zod';
 import { answerMeter, limiter, limitsFrom } from '@/server/guard/limits';
 import { parseBody, refuse, refuseCrossSite, visitorKey } from '@/server/guard/http';
+import { chargeTo } from '@/server/llm/usage';
 import { checkPrompt } from '@/server/guard/prompt';
 import { LlmError, resolveProvider } from '@/server/llm';
 import { errorText, log, withRequestLog } from '@/server/log';
@@ -105,4 +106,5 @@ async function post(request: Request) {
   });
 }
 
-export const POST = withRequestLog('llm', post);
+// every model call this request makes is charged to the visitor, for their share of the daily cap
+export const POST = withRequestLog('llm', (request: Request) => chargeTo(visitorKey(request), () => post(request)));

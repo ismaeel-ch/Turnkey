@@ -62,13 +62,14 @@ every agent on Haiku. App agent teams choose their own tier per agent.
 
 `src/server/guard/limits.ts`. Counters live in each server instance's memory, so they are a brake, not an exact meter.
 
-| Setting                 | Default | Why                                                                                             |
-| ----------------------- | ------- | ----------------------------------------------------------------------------------------------- |
-| `LLM_DAILY_SPEND_USD`   | $5      | About 50 builds a day at $0.10. Five days of judging use the whole $25.                         |
-| `LLM_DAILY_CALL_CAP`    | 600     | A backstop for calls that cannot be priced; the spend cap stops first on normal builds.         |
-| `LLM_RATE_PER_MINUTE`   | 20      | One visitor's build makes 6 to 8 calls over about two minutes.                                  |
-| `LLM_GLOBAL_PER_MINUTE` | 50      | Under the provider's limit.                                                                     |
-| `LLM_MAX_OUTPUT_TOKENS` | 16,000  | Thinking counts as output; one Haiku Database step used 12,000. A cut-off answer costs a retry. |
+| Setting                       | Default | Why                                                                                             |
+| ----------------------------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `LLM_DAILY_SPEND_USD`         | $5      | About 50 builds a day at $0.10. Five days of judging use the whole $25.                         |
+| `LLM_VISITOR_DAILY_SPEND_USD` | $2      | 40% of the day for one address: 10 to 20 builds. One person cannot pause Live for the judges.   |
+| `LLM_DAILY_CALL_CAP`          | 600     | A backstop for calls that cannot be priced; the spend cap stops first on normal builds.         |
+| `LLM_RATE_PER_MINUTE`         | 20      | One visitor's build makes 6 to 8 calls over about two minutes.                                  |
+| `LLM_GLOBAL_PER_MINUTE`       | 50      | Under the provider's limit.                                                                     |
+| `LLM_MAX_OUTPUT_TOKENS`       | 16,000  | Thinking counts as output; one Haiku Database step used 12,000. A cut-off answer costs a retry. |
 
 Both daily caps start again at midnight UTC (5 AM in Pakistan).
 
