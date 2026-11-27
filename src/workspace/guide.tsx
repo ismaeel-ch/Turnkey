@@ -8,6 +8,8 @@ import type { AppRecord } from '@/shared/types/workspace';
 export interface GuideGo {
   label: string;
   view?: string;
+  /** with view 'build': open the plain list of steps instead of how it was built */
+  steps?: boolean;
   act?: 'home' | 'tour' | 'debug' | 'chat' | 'share';
 }
 export interface GuideGroup {
@@ -113,11 +115,27 @@ export const GUIDE: GuideEntry[] = [
   },
   {
     g: 'build',
+    icon: 'tasks',
+    title: 'The build, step by step',
+    what: 'Build opens on a short list of steps in plain words: one row for each job, the agent that does it, what it made, and whether it is done. Only the steps this app needs are listed. When the build needs an answer from you, the row says so and waits.',
+    how: [
+      'Open an app and stay on Build.',
+      'When a row says Needs you, answer there or in chat.',
+      'Press Show how it was built for the workflow, the timeline, the log and the meeting. Back to the steps returns here.',
+    ],
+    go: {
+      label: 'Show the steps',
+      view: 'build',
+      steps: true,
+    },
+  },
+  {
+    g: 'build',
     icon: 'flow',
     title: 'The workflow canvas',
     what: "The build drawn as a workflow with React Flow: your request, the six agents, a gate after each one, the steps you added, the send-back arrows, the finished app, and the app's own agents if it has any.",
     how: [
-      'Open an app and stay on Build.',
+      'Open an app, go to Build and press Show how it was built.',
       'Drag the background to pan. Use the zoom buttons or pinch. Drag a node to move it.',
       'Select an agent to read what it wrote. Select a gate to see its checks and tests.',
       'Map shows a small overview. Reset layout puts every node back.',
@@ -165,7 +183,7 @@ export const GUIDE: GuideEntry[] = [
     title: 'Customise the workflow',
     what: 'The build workflow is yours to change, and it is shared state: you edit it on the canvas, in the inspector or in the settings, and the orchestrator edits it when you ask in chat. Every change is one state update, and only the agents it touches run again. The six stations keep their order, because each one needs what the one before it made.',
     how: [
-      'On Build, press Customize under the canvas to see every setting in one place.',
+      'On Build, press Show how it was built, then Customize under the canvas to see every setting in one place.',
       'Or press the plus on a gate to add a step, or the options button on an agent.',
       'Or ask in chat: “ask me before the screens are built”, “add a normalise step”, “allow 2 attempts”, “show the workflow”.',
       'Save as my default makes new apps start with your workflow. Reset to standard puts it back.',
@@ -312,7 +330,7 @@ export const GUIDE: GuideEntry[] = [
     icon: 'timeline',
     title: 'Timeline and log',
     what: 'Two other ways to see the same run: who worked when, and every step in order with its duration.',
-    how: ['On Build, switch from Workflow to Timeline or Log.'],
+    how: ['On Build, press Show how it was built.', 'Switch from Workflow to Timeline or Log.'],
     go: {
       label: 'Show the build',
       view: 'build',
@@ -526,6 +544,8 @@ export function guideGo(go: GuideGo, app: AppRecord | null): void {
     U.sheet = null;
     if (U.solo) U.solo = null;
     U.view[app.id] = go.view;
+    // every Build entry but the first is about how it was built: the canvas and the views beside it
+    if (go.view === 'build') U.bview[app.id] = go.steps ? 'steps' : !U.bview[app.id] || U.bview[app.id] === 'steps' ? 'line' : U.bview[app.id];
     if (chatShown() && NARROW()) setChat(false);
     notify();
     return;
