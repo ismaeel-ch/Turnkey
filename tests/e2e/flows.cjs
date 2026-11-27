@@ -903,7 +903,7 @@ async function canvasFieldEdits(browser, url) { // the owner edits fields on the
 async function flowViews(browser, url) {
   const { ctx, page } = await newPage(browser);
   await enter(page, url); await shot(page, '70-home-library');
-  check('home lists three quests and seven business apps', await page.locator('.tpl').count() === 10 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
+  check('home lists three quests and eleven business apps', await page.locator('.tpl').count() === 14 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
   await page.locator('[data-tpl="clinic"] .tpl-build').click(); await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').first().click(); await waitReady(page);
   let a = await appState(page);
   check('six stations, and the Views station passed', Object.keys(a.line).length === 6 && a.line.views === 'ok', a.line);
@@ -1665,7 +1665,7 @@ async function flowCustom(browser, url) {
 /* ---------- round 6: plain navigation, the Tester's repair loop, agent rooms, an agent step that changes the schema, releases, the app on its own ---------- */
 async function flowRound6(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
-  check('home: four plain steps, and seven business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 10 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
+  check('home: four plain steps, and eleven business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 14 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
   await buildTpl(page, 'biddesk'); a = await appFull(page);
   check('workspace: three plain steps and one Details tab', (await page.locator('.views .tab').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim().split(' ')[0]).join() === 'Build,App,Release,Details', await page.locator('.views .tab').allInnerTexts());
   check('bidding desk: every station passed first time, with four tables and its own team of agents', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'tenders,score_lines,price_options,risks', [a.status, a.line]);
@@ -1886,7 +1886,7 @@ async function flowRound6(browser, url) {
 /* ---------- The two more business apps on Home: a grant desk with its own agent team, and purchase requests ---------- */
 async function samplesChecks(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
-  check('home: the grant desk, purchase requests and the expense manager are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('[data-tpl="expenses"]').count() === 1 && await page.locator('.tpl').count() === 10);
+  check('home: the grant desk, purchase requests and the expense manager are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('[data-tpl="expenses"]').count() === 1 && await page.locator('.tpl').count() === 14);
   await page.fill('#home-prompt', 'a community foundation that reviews grant applications'); await page.locator('.prompt .btn.primary').click(); await page.waitForSelector('.iv-ask');
   check('Demo: a saved build with no question of its own asks only about demo data', (await ivNow(page)).n === 'Question 1 of 1' && (await ivNow(page)).card === 'demo_data' && /One quick question/.test(await page.locator('.iv-chat').innerText()) && (await ivNow(page)).name === 'GrantDesk', await ivNow(page));
   await page.locator('.iv-usual').click(); await page.locator('.iv-act .iv-build').click(); await onApp(page); const gd = await drive(page); a = gd.a;

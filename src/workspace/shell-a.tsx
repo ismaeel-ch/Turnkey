@@ -43,7 +43,7 @@ import type { MenuEntry, TabItem } from './ui';
 import { DBX, createTableSQL, dbCount, dbTables } from './db';
 import { TYPE_LABEL, VIEW_ICON, VIEW_LABEL, accOf, colOf, deriveEndpoints, roleName, tableOf } from './engine';
 import { DATA_VIEWS, VIEW_WHAT, viewFit, viewsOf } from './viewspec';
-import { CARDS, HOME_TEMPLATES, QUESTS, matchTemplate } from './catalog';
+import { CARDS, COMPLEX_TEMPLATES, MORE_TEMPLATES, QUESTS, TEMPLATES, matchTemplate } from './catalog';
 import { beginInterview, interviewNow, switchToDemo } from './interview';
 import { modelGoneForToday, modelOutage } from '@/shared/api-error';
 import { TEAMS, TeamAv } from './team';
@@ -625,11 +625,18 @@ export function Home() {
           </Btn>
         </div>
         <div className="tpl-grid">{QUESTS.map(card)}</div>
+        <div className="col gap0 sec" data-home="complex">
+          <h2 className="t-sub2">Apps that work things out</h2>
+          <span className="t-cap muted">
+            Totals and budgets worked out for you, bookings that cannot clash, and approvals that depend on the amount.
+          </span>
+        </div>
+        <div className="tpl-grid">{COMPLEX_TEMPLATES.map(card)}</div>
         <div className="col gap0 sec">
           <h2 className="t-sub2">Business apps</h2>
           <span className="t-cap muted">Record-keeping apps with roles and a workflow.</span>
         </div>
-        <div className="tpl-grid">{HOME_TEMPLATES.map(card)}</div>
+        <div className="tpl-grid">{TEMPLATES.concat(MORE_TEMPLATES).map(card)}</div>
         {!apps.length ? mine0 : null}
         {guests.length > 0 && (
           <>

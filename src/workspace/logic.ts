@@ -41,6 +41,8 @@ const WORK_CAP = 600;
 
 /** Stages that mean "this did not happen": a cancelled visit does not block the time it had. */
 const DEAD = /cancel|reject|declin|no_show|void|withdraw|missed/;
+/** True for a stage that ends a record without it having happened, such as cancelled or rejected. */
+export const isDeadStage = (id: unknown) => DEAD.test(String(id));
 
 /** Where a formula of `t` reads its records from: the app's own database. */
 export function scopeFor(appId: string, def: LogicDef, t: AppTable, row: Rec): Scope {

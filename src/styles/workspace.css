@@ -872,7 +872,7 @@ html.tk-opening .boot-btn{cursor:progress}.boot-wait{align-self:center}
 .lg-tbl td{padding:7px 10px;border-bottom:1px solid var(--colorNeutralStroke3);vertical-align:middle}.lg-tbl tbody tr:last-child td{border-bottom:0}.lg-tbl .num{text-align:right;font-variant-numeric:tabular-nums}
 .lg-row{cursor:pointer}.lg-row:hover,.lg-row:focus-visible{background:var(--colorSubtleBackgroundHover);outline:0}.lg-row:focus-visible{box-shadow:inset 0 0 0 2px var(--colorStrokeFocus2)}
 .lg-tbl tfoot td{font-weight:600;border-top:1px solid var(--colorNeutralStroke1);border-bottom:0;background:var(--colorNeutralBackground2)}.lg-tbox>p{padding:6px 10px}
-.lg-inbox,.fui-Card.lg-inbox{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;border-left:3px solid var(--colorBrandStroke1)}.lg-inbox .widget-h{display:flex;align-items:center;gap:6px}
+.lg-inbox,.fui-Card.lg-inbox{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;padding:12px 16px;border-left:3px solid var(--colorBrandStroke1)}.lg-inbox .widget-h{display:flex;align-items:center;gap:6px}
 .lg-todo{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}.lg-todo-i{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--colorNeutralStroke2)}.lg-todo-i:first-child{border-top:0}
 .lg-todo-open{flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:0;border:0;background:none;text-align:left;color:inherit;padding:2px 4px;border-radius:4px}.lg-todo-open:hover{background:var(--colorSubtleBackgroundHover)}
 .iv-logic .iv-rule{align-items:flex-start}.iv-logic .badge{flex:none}

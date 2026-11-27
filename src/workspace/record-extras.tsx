@@ -14,7 +14,7 @@ import type { AppTable, AppUser, ColumnDef, Process, StoredRow, Transition } fro
 import type { AppRecord, Pane } from '@/shared/types/workspace';
 import { cx, fmtNum, label, notify, toast } from './core';
 import { accOf, apiCall, colOf, roleName, tableOf } from './engine';
-import { isLocked, moveBlock } from './logic';
+import { isDeadStage, isLocked, moveBlock } from './logic';
 import { Cell, cellText, fetchApi, isStatusCol, openRecord, patchPane, rowTitle, stateLabel, stateTone } from './runtime';
 import { Btn, Card, Icon } from './ui';
 import { isMeasure, isRate } from './viewspec';
@@ -60,7 +60,8 @@ export function Moves({ app, user, t, row, small }: { app: AppRecord; user: AppU
   const moves = movesFor(app, user, t, row);
   if (!moves.length) return null;
   const held = moves.filter((m) => m.block),
-    firstOpen = moves.find((m) => !m.block);
+    // the button that stands out is the one that takes the record forward, never the one that cancels it
+    firstOpen = moves.find((m) => !m.block && !isDeadStage(m.tr.to));
   return (
     <span className="lg-moves">
       <span className="row wrap gap8">
@@ -199,6 +200,8 @@ export function LineItems({
     shown = list.slice(0, 12),
     locked = isLocked(processOf(app, t), row);
   const total = (col: ColumnDef) => {
+    // a price for one of something does not add up to anything useful
+    if (/(^|_)(price|rate|each)(_|$)|^unit_/.test(col.name)) return '';
     const vals = list.map((r) => Number(r[col.name])).filter((v) => Number.isFinite(v));
     if (!vals.length) return '';
     const sum = vals.reduce((a, b) => a + b, 0);
@@ -291,8 +294,11 @@ export function waitingFor(
   if (res.status !== 200) return null;
   const rows = (res.data as StoredRow[])
     .map((row) => ({ row, moves: movesFor(app, user, t, row) }))
-    // a record waits for someone when they can move it on now; one that is only held back is not theirs to act on yet
-    .filter((x) => x.moves.some((m) => !m.block))
+    // A record waits for someone when they can take it forward now, or could once they fill in what the move needs.
+    // One they could only cancel, or that is held back by a condition, is not theirs to act on yet.
+    .filter((x) =>
+      x.moves.some((m) => !isDeadStage(m.tr.to) && (!m.block || (m.tr.needs || []).some((f) => x.row[f] == null || x.row[f] === ''))),
+    )
     .sort((a, b) => a.row.id - b.row.id);
   return { t, rows };
 }
@@ -306,7 +312,8 @@ export function Inbox({ app, user, pane, src }: { app: AppRecord; user: AppUser;
     sc = colOf(t, P.column),
     shown = rows.slice(0, 5);
   // the fact that tells the records apart at a glance: an amount if there is one, and whose it is
-  const amount = t.columns.find((c) => c.type === 'money') || t.columns.find((c) => isMeasure(c) && !isRate(c)),
+  const money = t.columns.filter((c) => c.type === 'money'),
+    amount = money.find((c) => /total|amount/.test(c.name)) || money[0] || t.columns.find((c) => isMeasure(c) && !isRate(c)),
     who = t.columns.find((c) => c.type === 'user' && c.name === t.owner) || t.columns.find((c) => c.type === 'user');
   return (
     <Card className="card lg-inbox" data-waiting={rows.length}>
@@ -326,7 +333,9 @@ export function Inbox({ app, user, pane, src }: { app: AppRecord; user: AppUser;
                 <span className="t-cap muted ellipsis">
                   {[
                     who && row[who.name] != null ? cellText(app, user, t, who, row[who.name], 0) : '',
-                    amount && row[amount.name] != null ? amount.label + ' ' + cellText(app, user, t, amount, row[amount.name], 0) : '',
+                    amount && row[amount.name] != null && row[amount.name] !== 0
+                      ? amount.label + ' ' + cellText(app, user, t, amount, row[amount.name], 0)
+                      : '',
                   ]
                     .filter(Boolean)
                     .join(' · ')}
