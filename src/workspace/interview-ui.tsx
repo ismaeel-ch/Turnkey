@@ -447,7 +447,7 @@ function AskCard({ iv, card }: { iv: Interview; card: QuestionCard }) {
       </h3>
       <p className="t-cap muted">
         {"Why I'm asking: "}
-        {card.why}
+        {card.why.charAt(0).toUpperCase() + card.why.slice(1)}
       </p>
       <div className="col gap8" role="group" aria-labelledby="iv-q">
         {card.options.map((o) => {
