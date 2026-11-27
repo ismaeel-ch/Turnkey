@@ -95,10 +95,10 @@ describe('teamFor', () => {
 
   it('adds the rules builder for stages even with one kind of person', () => {
     const plan = copy(PERSONAL_EXPENSES);
-    plan.lists[0].fields.push({ name: 'stage', label: 'Stage', type: 'select', options: ['to_pay', 'paid', 'claimed_back'] });
+    plan.lists[0].fields.push({ name: 'status', label: 'Stage', type: 'select', options: ['to_pay', 'paid', 'claimed_back'] });
     plan.stages = {
       list: 'expenses',
-      field: 'stage',
+      field: 'status',
       stages: [
         { id: 'to_pay', label: 'To pay' },
         { id: 'paid', label: 'Paid' },

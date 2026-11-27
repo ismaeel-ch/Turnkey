@@ -1686,10 +1686,7 @@ export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
           </ul>
         </div>
         <div className="out-c">
-          <h4>
-            {'Process on '}
-            {label(b.process.entity).toLowerCase()}
-          </h4>
+          <h4>{b.process.states.length ? 'Process on ' + label(b.process.entity).toLowerCase() : 'No stages: records are just kept'}</h4>
           <div className="flow">
             {b.process.states.map((s, i) => [
               i > 0 && <Icon key={'a' + i} n="arrowRight" s="12" />,

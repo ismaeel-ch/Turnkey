@@ -4,7 +4,8 @@ import { detectRole } from '@/server/agents/registry';
 import { issuesOf } from '@/server/agents/schemas';
 import { roleAnswer } from '@/server/llm/providers/mock-roles';
 import { COMPANY_EXPENSES, PERSONAL_EXPENSES, checkPlan, planOk, teamFor, type PlanAnswer } from '@/shared/plan';
-import { U } from '@/workspace/core';
+import { deriveActivity, type RawAgentEvent } from '@/platform/agui/activity';
+import { EV, U } from '@/workspace/core';
 import { LIVE } from '@/workspace/line';
 import { PLANNING, askPlanner, askPrompt, planPrompt, writePlan } from '@/workspace/planner';
 
@@ -62,6 +63,19 @@ describe('askPlanner and writePlan', () => {
   it('refuses in plain words when no model is connected', async () => {
     LIVE.fn = null;
     await expect(askPlanner(EXPENSES)).rejects.toThrow('No model is connected');
+  });
+
+  it('shows the Planner as done when its turn ends, whether it answered or could not', async () => {
+    const state = (from: number) => deriveActivity(EV.slice(from) as RawAgentEvent[]).agents.researcher?.state;
+    let from = EV.length;
+    model();
+    await askPlanner(EXPENSES);
+    expect(EV.slice(from).map((e) => e.type)).toEqual(expect.arrayContaining(['STEP_STARTED', 'STEP_FINISHED']));
+    expect(state(from)).toBe('done');
+    from = EV.length;
+    LIVE.fn = null;
+    await expect(askPlanner(EXPENSES)).rejects.toThrow();
+    expect(state(from)).toBe('done');
   });
 
   it('asks once and returns cards and a draft that passes every check', async () => {

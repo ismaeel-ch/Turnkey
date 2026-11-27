@@ -69,8 +69,12 @@ describe('schemas refuse what the browser would refuse', () => {
     expect(issues.join(' ')).toMatch(/roles/);
     expect(issues.join(' ')).toMatch(/stories/);
   });
-  it('refuses a backend with no workflow and a dashboard with no widgets', () => {
-    expect(issuesOf('backend', { access: [] }).length).toBeGreaterThan(0);
+  it('refuses a backend whose workflow has nothing in it, and a dashboard with no widgets', () => {
+    expect(issuesOf('backend', { access: [], status: { states: [], transitions: [] } }).length).toBeGreaterThan(0);
+    expect(issuesOf('backend', { status: { states: ['a'], transitions: [{ from: 'a', to: 'b' }] } }).length).toBeGreaterThan(0);
+    // an app planned with no stages has access rules and no workflow at all
+    expect(issuesOf('backend', { access: [] })).toEqual([]);
+    expect(issuesOf('backend', { access: [], status: null })).toEqual([]);
     expect(issuesOf('views', { views: [], dashboard: { widgets: [] } }).join(' ')).toMatch(/widgets/);
   });
   it('refuses an array where one object is needed', () => {

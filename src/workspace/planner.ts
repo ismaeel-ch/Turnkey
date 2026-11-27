@@ -26,7 +26,7 @@ import {
   type QuestionCard,
 } from '@/shared/plan';
 import type { Untrusted } from '@/shared/types/app';
-import { str } from './core';
+import { emit, str } from './core';
 import { HEAD, Stopped, callModel, fbText, type CallRun } from './line';
 
 export { planFromDef } from '@/shared/plan';
@@ -61,7 +61,7 @@ const PLAN_RULES =
   PLAN_LIMITS.fields.max +
   ' fields.\n' +
   '- Field types: text, longtext, number, money, date, datetime, bool, select, ref, user. select needs "options" (snake_case, at least 2). ref needs "ref" (the name of a list in the plan). user is a person who signs in; "role" limits it to one kind of person. Do not list id, created_by or created_at. No list named users or activity.\n' +
-  '- "stages": null when records do not move through steps (a personal tracker usually has none). Otherwise the one list whose records move: "list", "field" (a select field of that list whose options are exactly the stage ids), "stages" (' +
+  '- "stages": null when records do not move through steps (a personal tracker usually has none). Otherwise the one list whose records move: "list", "field" (always "status": a select field of that list, named status, whose options are exactly the stage ids), "stages" (' +
   PLAN_LIMITS.stages.min +
   ' to ' +
   PLAN_LIMITS.stages.max +
@@ -73,7 +73,7 @@ const PLAN_RULES =
   '- Write for an owner who is not technical: plain names, no jargon.';
 
 const PLAN_FORMAT =
-  '{"name":"2 or 3 words","summary":"one sentence","audience":"just_me|group|company","people":[{"id":"","name":"","can":""}],"lists":[{"name":"","label":"","one":"","what":"","title":"","owner":null,"settings":false,"fields":[{"name":"","label":"","type":"","required":true,"options":[],"ref":"","role":""}]}],"stages":{"list":"","field":"stage","stages":[{"id":"","label":""}],"moves":[{"label":"","from":[""],"to":"","by":[""]}],"note":""},"permissions":{"list name":{"person id":{"list":"all","create":true,"update":"all","delete":false}}},"rules":[""],"stories":[{"role":"","want":"","so":""}],"demoData":true,"overview":true,"helpers":null,"assumed":[{"slot":"","question":"","answer":""}],"notInThisVersion":[{"ask":"","instead":""}]}';
+  '{"name":"2 or 3 words","summary":"one sentence","audience":"just_me|group|company","people":[{"id":"","name":"","can":""}],"lists":[{"name":"","label":"","one":"","what":"","title":"","owner":null,"settings":false,"fields":[{"name":"","label":"","type":"","required":true,"options":[],"ref":"","role":""}]}],"stages":{"list":"","field":"status","stages":[{"id":"","label":""}],"moves":[{"label":"","from":[""],"to":"","by":[""]}],"note":""},"permissions":{"list name":{"person id":{"list":"all","create":true,"update":"all","delete":false}}},"rules":[""],"stories":[{"role":"","want":"","so":""}],"demoData":true,"overview":true,"helpers":null,"assumed":[{"slot":"","question":"","answer":""}],"notInThisVersion":[{"ask":"","instead":""}]}';
 
 /** The Planner's first prompt: the question cards and the draft. */
 export function askPrompt(request: string, f?: string[] | null) {
@@ -138,20 +138,27 @@ async function ask<T>(
   ctl?: PlannerCtl,
 ): Promise<T> {
   let feedback: string[] | null = null;
-  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-    let answer: Untrusted;
-    try {
-      answer = await callModel(PLAN_APP, PLANNING, 'researcher', prompt(feedback), attempt, ctl);
-    } catch (e) {
-      if (e instanceof Stopped || (e as { fatal?: boolean } | null)?.fatal) throw e;
-      feedback = [(e as Error).message];
-      continue;
+  // The Planner's turn opens and closes as a step of its own, so the list of agents shows it working and then done.
+  const turn = { stepName: 'plan', agent: 'researcher', app: PLAN_APP.id };
+  emit('STEP_STARTED', turn);
+  try {
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+      let answer: Untrusted;
+      try {
+        answer = await callModel(PLAN_APP, PLANNING, 'researcher', prompt(feedback), attempt, ctl);
+      } catch (e) {
+        if (e instanceof Stopped || (e as { fatal?: boolean } | null)?.fatal) throw e;
+        feedback = [(e as Error).message];
+        continue;
+      }
+      const { value, problems } = read(answer, attempt >= ATTEMPTS);
+      if (!problems.length) return value;
+      feedback = problems;
     }
-    const { value, problems } = read(answer, attempt >= ATTEMPTS);
-    if (!problems.length) return value;
-    feedback = problems;
+    throw new Error('The Planner could not write a plan that passes the checks. ' + (feedback || []).join(' '));
+  } finally {
+    emit('STEP_FINISHED', turn);
   }
-  throw new Error('The Planner could not write a plan that passes the checks. ' + (feedback || []).join(' '));
 }
 
 /** Reads the request and writes the question cards and the draft plan. */
