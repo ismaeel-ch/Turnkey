@@ -1659,9 +1659,11 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
     if (r.status === 403) return pass('403 Forbidden · ' + r.error);
     // a transition the workflow does not allow from the record's state is refused too, with 409
     if (r.status === 409 && call[0] === 'POST' && act !== 'create') return pass('409 Conflict · ' + r.error);
-    // a record this person may not even see is refused as not found; that counts, as long as the record really exists
+    // a record this person may not even see is refused as not found; that counts, as long as the record really exists.
+    // Only the "not found" answer: a 404 for an action or table the app does not have is a broken step, not a refusal.
     if (
       r.status === 404 &&
+      r.error === t.one + ' not found' &&
       act !== 'create' &&
       act !== 'list' &&
       sqlPeek(app.id, 'SELECT id FROM ' + qi(tn) + ' WHERE id = ?', [rid]).length
