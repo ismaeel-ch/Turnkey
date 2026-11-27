@@ -1212,6 +1212,10 @@ async function flowRound6(browser, url) {
   await page.evaluate(() => document.activeElement && document.activeElement.blur()); await page.keyboard.press('Control+z'); await sleep(400);
   const undone = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return { by: s.apps[t.app].flow.by.screens || null, team: window.__formwork.teams()[t.app].status }; });
   check('undo waits while the app\'s own agents are running', undone.by === 'rules' && undone.team === 'running', undone);
+  // and Run again (here from the command palette) waits too, as chat does
+  await page.keyboard.press('Control+k'); await page.waitForSelector('.dialog.palette', { timeout: 5000 }); await page.keyboard.type('Run the build again'); await sleep(100); await page.keyboard.press('Enter'); await sleep(800);
+  const rebuilt = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return { runs: Object.keys(window.__formwork.wf.runs()), dialog: !!document.querySelector('.dialog'), toast: [...document.querySelectorAll('.toast')].map((e) => e.textContent).join(' | '), team: window.__formwork.teams()[t.app].status }; });
+  check('Run again waits while the app\'s own agents are running, and says why', rebuilt.runs.length === 0 && !rebuilt.dialog && /own agents are in the middle of a run/.test(rebuilt.toast) && rebuilt.team === 'running' && (await appFull(page)).run.n === runN, rebuilt);
   await worker('agent'); await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); window.__formwork.wf.cancelRerun(t.app); });
   await page.locator('.team-log .gcard.ask .btn.primary').click(); await waitTeam(page); await sleep(300);
   const deb = (await page.locator('.team-log').innerText()).replace(/\s+/g, ' ');
