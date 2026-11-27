@@ -94,6 +94,8 @@ export interface AppUser {
   name: string;
   username: string;
   role: string;
+  /** a made-up person who came with the demo data; the sign-in screen says so */
+  example?: boolean;
 }
 
 /* ---------- station 3: workflow, access, team ---------- */

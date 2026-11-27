@@ -720,3 +720,17 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 @media (max-width:640px){.conn-detail .tbl th:nth-child(3),.conn-detail .tbl td:nth-child(3){display:none}}
 .team-cost{display:block;font-variant-numeric:tabular-nums}.team-a-cost{font-variant-numeric:tabular-nums}
 @media (max-width:820px){.build-bar>.fui-Button.btn{min-width:0}}
+/* first use of a built app: "Choose who you are", the welcome, the checklist and the tour (src/workspace/firstrun.tsx) */
+.login-card{width:min(640px,100%)}.login-card .persona-grid{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}.login-card .persona-btn{align-items:flex-start}.persona-btn .av{flex:none}
+.login-more{display:flex;align-items:center;gap:6px;min-height:28px;padding:2px 6px 2px 0;border:0;border-radius:4px;background:none;color:var(--colorNeutralForeground2);font:inherit;cursor:pointer}.login-more:hover{color:var(--colorNeutralForeground1);text-decoration:underline}.login-pw{width:100%}
+.fr-card{flex:none;margin:16px 16px 0;padding:14px 16px;background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke2);border-radius:8px;display:flex;flex-direction:column;gap:10px}
+.fr-welcome{border-color:var(--acc-line);box-shadow:var(--shadow4)}.app.dense .fr-card{margin:12px 12px 0;padding:10px 12px}
+.fr-points,.fr-items{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}.fr-points li,.fr-items li{display:flex;gap:8px;align-items:flex-start}.fr-items li{align-items:center;min-height:28px}
+.fr-points .ic,.fr-items .ic{flex:none;color:var(--colorNeutralForeground3)}.fr-points .ic{margin-top:2px}.fr-points .ic,.fr-items li.ok .ic{color:var(--colorStatusSuccessForeground1)}.fr-items li.ok>.col{color:var(--colorNeutralForeground3)}
+.fr-toggle{display:flex;align-items:center;gap:8px;min-height:28px;padding:2px 6px 2px 0;border:0;border-radius:4px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.fr-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.fr-sheet{position:absolute;left:8px;right:8px;bottom:8px;margin:0;z-index:5;max-height:calc(100% - 16px);overflow:auto;border-radius:16px;box-shadow:var(--shadow28)}
+.fr-tour{position:absolute;inset:0;z-index:30;overflow:hidden}.fr-dim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.fr-hole{position:absolute;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.45);outline:2px solid var(--acc);pointer-events:none;transition:left .2s,top .2s,width .2s,height .2s}
+.fr-pop{position:absolute;background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke1);border-radius:8px;box-shadow:var(--shadow28);padding:14px 16px;display:flex;flex-direction:column;gap:8px;outline:none}
+.empty>.row{justify-content:center}

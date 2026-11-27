@@ -953,7 +953,8 @@ export interface Pane {
   ds: { range: string; f: DashFilter[] } | null;
   /** the agent room's start form */
   tf: PaneForm | null;
-  login: { u: string; p: string; err: string } | null;
+  /** the sign-in screen: what was typed, the error, and whether the username and password form is unfolded */
+  login: { u: string; p: string; err: string; open?: boolean } | null;
   conn: PaneCall | null;
   /** phone layout: the open sheet */
   sheet?: string | null;
@@ -961,6 +962,8 @@ export interface Pane {
   caseId?: number | null;
   /** drawn by a check, not by a person: nothing is remembered */
   test?: boolean;
+  /** the first-use tour while it runs: the stop on show (src/workspace/firstrun.tsx) */
+  guide?: { stop: number } | null;
 }
 
 /** The walkthrough player: the step on show, each step's result, and what the tour remembers. */
