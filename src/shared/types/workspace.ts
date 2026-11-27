@@ -7,7 +7,7 @@
  * The workspace modules are typed one at a time. Fields that only untyped modules read stay loose (`Loose`) until the
  * module that owns them is typed and can say what they hold.
  */
-import type { AppDef, Check, Row } from './app';
+import type { AppDef, Check, RecordStep, Row } from './app';
 
 /** A value whose shape is not described yet. Narrow it where you read it. */
 export type Loose = unknown;
@@ -101,6 +101,8 @@ export interface AppRecord {
   lookups?: Loose[];
   /** released versions, newest first */
   releases?: Release[];
+  /** set when the owner went back to an earlier version, until those changes are asked for again or let go */
+  takenBack?: TakenBack | null;
   /** changes since the first build, for the next release's notes */
   log?: { at: number; text: string; station: string }[];
   /** stays the same across versions and copies, so an installed app finds its newest copy */
@@ -160,6 +162,24 @@ export interface Release {
   pack: string | null;
   size: number;
   inside: { tables: number; pages: number };
+  /** what this version did to the records, for a device that updates to it (src/workspace/record-steps.ts) */
+  steps?: RecordStep[];
+  /** for a release that went back: the version it is the same as */
+  back?: string;
+}
+
+/** What going back to an earlier version took out of the app, kept so the owner can ask for it again. */
+export interface TakenBack {
+  at: number;
+  /** the version that was live before, and the one the app went back to */
+  from: string;
+  to: string;
+  /** the release notes and draft changes that were undone */
+  items: string[];
+  /** the owner's words on what went wrong */
+  why: string;
+  /** the draft as it was, in the draft history (src/workspace/history.ts) */
+  version: string | null;
 }
 
 /** One step of a run, as the timeline shows it. */
@@ -483,7 +503,11 @@ export interface SharedInfo {
   /** the short link's name, when it was opened from one */
   slug?: string;
   /** set when this copy replaced an older version and carried its records over */
-  updated?: { from: string; kept: number | null; at: number; seen?: boolean };
+  updated?: { from: string; kept: number | null; at: number; seen?: boolean; away?: number };
+  /** set when a newer version could not take this copy's records: the copy stays on its version */
+  failed?: { to: string; at: number; seen?: boolean };
+  /** what kind of release this version was (`Release.kind`) */
+  kind?: string;
 }
 
 /** An app open on its own, without the builder around it. */
@@ -496,6 +520,8 @@ export interface SoloView {
   /** the app tab to go back to */
   back: string | null;
   noInstall?: boolean;
+  /** a newer version found under the app's short link: its number, notes and packed code */
+  update?: { ver: string; kind: string; notes: string[]; code: string; later?: boolean; busy?: boolean } | null;
 }
 
 /** The share dialog: which data and person the link carries, and the link once it is packed. */

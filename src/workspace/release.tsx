@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
-import type { BriefedDef, Logo, Theme, Untrusted } from '@/shared/types/app';
+import type { BriefedDef, Logo, RecordStep, Theme, Untrusted } from '@/shared/types/app';
 import type { AppRecord, ChatMessage, Dict, Release, ViewState } from '@/shared/types/workspace';
 import { ACC_HEX } from '@/styles/theme.generated';
 import { toStyle } from '@/platform/dom';
@@ -14,7 +14,6 @@ import {
   chatShown,
   closeDialog,
   commit,
-  confirmBox,
   cx,
   emit,
   errText,
@@ -22,6 +21,7 @@ import {
   label,
   me,
   notify,
+  openDialog,
   saveFile,
   setChat,
   snake,
@@ -30,13 +30,18 @@ import {
   toolCall,
   uid,
 } from './core';
-import { dbDrop, dbRelease, dbRollback, dbSave, dbSavepoint, qi, sqlRows, sqlRun, topoOrder } from './db';
-import { buildDatabase } from './engine';
+import { dbAdopt, dbCount, dbDrop } from './db';
 import { TEAMS } from './team';
 import { runTestsSync, testStats } from './tests';
 import { RUNS, STATIONS, pushChat } from './line';
 import { Btn, Card, Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner, Textarea } from './ui';
 import { appFromPack, framed, openShare, openShared, packOf, readPack, squeeze, unsqueeze } from './share';
+import type { Pack } from './share';
+import { carryData } from './carry';
+import { appBusy, record as keepDraft } from './history';
+import { inverseSteps, verCmp, verParts } from './record-steps';
+import type { VersionSteps } from './record-steps';
+import { saveShortLink } from '@/platform/share-link';
 import { exportMarkdown, exportPage, exportPdf, exportSqlite, exportZip } from './export';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 
@@ -341,19 +346,7 @@ export const isDirty = (app: AppRecord) => {
   const r = relOf(app);
   return !!r && r.sig !== appSig(app);
 };
-export const verParts = (v: unknown) =>
-    String(v || '0')
-      .split('.')
-      .map((x) => parseInt(x, 10) || 0),
-  verCmp = (a: unknown, b: unknown) => {
-    const x = verParts(a),
-      y = verParts(b);
-    for (let i = 0; i < 3; i++) {
-      const d = (x[i] || 0) - (y[i] || 0);
-      if (d) return d;
-    }
-    return 0;
-  };
+export { verCmp, verParts };
 export const verNext = (v: string, kind: string) => {
   const p = verParts(v);
   return kind === 'major'
@@ -367,7 +360,7 @@ export const REL_KIND: Dict<string> = {
   fix: 'Fixes',
   feature: 'New features',
   major: 'Big change',
-  rollback: 'Rolled back',
+  rollback: 'Went back',
 };
 export function logChange(app: AppRecord, text: string, station?: string) {
   if (!app.log) app.log = [];
@@ -437,6 +430,19 @@ export function draftNotes(app: AppRecord) {
   });
   return out.length ? out.slice(-12) : ['Small changes.'];
 }
+/** What each released version did to the records, oldest first: a link carries it so a device can replay it. */
+export const relHistory = (app: AppRecord): VersionSteps[] =>
+  relList(app)
+    .slice()
+    .reverse()
+    .map((r) => ({ v: r.v, steps: r.steps || [] }));
+/** What the draft has done to the records since the last release. */
+export const draftSteps = (app: AppRecord): RecordStep[] => {
+  const r = relOf(app);
+  return arr<{ at: number; step?: RecordStep }>(app.def.migrations)
+    .filter((m) => m.step && (!r || m.at > r.at))
+    .map((m) => m.step as RecordStep);
+};
 export function releaseBlock(app: AppRecord) {
   // why a release cannot happen right now, or null
   if (app.status !== 'ready') return 'The build has not finished.';
@@ -445,6 +451,15 @@ export function releaseBlock(app: AppRecord) {
   const st = testStats(app);
   if (st && st.fresh && st.failed) return st.failed + ' of ' + st.total + ' tests fail. A version is released only when every test passes.';
   return null;
+}
+/** Puts a released version under the app's short link, when it has one: the address people already have then opens
+ *  the newest version, and an installed app finds it the next time it opens. Fails quietly: the long link still works. */
+export async function refreshShortLink(app: AppRecord, code: string) {
+  const sh = app.short;
+  if (!sh || !sh.slug || !sh.token || framed()) return false;
+  const r = await saveShortLink({ code, name: app.name, slug: sh.slug, token: sh.token });
+  if (!r.ok && r.reason === 'forbidden') delete app.short; // the name belongs to someone else now: Share makes a new one
+  return r.ok;
 }
 export async function releaseApp(app: AppRecord, kind: string, notes: string[]) {
   const why = releaseBlock(app);
@@ -460,8 +475,9 @@ export async function releaseApp(app: AppRecord, kind: string, notes: string[]) 
     return null;
   }
   const prev = relOf(app),
-    k = prev ? (REL_KIND[kind] && kind !== 'first' ? kind : suggestKind(app)) : 'first',
+    k = prev ? (REL_KIND[kind] && kind !== 'first' && kind !== 'rollback' ? kind : suggestKind(app)) : 'first',
     v = prev ? verNext(prev.v, k) : '1.0',
+    steps = prev ? draftSteps(app) : [],
     list = arr(notes)
       .map((x) => str(x).slice(0, 200))
       .filter(Boolean)
@@ -474,6 +490,9 @@ export async function releaseApp(app: AppRecord, kind: string, notes: string[]) 
   pack.ver = v;
   pack.uid = app.uid;
   pack.notes = list;
+  pack.kind = k;
+  pack.history = relHistory(app).concat([{ v, steps }]);
+  if (app.short) pack.slug = app.short.slug; // an installed copy asks this address for newer versions
   let code: string;
   try {
     code = await squeeze(JSON.stringify(pack));
@@ -498,11 +517,13 @@ export async function releaseApp(app: AppRecord, kind: string, notes: string[]) 
       tables: app.def.tables.length,
       pages: app.def.screens.length,
     },
+    steps,
   };
   app.releases = [rel].concat(relList(app));
   app.releases.slice(6).forEach((r) => {
     r.pack = null;
   }); // older snapshots are let go to save room; their notes stay
+  app.takenBack = null; // what was taken back either went out again in this version or was left behind on purpose
   toolCall(
     {
       agent: 'orchestrator',
@@ -552,6 +573,7 @@ export async function releaseApp(app: AppRecord, kind: string, notes: string[]) 
   app.updated = Date.now();
   toast('Version ' + v + ' of ' + app.name + ' is released.', 'success');
   commit();
+  void refreshShortLink(app, code).then((ok) => ok && commit());
   return rel;
 }
 export async function openVersion(app: AppRecord, rel: Release) {
@@ -565,23 +587,79 @@ export async function openVersion(app: AppRecord, rel: Release) {
     toast(errText(e), 'danger');
   }
 }
-export async function rollbackTo(app: AppRecord, rel: Release) {
-  if (RUNS[app.id] || !rel.pack) return;
-  if (
-    !(await confirmBox({
-      title: 'Go back to version ' + rel.v + '?',
-      body:
-        'The draft becomes version ' +
-        rel.v +
-        " again: its tables, rules, views and pages. The records are reset to that version's sample data. Releases you already made stay in the history.",
-      yes: 'Go back to ' + rel.v,
-      danger: true,
-    }))
-  )
-    return;
-  let tmp: AppRecord | null = null;
+
+/* ---------- going back ---------- */
+/* Going back to an earlier version is one press and it never deletes a record. The earlier version's tables, rules,
+   views and pages come back, the records the app holds now are moved into them, and it goes out at once as the next
+   number, because a device only ever moves to a higher one. What the earlier version has no field for is put away
+   and returns when that field does. The draft as it was stays in the draft history. */
+/** The app's own lists, with how many records each holds now. */
+export const recordCounts = (app: AppRecord) => app.def.tables.map((t) => ({ label: t.label, n: Number(dbCount(app.id, t.name)) || 0 }));
+export const recordTotal = (app: AppRecord) => recordCounts(app).reduce((n, t) => n + t.n, 0);
+/** What going back to `rel` would undo: the notes of every later release, then the draft's own changes. */
+export function undoneBy(app: AppRecord, rel: Release): string[] {
+  const out: string[] = [];
+  relList(app)
+    .filter((r) => verCmp(r.v, rel.v) > 0 && r.kind !== 'rollback')
+    .forEach((r) => r.notes.forEach((n) => out.push(n)));
+  if (isDirty(app)) draftNotes(app).forEach((n) => out.push(n));
+  return out.filter((x, i, a) => x !== 'Small changes.' && a.indexOf(x) === i).slice(0, 12);
+}
+/** Why going back cannot start now, or null. */
+export const goBackBlock = (app: AppRecord, rel: Release): string | null =>
+  !rel.pack
+    ? 'The copy of version ' + rel.v + ' was let go to save room, so the app cannot go back to it.'
+    : appBusy(app)
+      ? 'Wait until the agents have finished, then go back.'
+      : null;
+export function askGoBack(app: AppRecord, rel: Release) {
+  const why = goBackBlock(app, rel);
+  if (why) return toast(why, 'warning');
+  openDialog('goback', { app: app.id, v: rel.v });
+}
+export async function goBackTo(app: AppRecord, rel: Release, why?: string): Promise<Release | null> {
+  const live = relOf(app),
+    block = goBackBlock(app, rel);
+  if (!live || block) {
+    if (block) toast(block, 'warning');
+    return null;
+  }
+  const same = rel === live, // back to what is live: the draft's changes are dropped and nothing new goes out
+    later = relList(app).filter((r) => verCmp(r.v, rel.v) > 0), // newest first
+    undone = undoneBy(app, rel),
+    relSteps = later
+      .slice()
+      .reverse()
+      .flatMap((r) => r.steps || []),
+    v = verNext(live.v, 'fix'),
+    notes = ['Back to version ' + rel.v + ': the app works as it did then. No records were deleted.'];
+  let pack: Pack,
+    code = '';
   try {
-    tmp = appFromPack(readPack(await unsqueeze(rel.pack)), 'rb' + Date.now(), true);
+    pack = readPack(await unsqueeze(rel.pack as string));
+    if (!same) {
+      pack.ver = v;
+      pack.uid = app.uid;
+      pack.notes = notes;
+      pack.kind = 'rollback';
+      pack.by = me()?.name || '';
+      pack.history = relHistory(app).concat([{ v, steps: inverseSteps(relSteps) }]);
+      if (app.short) pack.slug = app.short.slug;
+      code = await squeeze(JSON.stringify(pack));
+    }
+  } catch (e) {
+    toast('Version ' + rel.v + ' could not be opened: ' + errText(e), 'danger');
+    return null;
+  }
+  if (goBackBlock(app, rel)) return null; // something started while the version was being unpacked
+  const kept = keepDraft(app), // the draft as it is now goes into the draft history, so going back can be undone
+    before = recordTotal(app);
+  let tmp: AppRecord | null = null,
+    moved: ReturnType<typeof carryData> = null;
+  try {
+    tmp = appFromPack(pack, 'rb' + Date.now(), true);
+    moved = carryData(app, tmp, inverseSteps(relSteps.concat(draftSteps(app))));
+    if (!moved) throw new Error('the records could not be moved into it, so nothing was changed');
     app.def = tmp.def;
     app.seed = tmp.seed;
     app.name = tmp.name;
@@ -592,88 +670,184 @@ export async function rollbackTo(app: AppRecord, rel: Release) {
       app.line[s.id] = from.line[s.id];
       app.line[s.id].note = 'From version ' + rel.v;
     });
+    dbAdopt(app.id, tmp.id);
   } catch (e) {
-    toast('Version ' + rel.v + ' could not be restored: ' + errText(e), 'danger');
-    return;
+    toast('The app could not go back to version ' + rel.v + ': ' + errText(e), 'danger');
+    return null;
   } finally {
     if (tmp) {
       dbDrop(tmp.id);
       delete S.apps[tmp.id];
     }
   }
-  dbDrop(app.id);
-  const built = buildDatabase(
-    app,
-    {
-      tables: app.def.tables.map((t) =>
-        Object.assign({}, t, {
-          rows: (app.seed?.rows || {})[t.name] || [],
-        }),
-      ),
-      users: app.def.users,
-      repaired: false,
-    },
-    {
-      agent: 'orchestrator',
-      appId: app.id,
-    },
-  );
   app.rev++;
   app.reviews = {};
   app.updated = Date.now();
-  logChange(app, 'Go back to version ' + rel.v, 'database');
-  const ts = runTestsSync(app);
+  const ts = runTestsSync(app),
+    testLine = ts ? (ts.failed ? ts.failed + ' of ' + ts.total + ' tests fail on it.' : 'All ' + ts.total + ' tests pass.') : '',
+    recLine =
+      'No records were deleted: ' +
+      (moved.rows === before ? 'all ' + before : moved.rows + ' of ' + before) +
+      ' are still here' +
+      (moved.away
+        ? ', and ' +
+          moved.away +
+          ' value' +
+          (moved.away === 1 ? '' : 's') +
+          ' that version ' +
+          rel.v +
+          ' has no field for ' +
+          (moved.away === 1 ? 'is' : 'are') +
+          ' put away for ' +
+          AWAY_KEPT +
+          ' and come back when that field does'
+        : '') +
+      '.';
+  app.takenBack = undone.length
+    ? { at: Date.now(), from: live.v, to: rel.v, items: undone, why: str(why).slice(0, 300), version: kept ? kept.id : null }
+    : null;
+  if (same) {
+    app.log = (app.log || []).filter((x) => x.at <= live.at);
+    pushChat(app, 'orchestrator', 'The draft is version ' + rel.v + ' again, the same as what people have. ' + recLine + ' ' + testLine);
+    toast('The draft changes were dropped. Nothing was released.', 'success');
+    commit();
+    return live;
+  }
+  const back: Release = {
+    v,
+    at: Date.now(),
+    by: me()?.name || '',
+    kind: 'rollback',
+    back: rel.v,
+    notes,
+    sig: appSig(app),
+    tests: { passed: ts ? ts.passed : rel.tests.passed, total: ts ? ts.total : rel.tests.total },
+    pack: code,
+    size: code.length,
+    inside: { tables: app.def.tables.length, pages: app.def.screens.length },
+    steps: inverseSteps(relSteps),
+  };
+  app.releases = [back].concat(relList(app));
+  app.releases.slice(6).forEach((r) => {
+    r.pack = null;
+  });
+  toolCall({ agent: 'orchestrator', appId: app.id }, 'release_version', { version: v, kind: 'rollback', back: rel.v }, () => ({
+    released: v,
+    records: moved ? moved.rows : 0,
+  }));
+  emit('STATE_DELTA', {
+    app: app.id,
+    source: 'user',
+    delta: [{ op: 'add', path: '/releases/0', value: { version: v, kind: 'rollback' } }],
+  });
   pushChat(
     app,
     'orchestrator',
-    'The draft is version ' +
+    'You went back. Version ' +
+      v +
+      ' is live and is the same as ' +
       rel.v +
-      ' again' +
-      (built.every((c) => c.ok) ? '' : ', but the database reported a problem') +
       '. ' +
-      (ts ? (ts.failed ? ts.failed + ' of ' + ts.total + ' tests fail.' : 'All ' + ts.total + ' tests pass.') : '') +
-      ' Release it to make it the current version for everyone.',
+      recLine +
+      ' ' +
+      testLine +
+      (undone.length ? ' What was taken back is listed on the Release page, so you can ask for it again.' : ''),
+    { type: 'released', v, kind: 'rollback', notes },
   );
-  toast('The draft is version ' + rel.v + ' again.', 'success');
+  toast('Version ' + v + ' is live: the same as ' + rel.v + '. No records were deleted.', 'success');
   commit();
+  void refreshShortLink(app, code).then((ok) => ok && commit());
+  return back;
 }
-export function carryData(from: AppRecord, to: AppRecord) {
-  // an update keeps the records: every table and column both versions have is copied across, with its ids
-  const kept = {
-      tables: 0,
-      rows: 0,
-    },
-    names = (id: string, t: string) => sqlRows(id, 'PRAGMA table_info(' + qi(t) + ')', null, 'update').map((c) => String(c.name));
-  dbSavepoint(to.id, 'carry');
-  try {
-    topoOrder(to.def.tables)
-      .reverse()
-      .forEach((t) => {
-        if (from.def.tables.some((x) => x.name === t.name)) sqlRun(to.id, 'DELETE FROM ' + qi(t.name), null, 'update');
-      });
-    topoOrder(to.def.tables).forEach((t) => {
-      if (!from.def.tables.some((x) => x.name === t.name)) return;
-      const have = names(from.id, t.name),
-        cols = names(to.id, t.name).filter((c) => have.includes(c)),
-        rows = sqlRows(from.id, 'SELECT * FROM ' + qi(t.name) + ' ORDER BY "id"', null, 'update');
-      rows.forEach((r) => {
-        sqlRun(
-          to.id,
-          'INSERT INTO ' + qi(t.name) + ' (' + cols.map(qi).join(', ') + ') VALUES (' + cols.map(() => '?').join(', ') + ')',
-          cols.map((c) => r[c]),
-          'update',
-        );
-        kept.rows++;
-      });
-      kept.tables++;
-    });
-    dbRelease(to.id, 'carry');
-  } catch {
-    dbRollback(to.id, 'carry');
-    return null;
-  }
-  dbSave(to.id);
-  return kept;
+const AWAY_KEPT = '30 days';
+export function GoBackDialog({ p }: { p: { app: string; v: string } }) {
+  const [why, setWhy] = useState(''),
+    [busy, setBusy] = useState(false);
+  const app = S.apps[p.app],
+    rel = app ? relList(app).find((r) => r.v === p.v) : null,
+    live = app ? relOf(app) : null;
+  if (!app || !rel || !live) return null;
+  const same = rel === live,
+    undone = undoneBy(app, rel),
+    counts = recordCounts(app).filter((t) => t.n),
+    total = counts.reduce((n, t) => n + t.n, 0),
+    next = verNext(live.v, 'fix');
+  const go = async () => {
+    setBusy(true);
+    await goBackTo(app, rel, why);
+    closeDialog();
+  };
+  return (
+    <Dialog
+      title={same ? 'Drop the draft changes?' : 'Go back to version ' + rel.v + '?'}
+      onClose={closeDialog}
+      cls="goback"
+      foot={
+        <>
+          <Btn className="btn" onClick={closeDialog}>
+            Cancel
+          </Btn>
+          <Btn className="btn primary" id="goback-go" data-autofocus disabled={busy} onClick={go}>
+            {busy ? <Spinner /> : <Icon n="undo" s="16" />}
+            {same ? 'Drop the draft changes' : 'Go back to ' + rel.v}
+          </Btn>
+        </>
+      }
+    >
+      <div className="col gap12">
+        <div className="col gap4">
+          <strong>What comes back</strong>
+          <span>
+            {'The app as it was in version '}
+            {rel.v}
+            {', released '}
+            {new Date(rel.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+            {': its lists, rules, views and pages.'}
+          </span>
+        </div>
+        {undone.length > 0 && (
+          <div className="col gap4">
+            <strong>What goes away for now</strong>
+            <ul className="rel-notes" id="goback-undone">
+              {undone.map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <MBar tone="success">
+          <strong>Your records: nothing is deleted.</strong>
+          {total
+            ? ' All ' + total + ' stay (' + counts.map((t) => t.n + ' ' + t.label.toLowerCase()).join(', ') + ').'
+            : ' There are no records in the app yet.'}
+          {' Values in a field that version '}
+          {rel.v}
+          {' does not have are put away for ' + AWAY_KEPT + ' and come back when that field does.'}
+        </MBar>
+        {!same && (
+          <>
+            <p className="muted">
+              {'It goes out at once as version '}
+              {next}
+              {', the same as '}
+              {rel.v}
+              {'. People only ever move to a higher number, so an older one would reach nobody.'}
+            </p>
+            <Field id="goback-why" label="What went wrong? (optional)" hint="Kept with what was taken back, to help the fix.">
+              <Textarea
+                native
+                className="textarea"
+                id="goback-why"
+                rows={2}
+                value={why}
+                onInput={(e) => setWhy((e.target as HTMLTextAreaElement).value)}
+              />
+            </Field>
+          </>
+        )}
+      </div>
+    </Dialog>
+  );
 }
 export const verText = (app: AppRecord) => {
   const sh = app.shared,
@@ -961,7 +1135,10 @@ export function ReleaseView({ app }: { app: AppRecord }) {
                 </li>
                 <li>
                   <Icon n="sync" s="16" />
-                  <span>When you release a newer version and send its link, their copy updates and keeps their records.</span>
+                  <span>
+                    When you release a newer version the short link opens it at once, and an installed app offers the update the next time
+                    it opens. Their records are kept.
+                  </span>
                 </li>
               </ul>
             </div>
@@ -1042,6 +1219,7 @@ export function ReleaseView({ app }: { app: AppRecord }) {
                       {i === 0 ? 'Current' : REL_KIND[r.kind] || 'Release'}
                     </span>
                     {i === 0 && r.kind !== 'first' ? <span className="badge b-outline">{REL_KIND[r.kind]}</span> : null}
+                    {r.back ? <span className="badge b-outline">{'Same as ' + r.back}</span> : null}
                     <span className="t-cap muted grow" title={new Date(r.at).toLocaleString()}>
                       {new Date(r.at).toLocaleDateString(undefined, {
                         day: 'numeric',
@@ -1068,8 +1246,19 @@ export function ReleaseView({ app }: { app: AppRecord }) {
                       Open
                     </Btn>
                     {(i > 0 || dirty) && (
-                      <Btn className="btn subtle sm" disabled={!r.pack || !!RUNS[app.id]} onClick={() => rollbackTo(app, r)}>
-                        Go back to this
+                      <Btn
+                        className="btn subtle sm"
+                        disabled={!r.pack || !!RUNS[app.id]}
+                        title={
+                          r.pack
+                            ? i > 0
+                              ? 'Make this the live version again. No records are deleted.'
+                              : 'Make the draft the same as this version again. No records are deleted.'
+                            : 'This snapshot was let go to save room'
+                        }
+                        onClick={() => askGoBack(app, r)}
+                      >
+                        {i > 0 ? 'Go back to this' : 'Drop the draft changes'}
                       </Btn>
                     )}
                   </div>
@@ -1243,7 +1432,7 @@ export function InstallAppDialog({ p }: { p: { app: string } }) {
             <Icon n="sync" s="16" />
             <span>
               <strong>Updates:</strong>
-              {' opening the link of a newer version updates the app and keeps your records'}
+              {' the app looks for a newer version when it opens, asks before it updates, and keeps your records'}
             </span>
           </li>
           {app.def.team ? (

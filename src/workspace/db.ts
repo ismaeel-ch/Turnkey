@@ -116,6 +116,29 @@ export function dbDrop(appId: string) {
   LS.del('db:' + appId);
   dbBump(appId);
 }
+/** Hands one app's open database to another app: `toId` gets the file and `fromId` is left with none. */
+export function dbAdopt(toId: string, fromId: string) {
+  const db = dbOpen(fromId);
+  [toId, fromId].forEach((id) => {
+    clearTimeout(DBX.timers[id] ?? undefined);
+    DBX.timers[id] = null;
+    DBX.hold[id] = 0;
+  });
+  const old = DBX.open[toId];
+  if (old && old !== db) {
+    try {
+      old.close();
+    } catch {}
+  }
+  delete DBX.open[fromId];
+  delete DBX.size[fromId];
+  delete DBX.savedAt[fromId];
+  LS.del('db:' + fromId);
+  DBX.open[toId] = db;
+  dbBump(fromId);
+  dbBump(toId);
+  dbFlush(toId);
+}
 export const isRead = (text: string) => /^\s*(select|pragma|with|explain)\b/i.test(text);
 export function sqlRun(appId: string, text: string, params?: SqlValue[] | null, by?: string): SqlRow[] | { changes: number } {
   // every statement the product runs goes through here and is logged
