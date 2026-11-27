@@ -191,6 +191,9 @@ async function guided(browser) {
     .evaluate((el) => el.scrollIntoView({ block: 'center' }))
     .catch(() => {});
   await shot(page, 'versions', { wait: 700 });
+  // With nothing left in the draft, the page still offers the next version and explains how to get there.
+  await page.locator('#rel-next').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await shot(page, 'release-again', { wait: 700 });
   await ctx.close();
 }
 
@@ -339,6 +342,7 @@ const README = [
   'demo-data-removed',
   'fix-after-release',
   'versions',
+  'release-again',
   'build-tab',
   'chat-cards',
   'approval',
@@ -353,6 +357,7 @@ const README = [
 /** Copies the README's pictures into docs/images at 256 colours: about half the bytes, and the UI looks the same. */
 function optimise() {
   for (const name of README) {
+    if (!fs.existsSync(path.join(raw, name + '.png'))) continue;
     const dst = path.join(out, name + '.png');
     execFileSync('ffmpeg', [
       '-y',
@@ -383,10 +388,8 @@ function gif({ src, marks }) {
   const browser = await chromium.launch();
   try {
     if (only.includes('guided')) await guided(browser);
-    if (only.includes('shots')) {
-      await shots(browser);
-      optimise();
-    }
+    if (only.includes('shots')) await shots(browser);
+    if (only.includes('guided') || only.includes('shots')) optimise();
     if (only.includes('gif')) gif(await demo(browser));
   } finally {
     await browser.close();

@@ -3,7 +3,8 @@
 Describe the app your work needs in one sentence. Turnkey asks you a few questions, shows you a plan in plain words,
 and builds the app only when you press **Build it**: a team of agents makes its lists, rules, screens and tests, checks
 each other's work, and hands it over as a working app with its own welcome for each person who uses it. After the
-first release you say what is wrong or missing, get a plan first, and release the fix as the next version.
+first build you can say what is wrong or missing at any time, get a plan first, and release the change as the next
+version.
 Solo entry for the SSI Agent-A-Thon 2026.
 
 **Live app:** https://turnkey-bay.vercel.app/ (no login; **Demo** replays saved builds and calls no model)
@@ -24,13 +25,16 @@ doctors` and press Enter. (With **Live** off in the title bar this replays the s
 3. **The plan.** Who uses it, what it keeps, how an appointment moves, who can see and do what, and which agents will
    build it. Nothing is built until you press **Build it**.
 4. **The build.** The Build tab shows one line per step and the agent doing it, turning from Working to Done. One
-   part is sent back by the checks and fixed. All 142 checks pass.
+   part is sent back by the checks and fixed. All 142 checks pass. **Change something** beside Open the app takes you
+   straight to the change box, before or after the first release.
 5. **First use.** Open the **App** tab and sign in as Sara Malik: the app welcomes her as a receptionist, lists what
    she can do, and offers a one-minute tour. The made-up records are marked **Demo**; **Remove demo data** empties
    the lists in one step (and can be undone).
 6. **Release and fix.** On **Release**, release version 1.0. Under "Something wrong, or something missing?", type or
    pick **Add a notes field to patients**. You get a plan first, the change waits in a draft that only you see, and
-   after **It works** you release it as version 1.1. People with the link keep 1.0 until then.
+   after **It works** you release it as version 1.1. People with the link keep 1.0 until then. The Release page
+   always offers the next version: with nothing changed it explains how, and **Release again without changes** asks
+   only for a reason.
 
 <table>
   <tr>
@@ -42,7 +46,7 @@ doctors` and press Enter. (With **Live** off in the title bar this replays the s
     <td><em>The plan in plain words. Nothing is built until the owner presses Build it.</em></td>
   </tr>
   <tr>
-    <td><img src="docs/images/build-steps.png" alt="CareDesk is built: seven steps, each with its agent and what it made, all Done, 142 checks pass, and the agents' cards in the chat"></td>
+    <td><img src="docs/images/build-steps.png" alt="CareDesk is built: seven steps, each with its agent and what it made, all Done, 142 checks pass, Open the app and Change something, and the agents' cards in the chat"></td>
     <td><img src="docs/images/first-use.png" alt="The built CareDesk app: a welcome for Sara, the receptionist, with what she can do, Book your first appointment and Show me around, above a demo data bar with Remove demo data"></td>
   </tr>
   <tr>
@@ -56,6 +60,14 @@ doctors` and press Enter. (With **Live** off in the title bar this replays the s
   <tr>
     <td><em>A change after 1.0 goes to a draft. The owner tries it, says it works, and picks the kind of release.</em></td>
     <td><em>Every release keeps its tests and notes, and the owner can go back to an earlier one.</em></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/release-again.png" alt="The Release page after version 1.1 with nothing in the draft: a Release a new version card that says how to get to 1.1.1 or 1.2, with Release again without changes, above Share and install and the Versions list"></td>
+    <td><img src="docs/images/demo-data-removed.png" alt="The built CareDesk app after Remove demo data: the bar says the lists are empty and ready for real records, with Undo"></td>
+  </tr>
+  <tr>
+    <td><em>The owner can always release again. With nothing changed, the page says how to get to the next version.</em></td>
+    <td><em>Demo data goes in one step, and the app is ready for real records.</em></td>
   </tr>
 </table>
 
@@ -178,7 +190,9 @@ _The Bid room of the built BidDesk app, with the three agents' verdict for one t
 3. Read the plan: three kinds of people, three lists with their fields, six stages, a table of who can see and do
    what, and the agents that will build it. Press **Build it**.
 4. The **Build** tab lists seven steps with the agent of each. The List builder's first attempt is sent back and fixed,
-   the Access checker leaves one suggestion in chat, and all 142 checks pass. **Show how it was built** opens the same run as a workflow canvas, timeline, log and meeting.
+   the Access checker leaves one suggestion in chat, and all 142 checks pass. **Show how it was built** opens the same
+   run as a workflow canvas, timeline, log and meeting; **Change something** opens the change box on Release, which
+   works before version 1.0 too.
 5. Open **App**, sign in as Sara Malik (receptionist). Her welcome lists what she can do; **Show me around** is a
    four-stop tour. Pick someone else under **Preview as** to see the welcome for their job. **Remove demo data**
    empties the lists in one step, and the tests still pass; **Undo** brings the records back.
@@ -186,7 +200,8 @@ _The Bid room of the built BidDesk app, with the three agents' verdict for one t
    press **Add a notes field to patients**. The Orchestrator says it is a new feature, shows a plan, and builds it
    only after **Go ahead**. The change waits in a draft: compare **Before and after**, press **It works**, then
    **Release it as 1.1**. The release offers Fixes 1.0.1, New features 1.1 or Big change 2.0, and the Versions list
-   keeps both releases with **Go back to this**.
+   keeps both releases with **Go back to this**. Above them, "Release a new version" explains what comes next, and
+   **Release again without changes** puts out 1.1.1 once you give a reason.
 
 **Part 2: the agents' teamwork in detail (about three minutes).**
 
@@ -226,7 +241,8 @@ session is capped at 40 model calls.
   skips the ones it does not need. Each built app opens with a welcome and a short tour for each kind of person, demo
   data that is marked and can be removed or added back, and empty screens that say what to do first. After a release,
   "Something wrong, or something missing?" gives a plan, a draft only the owner sees, a try-it step and the next
-  version (1.0.1, 1.1 or 2.0).
+  version (1.0.1, 1.1 or 2.0). The change box is there before the first release too, the finished build has a
+  **Change something** button, and the owner can always release again.
 - **Workspace:** a Build tab that opens on a plain list of steps (one row for each job and the agent that does it),
   with the workflow canvas, timeline, log and meeting view behind "Show how it was built"; edits to fields and the look on the canvas that
   re-run only the stations they touch; Agents panel and a "How it works" page; chat sidebar with the
@@ -258,9 +274,9 @@ the cheaper model tier. `/api/health` shows the calls and the spend so far.
 
 ## Submission summary
 
-> Turnkey turns one sentence into a working business app. A Planner agent asks a few questions and shows a plain-words plan; once the owner approves, code picks the team (lists, rules, views, screens, tests, access) and a LangGraph workflow streams every step over AG-UI. Code checks each handoff and sends failed work back; failing tests go back for repair. Each app opens with a welcome per role and removable demo data. After release 1.0, a fix gets a plan, a draft and release 1.1. Built apps can carry agent teams that search public sources. Demo mode needs no model.
+> Turnkey turns one sentence into a working business app. A Planner agent asks a few questions and shows a plain-words plan; once the owner approves, code picks the team (lists, rules, views, screens, tests, access) and a LangGraph workflow streams every step over AG-UI. Code checks each handoff and sends failed work back; failing tests go back for repair. Each app opens with a welcome per role and removable demo data. Any later change gets a plan and a draft, then ships as 1.1. Built apps can carry agent teams that search public sources. Demo mode needs no model.
 
-(Counted: 570 characters.) Evidence for each rule and criterion: [`docs/hackathon/criteria.md`](docs/hackathon/criteria.md).
+(Counted: 568 characters.) Evidence for each rule and criterion: [`docs/hackathon/criteria.md`](docs/hackathon/criteria.md).
 
 ## More documents
 
