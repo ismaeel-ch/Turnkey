@@ -5,6 +5,21 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-11-27
+
+Built apps look like Fluent 2 products.
+
+### Changed
+
+- Built apps follow Fluent 2 the way Planner, Lists and Power Apps do. The page is grey and everything on it is a
+  raised white surface instead of an outlined box. Navigation rows are neutral, and the open page carries a short
+  accent bar and an accent icon; pages across the top are a bar of underlined tabs under the header, no longer
+  buttons on the brand colour. The person menu in the header is plain text on the brand colour, not a white box.
+  List pages get a command bar (underlined view tabs, quiet Filter and Copy CSV), a quiet header row, 44 px rows and
+  the first column as the record's name. Dashboards, boards, the calendar, the record pane, sign-in and the
+  first-use cards use the same surfaces, in light, dark and on a phone.
+  ([#283](https://github.com/ismaeel-ch/Turnkey/pull/283))
+
 ## [0.5.6] - 2026-11-27
 
 The workspace follows Fluent 2's type ramp, corner radii and control sizes.
