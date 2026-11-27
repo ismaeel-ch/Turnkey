@@ -12,6 +12,8 @@ export type SavedCard = Pick<
 export const TEMPLATES = ['clinic', 'helpdesk', 'leave', 'biddesk'];
 // Two more business apps for Home; onboarding offers only the first four, so a first-time visitor picks from a short list.
 export const MORE_TEMPLATES = ['grants', 'purchasing', 'expenses'];
+// Four apps that work numbers out and enforce rules (complex.ts).
+export const COMPLEX_TEMPLATES = ['orders', 'vet', 'projects', 'dispatch'];
 export const QUESTS = ['factcheck', 'priorart', 'debate'];
 
 export const CARDS: Dict<SavedCard> = {
@@ -124,9 +126,49 @@ export const CARDS: Dict<SavedCard> = {
     blurb: 'Asks who it is for first: just you, or a company where managers approve and Finance pays.',
     keys: ['expense', 'spend', 'reimburse', 'receipt'],
   },
+  orders: {
+    id: 'orders',
+    title: 'Order desk with budgets',
+    icon: 'cart',
+    accent: 'marigold',
+    sentence:
+      'Staff raise purchase orders made of lines with a quantity and a unit price. The app totals each order and checks it against the department budget. Managers approve orders up to 5,000, larger ones go to the director, and the buyer places and receives them.',
+    blurb: 'Order lines, totals and budgets worked out for you. Who approves depends on the amount.',
+    keys: ['purchase order', 'order line', 'line item', 'budget', 'department budget', 'approval limit', 'unit price', 'quantity'],
+  },
+  vet: {
+    id: 'vet',
+    title: 'Vet practice',
+    icon: 'paw',
+    accent: 'teal',
+    sentence:
+      'A vet practice books visits for pets without booking a vet twice at the same time. Vets record the treatments given, the app works out the bill, reception takes payments, and a visit closes only when nothing is owed.',
+    blurb: 'Bookings that cannot clash, bills worked out from treatments, and a balance per visit.',
+    keys: ['vet ', 'vets', 'veterinary', 'pet', 'pets', 'animal', 'treatment', 'double book'],
+  },
+  projects: {
+    id: 'projects',
+    title: 'Project planner',
+    icon: 'tasks',
+    accent: 'royalBlue',
+    sentence:
+      'An agency plans client projects with tasks, estimates and logged hours. The app works out progress, hours against the budget and whether each project is on track, and nobody is booked on two projects for the same days.',
+    blurb: 'Tasks, logged hours, progress and health worked out. People are never booked twice.',
+    keys: ['project', 'task', 'timesheet', 'logged hours', 'milestone', 'resource', 'capacity', 'agency'],
+  },
+  dispatch: {
+    id: 'dispatch',
+    title: 'Service dispatch',
+    icon: 'wrench',
+    accent: 'navy',
+    sentence:
+      'A repair company takes service jobs, the dispatcher schedules a technician without overlaps, technicians record labour hours and parts used, the app totals the cost, and a job can only be completed once the work is written up.',
+    blurb: 'Jobs scheduled without clashes. Parts and labour are totalled before a job closes.',
+    keys: ['dispatch', 'field service', 'technician', 'repair', 'call-out', 'callout', 'work order', 'engineer visit'],
+  },
 };
 
-export const HOME_TEMPLATES = TEMPLATES.concat(MORE_TEMPLATES);
+export const HOME_TEMPLATES = TEMPLATES.concat(MORE_TEMPLATES, COMPLEX_TEMPLATES);
 export function matchTemplate(text: string) {
   const s = ' ' + String(text || '').toLowerCase() + ' ';
   let best = null,

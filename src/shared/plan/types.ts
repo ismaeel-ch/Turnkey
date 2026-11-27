@@ -36,7 +36,7 @@ export const SLOT_VALUES = {
 export const PLAN_LIMITS = {
   people: { min: 1, max: 4 },
   lists: { min: 1, max: 6 },
-  fields: { min: 2, max: 10 },
+  fields: { min: 2, max: 14 },
   stages: { min: 3, max: 7 },
   /** question cards before the plan, not counting the demo data card */
   questions: 5,

@@ -1730,7 +1730,7 @@ export function renderTest(app: AppRecord) {
 }
 
 /* ---------- station 5: the tour, played as an acceptance test ---------- */
-export function tourValues(app: AppRecord, t: AppTable, values: Dict<unknown> | null | undefined) {
+export function tourValues(app: AppRecord, t: AppTable, values: Dict<unknown> | null | undefined, made?: Dict<number>) {
   const same = (a: unknown, b: unknown) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase(),
     out: Dict<SqlValue> = {};
   const look: SeedLookup = {
@@ -1766,6 +1766,9 @@ export function tourValues(app: AppRecord, t: AppTable, values: Dict<unknown> | 
     if (values && values[c.name] !== undefined) {
       const r = seedValue(c, byPlace(c, values[c.name]), look);
       if (r[0] != null) out[c.name] = r[0];
+    } else if (made && c.type === 'ref' && c.ref && made[c.ref] && c.ref !== t.name) {
+      // a link the step leaves out points at the record the tour made earlier: the line belongs to that order
+      out[c.name] = made[c.ref];
     }
   });
   return out;
@@ -1828,7 +1831,7 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
   if (!t) return fail('No table called ' + tn);
   const id = st.rows[t.name];
   if (step.do === 'create') {
-    const r = apiCall(app, u, 'POST', '/api/' + tn, tourValues(app, t, step.values), 'tour');
+    const r = apiCall(app, u, 'POST', '/api/' + tn, tourValues(app, t, step.values, st.rows), 'tour');
     if (r.status !== 201)
       return fail(
         r.status +
@@ -1851,7 +1854,7 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
     return pass('201 Created · ' + t.one + ' #' + r.data.id);
   }
   if (step.do === 'invalid') {
-    const r = apiCall(app, u, 'POST', '/api/' + tn, tourValues(app, t, step.values), 'tour');
+    const r = apiCall(app, u, 'POST', '/api/' + tn, tourValues(app, t, step.values, st.rows), 'tour');
     return r.status === 400
       ? pass('400 · ' + r.error + (r.fields ? ' (' + Object.keys(r.fields).join(', ') + ')' : ''))
       : fail('Expected it to be refused as incomplete, got ' + r.status + (r.status === 201 ? ' Created' : ' ' + str(r.error)));
