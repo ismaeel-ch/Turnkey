@@ -1,6 +1,6 @@
 import { modelProblem } from '@/shared/api-error';
 import type { AppDef, AppTable, BackedDef, Brief, BriefedDef, Check, Untrusted } from '@/shared/types/app';
-import type { PlanSpec } from '@/shared/plan';
+import { slotValue, type PlanSpec } from '@/shared/plan';
 import type {
   AppRecord,
   ChatCard,
@@ -358,6 +358,8 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
       checks = checkBrief(b);
     if (checks.every((c) => c.ok)) {
       b.sources = arr(app.lookups);
+      // answered in the interview before the build: the brief records the decision, and the line does not stop to ask
+      if (b.question && app.answers.q != null) b.decision = { text: b.question.text, answer: b.question.options[app.answers.q] };
       app.def.brief = b;
       if (!app.renamed) app.name = b.name;
       toolCall(
@@ -1515,6 +1517,8 @@ export async function runBuild(app: BuildApp, from?: string) {
   if (!part) {
     app.def = blankDef() as BackedDef; // the stations fill it in, in order
     app.answers = {};
+    const asked = app.tpl && app.plan ? slotValue(app.plan, 'q') : null;
+    if (asked != null) app.answers.q = Number(asked) || 0; // the owner answered the saved build's question before the build
     app.lookups = [];
     app.matrix = null;
     app.seed = null;
@@ -1535,6 +1539,13 @@ export async function runBuild(app: BuildApp, from?: string) {
   // what the orchestrator says before the first station; it runs inside the graph, so Stop works here too
   const open = async () => {
     if (!part) pushChat(app, 'user', String(app.request));
+    if (!part)
+      (app.plan?.answers || [])
+        .filter((x) => x.by === 'you')
+        .forEach((x) => {
+          pushChat(app, STATIONS[0].agent, x.question);
+          pushChat(app, 'user', x.answer);
+        });
     say(
       app,
       'orchestrator',

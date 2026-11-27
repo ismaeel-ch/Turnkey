@@ -9,6 +9,7 @@
  */
 import type { AppDef, Check, Row } from './app';
 import type { PlanSpec } from '@/shared/plan/types';
+import type { Interview } from './interview';
 
 /** A value whose shape is not described yet. Narrow it where you read it. */
 export type Loose = unknown;
@@ -430,7 +431,8 @@ export interface ViewState {
   /** model calls made this session */
   calls: number;
   savedAt: number;
-  home: { text: string; note: string };
+  /** the Home tab: the sentence being typed, a note under it, and the interview that follows "Continue" */
+  home: { text: string; note: string; interview?: Interview | null };
   /** the handoff being animated between stations, per app */
   handoff: Dict<number | null>;
   chatDraft: Dict<string>;
