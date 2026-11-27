@@ -32,6 +32,16 @@ export const verCmp = (a: unknown, b: unknown) => {
   return 0;
 };
 
+/** The number a version gets after `v`: a fix moves the last part, a new feature the middle one, a big change the first. */
+export const verNext = (v: string, kind: string) => {
+  const p = verParts(v);
+  return kind === 'major'
+    ? p[0] + 1 + '.0'
+    : kind === 'fix'
+      ? p[0] + '.' + (p[1] || 0) + '.' + ((p[2] || 0) + 1)
+      : p[0] + '.' + ((p[1] || 0) + 1);
+};
+
 const NAME = /^[a-z][a-z0-9_]{0,59}$/,
   VER = /^\d+(\.\d+){0,2}$/;
 const name = (x: unknown) => {

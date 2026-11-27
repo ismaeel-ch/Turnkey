@@ -132,7 +132,11 @@ async function runSample(browser, id) {
   const { ctx, page, errors } = await enterLive(browser);
   const off = logSize(), t0 = Date.now();
   await page.fill('#home-prompt', SENTENCES[id]);
-  await page.locator('.prompt .btn.primary').click();
+  await page.locator('#home-go').click();
+  // the Planner's questions come first: take the usual choices, then approve the plan it writes
+  await page.waitForSelector('.iv-ask, .iv-act .iv-build', { timeout: 3 * 60_000 });
+  if (await page.locator('.iv-usual').count()) await page.locator('.iv-usual').click();
+  await page.locator('.iv-act .iv-build').click({ timeout: 3 * 60_000 });
   const a = await waitDone(page, 15 * 60_000);
   await page.screenshot({ path: `/tmp/live-real-${id}.png` }).catch(() => {});
   await dumpApp(page, id);

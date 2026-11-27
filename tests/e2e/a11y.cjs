@@ -295,7 +295,10 @@ async function shortcuts(page) {
   await page.locator('main').focus();
   await page.keyboard.press('Control+k');
   await page.waitForSelector('.dialog.palette');
+  // as above: typing before the search box has focus loses the first letters, and Enter then runs another command
+  await page.waitForFunction(() => { const a = document.activeElement; return !!a && a.getAttribute('role') === 'combobox' && !!a.getAttribute('aria-activedescendant'); }, null, { timeout: 5000 }).catch(() => {});
   await page.keyboard.type('dark theme');
+  await page.waitForFunction(() => { const id = document.activeElement && document.activeElement.getAttribute('aria-activedescendant'), o = id && document.getElementById(id); return !!o && /dark/i.test(o.textContent || ''); }, null, { timeout: 5000 }).catch(() => {});
   await page.keyboard.press('Enter');
   await noDialog().catch(() => {});
   check('the palette switches the theme', (await page.evaluate(() => document.documentElement.getAttribute('data-app-theme'))) === 'dark');

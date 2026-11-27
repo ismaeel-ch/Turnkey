@@ -116,7 +116,7 @@ export interface AppRecord {
   /** set when the owner went back to an earlier version, until those changes are asked for again or let go */
   takenBack?: TakenBack | null;
   /** changes since the first build, for the next release's notes */
-  log?: { at: number; text: string; station: string }[];
+  log?: { at: number; text: string; station: string; kind?: 'fix' | 'feature' }[];
   /** stays the same across versions and copies, so an installed app finds its newest copy */
   uid?: string;
   /** when the app was installed on its own in this browser */
@@ -317,6 +317,54 @@ export interface PlanCard {
   steps: { text: string; sql?: string }[];
   rerun: string[];
   skip: string[];
+  /** the same plan in the owner's words: who works on it, what happens to the records, the version it becomes */
+  plan?: ChangePlan;
+  /** a plan that waits for the owner: null while it waits, then what they chose */
+  decided?: 'go' | 'later' | 'changed' | null;
+  /** the improvement this plan belongs to (src/workspace/improve.tsx) */
+  flow?: string;
+}
+/** What Turnkey took a request to be, what the Tester saw when it looked, and the questions before the plan. */
+export interface UnderstandCard {
+  type: 'understand';
+  flow: string;
+  kind: 'fix' | 'feature';
+  seen: { ok: boolean; text: string } | null;
+  questions: { text: string; options: string[]; recommended: number; answered: number | null }[];
+}
+/** After a change is built in the draft: try it as the person it is about, then say whether it works. */
+export interface TryCard {
+  type: 'tryit';
+  flow: string;
+  said: string;
+  kind: 'fix' | 'feature';
+  /** the kind of person the change is about, and the list it is about */
+  role: string | null;
+  table: string | null;
+  state: 'works' | 'wrong' | null;
+}
+/** One agent on a change plan: who it is in plain words, and why it is or is not needed. */
+export interface PlanWho {
+  /** agent id: researcher, database, backend, views, ui, tester */
+  agent: string;
+  who: string;
+  why: string;
+}
+/**
+ * A change to a built app, as the owner reads it before it runs (src/workspace/change-plan.ts). Everything here is
+ * worked out by code from the planned steps and the records the app holds, never taken from a model's opinion.
+ */
+export interface ChangePlan {
+  title: string;
+  kind: 'fix' | 'feature';
+  /** the version it goes out as, or '' while nothing is released yet */
+  becomes: string;
+  changes: string[];
+  team: PlanWho[];
+  notNeeded: PlanWho[];
+  records: { level: 'safe' | 'ask' | 'removes'; label: string; text: string };
+  /** who gains and who loses access, with how many people that is */
+  access: { gains: string[]; loses: string[] };
 }
 export interface SentBackCard {
   type: 'sentback';
@@ -351,6 +399,8 @@ export type BuilderCard =
   | QuestionCard
   | ApprovalCard
   | PlanCard
+  | UnderstandCard
+  | TryCard
   | SentBackCard
   | ChangedCard
   | ReadyCard
