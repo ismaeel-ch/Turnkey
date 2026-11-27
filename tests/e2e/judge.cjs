@@ -98,28 +98,17 @@ async function main() {
       await page.waitForSelector('.ob-card', { timeout: 45000 });
       await sleep(800);
       const text = clean(await page.locator('.ob-card').innerText());
-      expect(await page.getByRole('button', { name: 'Get started' }).isVisible(), 'no Get started button');
+      for (const b of ['Try a sample', 'Describe your own', 'Get started'])
+        expect(await page.getByRole('button', { name: b }).isVisible(), `no ${b} button`);
       return text.slice(0, 120);
     });
 
-    // ---- 2. first run: demo account, Demo, Sales bidding desk (shot 2) ----
-    await step(page, 'Skip sign-in and keep Demo', async () => {
-      await page.getByRole('button', { name: 'Get started' }).click();
-      await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
-      await page.waitForSelector('.choice', { timeout: 10000 });
-      const live = clean(await page.locator('.choice').nth(1).innerText());
-      return 'Live choice says: ' + (live.match(/Model connected|No model connected|Checking the model/) || ['?'])[0];
-    });
-    await step(page, 'Pick Sales bidding desk as the first app', async () => {
-      await page.getByRole('button', { name: 'Continue' }).click();
-      await page.getByText('Sales bidding desk', { exact: true }).click();
-      await sleep(300);
-    });
-    await step(page, 'Open the workspace', async () => {
-      await page.getByRole('button', { name: 'Continue' }).click();
-      await page.getByRole('button', { name: 'Open my workspace' }).click();
+    // ---- 2. first run: Try a sample signs in with the demo account, keeps Demo and builds the Sales bidding desk (shot 2) ----
+    await step(page, 'Try a sample starts the Sales bidding desk build', async () => {
+      await page.getByRole('button', { name: 'Try a sample' }).click();
       await page.waitForSelector('.work-head', { timeout: 30000 });
-      await sleep(1500);
+      await page.waitForSelector('.tour-pop', { timeout: 10000 });
+      return clean(await page.locator('.tour-pop').innerText()).slice(0, 80);
     });
 
     // the guided tour starts with the workspace; a judge reads it through
@@ -127,11 +116,12 @@ async function main() {
       let n = 0;
       while ((await page.locator('.tour-pop').count()) && n < 25) {
         n++;
-        if (n === 2) await page.screenshot({ path: path.join(shots, '05a-tour.png') });
+        if (n === 2) await page.screenshot({ path: path.join(shots, '02a-tour.png') });
         await page.locator('.tour-pop .btn.primary').click();
         await sleep(500);
       }
       expect(!(await page.locator('.tour-pop').count()), 'the tour is still open after 25 steps');
+      expect(n === 4, `the short tour should have 4 steps, it had ${n}`);
       return n ? `${n} steps` : 'no tour shown';
     });
 
@@ -161,7 +151,7 @@ async function main() {
       return (tp.match(/1 of \d+ failed/) || [''])[0] + ', then ' + (tp.match(/all \d+ passed/) || [''])[0];
     });
 
-    // ---- 5. the same run three ways, and the agents panel ----
+    // ---- 5. the same run four ways, and the agents panel ----
     await step(page, 'Timeline view of the run', async () => {
       await page.keyboard.press('Escape').catch(() => {});
       await page.getByRole('button', { name: 'Timeline' }).click();
@@ -172,6 +162,16 @@ async function main() {
     await step(page, 'Log view of the run', async () => {
       await page.getByRole('button', { name: 'Log', exact: true }).click();
       await sleep(600);
+    });
+    await step(page, 'Meeting view: a tile per agent, the build line on the shared screen', async () => {
+      await page.getByRole('button', { name: 'Meeting', exact: true }).click();
+      await page.waitForSelector('.meet-tile', { timeout: 10000 });
+      await sleep(600);
+      const tiles = await page.locator('.meet-tile').count();
+      const screen = clean(await page.locator('.meet-screen-head').innerText().catch(() => ''));
+      expect(tiles >= 6, `${tiles} tiles`);
+      expect(/6 of 6 stations checked/.test(screen), 'shared screen: ' + screen.slice(0, 120));
+      return `${tiles} tiles; ${screen.slice(0, 80)}`;
     });
     await step(page, 'Agents panel: activity', async () => {
       await page.getByRole('button', { name: 'Workflow', exact: true }).click();
@@ -256,6 +256,37 @@ async function main() {
       expect(await applied.count(), 'no Applied card for the notes field in chat');
       const ran = clean(await applied.innerText()).match(/Ran again (.*)$/);
       return `ran again: ${ran ? ran[1] : '?'}; ${a.tests.total} tests pass`;
+    });
+
+    // ---- 8b. edits on the canvas: a field on the Data page, the look on the App page ----
+    await step(page, 'Data page: add a field, only the touched stations run again', async () => {
+      await openTab(page, 'Details');
+      await page.locator('.subtabs').getByRole('tab', { name: 'Data', exact: true }).click();
+      await page.locator('.split .side-i', { hasText: 'tenders' }).first().click();
+      await page.getByRole('tab', { name: 'Columns' }).click();
+      await page.waitForSelector('.field-edit', { timeout: 10000 });
+      await page.getByLabel('New field name').fill('Site visit date');
+      await page.getByLabel('New field type').selectOption('date');
+      await page.locator('.field-edit .btn', { hasText: 'Add field' }).click();
+      await sleep(1000);
+      const a = await waitBuilt(page, 120000);
+      expect(a.status === 'ready' && a.tests && a.tests.failed === 0, 'status ' + a.status + ', tests ' + JSON.stringify(a.tests));
+      const row = page.locator('.main-body tr', { hasText: 'site_visit_date' });
+      expect(await row.count(), 'the Columns tab does not list site_visit_date');
+      const plan = page.locator('.gcard', { hasText: /Site visit date/i }).last();
+      return clean(await plan.innerText().catch(() => '')).slice(0, 140) || clean(await row.innerText()).slice(0, 120);
+    });
+    await step(page, 'App page: Look menu moves the navigation to an icon rail', async () => {
+      await openTab(page, 'App');
+      await page.waitForSelector('.stage-bar .look-btn', { timeout: 15000 });
+      await page.locator('.stage-bar .look-btn').click();
+      await page.locator('.menu .mi', { hasText: 'Icon rail' }).click();
+      await sleep(1000);
+      const a = await waitBuilt(page, 120000);
+      expect(a.status === 'ready', 'status ' + a.status);
+      const said = await page.getByText(/On the App page: Use an icon rail/).count();
+      expect(said, 'the chat does not record the Look change as yours');
+      return 'chat: "On the App page: Use an icon rail"';
     });
 
     // ---- 9. release and share ----
