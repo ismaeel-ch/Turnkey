@@ -21,7 +21,7 @@ Try a sample through the questions and plan.
   Screen designer, Tester, Access checker and List checker. A Demo build started from its plan runs the reviews and
   the pause that plan lists. ([#240](https://github.com/ismaeel-ch/Turnkey/pull/240))
 - The first page load is 496 KB instead of 590 KB: saved builds and screens opened on demand load on first use. ([#238](https://github.com/ismaeel-ch/Turnkey/pull/238))
-- The README, the judge walk and the submission lead with the guided build. ([#234](https://github.com/ismaeel-ch/Turnkey/pull/234) ([#242](https://github.com/ismaeel-ch/Turnkey/pull/242))
+- The README, the judge walk and the submission lead with the guided build. ([#234](https://github.com/ismaeel-ch/Turnkey/pull/234)) ([#242](https://github.com/ismaeel-ch/Turnkey/pull/242))
 
 ### Fixed
 
