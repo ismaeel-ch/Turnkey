@@ -103,7 +103,9 @@ describe('improving an app after it is built', () => {
 
     M.improve.tryVerdict(app, t.flow, true);
     expect(t.state).toBe('works');
-    expect(app.chat[app.chat.length - 1].text).toBe('Good. It waits in the draft, and goes out when you release version 1.0.1.');
+    expect(app.chat[app.chat.length - 1].text).toBe(
+      'Good. It waits in the draft, and goes out when you release version 1.0.1. Say "release" here when you are ready.',
+    );
     expect(M.release.suggestKind(app)).toBe('fix');
     const r = await M.release.releaseApp(app, M.release.suggestKind(app), M.release.draftNotes(app));
     expect(r?.v).toBe('1.0.1');

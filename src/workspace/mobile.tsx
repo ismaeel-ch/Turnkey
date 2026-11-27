@@ -38,7 +38,7 @@ import { Btn, Avatar, Empty, Icon, Logo } from './ui';
 import { startWalk } from './runtime';
 import type { GuideEntry } from './firstrun';
 import { enterSolo, openShare } from './share';
-import { AppLogo, isDirty, relOf } from './release';
+import { AppLogo, isDirty, relOf, waitingRelease } from './release';
 import { Inspector, isDetail, rebuildAsk, viewOf } from './shell-a';
 import { openHistory } from './history-ui';
 import { startTour } from './shell-c';
@@ -418,7 +418,7 @@ export function PhoneNav({ app }: { app: AppRecord }) {
   const view = viewOf(app),
     chat = chatShown(),
     rel = relOf(app),
-    needs = app.line.research.status === 'waiting' || !!PENDING[app.id],
+    needs = app.line.research.status === 'waiting' || !!PENDING[app.id] || !!waitingRelease(app),
     failed = testStats(app)?.failed || 0;
   const go = (v: string) => phoneGo(app, v, chat);
   const item = (id: string, icon: string, text: string, on: boolean, onClick: () => void, dot?: string | null) => (

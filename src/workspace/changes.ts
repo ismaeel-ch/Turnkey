@@ -99,7 +99,8 @@ import {
 } from './line';
 import { FLOW_HELP, LEVELS, NOTE_FOR, agentThe, answerGate, flowChat, flowList, flowOf, parseFlow } from './custom';
 import { REVIEWERS } from './reviewers';
-import { logChange, relOf } from './release';
+import { askRelease, declineRelease, logChange, relOf, releaseFromChat, waitingRelease } from './release';
+import { releaseIntent, replyIntent } from '@/shared/chat-intent';
 import { changePlan, kindOf, stationsFor } from './change-plan';
 import type { StepFacts } from './change-plan';
 import { AWAY_DAYS, bringBackColumn, putAwayColumn } from './carry';
@@ -1623,15 +1624,27 @@ export async function handleChat(app: BackedApp, text: string, opt?: { rules?: b
     );
     return;
   }
+  // a short yes or no answers the card that waits at the end of the chat, the same as pressing its button
+  const yn = opt && opt.rules ? null : replyIntent(text);
+  if (yn && (await answerWaiting(app, yn))) return;
   pushChat(app, 'user', text);
   commit();
   if (PENDING[app.id]) return void say(app, 'orchestrator', 'Answer the approval card first.');
+  const ra = opt && opt.rules ? null : releaseIntent(text);
+  if (ra) return void askRelease(app, ra);
   const wf = opt && opt.rules ? null : parseFlow(text, app);
   if (wf) return void flowChat(app, wf); // the workflow is shared state: it can be changed at any time, also while a build runs
   if (r) return void say(app, 'orchestrator', 'A run is in progress. I will take changes when it finishes.');
   if (TEAMS[app.id] && TEAMS[app.id].status === 'running')
     return void say(app, 'orchestrator', "The app's own agents are in the middle of a run. I will take changes when they have finished.");
   if (app.status !== 'ready') return void say(app, 'orchestrator', 'The app is not built yet. Use Run again above the line.');
+  // once people have a version, a change waits for a plan the owner approves, and goes out when they release
+  const released = !!relOf(app) && !(opt && opt.rules);
+  if (released) {
+    const imp = await import('./improve'),
+      pops = imp.problemOps(app, text);
+    if (pops) return void imp.planImprove(app, text, pops);
+  }
   const plan = await readChange(app, text, opt);
   if (plan.special === 'demo_remove') {
     const x = removeDemoData(app);
@@ -1687,7 +1700,42 @@ export async function handleChat(app: BackedApp, text: string, opt?: { rules?: b
   if (!plan.ops || !plan.ops.length) return void say(app, 'orchestrator', str(plan.reply) || help + ' ' + FLOW_HELP);
   const p = planOps(app, plan.ops);
   if (!p.steps.length) return void say(app, 'orchestrator', p.errors[0] || help + ' ' + FLOW_HELP);
+  if (released) return void (await import('./improve')).planImprove(app, text, arr<Dict<Untrusted>>(plan.ops).slice(0, 6));
   await proposeAndRun(app, p, str(plan.reply), text);
+}
+
+/**
+ * "Yes" or "no" typed under the card that waits for the owner: a release, a change plan, or "try it". Answers it the way
+ * its buttons do and says true; false when no card waits, so the message is read as anything else.
+ */
+async function answerWaiting(app: BackedApp, yn: 'yes' | 'no'): Promise<boolean> {
+  if (PENDING[app.id]) {
+    PENDING[app.id](yn === 'yes');
+    return true;
+  }
+  if (waitingRelease(app)) {
+    if (yn === 'yes') await releaseFromChat(app);
+    else declineRelease(app);
+    return true;
+  }
+  const last = app.chat
+    .slice()
+    .reverse()
+    .find((m) => !!m.card);
+  const c = last && last.card;
+  if (!c || typeof c.flow !== 'string') return false;
+  if (c.type === 'plan' && c.decided == null) {
+    const imp = await import('./improve');
+    if (!imp.IMPROVE[app.id] || imp.IMPROVE[app.id].id !== c.flow) return false;
+    if (yn === 'yes') await imp.goAhead(app, c.flow);
+    else imp.dropPlan(app, c.flow, false);
+    return true;
+  }
+  if (c.type === 'tryit' && c.state == null) {
+    (await import('./improve')).tryVerdict(app, c.flow, yn === 'yes');
+    return true;
+  }
+  return false;
 }
 
 /** A change as the owner reads it: who works on it, what happens to the records, and the version it goes out as. */
