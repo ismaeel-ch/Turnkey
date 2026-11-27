@@ -8,6 +8,7 @@ import {
   mendToPlan,
   outlineOf,
   outlineProblems,
+  planOk,
   slotValue,
   teamFor,
   wantsDemoData,
@@ -379,11 +380,26 @@ export function newRun(app: AppRecord, kind: string, name: string, mode: string)
 }
 
 /* ---------- a build that follows a plan the owner approved ---------- */
+/** Whether a build can follow this plan: it is whole and passes its checks. Looked at once per plan. */
+const FOLLOWED = new WeakMap<PlanSpec, boolean>();
+const followable = (plan: PlanSpec) => {
+  let ok = FOLLOWED.get(plan);
+  if (ok === undefined) {
+    try {
+      ok = Array.isArray(plan.people) && Array.isArray(plan.lists) && !!plan.permissions && planOk(plan);
+    } catch {
+      ok = false; // a damaged plan from storage must not stop the build
+    }
+    FOLLOWED.set(plan, ok);
+  }
+  return ok;
+};
 /**
  * The plan this build follows, or null. Only a Live build follows its plan: a saved build replays recorded work, and
- * its plan (worked out from that recording) is there to be shown.
+ * its plan (worked out from that recording) is there to be shown. A plan that is not whole or fails its checks is
+ * not followed either: that build asks its agents as it did before there were plans.
  */
-export const planOf = (app: AppRecord): PlanSpec | null => (app.mode === 'live' && app.plan ? app.plan : null);
+export const planOf = (app: AppRecord): PlanSpec | null => (app.mode === 'live' && app.plan && followable(app.plan) ? app.plan : null);
 
 /** The first station of a planned build: the Planner already wrote the plan, so code reads the brief off it. No model call. */
 export function applyPlan(app: BuildApp, run: Run): StationResult {

@@ -215,6 +215,10 @@ describe('a build that follows its plan', () => {
     expect(planOf(planned(COMPANY_EXPENSES))).toBe(COMPANY_EXPENSES);
     expect(planOf(planned(COMPANY_EXPENSES, 'demo'))).toBeNull();
     expect(PROMPTS.database(planned(COMPANY_EXPENSES, 'demo'))).not.toContain('LISTS OF THE PLAN');
+    // a plan that is not whole, or does not pass its checks, is not followed: the build asks its agents as before
+    const live = (plan: unknown) => ({ mode: 'live', plan }) as unknown as BuildApp;
+    expect(planOf(live({ demoData: false, lists: [{ name: 'claims', settings: false }] }))).toBeNull();
+    expect(planOf(planned({ ...copy(COMPANY_EXPENSES), people: [] }))).toBeNull();
   });
 
   it('sets the team the plan calls for: code for the rules of a one-person app, a pause and an access review for a company', () => {
