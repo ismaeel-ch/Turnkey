@@ -5,6 +5,24 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-27
+
+A tidier row of view tabs on every list page of a built app, fixes found by ten more real builds on new sentences,
+and plain words with a way on to Demo when no model can be reached.
+
+### Fixed
+
+- The More views button is a small square like the tabs instead of a wide framed box, the tabs lose their heavy
+  outline and scroll sideways instead of wrapping, Filter and Copy CSV sit on the same row as the tabs, and the
+  search box shows its icon again. ([#267](https://github.com/ismaeel-ch/Turnkey/pull/267))
+- Live builds on new sentences: charts of amounts add them up instead of counting rows, a walkthrough step that
+  says someone cannot see other people's records passes when their list leaves those records out, two pages never
+  share a name, and a model answer that corrects itself is read without a repair call.
+  ([#270](https://github.com/ismaeel-ch/Turnkey/pull/270))
+- When no model can be reached, the guided questions and a failed build say why in plain words and offer "Use Demo
+  instead". A busy model provider counts as busy, and the bars over Build no longer hide their buttons under the
+  canvas. ([#265](https://github.com/ismaeel-ch/Turnkey/pull/265))
+
 ## [0.5.3] - 2026-11-27
 
 Changing a built app and putting out a new version is easy to find and always possible.
