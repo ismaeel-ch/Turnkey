@@ -93,6 +93,14 @@ async function scheme(browser, s) {
   for (const v of ['Build', 'App', 'Tests', 'Data', 'API', 'Connections']) {
     await view(page, v);
     await screen(page, s + ': built app, ' + v + ' view');
+    if (v === 'Build') {
+      // Build opens on the plain list of steps; the canvas and its views are behind this button
+      await page.locator('#show-how').click();
+      await page.waitForSelector('.react-flow .fl-gate');
+      await screen(page, s + ': built app, Build view, how it was built');
+      await page.locator('#hide-how').click();
+      await page.waitForSelector('.steps-view');
+    }
   }
   await page.locator('[data-tour="share"]').click();
   await page.waitForSelector('.dialog.share');
@@ -213,6 +221,8 @@ async function keyboard(browser) {
   // the workflow canvas works from the keyboard: a station node takes focus and Enter opens it in the inspector
   await build(page, 'clinic');
   await view(page, 'Build');
+  await page.locator('#show-how').focus();
+  await page.keyboard.press('Enter');
   const node = page.locator('.react-flow__node[aria-label^="Database station"]').first();
   await node.focus();
   const focused = await page.evaluate(() => !!document.activeElement && document.activeElement.matches('.react-flow__node'));

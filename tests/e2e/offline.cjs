@@ -104,6 +104,9 @@ const check = (name, ok, detail) => {
     await sleep(120);
   }
   check('offline, a new Demo build runs to the end', offStatus === 'ready', offStatus);
+  const offSteps = await page.waitForSelector('.steps-list .step', { timeout: 15000 }).then(() => true, () => false);
+  check('offline, the Build tab lists the steps of the build', offSteps);
+  await page.locator('#show-how').click().catch(() => {});
   const offCanvas = await page.waitForFunction(() => document.querySelectorAll('.react-flow__node').length > 0, null, { timeout: 15000 }).then(() => true, () => false);
   check('offline, the workflow canvas draws the build', offCanvas);
 

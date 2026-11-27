@@ -30,6 +30,8 @@ export interface BuildStep {
   text: string;
   /** what the owner is asked: the first agent's question, or an approval of this station's work */
   ask?: 'question' | 'approval';
+  /** why the plan put this pause here, when it did */
+  why?: string;
   /** the station to select behind "Show how it was built" */
   station: string;
 }
@@ -52,10 +54,30 @@ const ORDER = ['research', 'database', 'backend', 'views', 'screens', 'walkthrou
 const PLAIN: Dict<{ title: string; agent: string; now: string; wait: string }> = {
   research: { title: 'Understand and plan', agent: 'researcher', now: 'Reading your request.', wait: 'Starts first.' },
   database: { title: 'Set up the lists', agent: 'database', now: 'Setting up the lists.', wait: 'Starts once your request is understood.' },
-  backend: { title: 'Add the rules and approvals', agent: 'backend', now: 'Writing who can see and do what.', wait: 'Starts after the lists.' },
-  views: { title: 'Choose views and the overview', agent: 'views', now: 'Choosing how each list is best shown.', wait: 'Starts after the rules.' },
-  screens: { title: 'Build the screens', agent: 'ui', now: 'Laying out a screen for each kind of person.', wait: 'Starts after the views.' },
-  tests: { title: 'Test everything', agent: 'tester', now: 'Using the app as each kind of person.', wait: 'Runs last, as each kind of person.' },
+  backend: {
+    title: 'Add the rules and approvals',
+    agent: 'backend',
+    now: 'Writing who can see and do what.',
+    wait: 'Starts after the lists.',
+  },
+  views: {
+    title: 'Choose views and the overview',
+    agent: 'views',
+    now: 'Choosing how each list is best shown.',
+    wait: 'Starts after the rules.',
+  },
+  screens: {
+    title: 'Build the screens',
+    agent: 'ui',
+    now: 'Laying out a screen for each kind of person.',
+    wait: 'Starts after the views.',
+  },
+  tests: {
+    title: 'Test everything',
+    agent: 'tester',
+    now: 'Using the app as each kind of person.',
+    wait: 'Runs last, as each kind of person.',
+  },
 };
 /** Plain names for the reviews a plan can add. Any other review keeps the name it has in the library. */
 const REVIEW_TITLE: Dict<string> = { security: 'Check who can see what', data: 'Check the lists' };
@@ -157,6 +179,7 @@ export interface StepsInput {
   team?: {
     steps: { id: string; name: string; why: string }[];
     reviews: { id: string; why: string }[];
+    pauses: { after: string; why: string }[];
     notNeeded: { who: string; why: string }[];
   } | null;
 }
@@ -202,7 +225,10 @@ export function buildSteps({ app, flow, reviewers, after, tests, running, names,
       const L = line[st],
         held = !!L && L.status === 'waiting' && L.hold === 'approval',
         ok = !!L && !!L.approved && L.status === 'ok',
-        rules = st === 'backend';
+        rules = st === 'backend',
+        why = team ? team.pauses.find((x) => x.after === st)?.why : undefined;
+      // a pause added after the build went past this point belongs to the next build, not to the one this list tells
+      if (!held && !ok && !running && !!L && L.status === 'ok') return;
       steps.push({
         id: 'ok_' + st,
         kind: 'approval',
@@ -212,6 +238,7 @@ export function buildSteps({ app, flow, reviewers, after, tests, running, names,
         station: st,
         state: held ? 'ask' : ok ? 'done' : 'wait',
         ask: held ? 'approval' : undefined,
+        why,
         text: held
           ? rules
             ? 'Waiting for you: do the rules look right?'
@@ -220,7 +247,7 @@ export function buildSteps({ app, flow, reviewers, after, tests, running, names,
             ? rules
               ? 'You approved the rules.'
               : 'You approved this step.'
-            : 'The build stops here until you say it looks right.',
+            : why || 'The build stops here until you say it looks right.',
       });
     }
   };
@@ -277,15 +304,16 @@ export function buildSteps({ app, flow, reviewers, after, tests, running, names,
       fixes = Q ? Q.rounds.reduce((k, r) => k + r.fixes.filter((f) => f.ok).length, 0) : 0,
       tried = !!W && W.status === 'ok',
       fresh = !!tests && tests.fresh,
-      state: StepState = !W || W.status === 'idle'
-        ? 'wait'
-        : busy(W.status) || (tried && (busy(Q ? Q.status : undefined) || (running && !fresh)))
-          ? 'now'
-          : W.status === 'failed' || (tried && ((Q && Q.status === 'failed') || (fresh && tests.failed > 0)))
-            ? 'bad'
-            : tried && fresh
-              ? 'done'
-              : 'wait';
+      state: StepState =
+        !W || W.status === 'idle'
+          ? 'wait'
+          : busy(W.status) || (tried && (busy(Q ? Q.status : undefined) || (running && !fresh)))
+            ? 'now'
+            : W.status === 'failed' || (tried && ((Q && Q.status === 'failed') || (fresh && tests.failed > 0)))
+              ? 'bad'
+              : tried && fresh
+                ? 'done'
+                : 'wait';
     steps.push({
       id: 'tests',
       kind: 'tests',
@@ -310,7 +338,13 @@ export function buildSteps({ app, flow, reviewers, after, tests, running, names,
   }
   const done = steps.filter((s) => s.state === 'done').length,
     first = steps.findIndex((s) => s.state !== 'done');
-  return { steps, skipped: team ? team.notNeeded.map((x) => ({ who: x.who, why: x.why })) : [], done, at: first + 1, asking: steps.find((s) => s.state === 'ask') || null };
+  return {
+    steps,
+    skipped: team ? team.notNeeded.map((x) => ({ who: x.who, why: x.why })) : [],
+    done,
+    at: first + 1,
+    asking: steps.find((s) => s.state === 'ask') || null,
+  };
 }
 
 /** The heading over the list and the line under it. */
@@ -330,7 +364,14 @@ export function stepsHeadline(app: AppRecord, S: BuildSteps, busy: boolean): { t
   if (app.status === 'ready')
     return S.at === 0
       ? { title: app.name + ' is built', sub: 'All ' + n(total, 'step') + ' are done. Every check passes.' }
-      : { title: app.name + ' is built', sub: cur && cur.state === 'bad' ? 'One step needs a look: ' + low(cur.title) + '.' : S.done + ' of ' + n(total, 'step') + ' are done.' };
-  if (app.status === 'failed') return { title: app.name + ' did not finish', sub: 'The build stopped at step ' + Math.max(1, S.at) + ' of ' + total + '.' };
+      : {
+          title: app.name + ' is built',
+          sub:
+            cur && cur.state === 'bad'
+              ? 'One step needs a look: ' + low(cur.title) + '.'
+              : S.done + ' of ' + n(total, 'step') + ' are done.',
+        };
+  if (app.status === 'failed')
+    return { title: app.name + ' did not finish', sub: 'The build stopped at step ' + Math.max(1, S.at) + ' of ' + total + '.' };
   return { title: app.name + ' is not finished', sub: 'The build was stopped at step ' + Math.max(1, S.at) + ' of ' + total + '.' };
 }

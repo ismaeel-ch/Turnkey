@@ -4,9 +4,10 @@
  * log and the meeting stay behind "Show how it was built".
  */
 import { ProgressBar } from '@fluentui/react-components';
+import { AGENT_NAMES, teamFor } from '@/shared/plan';
 import type { AppRecord } from '@/shared/types/workspace';
 import { S, U, commit, cx, notify, setChat } from './core';
-import { AgentAv, Avatar, Btn, Card, Icon, MBar, Spinner } from './ui';
+import { AgentAv, Avatar, Btn, Card, Icon, Spinner } from './ui';
 import { RUNS, stopRun } from './line';
 import { answerGate, flowOf, stepAfter } from './custom';
 import { REVIEWERS } from './reviewers';
@@ -31,6 +32,9 @@ export const stepsOf = (app: AppRecord): BuildSteps => {
     after: (id) => stepAfter(flow, id),
     tests: testStats(app),
     running: !!RUNS[app.id],
+    names: AGENT_NAMES,
+    // an app built before plans existed has none: its list comes from the stations alone
+    team: app.plan ? teamFor(app.plan) : null,
   });
 };
 
@@ -66,7 +70,9 @@ function ApprovalAsk({ app, st }: { app: AppRecord; st: BuildStep }) {
     facts = rules.length ? rules : (app.line[st.station]?.facts || []).slice(0, 4);
   return (
     <div className="step-ask">
-      {rules.length > 0 && <span className="t-cap muted">These decide who sees what, so the build stops here before the screens are made.</span>}
+      {(st.why || rules.length > 0) && (
+        <span className="t-cap muted">{st.why || 'These decide who sees what, so the build stops here before the screens are made.'}</span>
+      )}
       {facts.length > 0 && (
         <ul className="plain step-rules">
           {facts.map((x, i) => (
@@ -108,7 +114,11 @@ function StepRow({ app, st, i }: { app: AppRecord; st: BuildStep; i: number }) {
       <div className="step-body">
         <div className="step-top">
           <strong>{st.title}</strong>
-          <span className="t-cap muted">{st.who}</span>
+          <span className="t-cap muted grow">{st.who}</span>
+          <span className={'badge b-' + TONE[st.state]}>
+            {st.state === 'now' && <Spinner />}
+            {LABEL[st.state]}
+          </span>
         </div>
         <span className={cx('step-text', st.state === 'wait' && 'muted')}>{st.text}</span>
         {st.ask === 'approval' && <ApprovalAsk app={app} st={st} />}
@@ -120,10 +130,6 @@ function StepRow({ app, st, i }: { app: AppRecord; st: BuildStep; i: number }) {
           </div>
         )}
       </div>
-      <span className={'badge b-' + TONE[st.state]}>
-        {st.state === 'now' && <Spinner />}
-        {LABEL[st.state]}
-      </span>
     </li>
   );
 }
@@ -150,7 +156,13 @@ export function StepsView({ app }: { app: AppRecord }) {
             Stop
           </Btn>
         )}
-        <Btn className="btn sm" id="show-how" data-tour="how" title="The workflow, the timeline, the log and the meeting" onClick={() => showHow(app, true)}>
+        <Btn
+          className="btn sm"
+          id="show-how"
+          data-tour="how"
+          title="The workflow, the timeline, the log and the meeting"
+          onClick={() => showHow(app, true)}
+        >
           <Icon n="flow" s="16" />
           Show how it was built
         </Btn>
@@ -174,23 +186,22 @@ export function StepsView({ app }: { app: AppRecord }) {
         </div>
       )}
       {ready && B.at === 0 && (
-        <MBar
-          tone="success"
-          action={
-            <Btn
-              className="btn primary sm"
-              id="steps-open"
-              onClick={() => {
-                U.view[app.id] = 'app';
-                notify();
-              }}
-            >
-              Open the app
-            </Btn>
-          }
-        >
-          <strong>{app.name} is ready.</strong> Open it and try every screen.
-        </MBar>
+        <div className="steps-ready" role="status">
+          <Icon n="checkCircle" />
+          <span className="grow">
+            <strong>{app.name} is ready.</strong> Open it and try every screen.
+          </span>
+          <Btn
+            className="btn primary sm"
+            id="steps-open"
+            onClick={() => {
+              U.view[app.id] = 'app';
+              notify();
+            }}
+          >
+            Open the app
+          </Btn>
+        </div>
       )}
       <Card className="card steps-card">
         <ol className="steps-list">
@@ -200,10 +211,16 @@ export function StepsView({ app }: { app: AppRecord }) {
         </ol>
       </Card>
       {B.skipped.length > 0 && (
-        <p className="t-cap muted steps-skipped">
-          {'Not needed for this app, so ' + (B.skipped.length === 1 ? 'it did not run: ' : 'they did not run: ')}
-          {B.skipped.map((s) => s.title + ' (' + s.who + ')').join(', ')}.
-        </p>
+        <div className="t-cap muted steps-skipped">
+          <span>{'Not needed for this app, so ' + (B.skipped.length === 1 ? 'it did not run:' : 'they did not run:')}</span>
+          <ul className="plain">
+            {B.skipped.map((s) => (
+              <li key={s.who}>
+                <strong>{s.who}.</strong> {s.why}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

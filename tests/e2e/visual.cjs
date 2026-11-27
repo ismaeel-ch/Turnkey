@@ -138,6 +138,10 @@ async function desktop(browser, s) {
   await snap(page, s + '-desktop-home');
   await build(page, 'clinic');
   await view(page, 'Build');
+  await page.waitForSelector('.steps-view');
+  await snap(page, s + '-desktop-build-steps');
+  await page.locator('#show-how').click();
+  await page.waitForSelector('.react-flow .fl-gate');
   await page.locator('[data-tour="line"] .btn', { hasText: 'Fit' }).first().click().catch(() => {});
   await snap(page, s + '-desktop-build');
   await view(page, 'App');

@@ -545,7 +545,8 @@ export function guideGo(go: GuideGo, app: AppRecord | null): void {
     if (U.solo) U.solo = null;
     U.view[app.id] = go.view;
     // every Build entry but the first is about how it was built: the canvas and the views beside it
-    if (go.view === 'build') U.bview[app.id] = go.steps ? 'steps' : !U.bview[app.id] || U.bview[app.id] === 'steps' ? 'line' : U.bview[app.id];
+    if (go.view === 'build')
+      U.bview[app.id] = go.steps ? 'steps' : !U.bview[app.id] || U.bview[app.id] === 'steps' ? 'line' : U.bview[app.id];
     if (chatShown() && NARROW()) setChat(false);
     notify();
     return;
