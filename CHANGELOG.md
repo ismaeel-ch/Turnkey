@@ -27,6 +27,7 @@ Try a sample through the questions and plan.
 
 - Five fixes in the guided flow: rules for people an answer removed, the steps bar on phones, a pause opening the
   chat over the steps on phones, the agents panel log scrolling, and plain words in first-release notes. ([#233](https://github.com/ismaeel-ch/Turnkey/pull/233))
+- Saved runs follow field renames, for every app with a team. ([#230](https://github.com/ismaeel-ch/Turnkey/pull/230))
 - The live site check walks the rest of the guided flow. ([#228](https://github.com/ismaeel-ch/Turnkey/pull/228))
 
 ## [0.5.0] - 2026-11-27
