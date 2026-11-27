@@ -285,7 +285,7 @@ export function AppPane({
           <Icon n={def.theme.icon} />
         </span>
         <strong className="app-name ellipsis">{compact && scr ? scr.name : app.name}</strong>
-        {!compact && navKind === 'top' ? nav('top') : <span className="grow" />}
+        <span className="grow" />
         {compact ? (
           <button
             className="persona"
@@ -314,6 +314,7 @@ export function AppPane({
           <span className="persona">{who}</span>
         )}
       </header>
+      {!compact && navKind === 'top' && nav('top')}
       {!pane.test && <DemoBar app={app} />}
       <div className="app-body">
         {!compact && navKind !== 'top' && nav(navKind)}

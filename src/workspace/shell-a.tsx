@@ -428,15 +428,15 @@ export function Home() {
         <span className="row tpl-acts">
           {has ? (
             <>
-              <Btn className="btn primary sm" onClick={() => openTab(has.id)}>
+              <Btn className="btn primary" onClick={() => openTab(has.id)}>
                 Open
               </Btn>
-              <Btn className="btn sm tpl-build" onClick={() => build(id)}>
+              <Btn className="btn tpl-build" onClick={() => build(id)}>
                 Build another
               </Btn>
             </>
           ) : (
-            <Btn className="btn primary sm tpl-build" onClick={() => build(id)}>
+            <Btn className="btn primary tpl-build" onClick={() => build(id)}>
               <Icon n="sparkle" s="16" />
               Build this app
             </Btn>
@@ -1365,6 +1365,11 @@ export function RunUsage({ run }: { run: Run }) {
     </p>
   );
 }
+/** How long one agent worked in a run, for the end of its lane's label. */
+function laneTime(run: Run, id: string, now: number): string {
+  const ms = run.steps.filter((s) => s.agent === id).reduce((n, s) => n + ((s.t1 || now) - s.t0), 0);
+  return ms >= 100 ? fmtMs(ms) : '';
+}
 export function TimelineView({ app, run }: { app: AppRecord; run: Run | undefined }) {
   if (!run || !run.steps.length)
     return (
@@ -1388,12 +1393,14 @@ export function TimelineView({ app, run }: { app: AppRecord; run: Run | undefine
         <div key={id} className="tl-row">
           <div className="tl-l">
             <AgentAv id={id} size="xs" />
-            <span className="hide-sm">{AGENTS[id].name}</span>
+            <span className="hide-sm tl-name">{AGENTS[id].name}</span>
             {run.agentUsage?.[id]?.calls ? (
               <span className="tl-cost mono" title={usageLine(run.agentUsage[id])}>
                 {fmtUsd(run.agentUsage[id].costUsd)}
               </span>
-            ) : null}
+            ) : (
+              <span className="tl-time mono hide-sm">{laneTime(run, id, t1)}</span>
+            )}
           </div>
           <div className="tl-track">
             {run.steps
@@ -1451,43 +1458,34 @@ export function LogView({ app, run }: { app: AppRecord; run: Run | undefined }) 
   return (
     <div className="line-wrap" data-tour="line">
       <RunChips app={app} run={run} />
-      <div className="tbl-wrap">
-        <table className="tbl dense">
-          <thead>
-            <tr>
-              <th>At</th>
-              <th>Station</th>
-              <th>Who</th>
-              <th>What</th>
-              <th className="num">Took</th>
-              <th>Result</th>
-            </tr>
-          </thead>
-          <tbody>
-            {run.steps.map((s, i) => (
-              <tr key={i}>
-                <td className="mono">+{fmtMs(s.t0 - run.t0)}</td>
-                <td>{STATIONS.find((x) => x.id === s.station)?.name}</td>
-                <td>
-                  <span className="who">
-                    <AgentAv id={s.agent} size="xs" />
-                    <span>{AGENTS[s.agent].name}</span>
-                  </span>
-                </td>
-                <td>{s.label}</td>
-                <td className="num mono">{s.t1 ? fmtMs(s.t1 - s.t0) : '…'}</td>
-                <td>
-                  {s.t1 ? (
-                    <span className={'badge b-' + (s.ok === false ? 'warning' : 'success')}>{s.ok === false ? 'Not passed' : 'OK'}</span>
-                  ) : (
-                    <Spinner />
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ol className="log-feed" aria-label="Every step of this run, in order">
+        {run.steps.map((s, i) => {
+          const station = STATIONS.find((x) => x.id === s.station)?.name;
+          return (
+            <li key={i} className={cx('log-i', s.ok === false && 'bad', !s.t1 && 'on')}>
+              <span className="log-at mono t-cap">+{fmtMs(s.t0 - run.t0)}</span>
+              <span className="log-dot">
+                <AgentAv id={s.agent} size="sm" />
+              </span>
+              <span className="log-b">
+                <span className="log-t">
+                  <strong>{AGENTS[s.agent].name}</strong> <span>{s.label}</span>
+                </span>
+                {station && <span className="t-cap muted">{station}</span>}
+              </span>
+              <span className="log-took mono t-cap">{s.t1 ? fmtMs(s.t1 - s.t0) : 'now'}</span>
+              {s.t1 ? (
+                <span className={'badge b-' + (s.ok === false ? 'warning' : 'success')}>{s.ok === false ? 'Not passed' : 'OK'}</span>
+              ) : (
+                <span className="badge b-info">
+                  <Spinner />
+                  Working
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

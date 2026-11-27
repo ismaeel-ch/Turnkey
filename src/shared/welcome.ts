@@ -6,7 +6,7 @@ export const WELCOME_TITLE = 'Say what the work is. Get the whole app, ready to 
 /** Follows the product name. */
 export const WELCOME_LEAD =
   ' turns one sentence into a working business app. Five builder agents and a Tester make its database, rules, screens and tests while you watch, and code checks every handoff.';
-export const WELCOME_NOTE = 'An entry for the SSI Agent-A-Thon 2026. People and records in it are made up.';
+export const WELCOME_NOTE = 'People and records in it are made up.';
 /** Under the two quick-start buttons. */
 export const WELCOME_QUICK_NOTE =
   'Both use a demo account in this browser. Try a sample asks one question about a sales bidding desk, shows you the plan, then builds it in about 30 seconds with no model calls. Get started below sets up your own account first.';

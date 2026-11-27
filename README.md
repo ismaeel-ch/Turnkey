@@ -5,7 +5,6 @@ and builds the app only when you press **Build it**: a team of agents makes its 
 each other's work, and hands it over as a working app with its own welcome for each person who uses it. After the
 first build you can say what is wrong or missing at any time, get a plan first, and release the change as the next
 version.
-Solo entry for the SSI Agent-A-Thon 2026.
 
 **Live app:** https://turnkey-bay.vercel.app/ (no login; **Demo** replays saved builds and calls no model)
 
@@ -315,7 +314,7 @@ Settings → Environment Variables, then cut a release (merges do not deploy; se
 | Backend                        | Names                                                                                              |
 | ------------------------------ | -------------------------------------------------------------------------------------------------- |
 | Claude API key (the live site) | `ANTHROPIC_API_KEY`; optional `ANTHROPIC_MODEL`, `ANTHROPIC_MODEL_FAST`                            |
-| The SSI LiteLLM gateway        | `LITELLM_BASE_URL` (with `/v1`), `LITELLM_API_KEY`, `LITELLM_MODEL`; optional `LITELLM_MODEL_FAST` |
+| A LiteLLM gateway              | `LITELLM_BASE_URL` (with `/v1`), `LITELLM_API_KEY`, `LITELLM_MODEL`; optional `LITELLM_MODEL_FAST` |
 | Any OpenAI-compatible service  | `OPENAI_API_KEY`, `OPENAI_MODEL`; optional `OPENAI_MODEL_FAST`, `OPENAI_BASE_URL`                  |
 
 `LLM_PROVIDER` forces one; otherwise the first that is set is used, in the order above. Details:

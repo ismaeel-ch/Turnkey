@@ -46,14 +46,14 @@ const describeApp = async (page, text, pick) => { await page.fill('#home-prompt'
 const ivNow = (page) => st(page, () => { const iv = window.__formwork.view().home.interview, q = (s) => document.querySelector(s), all = (s) => [...document.querySelectorAll(s)].map((x) => x.innerText.replace(/\s+/g, ' ').trim()); return iv ? { step: iv.step, attr: q('.iv') && q('.iv').dataset.step, steps: all('.iv-st'), on: (q('.iv-st[aria-current=step]') || {}).innerText, name: (q('#iv-name') || {}).innerText, sum: (q('#iv-sum') || {}).innerText, people: all('.iv-person strong'), card: q('.iv-ask') ? q('.iv-ask').dataset.card : null, demo: q('#iv-demo') ? q('#iv-demo').checked : null, demoText: (q('#iv-demo-text') || {}).innerText, n: (q('.iv-ask .iv-n') || {}).innerText, opts: all('.iv-ask .iv-opt'), answered: all('.iv-answered li'), assumed: all('.iv-assumed li'), access: Object.fromEntries([...document.querySelectorAll('.iv-access tbody tr')].map((r) => [r.querySelector('th').innerText.trim(), [...r.querySelectorAll('td')].map((c) => c.innerText.trim()).join()])), agents: [...document.querySelectorAll('.iv-agent[data-agent]')].map((x) => x.dataset.agent), plan: !!iv.plan, apps: Object.keys(window.__formwork.state().apps).length } : null; });
 const land = async (page) => { await page.waitForSelector('.app-nav .nav-i'); await page.locator('.app-nav .nav-i').nth(1).click(); await sleep(80); }; // the Overview is first now, so the page that used to open first is the second one
 const nav = (page, name) => page.locator('.app-nav .nav-i', { hasText: name }).first().click();
-// The row under a list page's title: view tabs, the More views button, Filter and Copy CSV. Measures that they sit on one row at one height, that
+// The row under a list page's title: view tabs, the More views button, Filter and Copy CSV. Measures that they sit on one row (the buttons at one height, the tabs as tall as the bar so their underline sits on its edge), that
 // More views is a frameless square like the tabs (it was once a 96 px framed box), and that the tabs scroll inside the row rather than wrap.
 const vxBarLook = (page) => st(page, () => {
   const box = (e) => { const r = e.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; };
   const bar = document.querySelector('.vx-bar'), tabs = [...document.querySelectorAll('.vswitch [role=tab]')], more = document.querySelector('.vswitch .menu-wrap > button'), acts = [...document.querySelectorAll('.vx-acts > .menu-wrap > button, .vx-acts > button')];
   if (!bar || !tabs.length || !more || acts.length !== 2) return { ok: false, missing: { bar: !!bar, tabs: tabs.length, more: !!more, acts: acts.length } };
   const t = box(tabs[0]), m = box(more), a = acts.map(box), strip = document.querySelector('.vs-tabs'), cs = getComputedStyle(more);
-  const mid = (b) => b.y + b.h / 2, row = [t, m, ...a].every((b) => Math.abs(mid(b) - mid(t)) <= 1), same = [m, ...a].every((b) => b.h === t.h);
+  const mid = (b) => b.y + b.h / 2, row = [t, m, ...a].every((b) => Math.abs(mid(b) - mid(t)) <= 1), same = [m, ...a].every((b) => b.h === m.h) && t.h >= m.h;
   const square = m.w === m.h && cs.borderTopWidth === '0px', inside = a.every((b) => b.x + b.w <= box(bar).x + box(bar).w + 1) && m.x + m.w <= a[0].x;
   const oneRow = tabs.every((e) => Math.abs(box(e).y - t.y) <= 1) && strip.scrollHeight <= strip.clientHeight + 1;
   return { ok: row && same && square && inside && oneRow, row, same, square, inside, oneRow, tab: t, more: m, acts: a };
@@ -182,6 +182,13 @@ async function flowDemo(browser, url) {
   await page.locator('.meet-tile[data-agent=database]').click(); await page.waitForSelector('.meet-tile[data-agent=database].sel');
   check('meeting view: pressing a tile opens what that agent made', (await page.locator('section.inspector').first().getAttribute('aria-label')) === 'Database inspector', await page.locator('section.inspector').first().getAttribute('aria-label'));
   await shot(page, '09b-meeting');
+  // the agents chat: the strip under its title says where the build stands, a turn reads as one block, and a line marks each handover
+  const chatLook = await st(page, () => { const q = (s) => document.querySelector(s), all = (s) => [...document.querySelectorAll(s)]; const msgs = all('.chat .msgs .msg'); return { now: (q('.chat-now') || {}).innerText || '', tone: q('.chat-now') ? q('.chat-now').className : '', segs: all('.chat-now-bar i').map((e) => e.className).join(), seps: all('.chat .msg-sep').map((e) => e.innerText.trim()), heads: all('.chat .msg-who').length, cont: all('.chat .msg.cont').length, n: msgs.length, contHasHead: all('.chat .msg.cont .msg-who, .chat .msg.cont .msg-av').length, note: (q('.chat-note') || {}).innerText || '', frame: getComputedStyle(q('.composer')).borderTopWidth, card: getComputedStyle(q('.chat .gcard')).backgroundColor !== getComputedStyle(q('.chat')).backgroundColor }; });
+  check('agents chat: the strip under the title says every step is checked, with one segment per station', /Every step is checked/.test(chatLook.now) && /6 of 6/.test(chatLook.now) && /n-ok/.test(chatLook.tone) && chatLook.segs === 's-ok,s-ok,s-ok,s-ok,s-ok,s-ok', chatLook);
+  check('agents chat: an agent\'s turn is one block under one name, and a line marks each handover', chatLook.cont > 0 && chatLook.contHasHead === 0 && chatLook.heads > 0 && chatLook.heads + chatLook.cont <= chatLook.n && chatLook.seps.length >= 3 && chatLook.seps.some((t) => /List builder takes over/.test(t)), chatLook);
+  check('agents chat: cards stand out from the pane, the message box is one frame, and a note says agents can make mistakes', chatLook.card && chatLook.frame === '1px' && /Agents can make mistakes/.test(chatLook.note), chatLook);
+  const tile = await st(page, () => { const t = document.querySelector('.meet-tile[data-agent=database]'); return { state: (t.querySelector('.meet-state') || {}).innerText, work: (t.querySelector('.meet-work') || {}).innerText || '', rail: document.querySelectorAll('.meet-board .meet-step.s-ok .meet-rail').length }; });
+  check('meeting view: a tile says the agent\'s state and how long it worked, and the shared line ticks off each station', /Done/.test(tile.state) && /s in \d+ steps?/.test(tile.work) && tile.rail === 6, tile);
   await page.getByRole('button', { name: 'Workflow', exact: true }).click();
 
   // the built app
@@ -762,7 +769,7 @@ async function flowMisc(browser, url) {
   await page.evaluate(async () => { document.querySelector('button[title="Put every node back where it started"]').click(); await new Promise((r) => setTimeout(r, 20)); const el = document.createElement('style'); el.id = 'tk-hide-canvas'; el.textContent = '.flow-canvas{display:none !important}'; document.head.appendChild(el); });
   await sleep(1200); await page.evaluate(() => document.getElementById('tk-hide-canvas').remove()); await sleep(600); page.off('console', onNan);
   check('the workflow canvas hidden just after a change is not drawn at NaN, and shows its nodes again', nan.length === 0 && await page.locator('.flow-canvas .react-flow__node').first().isVisible(), nan.slice(0, 3));
-  await page.getByRole('button', { name: 'Log', exact: true }).click(); await sleep(100); check('log view lists steps', await page.locator('.line-wrap .tbl tbody tr').count() > 8); await shot(page, '61-log');
+  await page.getByRole('button', { name: 'Log', exact: true }).click(); await sleep(100); check('log view lists steps', await page.locator('.line-wrap .log-feed .log-i').count() > 8); await shot(page, '61-log');
   for (let i = 0; i < 4; i++) { await page.getByRole('button', { name: 'Workflow', exact: true }).click(); await page.locator('.station').nth(i).click(); await sleep(60); if (i === 1) { await page.locator('.insp-body .switch').click(); await sleep(60); await shot(page, '62-schema-sql'); } if (i === 2) await shot(page, '63-backend-out'); }
   // dialogs
   await page.locator('.work-head .menu-wrap .btn').click(); await page.locator('.menu .mi', { hasText: 'Export build pack' }).click(); await page.waitForSelector('.dialog .pack');
@@ -916,7 +923,7 @@ async function flowViews(browser, url) {
   for (const w of [1440, 1100]) { // wide and normal: one tidy row, whatever fits
     await page.setViewportSize({ width: w, height: 900 }); await sleep(150);
     const b = await vxBarLook(page);
-    check('view tabs bar at ' + w + ' px: tabs, More views, Filter and Copy CSV on one row, the same height, More views a small square with no frame', b.ok, b);
+    check('view tabs bar at ' + w + ' px: tabs, More views, Filter and Copy CSV on one row, the buttons the same height, More views a small square with no frame', b.ok, b);
   }
   await page.setViewportSize({ width: 1440, height: 900 }); await sleep(150);
   const expect = { Board: '.kb-col', Calendar: '.cal-grid .cal-chip', Timeline: '.gt .gt-item', Table: '.vx .tbl tbody tr', Chart: '.hb-row .hb-seg', Pivot: '.tbl.pivot .pv-b', Tree: '.tree .tree-row' }, drawn = {};
@@ -1071,9 +1078,20 @@ async function flowQuests(browser, url) {
   await ctx.close();
 }
 
+// Fluent 2's type ramp: text in the workspace is 10, 12, 14, 16, 20, 24, 28, 32 or 40 px and nothing in between. Returns the sizes that are not, by class.
+// The agents chat, the canvas and a built app's own screens are measured by their own checks.
+const offRamp = (page, root) => st(page, (sel) => { const ok = [10, 12, 14, 16, 20, 24, 28, 32, 40], bad = {}, r = document.querySelector(sel); if (!r) return { missing: sel };
+  const w = document.createTreeWalker(r, NodeFilter.SHOW_TEXT); let n;
+  while ((n = w.nextNode())) { if (!n.textContent.trim()) continue; const e = n.parentElement; if (e.closest('.chat, .msg, .gcard, svg, .react-flow, .stage, [hidden]') || !e.getClientRects().length) continue; const f = parseFloat(getComputedStyle(e).fontSize); if (!ok.includes(f)) { const k = f + 'px ' + (typeof e.className === 'string' && e.className ? '.' + e.className.split(' ').slice(0, 3).join('.') : e.tagName); bad[k] = (bad[k] || 0) + 1; } }
+  return bad; }, root);
+const onRamp = (o) => Object.keys(o).length === 0;
 async function plainSteps(browser, url) { // Build opens on a plain list of steps; the canvas and its views are behind "Show how it was built"
   const { ctx, page } = await newPage(browser);
   await enter(page, url, { plain: true }); await setSpeed(page, 'fast');
+  let ramp = await offRamp(page, '.shell');
+  check('Fluent type ramp: every text size on Home and in the title bar is a step of the ramp', onRamp(ramp), ramp);
+  const prompt = await st(page, () => { const f = document.querySelector('.prompt .fui-Textarea'), cs = getComputedStyle(f), b = document.querySelector('.tpl-build').getBoundingClientRect(); return { frame: cs.borderTopWidth, build: Math.round(b.height) }; });
+  check('Home: the prompt box has one frame, not a field inside a box, and a card\'s Build button is the standard 32 px', prompt.frame === '0px' && prompt.build === 32, prompt);
   const list = () => st(page, () => ({ rows: [...document.querySelectorAll('.steps-list .step')].map((x) => x.dataset.step + ':' + x.dataset.state), titles: [...document.querySelectorAll('.step-top strong')].map((x) => x.textContent), who: [...document.querySelectorAll('.step-top .t-cap')].map((x) => x.textContent), text: [...document.querySelectorAll('.step-text')].map((x) => x.textContent), head: (document.querySelector('.steps-head h2') || {}).textContent, sub: (document.querySelector('#steps-sub') || {}).textContent, how: document.querySelectorAll('.react-flow, .build-sum, .build-bar, .inspector').length, bar: (() => { const b = document.querySelector('.steps-view [role=progressbar]'); return b ? b.getAttribute('aria-valuenow') + '/' + b.getAttribute('aria-valuemax') : ''; })(), detail: window.__formwork.state().settings.buildDetail }));
   await page.locator('[data-tpl="leave"] .tpl-build').click();
   await page.waitForSelector('.step[data-step=research][data-state=ask]', { timeout: 30000 });
@@ -1098,7 +1116,7 @@ async function plainSteps(browser, url) { // Build opens on a plain list of step
   v = await list();
   check('"Show how it was built" opens the workflow canvas with the summary tiles and the four views, in place of the list', v.rows.length === 0 && await page.locator('.build-sum .kpi').count() === 6 && await page.locator('.build-bar .seg button').count() === 4 && await page.locator('.fl-node.station').count() === 7 && await page.locator('.inspector').count() === 1);
   await page.getByRole('button', { name: 'Timeline' }).click(); await page.waitForSelector('.tl-usage');
-  await page.getByRole('button', { name: 'Log', exact: true }).click(); await page.waitForSelector('.line-wrap .tbl tbody tr');
+  await page.getByRole('button', { name: 'Log', exact: true }).click(); await page.waitForSelector('.line-wrap .log-feed .log-i');
   await page.getByRole('button', { name: 'Meeting', exact: true }).click(); await page.waitForSelector('.meet-tile');
   check('the timeline, the log and the meeting are behind it too, and the choice is remembered as a setting', v.detail === true && await page.locator('.meet-tile').count() >= 6);
   await page.getByRole('button', { name: 'Workflow', exact: true }).click(); await page.waitForSelector('.react-flow .fl-gate'); await shot(page, 'steps-3-how');
@@ -1121,6 +1139,7 @@ async function plainSteps(browser, url) { // Build opens on a plain list of step
   // a review the workflow holds is a step of its own, under its plain name
   await say(page, 'Add a security review'); a = await waitFree(page); v = await list();
   check('steps: a review added to the workflow appears after the step it reads, as "Check who can see what" by the Access checker', a.reviews.security && a.reviews.security.status === 'ok' && v.rows.indexOf('rv_security:done') === 3 && v.titles[3] === 'Check who can see what' && v.who[3] === 'Access checker', [v.rows, v.titles, v.who]);
+  for (const name of ['Release', 'Details']) { await page.locator('.views .tab', { hasText: name }).first().click(); await sleep(400); ramp = await offRamp(page, '.shell'); check('Fluent type ramp: every text size on ' + name + ' is a step of the ramp', onRamp(ramp), ramp); }
   await ctx.close();
   // on a phone the list fits the screen and the canvas is still one press away
   const ph = await newPage(browser, { viewport: { width: 390, height: 844 } }), pp = ph.page; await enter(pp, url, { plain: true }); await buildTpl(pp, 'leave'); await pp.waitForSelector('.steps-view'); await sleep(300);
@@ -1451,6 +1470,7 @@ async function firstUse(browser, url) {
   const stops = [];
   for (let i = 0; i < 6 && await page.locator('.fr-pop').count(); i++) {
     await page.waitForFunction((n) => { const p = document.querySelector('.fr-pop'); return p && p.dataset.i === String(n) && document.activeElement === p; }, i);
+    await page.waitForSelector('.fr-hole', { timeout: 2000 }).catch(() => {}); // the tour measures what it points at a moment after a stop opens
     stops.push(await st(page, () => { const p = document.querySelector('.fr-pop'), h = document.querySelector('.fr-hole'), a = document.querySelector('.fr-tour').getBoundingClientRect(), r = p.getBoundingClientRect(); return { text: p.innerText.replace(/\n+/g, ' | '), hole: !!h, inside: r.left >= a.left && r.right <= a.right + 1 && r.top >= a.top && r.bottom <= a.bottom + 1, bubbles: document.querySelectorAll('.fr-pop').length }; }));
     if (i === 1) await shot(page, 'fu-04-tour');
     await page.keyboard.press('ArrowRight'); await sleep(60);

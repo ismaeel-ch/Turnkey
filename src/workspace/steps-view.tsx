@@ -226,7 +226,7 @@ export function StepsView({ app }: { app: AppRecord }) {
             <strong>{app.name} is ready.</strong> Open it and try every screen.
           </span>
           <Btn
-            className="btn primary sm"
+            className="btn primary"
             id="steps-open"
             onClick={() => {
               U.view[app.id] = 'app';
@@ -236,7 +236,7 @@ export function StepsView({ app }: { app: AppRecord }) {
             Open the app
           </Btn>
           <Btn
-            className="btn sm"
+            className="btn"
             id="steps-change"
             title="Say what to change. You get a plan first, then release it as a new version."
             onClick={() => askForChange(app)}
