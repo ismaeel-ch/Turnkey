@@ -89,6 +89,20 @@ async function scheme(browser, s) {
   await screen(page, s + ': onboarding');
   await finishOnboarding(page);
   await screen(page, s + ': workspace home');
+  // a typed sentence: the question cards with the plan so far, then the plan to approve
+  await page.fill('#home-prompt', 'a clinic that books patient appointments');
+  await page.locator('#home-go').click();
+  await page.waitForSelector('.iv-ask');
+  await screen(page, s + ': the questions before a build');
+  await page.locator('.iv-ask .iv-opt').first().focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.iv-done');
+  await page.locator('.iv-review').click();
+  await page.waitForSelector('.iv-act .iv-build');
+  await screen(page, s + ': the plan to approve');
+  await page.locator('.iv-over').click();
+  await page.waitForSelector('#home-prompt');
+  await page.fill('#home-prompt', '');
   await build(page, 'clinic');
   for (const v of ['Build', 'App', 'Tests', 'Data', 'API', 'Connections']) {
     await view(page, v);

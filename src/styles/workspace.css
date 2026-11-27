@@ -730,6 +730,65 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 .demo-note{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;border:1px dashed var(--colorStatusWarningBorder1);border-radius:6px;background:var(--colorStatusWarningBackground1)}.demo-note .b-demo{margin-left:0}
 .tbl .demo-cell{width:1%;white-space:nowrap;text-align:right;padding-left:0}.demo-cell .b-demo{margin-left:0}
 .demo-short{display:none}.app.compact .demo-long{display:none}.app.compact .demo-short{display:inline}.app.compact .demo-bar{padding:6px 12px;gap:4px 12px}
+/* The interview before a build (src/workspace/interview-ui.tsx): the steps, the plan canvas, the Planner's cards */
+.iv{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.iv-top{display:flex;align-items:center;gap:12px;padding:8px 20px;background:var(--colorNeutralBackground1);border-bottom:1px solid var(--colorNeutralStroke2);flex:none}
+.iv-steps{list-style:none;margin:0;padding:0;display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
+.iv-st{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:4px;color:var(--colorNeutralForeground3);white-space:nowrap;font-size:13px;line-height:18px}
+.iv-st-n{width:20px;height:20px;border-radius:50%;border:1px solid var(--colorNeutralStrokeAccessible);display:grid;place-items:center;font-size:11px;font-weight:600;flex:none}
+.iv-st.done{color:var(--colorNeutralForeground2)}
+.iv-st.done .iv-st-n{background:var(--colorStatusSuccessBackground1);border-color:var(--colorStatusSuccessBorder1);color:var(--colorStatusSuccessForeground1)}
+.iv-st.on{color:var(--colorNeutralForeground1);font-weight:600;background:var(--colorBrandBackground2)}
+.iv-st.on .iv-st-n{background:var(--colorBrandBackground);border-color:var(--colorBrandBackground);color:var(--colorNeutralForegroundOnBrand)}
+.iv-shell{flex:1;min-height:0;display:flex;align-items:stretch}
+.iv-canvas{flex:1 1 0;min-width:0;overflow:auto;padding:24px 20px 48px;display:flex;flex-direction:column;gap:16px}
+.iv-canvas:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:-2px}
+.iv-canvas > *{flex:none;width:100%;max-width:1080px;margin-inline:auto}
+.iv-chat{flex:0 0 400px;min-width:0;overflow:auto;background:var(--colorNeutralBackground1);border-left:1px solid var(--colorNeutralStroke2);display:flex;flex-direction:column;gap:12px;padding:16px}
+.iv-chat > *{flex:none}
+.iv-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px;align-items:start}
+.iv-sec,.fui-Card.iv-sec,.iv-ask,.fui-Card.iv-ask,.iv-done,.fui-Card.iv-done,.iv-ready,.fui-Card.iv-ready{padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.iv-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.iv-person,.iv-rule{display:flex;gap:8px;align-items:flex-start}
+.iv-rule .ic{margin-top:2px}
+.iv-yes{color:var(--colorStatusSuccessForeground1)}
+td.iv-yes{font-weight:600}
+td.iv-no{color:var(--colorNeutralForeground3)}
+.iv-flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.iv-agent-top{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px}
+.iv-stage{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:4px;background:var(--colorNeutralBackground3);font-size:13px;line-height:18px}
+.iv-wait{background:var(--colorNeutralBackground3);border-radius:6px;padding:12px}
+.iv-tbox{overflow-x:auto;border:1px solid var(--colorNeutralStroke2);border-radius:6px}
+.iv-tbl{border-collapse:collapse;width:100%;font-size:14px}
+.iv-tbl th,.iv-tbl td{padding:9px 12px;border-bottom:1px solid var(--colorNeutralStroke2);text-align:left;vertical-align:top}
+.iv-tbl thead th{font-size:12px;line-height:16px;font-weight:600;color:var(--colorNeutralForeground3);white-space:nowrap}
+.iv-tbl tbody th{font-weight:600}
+.iv-access .iv-tbl tbody th{font-weight:400}
+.iv-keeps .iv-tbl tbody th{white-space:nowrap}
+.iv-tbl tbody tr:last-child > *{border-bottom:0}
+.iv-tbl .c{text-align:center;white-space:nowrap}
+.iv-set{margin-left:8px}
+.iv-demo{background:var(--colorStatusWarningBackground1);color:var(--colorStatusWarningForeground1);border:1px dashed var(--colorStatusWarningBorder2)}
+.iv-agents{gap:0}
+.iv-agent{display:flex;gap:10px;align-items:flex-start;padding:8px 0}
+.iv-agent + .iv-agent{border-top:1px solid var(--colorNeutralStroke2)}
+.av.sq.iv-you{background:var(--colorBrandBackground2);color:var(--colorBrandForeground2);border:1px solid var(--colorBrandStroke2)}
+.av.sq.iv-off{background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground3);border:1px dashed var(--colorNeutralStroke1)}
+.iv-act,.fui-Card.iv-act{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px}
+.iv-extras .switch{align-self:flex-start}
+.iv-extras p{margin-top:-6px}
+.iv-bubble{background:var(--colorNeutralBackground3);border-radius:6px;padding:8px 12px}
+.iv-me{background:var(--colorBrandBackground2);border:1px solid var(--colorBrandStroke2);border-radius:6px;padding:6px 10px;max-width:85%}
+.iv-ask,.fui-Card.iv-ask,.iv-ready,.fui-Card.iv-ready{border-color:var(--colorBrandStroke1)}
+.iv-done,.fui-Card.iv-done{border-color:var(--colorStatusSuccessBorder1)}
+.iv-n{align-self:flex-start}
+.iv-next,.iv-review{align-self:flex-start}
+.iv-opt{display:flex;flex-direction:column;gap:2px;width:100%;min-height:48px;text-align:left;padding:10px 12px;border-radius:6px;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);color:inherit;font:inherit;cursor:pointer}
+.iv-opt:hover{background:var(--colorNeutralBackground1Hover)}
+.iv-opt.on{border-color:var(--colorBrandStroke1);box-shadow:inset 0 0 0 1px var(--colorBrandStroke1);background:var(--colorBrandBackground2)}
+.iv-link{background:none;border:0;padding:2px 0;min-height:24px;color:var(--colorBrandForegroundLink);font:inherit;text-decoration:underline;cursor:pointer;text-align:left}
+.iv-link.t-cap{font-size:12px;line-height:16px}
+@media (max-width: 900px){.iv{overflow:auto} .iv-shell{flex-direction:column;flex:none} .iv-canvas, .iv-chat{overflow:visible;flex:none} .iv-canvas{padding:16px 12px 32px} .iv-chat{border-left:0;border-top:1px solid var(--colorNeutralStroke2);padding:16px 12px} .iv-on-questions .iv-chat{order:-1;border-top:0;border-bottom:1px solid var(--colorNeutralStroke2)} .iv-top{padding:6px 12px} .iv-over{min-width:0} .iv-act, .fui-Card.iv-act{flex-direction:column;align-items:stretch} .iv-act .btn, .iv-ready .btn{flex:1}}
 /* the Build tab's plain list of steps (steps-view.tsx); the canvas and its views sit behind "Show how it was built" */
 .build.plain{align-items:center}.steps-view{width:100%;max-width:860px;display:flex;flex-direction:column;gap:12px;flex:none}.build.plain>.mbar,.build.plain>.rerun-bar{width:100%;max-width:860px}
 .steps-head{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap}.steps-head>.col{flex:1 1 240px}.steps-head h2{margin:0}.steps-bar.fui-ProgressBar{flex:none}
