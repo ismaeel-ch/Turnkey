@@ -279,6 +279,16 @@ export async function startImprove(app: AppRecord, said: string, ctx?: ReportCtx
     reply = str(read.reply);
   }
   if (!ops.length) return void say(app, 'orchestrator', reply || HELP);
+  planImprove(app, text, ops, ctx, kind);
+}
+
+/**
+ * The part of an improvement after the words are read: the kind, what the Tester sees, the questions, then the plan
+ * that waits for Go ahead. A change typed in the agents chat after a release comes in here with its operations read.
+ */
+export function planImprove(app: AppRecord, said: string, ops: Op[], ctx?: ReportCtx | null, kind?: Kind | null) {
+  const text = str(said).trim().slice(0, 400),
+    B = app as BackedApp;
   const first = planOps(B, ops);
   const flow: Flow = {
     id: uid('imp'),
@@ -451,7 +461,9 @@ export function tryVerdict(app: AppRecord, flowId: string, works: boolean) {
     'orchestrator',
     works
       ? rel
-        ? 'Good. It waits in the draft, and goes out when you release version ' + verNext(rel.v, suggestKind(app)) + '.'
+        ? 'Good. It waits in the draft, and goes out when you release version ' +
+          verNext(rel.v, suggestKind(app)) +
+          '. Say "release" here when you are ready.'
         : 'Good. It is part of the app now, and goes out with version 1.0.'
       : 'Then tell me what is still wrong. The change stays in the draft' +
           (rel ? ', and people keep version ' + rel.v + ' until you release.' : '.'),

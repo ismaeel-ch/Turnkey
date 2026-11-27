@@ -339,8 +339,9 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .gt-item:hover,.gt-item:focus-visible{box-shadow:var(--shadow4);filter:brightness(.97)}
 .gt-item.tone-info{border-left-color:var(--colorBrandStroke1);background:var(--colorBrandStroke2)}.gt-item.tone-success{border-left-color:var(--colorStatusSuccessBorder2);background:var(--colorStatusSuccessBackground2)}.gt-item.tone-warning{border-left-color:var(--colorStatusWarningBorder2);background:var(--colorStatusWarningBackground2)}.gt-item.tone-danger{border-left-color:var(--colorStatusDangerBorder2);background:var(--colorStatusDangerBackground2)}
 .gt-item.in .gt-t{display:block;padding:0 6px;line-height:22px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gt-item.out .gt-t{position:absolute;left:100%;top:0;margin-left:6px;line-height:22px;white-space:nowrap;max-width:170px;overflow:hidden;text-overflow:ellipsis;color:var(--colorNeutralForeground2)}
+.gt-item.out .gt-t{position:absolute;left:100%;top:0;margin-left:6px;line-height:22px;white-space:nowrap;max-width:170px;overflow:hidden;text-overflow:ellipsis;color:var(--colorNeutralForeground2);background:var(--colorNeutralBackground1);padding:0 3px;border-radius:2px}
 .gt-none{padding:28px 16px;text-align:center}
+.cal-none{margin:0 0 8px}
 
 /* ---------- dashboard ---------- */
 .dash-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:32px}
@@ -473,7 +474,10 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
   .app-modal{place-items:end stretch;padding:0;z-index:20}.app-dialog{width:100%;max-height:92%;border-radius:16px 16px 0 0;animation:sheet-in .22s cubic-bezier(.2,.8,.2,1);padding-bottom:env(safe-area-inset-bottom)}
   .app-dialog .dhead{padding:16px 12px 8px 16px}.app-dialog .dbody{padding:4px 16px 12px}.app-dialog .dfoot{padding:10px 16px 14px;flex-wrap:nowrap}.app-dialog .dfoot .btn{flex:1;height:48px;font-size:16px}
   .login-card{padding:20px 16px;border-radius:16px}.persona-grid{grid-template-columns:minmax(0,1fr)}.persona-btn{min-height:56px}
-  .team-flow{grid-template-columns:minmax(0,1fr)}.gt.lanes .gt-head,.gt.lanes .gt-lane{grid-template-columns:84px minmax(0,1fr)}.chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.chips>*{flex:none}
+  .team-flow{grid-template-columns:minmax(0,1fr)}.gt.lanes .gt-head,.gt.lanes .gt-lane{grid-template-columns:84px minmax(0,1fr)}
+  .gt{overflow-x:auto;overscroll-behavior-x:contain}.gt-head,.gt-lane{min-width:640px}.gt.lanes .gt-lab{position:sticky;left:0;z-index:3;background:var(--colorNeutralBackground1)}.gt-head .gt-lab{background:var(--colorNeutralBackground2)}
+  .tbl-wrap:has(>.tbl.pivot){overflow-x:auto}.tbl.pivot tfoot{display:table-footer-group}.tbl.pivot tfoot tr{display:table-row;padding:0;border:0;border-radius:0;background:none}.tbl.pivot tfoot td,.tbl.pivot tfoot th{display:table-cell;padding:8px 12px;border-top:2px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground2)}.tbl.pivot tfoot td:empty{display:table-cell}
+  .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.chips>*{flex:none}
 }
 
 /* ---------- the builder on a phone ---------- */
