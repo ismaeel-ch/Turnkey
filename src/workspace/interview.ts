@@ -1,7 +1,6 @@
 import {
   PLAN_LIMITS,
   cardsToAsk,
-  demoDataCard,
   nextCard,
   planAnswers,
   previewPlan,
@@ -19,7 +18,6 @@ import type { Dict } from '@/shared/types/workspace';
 import { U, errText, label, notify, singular, str } from './core';
 import { normBackend, normBrief, normSchema } from './engine';
 import { startBuild } from './line';
-import { askPlanner as callAsk, writePlan as callWrite, type PlannerCtl } from './planner';
 import { REC } from './registry';
 
 /* ===== The interview before a build =====
@@ -31,24 +29,40 @@ import { REC } from './registry';
      off the saved build with the build line's own normalisers, so it shows exactly what will be built, and it
      changes with the answer because each option carries the plan it leads to.
    - the model (Live): the Planner writes the cards and a draft plan in one call, and the final plan from the answers
-     in a second one (src/workspace/planner.ts, reached through PLANNER). Start over stops a call that is still out.
+     in a second one. Both arrive through PLANNER; until the Planner is plugged in, a live build starts without an
+     interview, as it always has.
    Either way the plan beside the cards is `previewPlan`: the draft with the answers laid over it, no model call. */
 
-/** The Planner's two calls (src/workspace/planner.ts) as the interview makes them, and what other modules switch on. */
+/** The Planner's two calls, and what else other modules plug in. Each is off until its module provides it. */
 export const PLANNER: {
   /** One model call: what was understood, the cards to ask, and the plan for the usual choices. */
-  ask: ((request: string, ctl?: PlannerCtl) => Promise<{ reflect: string; cards: QuestionCard[]; draft: PlanSpec }>) | null;
+  ask: ((request: string) => Promise<{ reflect: string; cards: QuestionCard[]; draft: PlanSpec }>) | null;
   /** One model call: the plan to approve, from the answers the owner gave (skipped cards are left out), the draft and the cards. */
-  write: ((request: string, answers: PlanAnswer[], draft: PlanSpec, cards: QuestionCard[], ctl?: PlannerCtl) => Promise<PlanSpec>) | null;
+  write: ((request: string, answers: PlanAnswer[], draft: PlanSpec, cards: QuestionCard[]) => Promise<PlanSpec>) | null;
   /** True once a build can start with no demo data. Until then the choice is not offered, so it is never a promise nothing keeps. */
   startEmpty: boolean;
-} = {
-  ask: (request, ctl) => callAsk(request, ctl),
-  write: (request, answers, draft, cards, ctl) => callWrite(request, answers, draft, { cards, ctl }),
-  startEmpty: false,
-};
+} = { ask: null, write: null, startEmpty: false };
+/** A sentence the model builds from gets an interview once the Planner can be asked. */
+export const plannerReady = () => !!(PLANNER.ask && PLANNER.write);
 /** The Planner writes the plan for one interview at most this many times; after that the plan is put together from the answers by rule. */
 export const MAX_WRITES = 3;
+
+export const DEMO_CARD: QuestionCard = {
+  id: 'demo_data',
+  title: 'Would you like demo data to try the app?',
+  why: 'an empty app is hard to judge. Demo data is made up, clearly marked, and you can remove it in one click.',
+  kind: 'one',
+  options: [
+    {
+      id: 'yes',
+      label: 'Yes, add demo data',
+      desc: 'Made-up records and people, so every screen has something to show',
+      leads: { demoData: true },
+    },
+    { id: 'no', label: 'No, start empty', desc: 'Only the sign-ins and the starter settings', leads: { demoData: false } },
+  ],
+  usual: ['yes'],
+};
 
 /* ---------- a saved build as a plan ---------- */
 
@@ -151,36 +165,15 @@ export function savedInterview(tpl: string): { reflect: string; cards: QuestionC
 
 export const interviewNow = (): Interview | null => U.home.interview || null;
 const mine = (iv: Interview) => U.home.interview === iv;
-/** The Planner's call that is out for an interview, so that leaving the interview stops it. */
-const out = new WeakMap<Interview, PlannerCtl>();
-function control(iv: Interview): PlannerCtl {
-  const ctl: PlannerCtl = { stop: false, ctrl: typeof AbortController === 'function' ? new AbortController() : null };
-  out.set(iv, ctl);
-  return ctl;
-}
-function stopCall(iv: Interview) {
-  const ctl = out.get(iv);
-  if (!ctl) return;
-  ctl.stop = true;
-  ctl.ctrl?.abort();
-  out.delete(iv);
-}
 
 /** The cards as asked: at most five and the demo data card, which is offered only when a build can start empty. */
 function askable(cards: QuestionCard[]): QuestionCard[] {
   const own = cards.filter((c) => c.id !== 'demo_data' && c.options.length >= 2).slice(0, PLAN_LIMITS.questions);
-  return PLANNER.startEmpty ? own.concat(cards.find((c) => c.id === 'demo_data') || demoDataCard()) : own;
+  return PLANNER.startEmpty ? own.concat(cards.find((c) => c.id === 'demo_data') || DEMO_CARD) : own;
 }
-/** What was understood, as one sentence. The Planner starts its own with "Got it:", which the opening already says. */
-const said = (reflect: string) => {
-  const t = str(reflect)
-    .replace(/^got it\s*[:.,!]?\s*/i, '')
-    .replace(/([^.!?])$/, '$1.');
-  return t.charAt(0).toUpperCase() + t.slice(1);
-};
 const opening = (reflect: string, n: number) =>
   'Got it. ' +
-  said(reflect) +
+  str(reflect).replace(/([^.!?])$/, '$1.') +
   ' ' +
   (n === 0
     ? 'I have no questions for this one, so here is the plan.'
@@ -219,7 +212,6 @@ export function beginInterview(request: string, tpl: string | null, skip?: boole
     editing: null,
     ticks: null,
   };
-  if (U.home.interview) stopCall(U.home.interview);
   U.home.interview = iv;
   U.home.text = '';
   U.home.note = '';
@@ -233,7 +225,7 @@ export function beginInterview(request: string, tpl: string | null, skip?: boole
 async function askPlanner(iv: Interview, skip?: boolean) {
   try {
     if (!PLANNER.ask) throw new Error('The Planner is not connected.');
-    const got = await PLANNER.ask(iv.request, control(iv));
+    const got = await PLANNER.ask(iv.request);
     if (mine(iv)) open(iv, got, skip);
   } catch (e) {
     if (!mine(iv)) return;
@@ -354,7 +346,7 @@ export function reviewPlan() {
   iv.written++;
   notify();
   const given = planAnswers(iv.cards, iv.answers).filter((a) => a.by === 'you');
-  PLANNER.write(iv.request, given, iv.draft, iv.cards, control(iv)).then(
+  PLANNER.write(iv.request, given, iv.draft, iv.cards).then(
     (plan) => {
       if (!mine(iv)) return;
       iv.busy = null;
@@ -387,7 +379,6 @@ export function setDemoData(on: boolean) {
 export function leaveInterview() {
   const iv = interviewNow();
   if (!iv) return;
-  stopCall(iv);
   U.home.interview = null;
   U.home.text = iv.request;
   notify();

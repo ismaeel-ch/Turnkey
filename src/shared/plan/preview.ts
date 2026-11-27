@@ -8,7 +8,6 @@
  * of who can see and do what. Pure functions, usable on the server and in the browser.
  */
 import type { Permission, Scope } from '@/shared/types/app';
-import { leadsForPeople } from './norm';
 import { AUDIENCES } from './types';
 import type { Audience, PlanAnswer, PlanPatch, PlanSpec, PlanStages, QuestionCard } from './types';
 
@@ -108,14 +107,7 @@ export function previewPlan(draft: PlanSpec, cards: readonly QuestionCard[], ans
     const a = answers[card.id];
     if (!a || a.other) continue; // an answer in the owner's own words changes the plan when the Planner reads it
     const chosen = card.options.filter((o) => a.picked.includes(o.id));
-    // on the Planner's "people" card each option is one kind of person and says no more; code works out the rest
-    const kinds = card.id === 'people' && card.kind === 'many' && chosen.length > 0 && chosen.every((o) => !o.leads);
-    const patch = kinds
-      ? leadsForPeople(
-          plan,
-          chosen.map((o) => ({ id: o.id, name: o.label, can: o.desc })),
-        )
-      : together(chosen.map((o) => o.leads ?? {}));
+    const patch = together(chosen.map((o) => o.leads ?? {}));
     const { permissions, ...rest } = patch;
     Object.assign(plan, rest);
     if (permissions) plan.permissions = overPermissions(plan.permissions, permissions);

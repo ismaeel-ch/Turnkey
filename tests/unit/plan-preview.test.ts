@@ -135,16 +135,6 @@ describe('previewPlan', () => {
     expect(accessRows(plan).every((r) => r.cells.length === 2)).toBe(true);
   });
 
-  it('on a people card whose options say nothing more, code works out the plan for the kinds of people ticked', () => {
-    const people: QuestionCard = { ...CARDS[1], onlyIf: undefined, options: CARDS[1].options.map(({ leads: _leads, ...o }) => o) };
-    const plan = previewPlan(COMPANY_EXPENSES, [people], { people: you('employee', 'manager') });
-    expect(plan.people.map((p) => p.id)).toEqual(['employee', 'manager']);
-    expect(Object.keys(plan.permissions.claims).sort()).toEqual(['employee', 'manager']);
-    expect(plan.stages?.moves.every((m) => m.by.length > 0 && !m.by.includes('finance'))).toBe(true);
-    expect(plan.stories.every((s) => s.role !== 'finance')).toBe(true);
-    expect(previewPlan(COMPANY_EXPENSES, [people], {}).people).toEqual(COMPANY_EXPENSES.people);
-  });
-
   it('an option that leads to no stages removes them', () => {
     expect(previewPlan(COMPANY_EXPENSES, CARDS, { approval: you('none') }).stages).toBeNull();
   });
