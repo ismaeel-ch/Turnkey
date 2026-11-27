@@ -77,3 +77,12 @@ records the deployed version.
 - No key, gateway address, email address or real company data is visible in any frame, including the debug drawer.
 - The video shows the same version that is deployed (`/api/health` commit matches the head of `main`).
 - Length is at most three minutes; captions match the voice-over.
+
+## A narrated cut with a synthetic voice
+
+With `JUDGE_VIDEO` set, the judge walk also writes `steps.json`: where each step starts and ends in its part's
+recording. A narrated cut is made from that: each shot takes its pieces of the recording, fitted to the length of its
+spoken line (sped up when longer, the last frame held when shorter), with the line read by a free open-source voice
+(Kokoro) and a subtitle file to match. The finished cuts and the scripts that make them are in the project files under
+`submission/video/` (`demo-voice-male.mp4`, `demo-voice-female.mp4`, `why-source/cut.py`). The recording runs about
+0.7 s behind the step times, which `cut.py` allows for.

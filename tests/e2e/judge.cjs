@@ -28,6 +28,8 @@ fs.mkdirSync(shots, { recursive: true });
 
 /** @type {{ n: number, name: string, status: 'pass' | 'fail', detail: string, ms: number }[]} */
 const results = [];
+/** When each part's recording started, so a step's place in the video can be written out (JUDGE_VIDEO only). */
+const rec = { part: 0, t0: Date.now() };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 const firstLine = (e) =>
@@ -50,7 +52,7 @@ async function step(page, name, fn) {
   }
   const file = `${String(n).padStart(2, '0')}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50)}.png`;
   await page.screenshot({ path: path.join(shots, file) }).catch(() => {});
-  results.push({ n, name, status, detail, ms: Date.now() - started });
+  results.push({ n, name, status, detail, ms: Date.now() - started, part: rec.part, at: (started - rec.t0) / 1000, end: (Date.now() - rec.t0) / 1000 });
   console.log(`${status.toUpperCase().padEnd(4)} ${n}. ${name}${detail ? '  (' + detail + ')' : ''}`);
   return status === 'pass';
 }
@@ -228,6 +230,7 @@ async function main() {
   };
   const gctx = await browser.newContext(opts);
   const gpage = await gctx.newPage();
+  Object.assign(rec, { part: 1, t0: Date.now() });
   watch(gpage);
   // part 2's browser opens when part 1 is done, so a recording of it does not start with minutes of blank page
   /** @type {import('playwright').Page} */
@@ -238,6 +241,7 @@ async function main() {
     await guidedWalk(gpage);
     await gctx.close();
     page = await (await browser.newContext(opts)).newPage();
+    Object.assign(rec, { part: 2, t0: Date.now() });
     watch(page);
 
     // ---- part 2: Try a sample and the agents' teamwork, in a fresh browser ----
@@ -529,6 +533,8 @@ async function main() {
 
   const failed = results.filter((r) => r.status === 'fail').length;
   console.log(`\n${results.length - failed} of ${results.length} steps passed. Screenshots in ${shots}`);
+  // where each step sits in the part's recording, in seconds, for cutting a narrated video from it
+  if (video) fs.writeFileSync(path.join(video, 'steps.json'), JSON.stringify(results.map(({ n, name, part, at, end }) => ({ n, name, part, at, end })), null, 1));
   if (process.env.GITHUB_STEP_SUMMARY) {
     const rows = results.map((r) => `| ${r.status === 'pass' ? '✅' : '❌'} | ${r.n}. ${r.name} | ${Math.round(r.ms / 1000)} s | ${r.detail.replace(/\|/g, '\\|')} |`);
     fs.appendFileSync(
