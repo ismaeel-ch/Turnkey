@@ -67,7 +67,7 @@ export async function runAgent(agentId: string, options: RunAgentOptions = {}): 
     initialState: options.state ?? {},
     initialMessages: typeof options.messages === 'string' ? [] : (options.messages ?? []),
     ...(options.fetch ? { fetch: (url: string, init: RequestInit) => options.fetch!(url, init) } : {}),
-  } as ConstructorParameters<typeof HttpAgent>[0]);
+  });
   if (typeof options.messages === 'string') {
     agent.addMessage({ id: globalThis.crypto.randomUUID(), role: 'user', content: options.messages });
   }
@@ -82,7 +82,7 @@ export async function runAgent(agentId: string, options: RunAgentOptions = {}): 
       : { agent: options.activity?.agent || (typeof role === 'string' && role) || agentId, app: options.activity?.app ?? null };
   const subscriber: AgentSubscriber = {
     onEvent: ({ event }) => {
-      if (who) publishAgentEvent(event as unknown as { type: string }, who);
+      if (who) publishAgentEvent(event, who);
       options.onEvent?.(event);
     },
     onStepStartedEvent: ({ event }) => options.onStepStarted?.(event.stepName),

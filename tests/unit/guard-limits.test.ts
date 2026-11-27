@@ -188,6 +188,23 @@ describe('spend of calls that stop early', () => {
     expect(t).toMatchObject({ calls: 1, input: 100, output: 1000, unpriced: 0 });
     expect(spentToday()).toBeGreaterThan(0);
   });
+  it('a model with no listed price still counts toward the daily cap, at the dearest listed price', async () => {
+    resetUsageTotals();
+    const inner = {
+      id: 'test',
+      model: () => 'some-unlisted-model',
+      async *stream() {
+        yield { type: 'delta' as const, text: 'ok' };
+        yield { type: 'done' as const, truncated: false, usage: { input: 100_000, output: 10_000 } };
+      },
+    };
+    const p = withUsage(inner as never, { LLM_LOG_USAGE: '0' });
+    for await (const _ of p.stream({ messages: [{ role: 'user', content: 'y' }], tier: 'default' })) void _;
+    const t = usageTotals({});
+    // the reported cost stays unknown; only the cap counts the fallback: 100k x $10/M + 10k x $50/M = $1.50
+    expect(t).toMatchObject({ calls: 1, costUsd: 0, unpriced: 1, unpricedUsd: 1.5 });
+    expect(spentToday()).toBeCloseTo(1.5, 6);
+  });
   it('a call that fails before any answer is not counted', async () => {
     resetUsageTotals();
     const inner = {

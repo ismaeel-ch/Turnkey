@@ -1,9 +1,9 @@
 import { AreaBoundary } from '@/platform/area-boundary';
 import { engineProblem, storageProblem } from './errors';
 import { modelHost } from '@/platform/model-client';
-import { type ReactNode, Suspense, lazy, useState, useLayoutEffect, useSyncExternalStore } from 'react';
+import { type ReactNode, Suspense, lazy, useState, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
-import type { BackedDef } from '@/shared/types/app';
+import type { BackedDef, TourStep } from '@/shared/types/app';
 import type { SqlValue } from '@/shared/types/sqljs';
 import type { AppRecord, Dict, Downloader, OnboardingForm, ProductTourStep, Settings, SignInForm } from '@/shared/types/workspace';
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
@@ -59,8 +59,21 @@ import {
   setSaveTimer,
   setU,
 } from './core';
-import { DBX, PEEK, backupWorkspace, dbCount, dbExists, dbFlush, dbSave, initSqlite, restoreWorkspace, sqlRun } from './db';
-import { appUsers, reseed } from './engine';
+import {
+  DBX,
+  PEEK,
+  backupWorkspace,
+  dbCount,
+  dbExists,
+  dbFlush,
+  dbRollback,
+  dbSave,
+  dbSavepoint,
+  initSqlite,
+  restoreWorkspace,
+  sqlRun,
+} from './db';
+import { appUsers, reseed, tourExec } from './engine';
 import { DATA_VIEWS, migrateApp } from './viewspec';
 import { REC, TEMPLATES } from './builds';
 import { QUESTS } from './quests';
@@ -72,7 +85,7 @@ import { cancelRerun, queuedRerun } from './rerun';
 import { buildPack, parseChange, planOps, runChange } from './changes';
 import { AddStepDialog, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
 import { REVIEWERS } from './reviewers';
-import { keepFix, suggestCases } from './tester';
+import { fillWorkflowSteps, keepFix, suggestCases } from './tester';
 import { AgentAv, Btn, Dialog, Field, Icon, Input, Logo, MBar, Seg, Select, Spinner, Switch, TONE_ICON } from './ui';
 import { PhoneSheets } from './mobile';
 import { AgentActivity, activityNow } from './activity';
@@ -120,7 +133,7 @@ function setSi(patch: Partial<SignInForm> | null) {
   notify();
 }
 /** Create the account from the onboarding form, apply its choices, and start the first build and the tour. */
-function finishOnboarding(o: OnboardingForm) {
+function finishOnboarding(o: OnboardingForm, shortTour = false) {
   const a = createAccount(o.name || 'Demo user', o.user || 'demo', o.pass || 'demo');
   S.session = a.id;
   S.onboarded = true;
@@ -135,7 +148,7 @@ function finishOnboarding(o: OnboardingForm) {
       request: REC[pick].sentence,
       tpl: pick,
     });
-  if (tour) setTimeout(startTour, 900);
+  if (tour) setTimeout(() => startTour(shortTour), 900);
   notify();
 }
 export function Onboarding() {
@@ -158,16 +171,37 @@ export function Onboarding() {
     setOb({ err: '', step: Math.min(steps.length - 1, o.step + 1) });
   };
   const finish = () => finishOnboarding(o);
+  // the two quick ways in from the first screen: a judge sees agents at work within seconds, or types a sentence
+  const trySample = () =>
+    finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: true, pick: 'biddesk', tour: true }, true);
+  const describeOwn = () => {
+    finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: U.live !== 'ready', pick: '', tour: false });
+    setTimeout(() => {
+      const el = document.getElementById('home-prompt');
+      if (el) el.focus();
+    }, 300);
+  };
   const body = [
     () => (
       <>
         <h1 className="t-title1">Say what the work is. Get the whole app, ready to use.</h1>
         <p className="lead">
-          {'A turnkey job is one that is handed over finished: you turn the key and it works. '}
           {BRAND.name}
           {
-            ' turns one sentence into a complete, working app for any domain: SQLite tables, role-guarded endpoints, switchable views, a dashboard and a guided tour. You watch five builder agents and a Tester make it, and code checks every handoff.'
+            ' turns one sentence into a working business app. Five builder agents and a Tester make its database, rules, screens and tests while you watch, and code checks every handoff.'
           }
+        </p>
+        <div className="ob-quick row">
+          <Btn className="btn primary" id="ob-sample" onClick={trySample}>
+            Try a sample
+          </Btn>
+          <Btn className="btn" id="ob-own" onClick={describeOwn}>
+            Describe your own
+          </Btn>
+        </div>
+        <p className="t-cap muted ob-quick-note">
+          Both use a demo account in this browser. Try a sample builds the sales bidding desk in about 30 seconds with no model calls. Get
+          started below sets up your own account first.
         </p>
         <div className="ob-line" aria-hidden="true">
           {STATIONS.map((s, i) => (
@@ -439,7 +473,7 @@ export function Onboarding() {
             )}
             <span className="grow" />
             {o.step < steps.length - 1 ? (
-              <Btn className="btn primary" onClick={next}>
+              <Btn className={o.step === 0 ? 'btn' : 'btn primary'} onClick={next}>
                 {o.step === 0 ? 'Get started' : 'Continue'}
               </Btn>
             ) : (
@@ -1177,7 +1211,7 @@ export function AboutDialog() {
           {li([
             "Demo replays recorded agent output, for builds and for the quest apps' agent runs. It makes no model calls, and its token figures are samples.",
             'In Demo the four review steps are rules written in code, and a standing instruction has nothing to act on, because recorded work is replayed.',
-            'Connections without a server client (Microsoft Learn, MCP servers you add) show a labelled sample.',
+            'MCP servers you add on the Connections page have no server client, so Test shows a labelled sample. Microsoft Learn search is the one MCP server Turnkey calls for real.',
             'Everyone who opens a share link works in their own copy, in their own browser. One database shared by everyone would need a store on the server, which the free hosting plan does not keep.',
             'Sign-in to a built app is local to this browser. It shows roles and permissions; it is not an account system.',
             'Live calls are capped per session and per day, to protect the model budget.',
@@ -1269,9 +1303,29 @@ export function DialogHost() {
       return null;
   }
 }
+/** How much of the bottom of the screen the toasts cover, as --toasts-h, so a phone view can add that much room
+ * after its last item and scroll it clear of them (workspace.css). 0 when there are none. */
+function useToastRoom() {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current,
+      root = document.documentElement;
+    if (!el) return;
+    const set = () => root.style.setProperty('--toasts-h', (el.offsetHeight ? el.offsetHeight + 8 : 0) + 'px');
+    set();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(set) : null;
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+      root.style.removeProperty('--toasts-h');
+    };
+  }, []);
+  return ref;
+}
 export function Toasts() {
+  const ref = useToastRoom();
   return (
-    <div className="toasts" aria-live="polite">
+    <div className="toasts" aria-live="polite" ref={ref}>
       {U.toasts.map((t) => (
         <div key={t.id} className={'toast m-' + t.tone}>
           <Icon n={TONE_ICON[t.tone] || 'info'} />
@@ -1323,7 +1377,7 @@ export function tourSteps() {
           U.bview[app.id] = 'line';
         },
         title: 'Checked handoffs',
-        body: 'Nothing moves on until code has checked it. A failed check sends the work back to the agent, at most twice. In the clinic build the Database agent is sent back once, so you can watch it happen.',
+        body: 'Nothing moves on until code has checked it. A failed check sends the work back to the agent, at most twice. When a check fails, you see the work go back to the agent here and in chat.',
       },
       {
         target: 'inspector',
@@ -1420,12 +1474,15 @@ export function tourSteps() {
   );
   return s;
 }
-export function startTour() {
+// the short tour after Try a sample: what the agents are doing and where the app is, nothing about settings
+const SHORT_TOUR = ['line', 'station', 'chat', 'views'];
+export function startTour(short = false) {
   if (!S.session) return;
+  const all = tourSteps();
   U.tour = {
     id: uid('tour'),
     i: 0,
-    steps: tourSteps(),
+    steps: short ? all.filter((x) => SHORT_TOUR.includes(x.target)) : all,
   };
   notify();
 }
@@ -1860,11 +1917,22 @@ export function boot() {
       release: releaseApp,
       logo: logoOf,
       cases: suggestCases,
+      fill: fillWorkflowSteps,
       keepFix,
     },
     activity: (appId: string) => activityNow(appId),
     history: historyHooks,
     runTests: (app: AppRecord) => runTestsSync(app),
+    /** Runs one walkthrough step against an app's data and undoes what it changed. */
+    tourStep: (id: string, step: TourStep | TourStep[], rows?: Dict<number>) => {
+      dbSavepoint(id, 'hook');
+      try {
+        const st = { rows: rows || {}, last: null };
+        return Array.isArray(step) ? step.map((x) => tourExec(S.apps[id], st, x)) : tourExec(S.apps[id], st, step);
+      } finally {
+        dbRollback(id, 'hook');
+      }
+    },
     suite: (id: string) =>
       suiteOf(S.apps[id]).map((x) => ({
         id: x.id,

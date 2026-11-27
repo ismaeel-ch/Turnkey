@@ -12,6 +12,7 @@ import { AppSheets, AppTabs, isCompact, useElWidth, type SoloItem } from './mobi
 import { Explorer } from './views-a';
 import { Dash } from './views-b';
 import { AppLogo } from './release';
+import { isYear } from './viewspec';
 
 /* ===== Turnkey prototype · runtime: draws a built app from its definition =====
    Nothing here is specific to one app. Tables, columns, roles, workflow, screens and layout all come from
@@ -64,7 +65,7 @@ export function cellText(app: AppRecord, user: AppUser, t: TableName, c: ColumnD
       return v ? 'Yes' : 'No';
     case 'money':
     case 'number':
-      return fmtNum(v);
+      return isYear(c) ? String(v) : fmtNum(v);
     case 'select':
       return stateLabel(app.def, t, c, v);
     case 'user':

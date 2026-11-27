@@ -1714,7 +1714,7 @@ export function reviewPrompt(app: AppRecord, id: string) {
       '\n\nTABLES:\n' +
       pTables(def) +
       '\n\nACCESS:\n' +
-      (def.process ? pAccess(def as BackedDef) : ''),
+      (def.process ? pAccess(def) : ''),
     insight:
       'TABLES:\n' +
       pTables(def) +
@@ -1740,7 +1740,7 @@ export function reviewPrompt(app: AppRecord, id: string) {
   const all =
     'TABLES (name:type, * = required):\n' +
     pTables(def) +
-    (def.process ? '\n\nACCESS:\n' + pAccess(def as BackedDef) + '\n\nWORKFLOW:\n' + pFlow(def as BackedDef) : '') +
+    (def.process ? '\n\nACCESS:\n' + pAccess(def) + '\n\nWORKFLOW:\n' + pFlow(def as BackedDef) : '') +
     (def.screens && def.screens.length
       ? '\n\nSCREENS: ' +
         def.screens.map((s) => s.name + ' (' + s.type + ' on ' + s.table + ')').join('; ') +

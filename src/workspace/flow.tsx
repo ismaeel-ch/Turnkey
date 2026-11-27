@@ -3,15 +3,16 @@ import { createEagerRoot } from '@/platform/dom';
 import { createElement, useEffect, useRef } from 'react';
 import { toStyle } from '@/platform/dom';
 import { ICONS } from './icons';
-import { PHONE, S, U, arr, cx, notify, openDialog } from './core';
+import { PHONE, S, U, arr, cx, notify, openDialog, toast } from './core';
 import { dbCount } from './db';
 import { deriveEndpoints } from './engine';
 import { TEAMS } from './team';
 import { TESTS, runTests, suiteOf, testStats, testable } from './tests';
-import { AGENTS, RUNS, STATIONS } from './line';
+import { AGENTS, RUNS, STATIONS, stationIdx } from './line';
 import {
   APPROVE_AT,
   FlowChips,
+  LIB,
   STEP_AT,
   answerGate,
   flowEdit,
@@ -249,8 +250,7 @@ export function flowGraph(app: AppRecord, v: boolean): FlowGraph {
     suites = ok ? suiteOf(app) : [],
     T0 = TESTS[app.id],
     res: Dict<{ ok: boolean }> = T0 && T0.rev === app.rev ? T0.res : {},
-    // tests.tsx keeps the id of the suite that is running here, though its type says boolean
-    running = T0 ? (T0.running as unknown as string | null | undefined) : null;
+    running = T0 ? T0.running : null; // the id of the suite running now
   const css = getComputedStyle(document.documentElement),
     col = (n: string) => css.getPropertyValue('--' + n).trim() || '#888',
     C = {
@@ -866,6 +866,25 @@ export function flowKit(): FlowKit {
       {
         className: cx('fl-node fl-gate', 'g-' + d.state),
         'data-tour': d.tour,
+        'data-st': d.st,
+        // a step dragged from the palette above the canvas lands on the gate it is dropped on
+        onDragOver: d.canAdd
+          ? (ev: React.DragEvent) => {
+              if (!Array.from(ev.dataTransfer.types).includes(STEP_MIME)) return;
+              ev.preventDefault();
+              ev.dataTransfer.dropEffect = 'copy';
+              (ev.currentTarget as HTMLElement).classList.add('drop-on');
+            }
+          : undefined,
+        onDragLeave: (ev: React.DragEvent) => (ev.currentTarget as HTMLElement).classList.remove('drop-on'),
+        onDrop: d.canAdd
+          ? (ev: React.DragEvent) => {
+              ev.preventDefault();
+              (ev.currentTarget as HTMLElement).classList.remove('drop-on');
+              const app = S.apps[d.app];
+              if (app) dropStep(app, ev.dataTransfer.getData(STEP_MIME), d.st);
+            }
+          : undefined,
       },
       hs([
         ['in', 'target', 'top'],
@@ -1412,7 +1431,7 @@ export function flowKit(): FlowKit {
             sig = JSON.stringify([at, n.width, n.data]);
           return o && o.type === n.type && o.sig === sig && o.position.x === at.x && o.position.y === at.y
             ? o
-            : ({ ...(o && o.type === n.type ? o : null), ...n, position: at, sig } as IslandNode);
+            : { ...(o && o.type === n.type ? o : null), ...n, position: at, sig };
         }),
       );
     }, [p.sig]); // a node that did not change keeps its object, so React Flow leaves it alone
@@ -1423,11 +1442,9 @@ export function flowKit(): FlowKit {
               // hidden (another view, a dialog over it, the page going away): d3's animated zoom divides by the
               // canvas size, and the background and the minimap would be drawn at NaN
               if (!inst.current || !p.shown()) return;
-              if (p.v)
-                void inst.current.setViewport(p.start, {
-                  duration: 200,
-                });
-              else void inst.current.fitView({ duration: d, ...p.fit });
+              // no animation: a view switch during an animated move hides the canvas mid-way, and d3 then draws at NaN
+              if (p.v) void inst.current.setViewport(p.start);
+              else void inst.current.fitView({ ...p.fit });
             },
             d ? 90 : 420,
           ),
@@ -1444,7 +1461,6 @@ export function flowKit(): FlowKit {
       if (n)
         void inst.current.setCenter(n.position.x + 110, n.position.y + 170, {
           zoom: p.start.zoom,
-          duration: 350,
         });
     }, [p.focus, p.v]);
     const onNodesChange = (chs: NodeChange<IslandNode>[]) => {
@@ -1510,6 +1526,22 @@ export function flowKit(): FlowKit {
 function flowPosFor(key: string): Dict<XYPosition> {
   return U.flowPos[key] || (U.flowPos[key] = {});
 }
+/**
+ * How tall the wide canvas should be so the whole workflow fits at the width it has. Sized to the viewport alone, the
+ * graph (about as tall as it is wide) was fitted by its height and shrank node text to 6 or 7 px, with half the
+ * canvas empty beside it. Never shorter than 460px, never taller than the graph needs at full size.
+ */
+function fitHeight(app: AppRecord, width: number, deep: number): number {
+  const g = flowGraph(app, false);
+  if (!g.nodes.length || !width) return Math.min(1040, 660 + 96 * deep);
+  const xs = g.nodes.map((n) => n.position.x),
+    ys = g.nodes.map((n) => n.position.y),
+    gw = Math.max(...g.nodes.map((n) => n.position.x + (n.width || FL.W))) - Math.min(...xs),
+    gh = Math.max(...ys) + FL.RH - Math.min(...ys),
+    pad = 0.06,
+    zoom = Math.min(1.1, (width * (1 - 2 * pad)) / gw);
+  return Math.round(Math.max(460, Math.min(1100, (gh * zoom) / (1 - 2 * pad))));
+}
 export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) {
   // the Preact side: keeps a React root alive and hands it fresh data on every render
   const ref = useRef<HTMLDivElement>(null),
@@ -1518,10 +1550,27 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
     ready = FLOW.state === 'ready';
   useEffect(() => {
     if (!ready || !ref.current) return undefined;
-    const r = createEagerRoot(ref.current);
+    const r = createEagerRoot(ref.current),
+      el = ref.current,
+      // a zoom that is still animating when the canvas loses its size (hidden, or the page changes around it) divides
+      // by a size of 0 and draws the background and minimap at NaN: stop it where it is as soon as the size goes
+      still = () => {
+        try {
+          if (FLOW.inst) void FLOW.inst.setViewport(FLOW.inst.getViewport());
+        } catch {}
+      },
+      ro =
+        typeof ResizeObserver === 'function'
+          ? new ResizeObserver(() => {
+              if (!el.clientWidth || !el.clientHeight) still();
+            })
+          : null;
+    if (ro) ro.observe(el);
     root.current = r;
     notify();
     return () => {
+      if (ro) ro.disconnect();
+      still(); // the root lives on for a moment after the canvas leaves the page
       root.current = null;
       FLOW.inst = null;
       setTimeout(() => {
@@ -1669,9 +1718,10 @@ export function FlowView({ app, sel }: { app: AppRecord; sel?: string | null }) 
     );
   return (
     <div className="line-wrap flow-wrap" data-tour="line">
+      {PHONE() ? null : <StepPalette app={app} />}
       <div
         className={cx('flow-canvas', v && 'narrow')}
-        style={toStyle(v ? null : 'height:clamp(460px,calc(100dvh - 330px),' + Math.min(1040, 660 + 96 * deepNow) + 'px)')}
+        style={toStyle(v ? null : 'height:' + fitHeight(app, w, deepNow) + 'px')}
         ref={ref}
         role="group"
         aria-label="The build workflow. Select a node to inspect it, or use its controls to change the workflow."
@@ -1832,6 +1882,80 @@ export function BuildSummary({ app }: { app: AppRecord }) {
         run ? (run.replayed ? run.replayed + ' steps replayed' : run.retries ? run.retries + ' sent back' : 'none sent back') : 'per build',
         null,
       )}
+    </div>
+  );
+}
+
+/* ---------- the step palette: drag a step onto a gate, as in n8n or Flowise ----------
+   Every step the plus on a gate offers is also a tile above the canvas. Drag one onto a gate to add it there, or press it to add it at
+   the first gate where it fits. The result is the same tool call the plus, the Customize dialog and the chat make. */
+const STEP_MIME = 'application/x-turnkey-step';
+/** The first gate where a step fits: approvals after any station that can stop, library steps after the station they read. */
+function firstGate(id: string): string | null {
+  if (id === 'approval') return APPROVE_AT[0] || null;
+  if (id === 'own') return STEP_AT[0] || null;
+  const rv = REVIEWERS[id];
+  if (!rv) return null;
+  return STEP_AT.find((st) => stationIdx(st) >= stationIdx(rv.after)) || null;
+}
+/** Add the step with this id after station `st`, or say plainly why it cannot go there. */
+export function dropStep(app: AppRecord, id: string, st: string) {
+  if (!id) return;
+  const f = flowOf(app);
+  if (id === 'approval') {
+    if (!APPROVE_AT.includes(st)) return toast('The build cannot stop for your approval after ' + stName(st) + '.', 'warning');
+    if (f.approve[st]) return toast('Your approval is already after ' + stName(st) + '.', 'info');
+    flowEdit(app, [{ tool: 'set_approval', args: { station: st, on: true } }]);
+    return;
+  }
+  if (id === 'own') {
+    openDialog('addstep', { app: app.id, after: st });
+    return;
+  }
+  const rv = REVIEWERS[id];
+  if (!rv) return;
+  if (f.reviewers.includes(id)) return toast(rv.short + ' is already in this workflow.', 'info');
+  if (!STEP_AT.includes(st) || stationIdx(st) < stationIdx(rv.after))
+    return toast(rv.short + ' reads ' + rv.reads + ', so it can go after ' + stName(rv.after) + ' or later.', 'warning');
+  flowEdit(app, [{ tool: 'add_step', args: { step: id, after: st } }]);
+}
+function StepPalette({ app }: { app: AppRecord }) {
+  const f = flowOf(app);
+  const tiles: { id: string; label: string; icon: string; acc: string; job: string; on: boolean }[] = [
+    { id: 'approval', label: 'Your approval', icon: 'approved', acc: 'blue', job: 'The build stops here until you approve it.', on: false },
+    ...LIB().map((id) => {
+      const rv = REVIEWERS[id];
+      return { id, label: rv.short, icon: rv.icon, acc: rv.acc, job: rv.job, on: f.reviewers.includes(id) };
+    }),
+    { id: 'own', label: 'Your own agent', icon: 'bot', acc: 'purple', job: 'An agent you describe in a sentence.', on: false },
+  ];
+  return (
+    <div className="flow-palette" role="toolbar" aria-label="Steps you can add to the workflow" data-tour="palette">
+      <span className="t-cap muted">Drag a step onto a gate, or press it:</span>
+      {tiles.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          className={cx('fp-tile', t.on && 'on')}
+          data-step={t.id}
+          draggable={!t.on}
+          disabled={t.on}
+          title={t.on ? t.label + ' is already in this workflow.' : t.job}
+          onDragStart={(ev) => {
+            ev.dataTransfer.setData(STEP_MIME, t.id);
+            ev.dataTransfer.effectAllowed = 'copy';
+          }}
+          onClick={() => {
+            const st = firstGate(t.id);
+            if (st) dropStep(app, t.id, st);
+          }}
+        >
+          <span className={'av sq av-xs acc-' + t.acc}>
+            <Icon n={t.icon} s="12" />
+          </span>
+          {t.label}
+        </button>
+      ))}
     </div>
   );
 }

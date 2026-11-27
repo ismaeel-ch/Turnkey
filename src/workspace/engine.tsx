@@ -1659,6 +1659,14 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
     if (r.status === 403) return pass('403 Forbidden · ' + r.error);
     // a transition the workflow does not allow from the record's state is refused too, with 409
     if (r.status === 409 && call[0] === 'POST' && act !== 'create') return pass('409 Conflict · ' + r.error);
+    // a record this person may not even see is refused as not found; that counts, as long as the record really exists
+    if (
+      r.status === 404 &&
+      act !== 'create' &&
+      act !== 'list' &&
+      sqlPeek(app.id, 'SELECT id FROM ' + qi(tn) + ' WHERE id = ?', [rid]).length
+    )
+      return pass('404 · hidden from ' + roleName(def, u.role).toLowerCase());
     return fail(
       'Expected a refusal, got ' +
         r.status +
@@ -1672,6 +1680,14 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
             '; only the empty test values were refused'
           : ''),
     );
+  }
+  if (!id && step.do === 'hidden') {
+    // nothing made in this case: "cannot see" then means the whole table is closed to this person
+    const r = apiCall(app, u, 'GET', '/api/' + tn, {}, 'tour'),
+      stored = sqlPeek(app.id, 'SELECT COUNT(*) AS n FROM ' + qi(tn))[0]?.n || 0;
+    if (r.status === 403) return pass('403 Forbidden · ' + u.name + ' cannot see any ' + t.label.toLowerCase());
+    if (r.status === 200 && !r.data.length && stored)
+      return pass('200 OK · ' + u.name + ' sees none of the ' + stored + ' ' + t.label.toLowerCase());
   }
   if (!id) return fail('Nothing was created earlier in the tour for ' + tn);
   out.rec = {

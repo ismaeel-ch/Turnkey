@@ -29,13 +29,23 @@ The browser never calls a model provider. It calls Turnkey's own routes (`/api/c
 | Kill switch        | `LIVE_MODE=off` refuses every model call at once. Saved builds keep working.                                                                       | `src/server/guard/limits.ts`                 |
 | Short-link quotas  | Saves per visitor, saves and megabytes per day, so the free Blob store cannot be filled.                                                           | `src/server/share/quota.ts`                  |
 | Body checks        | Request bodies are size-limited and validated with zod; every refusal is JSON with a `code`.                                                       | `src/server/guard/http.ts`                   |
-| Security headers   | Content security policy (own origin only, no outside connections), no framing, no sniffing, HSTS.                                                  | `src/server/guard/headers.ts`                |
+| Security headers   | Content security policy (own origin only, no outside connections, no inline event handlers), no framing, no sniffing, HSTS, features switched off. | `src/server/guard/headers.ts`                |
 | Secrets scan       | Fails `npm run check` and CI if a key-shaped string or an env file is in the repo. `--history` scans every commit.                                 | `scripts/check-secrets.mjs`                  |
 
 The limits are set by environment variables (`LLM_RATE_PER_MINUTE`, `LLM_GLOBAL_PER_MINUTE`, `LLM_DAILY_CALL_CAP`, `LLM_DAILY_SPEND_USD`,
 `LLM_MAX_PROMPT_CHARS`, `LLM_MAX_OUTPUT_TOKENS`, `LLM_MAX_ANSWER_CHARS`; `LIGHT_RATE_PER_MINUTE` and `LIGHT_GLOBAL_PER_MINUTE` for the free routes: connectors and health). Counters are kept in memory by each warm server
 instance, so they are a brake and not an exact meter. The only hard stop is a spend limit set on the key itself, in the
 Claude Console (or the gateway's own budget for a LiteLLM key).
+
+### Why the content security policy allows inline scripts
+
+Next.js writes small inline scripts into every page. A strict policy would allow them with a fresh nonce per request,
+but that makes every page render on the server for each visit, and it does not fit how Turnkey opens offline: the
+service worker answers the page from its cache. So `script-src` keeps `'unsafe-inline'` and the rest of the policy
+does the work: scripts only from this origin, no `eval` (only `'wasm-unsafe-eval'` for SQLite), no inline event
+handlers (`script-src-attr 'none'`), no connections, frames, plugins or form posts to other sites, and no framing by
+them. Styles keep `'unsafe-inline'` because Fluent UI inserts its styles at run time. The policy is enforced, not
+report-only; every browser flow in `tests/e2e` fails on a console error, which includes any blocked script.
 
 There is deliberately no login or passcode: evaluators must be able to use the app without one.
 

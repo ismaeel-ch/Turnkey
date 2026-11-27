@@ -6,6 +6,8 @@ export default function manifest(): MetadataRoute.Manifest {
     id: '/',
     name: 'Turnkey',
     short_name: 'Turnkey',
+    lang: 'en',
+    dir: 'ltr',
     description:
       'Describe the app your work needs. A team of agents builds its database, backend, views, pages and tests on a workflow you can watch and change.',
     start_url: '/',

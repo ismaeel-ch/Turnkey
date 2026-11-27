@@ -240,6 +240,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .ob-main{display:flex;flex-direction:column;min-width:0}.ob-body{flex:1;padding:36px 36px 24px;display:flex;flex-direction:column;gap:16px;overflow:auto;align-items:flex-start}.ob-body>.choices,.ob-body>.form-grid,.ob-body>.mbar{width:100%}
 .ob-foot{display:flex;gap:8px;padding:16px 36px;border-top:1px solid var(--colorNeutralStroke2)}
 .ob-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px;color:var(--colorNeutralForeground3)}.ob-pair{display:inline-flex;align-items:center;gap:6px}.ob-st{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border:1px solid var(--colorNeutralStroke1);border-radius:16px;color:var(--colorNeutralForeground1);font-size:13px}
+.ob-quick{gap:8px;flex-wrap:wrap;margin:4px 0 0}.ob-quick-note{margin:0}
 .choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.choices.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 .choice{display:flex;flex-direction:column;gap:8px;text-align:left;padding:14px;border:1px solid var(--colorNeutralStroke1);border-radius:8px;background:var(--colorNeutralBackground1);min-width:0}.choice:hover:not(:disabled){border-color:var(--colorNeutralStroke1Hover);box-shadow:var(--shadow4)}
 .choice.on{border-color:var(--colorBrandStroke1);box-shadow:0 0 0 1px var(--colorBrandStroke1);background:var(--colorBrandBackground2)}.choice:disabled{cursor:not-allowed;background:var(--colorNeutralBackground2)}
@@ -472,8 +473,9 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
   .toasts{left:12px;right:12px;width:auto;bottom:calc(76px + env(safe-area-inset-bottom))}
   .work.phone .chat{position:static;width:auto;flex:1;border-left:0;box-shadow:none;z-index:auto}.work.phone .chat-head .btn.icon{display:none}
   .home-in{padding:20px 12px 40px;gap:10px}.tpl-grid{grid-template-columns:minmax(0,1fr)}.app-row,.fui-Card.app-row{flex-wrap:wrap;gap:6px}.app-open{flex:1 1 100%}.prompt-bar .btn.primary{flex:1}
-  .build{padding:12px;gap:10px}.build-sum{display:flex;overflow-x:auto;scrollbar-width:none;margin:0 -12px;padding:0 12px;scroll-snap-type:x proximity}.build-sum::-webkit-scrollbar{display:none}.build-sum .kpi{flex:0 0 132px;scroll-snap-align:start}
-  .build-bar{gap:8px}.flow-wrap{padding:8px;gap:8px}.flow-canvas.narrow{height:calc(100dvh - 420px);min-height:320px}.flow-foot{gap:8px}.fl-key{font-size:11px}.orch{display:none}
+  .build{padding:12px;gap:10px}.build-sum{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.build-sum .kpi.mini{padding:6px 8px;gap:0}.build-sum .kpi.mini .kpi-v{font-size:17px;line-height:24px;white-space:nowrap}.build-sum .kpi-s{display:none}
+  .build-bar{gap:8px;flex-wrap:nowrap}.build-bar .seg .fui-Button__icon{display:none}.build-bar .seg button.fui-Button{padding:0 10px}.build-bar>.btn{flex:none}
+  .home::after,.build::after,.release-in::after,.tests-view::after,.launch::after{content:"";display:block;flex:none;height:var(--toasts-h,0px)} /* room to scroll the last item clear of the toasts */.flow-wrap{padding:8px;gap:8px}.flow-canvas.narrow{height:calc(100dvh - 420px);min-height:320px}.flow-foot{gap:8px}.fl-key{font-size:11px}.orch{display:none}
   .tests-view{padding:12px}.tests-head{flex-direction:column;align-items:stretch}.kpis.tk{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.suite-h{flex-wrap:wrap;padding:8px}.suite-t{flex:1 1 100%}.test{grid-template-columns:16px minmax(0,1fr);padding:8px 12px}.test-x{grid-column:2;text-align:left;white-space:normal}
   .stage{padding:0;gap:0}.stage-bar{padding:8px;overflow-x:auto;flex-wrap:nowrap}.debug{height:60%}.signin{padding:24px 16px;border-radius:16px}.ob{padding:0;place-items:stretch}.ob-card{min-height:100%;border-radius:0;width:100%}
   .split>.side,.split>.side.wide{max-height:132px}
@@ -613,6 +615,15 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .gcard .flow-chips{min-width:0}.gcard .flow-chips>*{white-space:normal;max-width:100%;text-align:left;height:auto}
 #boot{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center}
 .fl-provider{height:100%;background:transparent;color:inherit;font:inherit;line-height:inherit}
+/* the step palette above the workflow canvas: drag a step onto a gate */
+.flow-palette{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;margin-bottom:8px;padding-bottom:2px}
+.flow-palette>*{flex:none}
+.fp-tile{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:2px 10px 2px 4px;border-radius:14px;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground1);font:inherit;font-size:12px;line-height:16px;cursor:grab}
+.fp-tile:hover:not(:disabled){background:var(--colorNeutralBackground1Hover);border-color:var(--colorNeutralStroke1Hover)}
+.fp-tile:active:not(:disabled){cursor:grabbing}
+.fp-tile:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:1px}
+.fp-tile:disabled{cursor:default;color:var(--colorNeutralForegroundDisabled);border-style:dashed}
+.fl-gate.drop-on{outline:2px dashed var(--colorBrandStroke1);outline-offset:4px}
 /* command palette (Ctrl/Cmd+K) and the keyboard shortcuts dialog */
 .dialog.palette{width:min(600px,calc(100vw - 32px))}
 .palette .palette-q{width:100%;margin-bottom:8px}
@@ -666,3 +677,40 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 /* 9: the onboarding "skip" action lines up with the form's left edge and reads as a link */
 .fui-Button.ob-skip{align-self:flex-start;min-width:0;padding-left:0;padding-right:0;color:var(--colorBrandForegroundLink)}
 .fui-Button.ob-skip:hover{background:none;text-decoration:underline;color:var(--colorBrandForegroundLink)}
+/* 10: the wide canvas is sized to show node text at a readable size, so it can be taller than the window; its
+   controls (zoom, Fit, Map, Reset layout) and legend sit above it, where they are in view without scrolling */
+.flow-wrap>.flow-foot{order:-1}
+.field-edit{display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--colorNeutralStroke2)}.field-edit .row>strong{min-width:110px}.field-edit .tk-input{min-width:180px}
+/* Meeting view of the agents (src/workspace/meeting.tsx): tiles like a Teams call, the speaker ringed, a raised hand for the owner */
+.meet .meet-stage{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:12px;align-items:start}
+.meet-screen{border:1px solid var(--colorNeutralStroke2);border-radius:var(--borderRadiusXLarge);background:var(--colorNeutralBackground2);padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.meet-screen-head{display:flex;align-items:center;gap:8px;color:var(--colorNeutralForeground1)}
+.meet-board{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.meet-step{display:flex;align-items:center;gap:8px;min-height:32px;padding:4px 8px;border-radius:var(--borderRadiusMedium);background:var(--colorNeutralBackground1)}
+.meet-step.on{box-shadow:inset 3px 0 0 var(--colorBrandStroke1)}
+.meet-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:0;padding:0}
+.meet-cell{display:flex;min-width:0}
+.meet-tile{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:132px;padding:12px 8px;border-radius:var(--borderRadiusXLarge);border:2px solid transparent;background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground1);font:inherit;text-align:center;cursor:pointer}
+.meet-tile:disabled{cursor:default}
+.meet-tile:hover:not(:disabled){background:var(--colorNeutralBackground3Hover)}
+.meet-tile:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:2px}
+.meet-tile.sel{border-color:var(--colorNeutralStroke1Selected)}
+.meet-tile.m-talking{border-color:var(--colorBrandStroke1);box-shadow:0 0 0 2px var(--colorBrandStroke2)}
+.meet-tile.m-hand{border-color:var(--colorStatusWarningBorderActive)}
+.meet-tile.m-idle .av{opacity:.55}
+.meet-name{font-size:14px;line-height:20px}
+.meet-cap{color:var(--colorNeutralForeground2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.meet-state{display:inline-flex;align-items:center;gap:6px;color:var(--colorNeutralForeground3)}
+.m-talking .meet-state{color:var(--colorBrandForeground1)}
+.m-hand .meet-state{color:var(--colorStatusWarningForeground1)}
+.m-flag .meet-state{color:var(--colorStatusDangerForeground1)}
+.meet-hand{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--colorStatusWarningBackground1);color:var(--colorStatusWarningForeground1);animation:meet-wave 1.4s ease-in-out infinite}
+@keyframes meet-wave{50%{transform:rotate(-14deg)}}
+.meet-eq{width:10px;height:10px;border-radius:50%;background:var(--colorBrandBackground);animation:meet-pulse 1s ease-in-out infinite}
+@keyframes meet-pulse{50%{transform:scale(.55);opacity:.6}}
+.meet-note{display:flex;align-items:center;gap:6px;margin:10px 0 0;color:var(--colorStatusWarningForeground1)}
+.meet-captions{margin-top:10px;padding:8px 12px;border-radius:var(--borderRadiusLarge);background:var(--colorNeutralBackground2);display:flex;flex-direction:column;gap:2px}
+.meet-line{display:flex;gap:8px;font-size:12px;line-height:16px;min-width:0}
+.meet-line>.muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:900px){.meet .meet-stage{grid-template-columns:1fr}}
+@media (max-width:600px){.meet-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.meet-tile{min-height:112px}}

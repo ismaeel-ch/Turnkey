@@ -78,15 +78,15 @@ export function createSink(
     if (!closed) emit({ ...event, timestamp: Date.now() });
   };
   const closeText = () => {
-    if (messageId) send({ type: EventType.TEXT_MESSAGE_END, messageId } as BaseEvent);
+    if (messageId) send({ type: EventType.TEXT_MESSAGE_END, messageId });
     messageId = null;
   };
   const closeTools = () => {
-    for (const id of openTools) send({ type: EventType.TOOL_CALL_END, toolCallId: id } as BaseEvent);
+    for (const id of openTools) send({ type: EventType.TOOL_CALL_END, toolCallId: id });
     openTools.clear();
   };
   const closeStep = () => {
-    if (step !== null) send({ type: EventType.STEP_FINISHED, stepName: step } as BaseEvent);
+    if (step !== null) send({ type: EventType.STEP_FINISHED, stepName: step });
     step = null;
   };
   const closeAll = () => {
@@ -112,7 +112,7 @@ export function createSink(
       if (closed) return;
       closeAll();
       step = name;
-      send({ type: EventType.STEP_STARTED, stepName: name } as BaseEvent);
+      send({ type: EventType.STEP_STARTED, stepName: name });
     },
     endStep() {
       if (closed) return;
@@ -124,9 +124,9 @@ export function createSink(
       if (!messageId) {
         closeTools();
         messageId = opts?.messageId ?? newId();
-        send({ type: EventType.TEXT_MESSAGE_START, messageId, role: "assistant" } as BaseEvent);
+        send({ type: EventType.TEXT_MESSAGE_START, messageId, role: "assistant" });
       }
-      send({ type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta } as BaseEvent);
+      send({ type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta });
     },
     endText() {
       if (!closed) closeText();
@@ -140,9 +140,9 @@ export function createSink(
         toolCallId: id,
         toolCallName: name,
         ...(opts?.parentMessageId ? { parentMessageId: opts.parentMessageId } : {}),
-      } as BaseEvent);
-      send({ type: EventType.TOOL_CALL_ARGS, toolCallId: id, delta: toJson(args ?? {}) } as BaseEvent);
-      send({ type: EventType.TOOL_CALL_END, toolCallId: id } as BaseEvent);
+      });
+      send({ type: EventType.TOOL_CALL_ARGS, toolCallId: id, delta: toJson(args ?? {}) });
+      send({ type: EventType.TOOL_CALL_END, toolCallId: id });
       return id;
     },
     toolResult(toolCallId, result) {
@@ -154,17 +154,17 @@ export function createSink(
         toolCallId,
         content: toJson(result),
         role: "tool",
-      } as BaseEvent);
+      });
     },
     state(delta) {
       if (closed || delta.length === 0) return;
-      send({ type: EventType.STATE_DELTA, delta } as BaseEvent);
+      send({ type: EventType.STATE_DELTA, delta });
     },
     snapshot(state) {
-      if (!closed) send({ type: EventType.STATE_SNAPSHOT, snapshot: state } as BaseEvent);
+      if (!closed) send({ type: EventType.STATE_SNAPSHOT, snapshot: state });
     },
     custom(name, value) {
-      if (!closed) send({ type: EventType.CUSTOM, name, value } as BaseEvent);
+      if (!closed) send({ type: EventType.CUSTOM, name, value });
     },
     finish(result) {
       stop({
@@ -172,10 +172,10 @@ export function createSink(
         threadId: input.threadId,
         runId: input.runId,
         ...(result === undefined ? {} : { result }),
-      } as BaseEvent);
+      });
     },
     fail(code, message) {
-      stop({ type: EventType.RUN_ERROR, code, message } as BaseEvent);
+      stop({ type: EventType.RUN_ERROR, code, message });
     },
   };
 }
@@ -221,7 +221,7 @@ export class GraphAgent extends AbstractAgent {
         threadId: input.threadId,
         runId: input.runId,
         timestamp: Date.now(),
-      } as BaseEvent);
+      });
 
       void (async () => {
         try {

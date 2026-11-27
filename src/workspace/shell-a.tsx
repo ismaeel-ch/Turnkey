@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { AreaBoundary } from '@/platform/area-boundary';
 import {
   BRAND,
@@ -51,6 +52,7 @@ import { type Station, AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp,
 import { CustomTab, FlowChips, ReviewPanel, answerGate, flowList, flowOf, reviewerAt } from './custom';
 import { REVIEWERS } from './reviewers';
 import { TesterPanel } from './tester';
+import { MeetingView } from './meeting';
 import {
   AgentAv,
   Avatar,
@@ -875,13 +877,12 @@ export function Workspace({ app }: { app: AppRecord }) {
         on: del,
       },
     ];
-  const tabs = VIEWS.map(
-    (v): TabItem =>
-      v.id === 'release' && app.status === 'ready'
-        ? Object.assign({}, v, {
-            count: rel ? (dirty ? 'draft' : rel.v) : 'new',
-          })
-        : v,
+  const tabs = VIEWS.map((v): TabItem =>
+    v.id === 'release' && app.status === 'ready'
+      ? Object.assign({}, v, {
+          count: rel ? (dirty ? 'draft' : rel.v) : 'new',
+        })
+      : v,
   );
   const body =
     view === 'build' ? (
@@ -1037,6 +1038,12 @@ export function BuildView({ app }: { app: AppRecord }) {
               icon: 'list',
               title: 'Every step in order',
             },
+            {
+              id: 'meeting',
+              label: 'Meeting',
+              icon: 'people',
+              title: 'The agents as a meeting: who is speaking, who has a hand raised',
+            },
           ]}
           value={mode}
           onChange={(v) => {
@@ -1127,6 +1134,8 @@ export function BuildView({ app }: { app: AppRecord }) {
         <FlowView app={app} sel={sel} />
       ) : mode === 'timeline' ? (
         <TimelineView app={app} run={run} />
+      ) : mode === 'meeting' ? (
+        <MeetingView app={app} run={run} sel={sel} />
       ) : (
         <LogView app={app} run={run} />
       )}
@@ -1553,12 +1562,10 @@ export function AccessMatrix({ app }: { app: AppRecord }) {
                 return (
                   <td key={r.id}>
                     {bits.length ? (
-                      bits.map((b, i) => (
-                        <>
-                          <span key={i} className={cx('badge', /own/.test(b) ? 'b-warning' : 'b-outline')}>
-                            {b}
-                          </span>{' '}
-                        </>
+                      bits.map((b) => (
+                        <Fragment key={b}>
+                          <span className={cx('badge', /own/.test(b) ? 'b-warning' : 'b-outline')}>{b}</span>{' '}
+                        </Fragment>
                       ))
                     ) : (
                       <span className="muted">No access</span>
@@ -1792,7 +1799,11 @@ export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
                     <td>
                       <strong>{x.label}</strong>
                     </td>
-                    <td>{x.from.map((f) => [pill(f), ' '])}</td>
+                    <td>
+                      {x.from.map((f) => (
+                        <Fragment key={f}>{pill(f)} </Fragment>
+                      ))}
+                    </td>
                     <td>{pill(x.to)}</td>
                     <td>{x.roles.map((r) => roleName(def, r)).join(', ')}</td>
                   </tr>

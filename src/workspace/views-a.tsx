@@ -22,7 +22,7 @@ import {
   today,
 } from './core';
 import { VIEW_ICON, VIEW_LABEL, accOf, apiCall, appUsers, colOf, roleName, tableOf } from './engine';
-import { DATA_VIEWS, isCat, isDate, isNum, viewCfg, viewFit, viewsOf } from './viewspec';
+import { DATA_VIEWS, isCat, isDate, isMeasure, isNum, isRate, viewCfg, viewFit, viewsOf } from './viewspec';
 import { Btn, Empty, FilterChip, Icon, Input, MBar, Menu, Seg, Select, type MenuEntry } from './ui';
 import { Cell, cellText, fetchApi, isStatusCol, optLabel, patchPane, rowTitle, stateLabel, stateTone } from './runtime';
 import { VChart, VPivot, VTimeline } from './views-b';
@@ -709,7 +709,7 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
     sort = st.sort && colOf(t, st.sort.col) ? st.sort : null,
     list = rows.slice(),
     g = colOf(t, st.group),
-    nums = cols.filter(isNum),
+    nums = cols.filter(isMeasure),
     per = 25,
     pages = Math.max(1, Math.ceil(list.length / per)),
     page = Math.min(st.page || 0, pages - 1);
@@ -732,6 +732,10 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
     list.sort((a, b) => String(a[dc]).localeCompare(String(b[dc])));
   }
   const sum = (c: ColumnDef, l: StoredRow[]) => l.reduce((n, r) => n + (Number(r[c.name]) || 0), 0),
+    avg = (c: ColumnDef, l: StoredRow[]) => {
+      const set = l.filter((r) => r[c.name] != null && r[c.name] !== '');
+      return set.length ? Math.round((sum(c, set) / set.length) * 10) / 10 : 0;
+    },
     id = 'tb' + scr.id + pane.n;
   const row = (r: StoredRow) => (
     <tr
@@ -924,7 +928,13 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
                 <tr>
                   {cols.map((c, i) => (
                     <td key={c.name} className={isNum(c) ? 'num' : ''}>
-                      {isNum(c) ? fmtNum(sum(c, list)) : i === 0 ? 'Total of ' + list.length : ''}
+                      {isRate(c)
+                        ? 'Average ' + fmtNum(avg(c, list))
+                        : isMeasure(c)
+                          ? fmtNum(sum(c, list))
+                          : i === 0
+                            ? 'Total of ' + list.length
+                            : ''}
                     </td>
                   ))}
                 </tr>
@@ -1268,7 +1278,7 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
     self = cfg.parent ? colOf(t, cfg.parent) : null,
     byParent = self && cfg.mode !== 'groups',
     levels = (cfg.levels || []).filter((n) => colOf(t, n)),
-    num = t.columns.find(isNum),
+    num = t.columns.find(isMeasure),
     P = def.process && def.process.table === t.name ? def.process : null,
     id = 'tr' + scr.id + pane.n,
     tag = P ? null : t.columns.find((c) => c.type === 'select' && (byParent || !levels.includes(c.name)));
@@ -1312,6 +1322,8 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
     </li>
   );
   type Tree = ReactNode | Tree[];
+  // one flat list of keyed rows: nested arrays of children make React ask for keys it cannot see
+  const flatTree = (x: Tree): ReactNode[] => (Array.isArray(x) ? x.flatMap(flatTree) : x == null ? [] : [x]);
   let body: Tree;
   if (self && byParent) {
     const pc = self.name,
@@ -1421,7 +1433,7 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
           Reset
         </Btn>
       </div>
-      {rows.length ? <ul className="tree">{body as ReactNode}</ul> : <NoRows t={t} />}
+      {rows.length ? <ul className="tree">{flatTree(body)}</ul> : <NoRows t={t} />}
     </>
   );
 }
