@@ -13,6 +13,7 @@ import {
   listsInto,
   logicProblems,
   readFormula,
+  renameInFormula,
   type AppRule,
   type CalcRef,
   type Rec,
@@ -339,4 +340,52 @@ export function usesOfField(def: LogicDef, table: string, field: string): string
     for (const tr of P.transitions)
       if (hit(P.table, tr.when) || (P.table === table && (tr.needs || []).includes(field))) out.push('the condition on "' + tr.label + '"');
   return out;
+}
+
+/* ---------- following a renamed field ---------- */
+
+/** A function that rewrites one formula of list `src` after `table.from` became `table.to`. `seen` counts the changes. */
+export function formulaRenamer(
+  tables: readonly { name: string; columns: readonly { name: string; ref?: string }[] }[],
+  table: string,
+  from: string,
+  to: string,
+  seen: { n: number } = { n: 0 },
+) {
+  const cols = (name: string) => tables.find((t) => t.name === name)?.columns || [];
+  return (src: string, text: string | undefined): string | undefined => {
+    if (!text) return text;
+    const has = (name: string) => cols(src).some((c) => c.name === name);
+    // the renamed column is still a field of its list, under either name
+    const isList = (name: string) => !(src === table && name === from) && !has(name);
+    const refTo = (link: string) => cols(src).find((c) => c.name === link || (src === table && link === from && c.name === to))?.ref;
+    const out = renameInFormula(text, isList, {
+      own: (name) => (src === table && name === from ? to : null),
+      linked: (link, field) => (field === from && refTo(link) === table ? to : null),
+      listed: (list, field) => (list === table && field === from ? to : null),
+    });
+    if (out !== text) seen.n++;
+    return out;
+  };
+}
+
+/**
+ * Rewrites every formula, rule and move condition that reads `table.from` so it reads `table.to`. Call it once the
+ * column carries its new name. Returns how many texts changed.
+ */
+export function renameInLogic(def: LogicDef, table: string, from: string, to: string): number {
+  const seen = { n: 0 },
+    fix = formulaRenamer(def.tables, table, from, to, seen);
+  for (const t of def.tables) for (const c of t.columns) if (c.formula) c.formula = fix(t.name, c.formula);
+  for (const r of def.logic?.rules || []) r.when = fix(r.table, r.when) as string;
+  const P = def.process;
+  if (P && P.table)
+    for (const tr of P.transitions) {
+      if (tr.when) tr.when = fix(P.table, tr.when);
+      if (P.table === table && tr.needs?.includes(from)) {
+        tr.needs = tr.needs.map((f) => (f === from ? to : f));
+        seen.n++;
+      }
+    }
+  return seen.n;
 }

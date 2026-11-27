@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { calc, calcOrder, formulaProblems, logicProblems, parse, FormulaError, type Rec, type Scope } from '@/shared/logic';
+import {
+  calc,
+  calcOrder,
+  formulaProblems,
+  logicProblems,
+  parse,
+  print,
+  renameInFormula,
+  FormulaError,
+  type Rec,
+  type Scope,
+} from '@/shared/logic';
 import type { TableDef } from '@/shared/sql/types';
 
 const scope = (row: Rec, more: Partial<Scope> = {}): Scope => ({
@@ -177,5 +188,40 @@ describe('formulas in plain words', () => {
     );
     expect(formulaWords(T, 'orders', 'overlaps(title, title, status) = 0')).toBe('no other orders at the same time with the same status');
     expect(formulaWords(T, 'orders', 'not a formula (')).toBe('not a formula (');
+  });
+});
+
+describe('writing a formula back', () => {
+  it('prints what it parsed, with brackets only where they are needed', () => {
+    for (const text of [
+      'quantity * unit_price',
+      'a - (b - c)',
+      '(a + b) * c',
+      'a + b * c',
+      "if(total = 0, 'none', if(paid >= total, 'paid', 'unpaid'))",
+      "sum(order_lines.line_total, status = 'approved' or status = 'ordered')",
+      'not (a > 1 and b < 2)',
+      '-(a + b)',
+      'overlaps(starts_at, ends_at, room) = 0',
+      "round(100 * count(tasks, status = 'done') / count(tasks), 0)",
+    ])
+      expect(print(parse(print(parse(text))))).toBe(print(parse(text)));
+    expect(print(parse('a - (b - c)'))).toBe('a - (b - c)');
+    expect(print(parse('(a * b) + c'))).toBe('a * b + c');
+  });
+
+  it('renames only the names the rename is about, and leaves other text exactly as written', () => {
+    const r = { own: (n: string) => (n === 'qty' ? 'quantity' : null), linked: () => null, listed: () => null };
+    expect(renameInFormula('qty*price', () => false, r)).toBe('quantity * price');
+    expect(renameInFormula('amount  *  price', () => false, r)).toBe('amount  *  price');
+    expect(renameInFormula("status = 'qty'", () => false, r)).toBe("status = 'qty'");
+    expect(renameInFormula('this is ( broken', () => false, r)).toBe('this is ( broken');
+    // inside sum(), a name belongs to the other list
+    const child = {
+      own: () => null,
+      linked: () => null,
+      listed: (l: string, f: string) => (l === 'lines' && f === 'qty' ? 'quantity' : null),
+    };
+    expect(renameInFormula('sum(lines.qty, qty > 0) + qty', (n) => n === 'lines', child)).toBe('sum(lines.quantity, quantity > 0) + qty');
   });
 });
