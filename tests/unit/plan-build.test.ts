@@ -24,7 +24,16 @@ const failed = (checks: { ok: boolean; label: string; detail: string }[]) =>
   checks.filter((c) => !c.ok).map((c) => c.label + ': ' + c.detail);
 
 /** The tables of a plan exactly as planned: what `mendToPlan` makes from nothing. */
-const tablesOf = (plan: PlanSpec) => mendToPlan(plan, []);
+type Table = {
+  name: string;
+  title: string;
+  owner: string | null;
+  columns: ColumnDef[];
+  rows?: Record<string, unknown>[];
+  label?: string;
+  one?: string;
+};
+const tablesOf = (plan: PlanSpec) => mendToPlan<Table>(plan, []);
 const col = (name: string, type: ColumnDef['type'], more: Partial<ColumnDef> = {}): ColumnDef => ({
   name,
   label: name,
@@ -113,7 +122,7 @@ describe('outlineOf and outlineProblems', () => {
 
 describe('mendToPlan', () => {
   it('brings any tables back to the plan', () => {
-    const mended = mendToPlan(PERSONAL_EXPENSES, [
+    const mended = mendToPlan<Table>(PERSONAL_EXPENSES, [
       {
         name: 'expenses',
         title: 'note',
