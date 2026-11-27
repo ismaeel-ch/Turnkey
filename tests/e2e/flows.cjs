@@ -1259,6 +1259,13 @@ async function expenseSample(browser, url) {
     check('expenses, just me: after a reload the unanswered request says it stopped, and "Ask again" asks the same question again', /stopped when the page was closed/.test(stale) && await page.locator('.gcard.understand [data-act="again"]').count() === 0, stale);
     await view(page, 'App'); await page.waitForSelector('.stage-bar');
     check('expenses, just me: an app for one person offers no "Two users" side-by-side preview', await page.locator('.stage-bar .btn', { hasText: 'Two users' }).count() === 0);
+    // a change typed in the chat, cut off by closing the page while its steps run: it is kept, and it still gets a release note
+    await setSpeed(page, 'normal'); await say(page, 'Add a notes field to expenses');
+    await page.waitForFunction(() => !!document.querySelector('.work-head .spin'), null, { timeout: 15000 });
+    await page.reload(); await page.waitForSelector('.views .tab'); await setSpeed(page, 'instant');
+    const cut = await appFull(page); await view(page, 'Release'); await page.waitForSelector('#rel-notes');
+    const cutNotes = await page.locator('#rel-notes').inputValue();
+    check('expenses, just me: a change cut off by closing the page mid-run is still in the next release notes', cut.cols.expenses.includes('notes') && /Added Notes to Expenses/.test(cutNotes), { cols: cut.cols.expenses, cutNotes });
     await ctx.close();
   }
 
