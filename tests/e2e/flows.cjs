@@ -1138,7 +1138,7 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   check('a gate runs its own tests from the canvas', /14 tests · all pass/.test(await page.locator('.fl-gate').nth(1).innerText()));
   await say(page, 'Add a notes field to patients'); await waitIdle(page);
   a = await st(page, (id) => { const x = window.__formwork.state().apps[id]; return { tests: x.tests, rev: x.rev, last: x.chat[x.chat.length - 1].text }; }, appId);
-  check('after a change by chat the tests are generated and run again', a.tests.rev === a.rev && a.tests.failed === 0 && /regenerated the tests/.test(a.last), a);
+  check('after a change by chat the tests are generated and run again', a.tests.rev === a.rev && a.tests.failed === 0 && /ran every check again/.test(a.last), a);
   // share by link
   await page.locator('[data-tour="share"]').click(); await page.waitForSelector('.dialog.share'); check('sharing a draft first asks to release version 1.0', await page.locator('#sh-release').count() === 1 && (await page.locator('.dialog.share').innerText()).includes('not released yet')); await page.locator('#sh-release').click(); await page.waitForFunction(() => /#app=1\./.test((document.getElementById('sh-link') || {}).value || ''));
   const link1 = await page.inputValue('#sh-link'); await shot(page, '94-share');
@@ -1248,6 +1248,24 @@ async function expenseSample(browser, url) {
     await page.fill('#rel-notes', 'New people start with the demo data.'); await page.locator('#rel-go').click();
     await page.waitForFunction(() => /Version 1\.1\.1 · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''), null, { timeout: 20000 });
     check('expenses, just me: with nothing changed the page says how to make the next version, and "Release again without changes" goes out as 1.1.1 once the owner says why', /Nothing has changed since version 1\.1\./.test(nextText) && /1\.1\.1 or 1\.2/.test(nextText) && emptyBlocked && /1\.1\.1/.test(await page.locator('.rel-hist').innerText()), nextText);
+    // the questions come in the chat: the Release page says so where the owner asked, and a request cut off by a reload can be asked again
+    await page.fill('#improve-text', 'Add a receipt field to expenses'); await page.locator('#improve-go').click();
+    await page.waitForSelector('.gcard.understand .opt:not([disabled])', { timeout: 15000 });
+    const pend = await page.locator('#improve-pending').innerText();
+    check('expenses, just me: a change asked on the Release page says there that a question waits in the chat', /Add a receipt field to expenses.*is waiting for you in the chat: a question first/.test(pend.replace(/\s+/g, ' ')), pend);
+    await page.reload(); await page.waitForSelector('.gcard.understand [data-act="again"]', { timeout: 20000 });
+    const stale = await page.locator('.gcard.understand').last().innerText();
+    await page.locator('.gcard.understand [data-act="again"]').last().click(); await page.waitForSelector('.gcard.understand .opt:not([disabled])', { timeout: 15000 });
+    check('expenses, just me: after a reload the unanswered request says it stopped, and "Ask again" asks the same question again', /stopped when the page was closed/.test(stale) && await page.locator('.gcard.understand [data-act="again"]').count() === 0, stale);
+    await view(page, 'App'); await page.waitForSelector('.stage-bar');
+    check('expenses, just me: an app for one person offers no "Two users" side-by-side preview', await page.locator('.stage-bar .btn', { hasText: 'Two users' }).count() === 0);
+    // a change typed in the chat, cut off by closing the page while its steps run: it is kept, and it still gets a release note
+    await setSpeed(page, 'normal'); await say(page, 'Add a notes field to expenses');
+    await page.waitForFunction(() => !!document.querySelector('.work-head .spin'), null, { timeout: 15000 });
+    await page.reload(); await page.waitForSelector('.views .tab'); await setSpeed(page, 'instant');
+    const cut = await appFull(page); await view(page, 'Release'); await page.waitForSelector('#rel-notes');
+    const cutNotes = await page.locator('#rel-notes').inputValue();
+    check('expenses, just me: a change cut off by closing the page mid-run is still in the next release notes', cut.cols.expenses.includes('notes') && /Added Notes to Expenses/.test(cutNotes), { cols: cut.cols.expenses, cutNotes });
     await ctx.close();
   }
 

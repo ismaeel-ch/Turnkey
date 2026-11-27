@@ -3,7 +3,7 @@ import type { AppRecord, ChangeSet, Dict, Release, StartWith } from '@/shared/ty
 import { ACC_HEX } from '@/styles/theme.generated';
 import { toStyle } from '@/platform/dom';
 import { ICONS } from './icons';
-import { S, arr, commit, cx, emit, errText, hashStr, me, str, toast, toolCall, uid } from './core';
+import { S, arr, commit, cx, emit, errText, hashStr, label, me, str, toast, toolCall, uid } from './core';
 import { dbAdopt, dbCount, dbDrop } from './db';
 import { TEAMS } from './team';
 import { runTestsSync, testStats } from './tests';
@@ -265,9 +265,36 @@ export function baseOf(app: AppRecord): Release | null {
   }
   return r;
 }
-export const draftLog = (app: AppRecord) => {
-  const r = baseOf(app);
-  return (app.log || []).filter((x) => !r || x.at > r.at);
+type LogEntry = NonNullable<AppRecord['log']>[number];
+/** A record step in the owner's words, for a release note: "Add Phone to Tracks". */
+export function stepWords(app: AppRecord, step: RecordStep): string {
+  const t = app.def.tables.find((x) => x.name === step.table),
+    list = t ? t.label : label(step.table);
+  switch (step.op) {
+    case 'add_field':
+      return 'Add ' + label(step.column) + ' to ' + list;
+    case 'remove_field':
+      return 'Remove ' + label(step.column) + ' from ' + list;
+    case 'rename_field':
+      return 'Rename ' + label(step.from) + ' to ' + label(step.to) + ' in ' + list;
+    case 'to_choice':
+      return 'Change ' + label(step.column) + ' in ' + list + ' to a choice';
+  }
+}
+/**
+ * What the draft changed since the live version, for the release notes. A change that was cut off half-way (the tab
+ * was closed while its steps ran) is in the app but never got its note: its record steps carry no change id. Each
+ * such step is noted from the step itself, so it is never left out of the notes people read when they update.
+ */
+export const draftLog = (app: AppRecord): LogEntry[] => {
+  const r = baseOf(app),
+    after = (at: number) => !r || at > r.at,
+    noted = (app.log || []).filter((x) => after(x.at)),
+    cut = arr<{ at: number; step?: RecordStep; group?: string }>(app.def.migrations)
+      .filter((m) => m.step && !m.group && after(m.at))
+      .map((m): LogEntry => ({ at: m.at, text: stepWords(app, m.step as RecordStep), station: 'database' }))
+      .filter((x) => !noted.some((y) => y.text === x.text));
+  return cut.length ? noted.concat(cut).sort((a, b) => a.at - b.at) : noted;
 };
 export const PAST: [RegExp, string][] = [
   [/^Add /, 'Added '],
