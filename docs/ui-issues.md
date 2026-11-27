@@ -20,3 +20,21 @@ inconsistent and notes phone-only items for those owners.
 | 10  | Build → Workflow canvas                   | Sized to the window, the canvas fitted the graph by its height: node text was 6–7 px beside half a canvas of empty space.                                                          | Fixed  |
 | 11  | Phone, Build                              | KPI cards are a sideways strip with the third card cut at the edge, and "Run again" sits on its own row. (Phone owner.)                                                            | Fixed  |
 | 12  | Phone, toasts                             | Toasts sit over the last list item above the bottom nav. (Phone owner.)                                                                                                            | Fixed  |
+
+## Second pass: features merged on 26–27 Nov
+
+The same check, on the features merged after the first pass: Meeting view (#191), field editing on Data (#192), Look
+menu (#194), team cost in the agent room (#185), Microsoft Learn connector (#188), step palette (#140) and the
+first-screen choice (#128). Screenshots are in `screens/ui-qa-new-features/` in the project's shared folder.
+
+| #   | Where                           | What is wrong                                                                                                                                                   | Status |
+| --- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 13  | Whole workspace, theme "System" | Switching the device between light and dark while the page is open changed the CSS tokens but not Fluent's theme, so controls stayed in the old theme.          | Fixed  |
+| 14  | Every dropdown                  | `.tk-field>.select{border:0}` removed the border Fluent draws on the native select, so dropdowns ("Text", "Pick a field", "Preview as") looked like plain text. | Fixed  |
+| 15  | App page, Look menu             | The current choice was disabled and greyed, groups had no dividers, and 20 entries ran past the menu's height, hiding most accent colours.                      | Fixed  |
+| 16  | Phone, Data → Columns           | The field editor wrapped raggedly: the type dropdown and Add field on one line, Remove alone on another.                                                        | Fixed  |
+| 17  | Phone, Build                    | With Meeting added, the four view buttons pushed Run again past the right edge.                                                                                 | Fixed  |
+| 18  | Build → Workflow palette        | The step tiles were one scrolling row with the last tile cut at the edge and no sign of more.                                                                   | Fixed  |
+| 19  | Agent room, team cost           | Per-agent cost lines wrapped with a dot at the start of a line; the run total squeezed the case title.                                                          | Fixed  |
+| 20  | Phone, Connections detail       | The tool table needed sideways scrolling to reach Test.                                                                                                         | Fixed  |
+| 21  | First screen                    | Wrapped station chips started a line with an arrow; the tour still said "Workflow, Timeline and Log show the same run three ways".                              | Fixed  |
