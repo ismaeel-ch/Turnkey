@@ -1420,7 +1420,13 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
             onChange={(v) => setCfg('mode', v)}
           />
         )}
-        {!byParent && [lv(0), levels.length > 0 && lv(1), levels.length > 1 && lv(2)]}
+        {!byParent && (
+          <>
+            {lv(0)}
+            {levels.length > 0 && lv(1)}
+            {levels.length > 1 && lv(2)}
+          </>
+        )}
         <span className="grow" />
         <Btn
           className="btn subtle sm"

@@ -1,9 +1,22 @@
 import type { FormEvent } from 'react';
-import type { AppAction, AppDef, AppTable, AppUser, ColumnDef, Row, Screen, StoredRow, TableDef, Transition } from '@/shared/types/app';
+import type {
+  AppAction,
+  AppDef,
+  BackedDef,
+  AppTable,
+  AppUser,
+  ColumnDef,
+  Row,
+  Screen,
+  StoredRow,
+  TableDef,
+  Transition,
+} from '@/shared/types/app';
 import type { AppRecord, Dict, Pane, PaneForm, RecordRef, Stage, Walk } from '@/shared/types/workspace';
 import { BRAND, U, arr, confirmBox, cx, fmtDate, fmtDateTime, fmtNum, initials, label, needNet, notify, online, toast } from './core';
 import { DBX, dbExists } from './db';
-import { accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec, type ApiResult } from './engine';
+import { ACCENTS, accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec, type ApiResult } from './engine';
+import { editBlocked, editFromCanvas } from './changes';
 import { REC, allConnectors, callConnector, connOn } from './builds';
 import { TeamConsole } from './room';
 import { resetAppData } from './line';
@@ -1017,6 +1030,7 @@ export function StageView({ app }: { app: AppRecord }) {
           <Icon n="split" s="16" />
           <span className="hide-sm">Two users</span>
         </Btn>
+        <LookMenu app={app} />
         <span className="grow" />
         {saved && (
           <span className="hide-sm">
@@ -1044,6 +1058,53 @@ export function StageView({ app }: { app: AppRecord }) {
       </div>
       {st.tour && <WalkPlayer app={app} st={st} T={st.tour} />}
     </div>
+  );
+}
+/** Change how the app looks right here on the App page: accent, navigation and row density. Each pick is planned like
+ *  a chat change, so only the UI agent's Screens station and the stations after it run again. */
+function LookMenu({ app }: { app: AppRecord }) {
+  const th = app.def.theme;
+  const blocked = editBlocked(app);
+  const pick = (patch: Record<string, string>) => {
+    void editFromCanvas(app as AppRecord & { def: BackedDef }, { op: 'set_theme', ...patch }, 'App page').then((why) => {
+      if (why) toast(why, 'warning');
+    });
+  };
+  const items: MenuEntry[] = [
+    { label: 'Navigation', head: true },
+    ...(['side', 'top', 'rail'] as const).map((n) => ({
+      label: n === 'rail' ? 'Icon rail' : n === 'side' ? 'Side' : 'Top',
+      check: (th.nav || 'side') === n,
+      disabled: (th.nav || 'side') === n,
+      on: () => pick({ nav: n }),
+    })),
+    { label: 'Rows', head: true },
+    ...(['comfortable', 'compact'] as const).map((d) => ({
+      label: label(d),
+      check: (th.density || 'comfortable') === d,
+      disabled: (th.density || 'comfortable') === d,
+      on: () => pick({ density: d }),
+    })),
+    { label: 'Accent colour', head: true },
+    ...ACCENTS.map((a) => ({ label: label(a), check: th.accent === a, disabled: th.accent === a, on: () => pick({ accent: a }) })),
+  ];
+  return (
+    <span title={blocked || 'Change the look. Only the Screens station and the ones after it run again.'}>
+      <Menu
+        align="left"
+        btn={{
+          cls: 'btn sm look-btn',
+          label: 'Look',
+          body: (
+            <>
+              <Icon n="color" s="16" />
+              <span className="hide-sm">Look</span>
+            </>
+          ),
+        }}
+        items={blocked ? [{ label: blocked, disabled: true }] : items}
+      />
+    </span>
   );
 }
 /** Two users side by side, or one. The second pane signs in as someone with another role. */

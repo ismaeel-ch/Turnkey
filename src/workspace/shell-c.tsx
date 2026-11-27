@@ -80,9 +80,9 @@ import { QUESTS } from './quests';
 import { TEAMS } from './team';
 import { TESTS, runTestsSync, suiteOf } from './tests';
 import { FLOW, isDark } from './flow';
-import { LIVE, RUNS, STATIONS, deleteApp, pushChat, resumeInterrupted, runBuild, startBuild, stopRun } from './line';
+import { LIVE, RUNS, STATIONS, deleteApp, resumeInterrupted, runBuild, startBuild, stopRun } from './line';
 import { cancelRerun, queuedRerun } from './rerun';
-import { buildPack, parseChange, planOps, runChange } from './changes';
+import { buildPack, editFromCanvas, parseChange } from './changes';
 import { AddStepDialog, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
 import { REVIEWERS } from './reviewers';
 import { fillWorkflowSteps, keepFix, suggestCases } from './tester';
@@ -1002,17 +1002,11 @@ export function RenameDialog({ p }: { p: AppPick & { name: string } }) {
     e.preventDefault();
     const name = str(p.name);
     if (!name || name === app.name) return closeDialog();
-    const pl = planOps(backed(app), [
-      {
-        op: 'rename_app',
-        name,
-      },
-    ]);
     closeDialog();
-    if (pl.steps.length) {
-      pushChat(app, 'user', 'Rename the app to ' + name);
-      runChange(backed(app), pl.steps, 'Rename the app');
-    }
+    // the same rules as a change asked for in chat: not while a run, an approval or the app's own team is going
+    void editFromCanvas(backed(app), { op: 'rename_app', name }, 'Rename dialog').then((why) => {
+      if (why) toast(why, 'warning');
+    });
   };
   return (
     <Dialog title="Rename app" onClose={closeDialog}>
