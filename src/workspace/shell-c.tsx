@@ -108,6 +108,7 @@ import {
 } from './share';
 import { safetyCopyOf } from './carry';
 import { GoBackDialog, InstallAppDialog, isDirty, logoOf, relOf, releaseApp } from './release';
+import { CompareDialog, ReportDialog } from './improve';
 import { HistoryDialog } from './history-ui';
 import { historyHooks } from './history';
 import { Home, Titlebar, Workspace, lineApp } from './shell-a';
@@ -1293,6 +1294,10 @@ export function DialogHost() {
       return <InstallAppDialog p={p} />;
     case 'goback':
       return <GoBackDialog p={p} />;
+    case 'report':
+      return <ReportDialog p={p} />;
+    case 'compare':
+      return <CompareDialog p={p} />;
     case 'addstep':
       return <AddStepDialog p={p} />;
     case 'guide':

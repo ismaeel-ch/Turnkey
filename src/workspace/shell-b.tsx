@@ -61,6 +61,7 @@ import { FlowCards, flowTips } from './custom';
 import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto, Select, Spinner, Switch, Tabs, Textarea } from './ui';
 import { isStatusCol, startWalk } from './runtime';
 import { ReleaseCard } from './release';
+import { ChangePlanCard, TryItCard, UnderstandBox } from './improve';
 import { latestTouchOfTable, touchOf, touchShort, touchText } from './provenance';
 
 /** Who made a table, and who changed it last if that was later. Apps saved before this was recorded say the Database agent. */
@@ -1287,6 +1288,7 @@ export function ChatCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
       );
     }
     case 'plan':
+      if (c.plan) return <ChangePlanCard app={app} c={c} />;
       return (
         <div className="gcard">
           <div className="gc-h">
@@ -1313,6 +1315,10 @@ export function ChatCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
           )}
         </div>
       );
+    case 'understand':
+      return <UnderstandBox app={app} c={c} />;
+    case 'tryit':
+      return <TryItCard app={app} c={c} />;
     case 'sentback':
       return (
         <div className="gcard warn">
