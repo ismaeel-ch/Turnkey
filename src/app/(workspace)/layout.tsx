@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import '@xyflow/react/dist/base.css';
 import '@/styles/fluent-theme.css';
 import '@/styles/workspace.css';
+import '@/styles/agents.css';
 import PwaRegister from '@/platform/pwa/PwaRegister';
 import { BASE_OPEN_GRAPH, SITE_DESCRIPTION, SITE_NAME, siteUrl } from '@/server/site';
 
