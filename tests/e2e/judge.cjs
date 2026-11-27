@@ -103,9 +103,23 @@ async function main() {
       return text.slice(0, 120);
     });
 
-    // ---- 2. first run: Try a sample signs in with the demo account, keeps Demo and builds the Sales bidding desk (shot 2) ----
-    await step(page, 'Try a sample starts the Sales bidding desk build', async () => {
+    // ---- 2. first run: Try a sample signs in with the demo account, keeps Demo, asks its one question, shows the plan and builds the Sales bidding desk (shot 2) ----
+    await step(page, 'Try a sample asks one question with the usual choice marked', async () => {
       await page.getByRole('button', { name: 'Try a sample' }).click();
+      await page.waitForSelector('.iv-ask', { timeout: 30000 });
+      await sleep(600);
+      const card = clean(await page.locator('.iv-ask').innerText());
+      expect(/Usual choice/.test(card), 'no usual choice on the card: ' + card.slice(0, 160));
+      return card.slice(0, 100);
+    });
+    await step(page, 'Try a sample shows the plan before anything is built', async () => {
+      await page.getByRole('button', { name: 'Use the usual choices and show me the plan' }).click();
+      await page.waitForSelector('.iv-act .iv-build', { timeout: 10000 });
+      await sleep(600);
+      return clean(await page.locator('#iv-name').innerText()).slice(0, 80);
+    });
+    await step(page, 'Build it starts the Sales bidding desk build', async () => {
+      await page.locator('.iv-act .iv-build').click();
       await page.waitForSelector('.work-head', { timeout: 30000 });
       await page.waitForSelector('.tour-pop', { timeout: 10000 });
       return clean(await page.locator('.tour-pop').innerText()).slice(0, 80);

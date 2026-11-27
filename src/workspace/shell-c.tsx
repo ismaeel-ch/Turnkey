@@ -81,6 +81,7 @@ import { QUESTS } from './quests';
 import { TEAMS } from './team';
 import { TESTS, runTestsSync, suiteOf } from './tests';
 import { FLOW, isDark } from './flow';
+import { AFTER_BUILD, beginInterview } from './interview';
 import { LIVE, RUNS, STATIONS, deleteApp, resumeInterrupted, runBuild, startBuild, stopRun } from './line';
 import type { PlanSpec } from '@/shared/plan/types';
 /** The Planner is loaded on first use, so only its types are imported here. */
@@ -164,6 +165,15 @@ function finishOnboarding(o: OnboardingForm, shortTour = false) {
     if (tour) setTimeout(() => startTour(shortTour), 900);
   });
 }
+/**
+ * "Try a sample" on the first screen: the sales bidding desk's own interview in Demo, with no model call. Its card
+ * shows the usual choice marked, then the plan, and "Build it" starts the build and the short tour.
+ */
+function startSample(o: OnboardingForm) {
+  finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: true, pick: '', tour: false });
+  AFTER_BUILD.sample = () => setTimeout(() => startTour(true), 900);
+  void engineReady.then(() => beginInterview(REC.biddesk.sentence, 'biddesk', false, true));
+}
 export function Onboarding() {
   useLayoutEffect(startEngineAfterPaint, []);
   const o = obForm(),
@@ -185,9 +195,8 @@ export function Onboarding() {
     setOb({ err: '', step: Math.min(steps.length - 1, o.step + 1) });
   };
   const finish = () => finishOnboarding(o);
-  // the two quick ways in from the first screen: a judge sees agents at work within seconds, or types a sentence
-  const trySample = () =>
-    finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: true, pick: 'biddesk', tour: true }, true);
+  // the two quick ways in from the first screen: a sample to answer, plan and build in under a minute, or a sentence of one's own
+  const trySample = () => startSample(o);
   const describeOwn = () => {
     finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: U.live !== 'ready', pick: '', tour: false });
     void engineReady.then(() =>
@@ -216,8 +225,8 @@ export function Onboarding() {
           </Btn>
         </div>
         <p className="t-cap muted ob-quick-note">
-          Both use a demo account in this browser. Try a sample builds the sales bidding desk in about 30 seconds with no model calls. Get
-          started below sets up your own account first.
+          Both use a demo account in this browser. Try a sample asks one question about a sales bidding desk, shows you the plan, then
+          builds it in about 30 seconds with no model calls. Get started below sets up your own account first.
         </p>
         <div className="ob-line" aria-hidden="true">
           {STATIONS.map((s, i) => (
