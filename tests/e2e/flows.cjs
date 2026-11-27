@@ -951,6 +951,10 @@ async function flowViews(browser, url) {
   await page.locator('.vx .chips .btn', { hasText: 'Clear all' }).click();
   await vtab(page, 'Calendar'); await page.locator('.vopts .seg button', { hasText: 'Week' }).click(); await sleep(80); check('calendar has a week span', await page.locator('.cal-grid.wk .cal-day').count() === 7);
   await page.locator('.vopts .seg button', { hasText: 'Month' }).click();
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Previous month' }).click();
+  const none = page.locator('.cal-none .link-btn'), noneText = (await none.count()) ? await none.innerText() : '';
+  if (noneText) await none.click(); await sleep(80);
+  check('an empty month offers the nearest month with records', /^Go to \d+ \w+ \d{4}$/.test(noneText) && await page.locator('.cal-grid .cal-chip').count() > 0 && !(await page.locator('.cal-none').count()), noneText);
   await vtab(page, 'Timeline'); const lanes = await page.locator('.gt-lane').count(); await page.locator('.vopts .seg button', { hasText: 'Quarter' }).click(); await sleep(80);
   check('timeline has a lane per doctor and zooms', lanes === 3 && await page.locator('.gt-item').count() === 39, [lanes, await page.locator('.gt-item').count()]);
   await vtab(page, 'Tree'); const rows0 = await page.locator('.tree-row').count(); await page.locator('.tree-tog').first().click(); await sleep(60);
@@ -2044,6 +2048,15 @@ async function flowSizes(browser, url) {
       await page.locator('.phone-nav .tab-i', { hasText: 'App' }).click(); await page.getByRole('button', { name: 'Open the app' }).click(); await page.waitForSelector('.solo .app');
       if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click();
       await page.waitForSelector('.app-tabs'); await sleep(300); await fitBoth(page, at + 'the app full screen');
+      if (w === 390 && await page.locator('.app-tabs > *', { hasText: 'Schedule' }).count()) { // a pivot keeps its total row, and a timeline scrolls sideways instead of piling its labels on top of each other
+        await page.locator('.app-tabs > *', { hasText: 'Schedule' }).first().click(); await sleep(200);
+        await page.locator('.vs-tabs [role=tab]', { hasText: 'Pivot' }).click(); await page.waitForSelector('.tbl.pivot');
+        const pv = await st(page, () => { const f = document.querySelector('.tbl.pivot tfoot tr'), h = document.querySelector('.tbl.pivot thead tr'); return { disp: getComputedStyle(f).display, cells: f.children.length, cols: h.children.length, w: Math.round(f.getBoundingClientRect().width), tw: Math.round(document.querySelector('.tbl.pivot').getBoundingClientRect().width) }; });
+        check(at + 'the pivot total is a row of the table, one cell per column', pv.disp === 'table-row' && pv.cells === pv.cols && pv.w === pv.tw, pv);
+        await page.locator('.vs-tabs [role=tab]', { hasText: 'Timeline' }).click(); await page.waitForSelector('.gt .gt-item');
+        const gt = await st(page, () => { const g = document.querySelector('.gt'), t = [...document.querySelectorAll('.gt-tick')].filter((e) => e.textContent).map((e) => e.getBoundingClientRect()); return { scrolls: g.scrollWidth > g.clientWidth, overlap: t.some((r, i) => i && r.left < t[i - 1].right - 1) }; });
+        check(at + 'the timeline scrolls sideways and its day labels do not overlap', gt.scrolls && !gt.overlap, gt);
+      }
       await page.locator('.app-head .persona').click(); await page.waitForSelector('.sheet'); await page.locator('.sheet-i', { hasText: 'Back to Turnkey' }).click(); await page.waitForSelector('.phone-nav');
       await page.locator('.phone-nav .tab-i', { hasText: 'More' }).click(); await page.waitForSelector('.sheet'); await page.locator('.sheet .sheet-i', { hasText: 'Share by link' }).click();
     }
