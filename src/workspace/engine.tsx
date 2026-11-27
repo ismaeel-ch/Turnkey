@@ -23,13 +23,14 @@ import type {
 } from '@/shared/types/app';
 import type { SqlValue } from '@/shared/types/sqljs';
 import type { AppRecord, Dict, ToolContext } from '@/shared/types/workspace';
-import { APILOG, arr, errText, dayOffset, label, nowStamp, pad2, ring, singular, snake, str, toolCall } from './core';
+import { APILOG, arr, errText, dayOffset, isoDate, label, nowStamp, pad2, ring, singular, snake, str, toolCall } from './core';
 import {
   DEMO_COL,
   SYS_SQL,
   createTableSQL,
   dbDrop,
   dbExists,
+  dbRelease,
   dbRollback,
   dbSavepoint,
   lastId,
@@ -42,6 +43,8 @@ import {
 } from './db';
 import { demoReady, isSettingsTable, tempDemoData } from './demo-data';
 import { canRunTeam, normTeam } from './team';
+import type { AppLogic } from '@/shared/logic';
+import { brokenRule, isLocked, logicIssues, moveBlock, normRules, recalcAfter, recalcAll } from './logic';
 import { AppPane, newPane } from './runtime';
 
 /* ===== Turnkey prototype · engine: definitions, station checks, the role-guarded API, acceptance runner ===== */
@@ -144,7 +147,7 @@ export const VIEW_LABEL: Dict<string> = {
 };
 export const LIMITS = {
   tables: 8,
-  cols: 12,
+  cols: 16, // a plan may hold 14 fields in a list, and the Database agent may add 2
   screens: 12,
   rows: 40,
 };
@@ -355,6 +358,11 @@ export function normSchema(o: Untrusted, brief: Brief, repair?: boolean, maxRows
             }
           }
           if (col.type === 'user') col.role = roleIds.includes(snake(c.role)) ? snake(c.role) : null;
+          // a calculated field: nobody types into it, so it cannot be required
+          if (str(c.formula) && col.type !== 'ref' && col.type !== 'user') {
+            col.formula = str(c.formula).slice(0, 400);
+            col.required = false;
+          }
           return col;
         })
         .filter((c) => c.name && !['id', 'created_by', 'created_at', DEMO_COL].includes(c.name) && !used[c.name] && (used[c.name] = 1))
@@ -467,6 +475,16 @@ export function checkSchemaShape(sc: SchemaDraft, brief: Brief) {
     }),
   );
   out.push(chk('Every link points to a table that exists', !bad.length, bad.join('; ') || 'all links resolve'));
+  if (sc.tables.some((t) => t.columns.some((c) => c.formula))) {
+    const wrong = logicIssues({ tables: sc.tables as AppTable[], process: null, logic: null });
+    out.push(
+      chk(
+        'Every calculated field has a formula that can be worked out',
+        !wrong.length,
+        wrong.slice(0, 4).join('; ') || 'all formulas read real fields',
+      ),
+    );
+  }
   const noTitle = sc.tables.filter((t) => !t.title || !t.columns.length).map((t) => t.name);
   out.push(chk('Every table has columns and a title column', !noTitle.length, noTitle.length ? 'fix: ' + noTitle.join(', ') : ''));
   const pt = sc.tables.find((t) => t.name === brief.process.entity);
@@ -707,6 +725,8 @@ export function insertSeed(
       if (got[k]) ids[t.name][pos] = Number(got[k].id);
     });
   }
+  // the starting records carry no worked-out values: totals and other calculated fields are filled in now
+  recalcAll(appId, { tables: tables as AppTable[], process: null, logic: null });
   return total;
 }
 export function buildDatabase(app: AppRecord, sc: SchemaDraft, ctx: ToolContext) {
@@ -825,6 +845,8 @@ export interface BackendDraft {
   process: Process;
   access: Dict<Dict<Permission>>;
   team: ReturnType<typeof normTeam>;
+  /** rules that refuse a save; the conditions of moves are on the transitions */
+  logic: AppLogic;
 }
 export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
   o = o || {};
@@ -863,7 +885,7 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
         Object.keys(x.set).forEach((k) => {
           if (t && colOf(t, snake(k))) set[snake(k)] = x.set[k];
         });
-      return {
+      const tr: Transition = {
         id: snake(x.id || x.label),
         label: str(x.label) || label(x.id),
         from: list1(x.from).map(snake).filter(Boolean),
@@ -873,6 +895,15 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
           .filter((r) => roleIds.includes(r)),
         set,
       };
+      if (str(x.when)) {
+        tr.when = str(x.when).slice(0, 400);
+        if (str(x.unless)) tr.unless = str(x.unless).slice(0, 200);
+      }
+      const needs = list1(x.needs)
+        .map(snake)
+        .filter((f) => t && colOf(t, f) && f !== column);
+      if (needs.length) tr.needs = needs;
+      return tr;
     })
     .filter((x) => x.id);
   const access: Dict<Dict<Permission>> = {};
@@ -928,13 +959,18 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
     initial: none ? '' : snake(st.initial) || (states[0] ? states[0].id : ''),
     transitions,
   };
+  const locked = list1(st.locked)
+    .map(snake)
+    .filter((id) => states.some((x) => x.id === id) && id !== P.initial);
+  if (locked.length) P.locked = locked;
   return {
     process: P,
     access,
     team: normTeam(o.team, def, P),
+    logic: { rules: normRules((o.logic && o.logic.rules) || o.rules, def.tables) },
   };
 }
-export function checkBackendShape(def: BriefedDef, be: Pick<BackendDraft, 'process' | 'access'>) {
+export function checkBackendShape(def: BriefedDef, be: Pick<BackendDraft, 'process' | 'access'> & { logic?: AppLogic }) {
   const P = be.process,
     t = tableOf(def, P.table),
     col = colOf(t, P.column),
@@ -1007,6 +1043,19 @@ export function checkBackendShape(def: BriefedDef, be: Pick<BackendDraft, 'proce
           : def.brief.roles.length + ' roles, ' + def.tables.length + ' tables',
     ),
   );
+  const rules = be.logic?.rules || [],
+    conds = P.transitions.filter((x) => x.when || x.needs).length,
+    calcs = def.tables.reduce((n, tb) => n + tb.columns.filter((c) => c.formula).length, 0);
+  if (rules.length || conds || calcs) {
+    const wrong = logicIssues({ tables: def.tables, process: P, logic: be.logic || null });
+    out.push(
+      chk(
+        'Calculated fields, rules and conditions can be worked out',
+        !wrong.length,
+        wrong.slice(0, 4).join('; ') || calcs + ' calculated fields, ' + rules.length + ' rules, ' + conds + ' moves with a condition',
+      ),
+    );
+  }
   return out;
 }
 /** One endpoint of a built app's API, and which roles may call it with which scope. */
@@ -1257,6 +1306,8 @@ export function readBody(app: AppRecord, t: AppTable, user: AppUser, body: Dict<
       if (partial && body[c.name] !== undefined) fields[c.name] = 'Status changes go through the workflow actions';
       continue;
     }
+    // a calculated field is worked out after the save; what a caller sends for it is ignored
+    if (c.formula) continue;
     const r = coerceField(c, body[c.name]);
     let v = r[0];
     if (r[1]) {
@@ -1326,6 +1377,31 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
     T = qi(t.name),
     P = def.process && def.process.table === t.name ? def.process : null;
   const deny = (verb: string) => httpErr(403, roleName(def, user.role) + ' cannot ' + verb + ' ' + t.label.toLowerCase());
+  const lockedText = (row: Row) =>
+    (/^[aeiou]/i.test(label(row[P ? P.column : '']) || '') ? 'An ' : 'A ') +
+    label(row[P ? P.column : '']).toLowerCase() +
+    ' ' +
+    t.one.toLowerCase() +
+    ' can no longer be changed';
+  /**
+   * A save with the app's logic around it: the write, then the calculated fields that read it, then the rules. A
+   * broken rule takes the whole save back, totals included, and the person is told why.
+   */
+  const guarded = <V,>(write: () => { value: V; rows: { table: string; id: number }[]; before?: { table: string; row: Row }[] }): V => {
+    const rules = !!def.logic && def.logic.rules.length > 0;
+    if (rules) dbSavepoint(id0, 'lg');
+    try {
+      const w = write();
+      const touched = recalcAfter(id0, def, w.rows, w.before);
+      const broken = rules ? brokenRule(id0, def, w.rows.concat(touched)) : null;
+      if (broken) throw httpErr(400, broken.message || 'A rule of this app does not allow that');
+      if (rules) dbRelease(id0, 'lg');
+      return w.value;
+    } catch (e) {
+      if (rules) dbRollback(id0, 'lg');
+      throw e;
+    }
+  };
   const id = seg[1] && /^\d+$/.test(seg[1]) ? +seg[1] : null;
   const getRow = (scope?: string) =>
     sqlRows(
@@ -1413,12 +1489,15 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
     r.vals.created_by = user.id;
     r.vals.created_at = nowStamp();
     const keys = Object.keys(r.vals);
-    sqlRun(
-      id0,
-      'INSERT INTO ' + T + ' (' + keys.map(qi).join(', ') + ') VALUES (' + keys.map(() => '?').join(', ') + ')',
-      keys.map((k) => r.vals[k]),
-    );
-    const nid = lastId(id0);
+    const nid = guarded(() => {
+      sqlRun(
+        id0,
+        'INSERT INTO ' + T + ' (' + keys.map(qi).join(', ') + ') VALUES (' + keys.map(() => '?').join(', ') + ')',
+        keys.map((k) => r.vals[k]),
+      );
+      const made = Number(lastId(id0));
+      return { value: made, rows: [{ table: t.name, id: made }] };
+    });
     logAct(app, user, t.name, nid, 'created', '');
     return {
       status: 201,
@@ -1433,6 +1512,8 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
     if (!row) throw httpErr(404, t.one + ' not found');
     const state = row[P.column] as string;
     if (!tr.from.includes(state)) throw httpErr(409, 'Cannot ' + tr.label.toLowerCase() + ' while it is ' + label(state).toLowerCase());
+    const block = moveBlock(id0, def, t, row, tr);
+    if (block) throw httpErr(409, block);
     const sets = [qi(P.column) + ' = ?'],
       ps: SqlValue[] = [tr.to];
     Object.keys(tr.set || {}).forEach((k) => {
@@ -1445,6 +1526,7 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
       'UPDATE ' + T + ' SET ' + sets.join(', ') + ' WHERE "id" = ? AND ' + qi(P.column) + ' IN (' + tr.from.map(() => '?').join(', ') + ')',
       ps.concat([id], tr.from),
     );
+    recalcAfter(id0, def, [{ table: t.name, id }]);
     logAct(app, user, t.name, id, tr.label.toLowerCase(), label(state) + ' → ' + label(tr.to));
     return {
       status: 200,
@@ -1453,16 +1535,21 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
   }
   if (method === 'PATCH' && id != null) {
     if (acc.update === 'none') throw deny('change');
-    if (!getRow(acc.update)) throw httpErr(404, t.one + ' not found');
+    const was = getRow(acc.update);
+    if (!was) throw httpErr(404, t.one + ' not found');
+    if (isLocked(P, was)) throw httpErr(409, lockedText(was));
     const r = readBody(app, t, user, body, true);
     if (Object.keys(r.fields).length) throw httpErr(400, 'Some fields need attention', r.fields);
     const keys = Object.keys(r.vals);
     if (!keys.length) throw httpErr(400, 'Nothing to change');
-    sqlRun(
-      id0,
-      'UPDATE ' + T + ' SET ' + keys.map((k) => qi(k) + ' = ?').join(', ') + ' WHERE "id" = ?',
-      keys.map((k) => r.vals[k]).concat([id]),
-    );
+    guarded(() => {
+      sqlRun(
+        id0,
+        'UPDATE ' + T + ' SET ' + keys.map((k) => qi(k) + ' = ?').join(', ') + ' WHERE "id" = ?',
+        keys.map((k) => r.vals[k]).concat([id]),
+      );
+      return { value: id, rows: [{ table: t.name, id }], before: [{ table: t.name, row: was }] };
+    });
     logAct(app, user, t.name, id, 'updated', keys.map(label).join(', '));
     return {
       status: 200,
@@ -1471,12 +1558,16 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
   }
   if (method === 'DELETE' && id != null) {
     if (!acc.delete) throw deny('delete');
-    if (!getRow(acc.list === 'own' ? 'own' : 'all')) throw httpErr(404, t.one + ' not found');
+    const was = getRow(acc.list === 'own' ? 'own' : 'all');
+    if (!was) throw httpErr(404, t.one + ' not found');
+    if (isLocked(P, was)) throw httpErr(409, lockedText(was));
     try {
       sqlRun(id0, 'DELETE FROM ' + T + ' WHERE "id" = ?', [id]);
     } catch {
       throw httpErr(409, 'Other records still point to this ' + t.one.toLowerCase() + '. Remove those first.');
     }
+    // the totals that counted this record are worked out again without it
+    recalcAfter(id0, def, [], [{ table: t.name, row: was }]);
     logAct(app, user, t.name, id, 'deleted', '');
     return {
       status: 200,
@@ -1639,7 +1730,14 @@ export function renderTest(app: AppRecord) {
 }
 
 /* ---------- station 5: the tour, played as an acceptance test ---------- */
-export function tourValues(app: AppRecord, t: AppTable, values: Dict<unknown> | null | undefined) {
+/** The same date or date and time, `days` later. */
+const laterDay = (v: string, days: number) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(v);
+  if (!m) return v;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days);
+  return isoDate(d) + m[4];
+};
+export function tourValues(app: AppRecord, t: AppTable, values: Dict<unknown> | null | undefined, made?: Dict<number>) {
   const same = (a: unknown, b: unknown) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase(),
     out: Dict<SqlValue> = {};
   const look: SeedLookup = {
@@ -1672,7 +1770,10 @@ export function tourValues(app: AppRecord, t: AppTable, values: Dict<unknown> | 
     return (typeof name === 'string' && name && look.ref(rt.name, name)) || firstId(app.id, rt.name);
   };
   t.columns.forEach((c) => {
-    if (values && values[c.name] !== undefined) {
+    // a link to a list in which the tour already made a record points at that record: the line belongs to the order
+    // the tour just made, whatever row number the step names
+    if (made && c.type === 'ref' && c.ref && made[c.ref] && c.ref !== t.name) out[c.name] = made[c.ref];
+    else if (values && values[c.name] !== undefined) {
       const r = seedValue(c, byPlace(c, values[c.name]), look);
       if (r[0] != null) out[c.name] = r[0];
     }
@@ -1707,7 +1808,10 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
       ok: false,
       detail: 'No user with the role ' + step.role,
     };
-  const tn = step.table || (st.last && st.last.table) || mainTable(def)?.name,
+  // a move with no table named is a move of the list that has stages, even when the step before it added a line elsewhere
+  const P0 = def.process,
+    moves = P0 && P0.table && (step.do === 'transition' || (step.do === 'denied' && P0.transitions.some((x) => x.id === step.action)));
+  const tn = step.table || (moves ? P0.table : null) || (st.last && st.last.table) || mainTable(def)?.name,
     t = tableOf(def, tn);
   const scr = step.screen
     ? def.screens.find((s) => s.name.toLowerCase() === String(step.screen).toLowerCase() && s.roles.includes(u.role))
@@ -1737,7 +1841,19 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
   if (!t) return fail('No table called ' + tn);
   const id = st.rows[t.name];
   if (step.do === 'create') {
-    const r = apiCall(app, u, 'POST', '/api/' + tn, tourValues(app, t, step.values), 'tour');
+    const values = tourValues(app, t, step.values, st.rows);
+    let r = apiCall(app, u, 'POST', '/api/' + tn, values, 'tour');
+    // A booking that must succeed can land on a time the demo data already took. The step is about making a booking,
+    // not about that hour, so it is tried again on the following days until the time is free.
+    const clash = (def.logic?.rules || []).find((x) => x.table === t.name && /\boverlaps\(/.test(x.when) && x.message === r.error);
+    if (r.status === 400 && clash) {
+      const times = t.columns.filter((c) => (c.type === 'date' || c.type === 'datetime') && typeof values[c.name] === 'string');
+      for (let k = 1; k <= 21 && r.status === 400 && r.error === clash.message; k++) {
+        const later = { ...values };
+        times.forEach((c) => (later[c.name] = laterDay(String(values[c.name]), k)));
+        r = apiCall(app, u, 'POST', '/api/' + tn, later, 'tour');
+      }
+    }
     if (r.status !== 201)
       return fail(
         r.status +
@@ -1760,7 +1876,7 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
     return pass('201 Created · ' + t.one + ' #' + r.data.id);
   }
   if (step.do === 'invalid') {
-    const r = apiCall(app, u, 'POST', '/api/' + tn, tourValues(app, t, step.values), 'tour');
+    const r = apiCall(app, u, 'POST', '/api/' + tn, tourValues(app, t, step.values, st.rows), 'tour');
     return r.status === 400
       ? pass('400 · ' + r.error + (r.fields ? ' (' + Object.keys(r.fields).join(', ') + ')' : ''))
       : fail('Expected it to be refused as incomplete, got ' + r.status + (r.status === 201 ? ' Created' : ' ' + str(r.error)));
@@ -1782,6 +1898,8 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
     if (r.status === 403) return pass('403 Forbidden · ' + r.error);
     // a transition the workflow does not allow from the record's state is refused too, with 409
     if (r.status === 409 && call[0] === 'POST' && act !== 'create') return pass('409 Conflict · ' + r.error);
+    // so is a change to a record in a locked stage
+    if (r.status === 409 && (act === 'update' || act === 'delete')) return pass('409 Conflict · ' + r.error);
     // a record this person may not even see is refused as not found; that counts, as long as the record really exists.
     // Only the "not found" answer: a 404 for an action or table the app does not have is a broken step, not a refusal.
     if (

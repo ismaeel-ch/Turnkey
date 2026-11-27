@@ -30,7 +30,7 @@ const obj = (x: unknown): Obj => (x && typeof x === 'object' ? (x as Obj) : {});
 /**
  * Turns whatever a model returned for `tables` into the shape the workspace stores, the way `normSchema` in
  * engine.js does: names made safe, type words mapped, columns the runtime adds itself dropped, duplicates dropped,
- * at most 12 columns per table. It never throws and never invents a table. It does not cut the table list to 8,
+ * at most 16 columns per table. It never throws and never invents a table. It does not cut the table list to 8,
  * so that `validateTables` can report it; pass `roleIds` to drop a `role` that does not exist.
  */
 export function normalizeTables(input: unknown, opts: { roleIds?: string[]; maxRows?: number } = {}): TableDef[] {

@@ -50,7 +50,7 @@ export const SQL_TYPE: Readonly<Record<ColumnType, string>> = {
 };
 
 /** `LIMITS` in engine.js: the design's limits. */
-export const LIMITS = { tables: 8, cols: 12, rows: 40 } as const;
+export const LIMITS = { tables: 8, cols: 16, rows: 40 } as const;
 
 /** Tables the runtime creates itself, and columns it adds to every table. */
 export const SYSTEM_TABLES = ['users', 'activity'] as const;
@@ -70,6 +70,11 @@ export interface ColumnDef {
   ref?: string;
   /** type `user`: limit the person to one role */
   role?: string | null;
+  /**
+   * a calculated field: the formula (src/shared/logic/expr.ts) its value is worked out from on every save. Nobody
+   * types into it.
+   */
+  formula?: string;
 }
 
 export interface TableDef {

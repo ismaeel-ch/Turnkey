@@ -47,6 +47,11 @@ const SENTENCES = {
   vans: 'We have five delivery vans and need to track who drives each one, what we spend on fuel and when each van is due for a service.',
   wedding: 'I am planning my wedding and need to keep track of guests, who has replied and what each of them will eat.',
   football: 'Our kids football club needs to register players, collect the season fees and pick the squad for each match.',
+  // apps that work things out (28 Nov): totals from lines, budgets, bookings that must not clash, moves with a condition
+  quotes: 'We are a print shop. Staff write quotes made of line items with a quantity and a unit price, the app adds up the total, quotes over 2,000 need the owner to approve them, and an accepted quote cannot be changed any more.',
+  rooms: 'Our company has six meeting rooms. Staff book a room for a start and end time, a room cannot be booked twice at the same time, the office manager approves bookings longer than four hours, and we want to see how many hours each room is used.',
+  builder: 'I run a small building firm. Each job has a budget, we log costs for materials and labour against it, the app shows what is spent and what is left, and a job cannot be marked finished while it is over budget unless the director signs it off.',
+  garage: 'A car garage: reception books cars in for a mechanic and a time slot without double-booking the mechanic, the mechanic records parts and hours, the app works out the bill, and the car can only be handed back once the bill is paid.',
 };
 // which answer to give when the Planner asks who the app is for; every other question takes the usual choice
 const PREFER = { 'expense-me': /just me|myself|only me|personal|my own/i, 'expense-company': /company|team|business|staff|employees/i };

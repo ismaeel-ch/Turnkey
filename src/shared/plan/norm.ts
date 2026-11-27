@@ -10,6 +10,7 @@
  */
 import { COLUMN_TYPES, SYSTEM_COLUMNS, SYSTEM_TABLES, TYPE_ALIAS, type ColumnType } from '@/shared/sql/types';
 import type { AccessMap, Permission, Scope, Story, Untrusted } from '@/shared/types/app';
+import { CALC_TYPES, calcOrder, formulaProblems } from '@/shared/logic/check';
 import {
   AUDIENCES,
   PLAN_LIMITS,
@@ -17,6 +18,7 @@ import {
   STAGE_FIELD,
   type Audience,
   type PlanAnswer,
+  type PlanCheck,
   type PlanField,
   type PlanGap,
   type PlanList,
@@ -83,6 +85,11 @@ function normField(o: Untrusted): PlanField {
   }
   if (type === 'select') field.options = uniq(arr(c.options).map(snake), (x) => x);
   if (type === 'user' && snake(c.role)) field.role = snake(c.role);
+  const formula = formulaText(c.formula ?? c.calc ?? c.calculated);
+  if (formula && CALC_TYPES.includes(field.type)) {
+    field.formula = formula;
+    delete field.required;
+  }
   return field;
 }
 
@@ -104,16 +111,42 @@ function normList(o: Untrusted): PlanList {
   };
 }
 
+/** A formula as written, or '' for the ways a model says "none". */
+const formulaText = (x: unknown) => {
+  const s = typeof x === 'string' ? x.trim().slice(0, 400) : '';
+  return /^(null|none|no|false|-)?$/i.test(s) ? '' : s;
+};
+
 function normMove(o: Untrusted): PlanMove {
   const m = rec(o);
   const many = (x: Untrusted): Untrusted[] => (Array.isArray(x) ? x : x == null ? [] : [x]);
-  return {
+  const move: PlanMove = {
     label: str(m.label) || label(m.id || m.to),
     from: uniq(many(m.from).map(snake), (x) => x),
     to: snake(m.to),
     by: uniq(many(m.by ?? m.roles).map(snake), (x) => x),
   };
+  const when = formulaText(m.when ?? m.condition);
+  if (when) {
+    move.when = when;
+    if (str(m.unless)) move.unless = str(m.unless).slice(0, 200);
+  }
+  const needs = uniq(many(m.needs).map(snake), (x) => x);
+  if (needs.length) move.needs = needs;
+  return move;
 }
+
+const normCheck = (o: Untrusted): PlanCheck => {
+  const c = rec(o);
+  return {
+    list: snake(c.list || c.table),
+    when: formulaText(c.when ?? c.rule ?? c.formula),
+    message: str(c.message || c.says).slice(0, 200),
+  };
+};
+
+/** The plan's lists as the formula checks read them. */
+export const tablesOf = (lists: PlanList[]) => lists.map((l) => ({ name: l.name, columns: l.fields }));
 
 function normStages(o: Untrusted): PlanStages | null {
   if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
@@ -122,7 +155,7 @@ function normStages(o: Untrusted): PlanStages | null {
     arr(s.stages || s.states).map((x) => {
       const st = typeof x === 'string' ? { label: x } : rec(x);
       const id = snake(st.id || st.label);
-      return { id, label: str(st.label) || label(id) };
+      return st.locked === true ? { id, label: str(st.label) || label(id), locked: true } : { id, label: str(st.label) || label(id) };
     }),
     (x) => x.id,
   );
@@ -247,6 +280,34 @@ function repairPlan(plan: PlanSpec) {
     if (l.owner && l.fields.find((f) => f.name === l.owner)?.type !== 'user') l.owner = null;
   }
   syncStageField(plan.lists, plan.stages);
+  // logic that cannot be worked out is taken out, so the rest of the plan still builds: the app then simply does
+  // not calculate that field or enforce that rule
+  const tables = tablesOf(plan.lists);
+  for (const l of plan.lists)
+    for (const f of l.fields)
+      if (
+        f.formula &&
+        (formulaProblems(tables, l.name, f.formula).length || (plan.stages?.list === l.name && plan.stages.field === f.name))
+      )
+        delete f.formula;
+  for (const c of calcOrder(tables).circular)
+    delete plan.lists.find((l) => l.name === c.table)?.fields.find((f) => f.name === c.column)?.formula;
+  if (plan.checks) {
+    plan.checks = plan.checks.filter((c) => lists.includes(c.list) && c.message && !formulaProblems(tables, c.list, c.when).length);
+    if (!plan.checks.length) delete plan.checks;
+  }
+  if (plan.stages) {
+    const st = plan.stages,
+      fields = plan.lists.find((l) => l.name === st.list)?.fields.map((f) => f.name) || [];
+    for (const m of st.moves) {
+      if (m.when && formulaProblems(tables, st.list, m.when).length) {
+        delete m.when;
+        delete m.unless;
+      }
+      if (m.needs) m.needs = m.needs.filter((f) => fields.includes(f) && f !== st.field);
+      if (m.needs && !m.needs.length) delete m.needs;
+    }
+  }
   const access: AccessMap = {};
   for (const l of plan.lists) {
     access[l.name] = {};
@@ -313,6 +374,11 @@ export function normPlan(o: Untrusted, opts: { answers?: PlanAnswer[]; repair?: 
       .filter((g) => g.ask)
       .slice(0, 8),
   };
+  const checks = arr(p.checks)
+    .map(normCheck)
+    .filter((c) => c.list && c.when)
+    .slice(0, PLAN_LIMITS.checks);
+  if (checks.length) plan.checks = checks;
   if (opts.repair) repairPlan(plan);
   return plan;
 }

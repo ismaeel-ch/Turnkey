@@ -3,8 +3,10 @@ import type { AppDef, AppTable, BackedDef, Brief, BriefedDef, Check, Untrusted }
 import {
   EXTRA_FIELDS,
   backendFromPlan,
+  matchMoves,
   briefFromPlan,
   checkPlan,
+  formulasFromPlan,
   mendToPlan,
   outlineOf,
   outlineProblems,
@@ -537,6 +539,8 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
     const plan = planOf(app);
     // on the last attempt code brings the tables back to the plan instead of failing the build
     if (plan && attempt >= 3) sc.tables = mendToPlan(plan, sc.tables);
+    // which fields are calculated, and how, is the plan's word, not the agent's
+    if (plan) formulasFromPlan(plan, sc.tables);
     let checks = checkSchemaShape(sc, app.def.brief);
     if (plan) {
       const off = outlineProblems(plan, sc.tables);
@@ -590,12 +594,32 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
   },
   backend(app, out, run) {
     const be = normBackend(out, app.def);
+    const plan = planOf(app);
+    if (plan) {
+      // the rules, the conditions of moves and the locked stages are the owner's approved plan: whatever the
+      // agent wrote in their place is replaced by the plan's own
+      const planned = normBackend(backendFromPlan(plan), app.def);
+      be.logic = planned.logic;
+      if (planned.process.locked) be.process.locked = planned.process.locked.filter((s) => be.process.states.some((x) => x.id === s));
+      else delete be.process.locked;
+      const match = matchMoves(planned.process.transitions, be.process.transitions);
+      for (const tr of be.process.transitions) {
+        const same = match.get(tr);
+        delete tr.when;
+        delete tr.unless;
+        delete tr.needs;
+        if (same?.when) tr.when = same.when;
+        if (same?.unless) tr.unless = same.unless;
+        if (same?.needs) tr.needs = same.needs;
+      }
+    }
     let checks = checkBackendShape(app.def, be),
       n = 0;
     if (checks.every((c) => c.ok)) {
       app.def.process = be.process;
       app.def.access = be.access;
       app.def.team = be.team;
+      app.def.logic = be.logic;
       n = deriveEndpoints(app.def).length;
       checks = checks.concat(checkBackendLive(app, ctxOf(app, run, 'backend')));
       if (be.team) checks.push(checkTeam(app.def, be.team));
@@ -902,7 +926,8 @@ export const pTables = (def: AppDef) =>
                   : c.type === 'user' && c.role
                     ? '(' + c.role + ')'
                     : '') +
-              (c.required ? '*' : ''),
+              (c.required ? '*' : '') +
+              (c.formula ? ' = ' + c.formula : ''),
           )
           .join(', '),
     )
@@ -922,8 +947,21 @@ export const pAccess = (def: BriefedDef) =>
           .join(' | '),
     )
     .join('\n');
+/** What the app enforces beyond roles, for the agents that write steps against it: they must not write a step it refuses. */
+export const pLogic = (def: AppDef) => {
+  const P = def.process,
+    out: string[] = [];
+  const calcs = def.tables.flatMap((t) => t.columns.filter((c) => c.formula).map((c) => t.name + '.' + c.name));
+  if (calcs.length) out.push('Calculated by the app, never send a value for them: ' + calcs.join(', ') + '.');
+  for (const r of def.logic?.rules || []) out.push('A ' + r.table + ' record is refused (400) unless: ' + r.when + '.');
+  if (P && (P.locked || []).length)
+    out.push('A ' + P.table + ' record in ' + (P.locked || []).join(' or ') + ' cannot be updated or deleted (409).');
+  return out.length
+    ? '\nRULES THE APP ENFORCES (a step that breaks one is refused, so do not write such a step as a passing one):\n' + out.join('\n')
+    : '';
+};
 export const pFlow = (def: BackedDef) =>
-  !def.process.states.length
+  (!def.process.states.length
     ? 'none: records in this app do not move through stages, so there are no transitions'
     : 'table ' +
       def.process.table +
@@ -932,7 +970,20 @@ export const pFlow = (def: BackedDef) =>
       ', initial ' +
       def.process.initial +
       '\n' +
-      def.process.transitions.map((x) => x.id + ': ' + x.from.join('|') + ' -> ' + x.to + ' by ' + x.roles.join('|')).join('\n');
+      def.process.transitions
+        .map(
+          (x) =>
+            x.id +
+            ': ' +
+            x.from.join('|') +
+            ' -> ' +
+            x.to +
+            ' by ' +
+            x.roles.join('|') +
+            (x.when ? ' only when ' + x.when : '') +
+            (x.needs?.length ? ' needs ' + x.needs.join(', ') + ' filled in first' : ''),
+        )
+        .join('\n')) + pLogic(def);
 export const pRoom = (def: AppDef) => {
   const tm = def.team;
   if (!tm) return '';
@@ -1001,8 +1052,15 @@ export const APP_ICONS = [
   'star',
   'flag',
 ];
+/** For whoever writes steps that are played against an app with calculated fields and rules. */
+export const logicCare = (def: Pick<AppDef, 'tables' | 'process' | 'logic'>) =>
+  def.tables.some((t) => t.columns.some((c) => c.formula)) ||
+  def.logic?.rules.length ||
+  def.process?.transitions.some((x) => x.when || x.needs?.length)
+    ? ' This app works things out and enforces RULES, and those apply to every step. Never put a calculated field (written with " = formula" in TABLES) in "values". A step that must succeed has to keep every rule of its table and meet the "only when" and "needs" of its transition, which may take an earlier step (add a line before a move that needs one, record the work before a bill is paid). You cannot know a worked-out amount in advance: where a rule limits a value by one (a payment up to what is still owed), first create what makes it large enough in the same steps and then use an amount that is certainly within it, such as 1, and do not call it the full amount.'
+    : '';
 export const TOUR_RULES =
-  'tour: 4 to 7 steps that replay the user stories as an acceptance test, in order. Each step: {"role":"role id","do":"create|see|transition|denied|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list","screen":"screen name","say":"one present-tense sentence naming the person"}. create: "values" for the required columns (not status; leave out the owner column when the creating role owns the row). see: that role lists the table and must find the record created earlier. transition: runs a workflow transition on that record; it must be allowed for that role from the record\'s current state. denied: that role attempts "action" on "table" and must be refused by the access rules; leave denied out when the app has only one role. open: opens "screen". ' +
+  'tour: 4 to 7 steps that replay the user stories as an acceptance test, in order. Each step: {"role":"role id","do":"create|see|transition|denied|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list","screen":"screen name","say":"one present-tense sentence naming the person"}. create: "values" for the required columns (not status; leave out the owner column when the creating role owns the row). A link column to a table in which an earlier step created a record always points at that record, whatever "values" says, which is how a line is added to the order the tour just made. see: that role lists the table and must find the record created earlier. transition: runs a workflow transition on that record; it must be allowed for that role from the record\'s current state. denied: that role attempts "action" on "table" and must be refused by the access rules; leave denied out when the app has only one role. open: opens "screen". ' +
   VALUE_RULES;
 /** For the Database agent of a planned build: the lists and fields the owner approved, which it must keep to. */
 const pPlanLists = (app: BuildApp) => {
@@ -1013,6 +1071,9 @@ const pPlanLists = (app: BuildApp) => {
         '\n\nThe owner approved these lists before the build. Build exactly these tables: the same names, every column with the same name and type, the same title and owner. Do not add or leave out a table. You may add at most ' +
         EXTRA_FIELDS +
         ' columns to a table, and only when the seed data or an "only their own records" rule needs them.' +
+        (/ = /.test(outlineOf(plan))
+          ? ' A column written with " = formula" is calculated by the app from that formula: give it the type shown, do not mark it required, and leave it out of every row.'
+          : '') +
         (plan.demoData ? '' : ' The owner starts with no demo data, so the rows you write are used for the tests only.')
     : '';
 };
@@ -1022,7 +1083,7 @@ const pPlanRules = (app: BuildApp) => {
   return plan
     ? '\n\nRULES OF THE PLAN: ' +
         JSON.stringify(backendFromPlan(plan)) +
-        '\n\nThe owner approved these rules before the build. Keep the states, who may make each transition, and the access of every role on every table as they are. You add the craft: a tone for each state, and "set" where a transition should stamp the acting user or the date.'
+        '\n\nThe owner approved these rules before the build. Keep the states, who may make each transition, and the access of every role on every table as they are. Keep every "when", "unless", "needs", "locked" and "logic" exactly as written. You add the craft: a tone for each state, and "set" where a transition should stamp the acting user or the date.'
     : '';
 };
 export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
@@ -1127,6 +1188,7 @@ export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
       : '') +
     '\n- ' +
     TOUR_RULES +
+    logicCare(app.def) +
     '\n\nFORMAT: {"theme":{"accent":"","nav":"","icon":"","logo":{"shape":"","fill":"","mark":""}},"screens":[{"name":"","type":"","table":"","roles":[""],"columns":[""],"icon":"","label":""}],"tour":[]}' +
     fbText(f),
   walkthrough: (app, f) =>
@@ -1143,6 +1205,7 @@ export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
     app.def.screens.map((s) => s.name + ' (' + s.roles.join('|') + ')').join('; ') +
     '\n\nThe tour failed as an acceptance test. Write a corrected tour.\n- ' +
     TOUR_RULES +
+    logicCare(app.def) +
     '\n\nFORMAT: {"tour":[]}' +
     fbText(f),
 };
