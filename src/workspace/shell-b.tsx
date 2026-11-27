@@ -1,4 +1,4 @@
-import { Suspense, lazy, useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AppTable, BackedDef, BriefedDef } from '@/shared/types/app';
 import type {
   ApiPanel,
@@ -1440,6 +1440,33 @@ export function ChatPanel({ app }: { app: AppRecord }) {
     const el = ref.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [n, app.id, answered, settled]);
+  // A card can grow after it is first drawn (a part that loads on first use, a list that fills in). While the log is
+  // at its end, keep it there, so a new question is not left half hidden under the suggestions.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let atEnd = true;
+    const onScroll = () => {
+      atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    };
+    const ro = new ResizeObserver(() => {
+      if (atEnd) el.scrollTop = el.scrollHeight;
+    });
+    const watch = () => {
+      ro.disconnect();
+      ro.observe(el);
+      for (const c of Array.from(el.children)) ro.observe(c);
+    };
+    const mo = new MutationObserver(watch);
+    mo.observe(el, { childList: true });
+    watch();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      el.removeEventListener('scroll', onScroll);
+    };
+  }, [app.id]);
   const send = (text?: string) => sendChat(app, text != null ? text : draft);
   const waiting = busy && (RUNS[app.id].answer || RUNS[app.id].gate),
     idle = !busy && !PENDING[app.id],

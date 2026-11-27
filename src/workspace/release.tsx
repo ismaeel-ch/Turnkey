@@ -301,9 +301,8 @@ export function draftNotes(app: AppRecord) {
     return [
       'First release: ' +
         d.screens.length +
-        ' pages for ' +
-        d.brief.roles.length +
-        ' roles' +
+        (d.screens.length === 1 ? ' screen for ' : ' screens for ') +
+        (d.brief.roles.length === 1 ? 'one kind of person' : d.brief.roles.length + ' kinds of people') +
         (d.team ? ', with a team of ' + d.team.agents.length + ' agents inside' : '') +
         '.',
     ];
