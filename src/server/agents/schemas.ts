@@ -53,8 +53,15 @@ const backendStatus = obj({
 });
 // with no access rules every role gets "none" everywhere, which the browser's checks always refuse
 const access = z.union([z.array(anyItem), obj({})]);
+// an app planned with no stages has no workflow: its answer is the access rules alone, with no status at all
+const noStatus = z.null().optional();
 export const backend = z.union(
-  [obj({ status: backendStatus, access }), obj({ workflow: backendStatus, access }), obj({ process: backendStatus, access })],
+  [
+    obj({ status: backendStatus, access }),
+    obj({ workflow: backendStatus, access }),
+    obj({ process: backendStatus, access }),
+    obj({ access, status: noStatus, workflow: noStatus, process: noStatus }),
+  ],
   {
     error: 'needs a "status" object with states and transitions',
   },

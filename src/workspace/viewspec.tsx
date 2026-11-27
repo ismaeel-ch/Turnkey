@@ -17,7 +17,7 @@ import type {
 import type { AppRecord, Dict } from '@/shared/types/workspace';
 import { ICONS } from './icons';
 import { arr, errText, label, snake, str } from './core';
-import { ACCENTS, LIMITS, VIEW_ICON, VIEW_LABEL, VIEW_TYPES, accOf, appUsers, chk, colOf, roleName, tableOf } from './engine';
+import { ACCENTS, LIMITS, VIEW_ICON, VIEW_LABEL, VIEW_TYPES, accOf, appUsers, chk, colOf, mainTable, roleName, tableOf } from './engine';
 import { canRunTeam } from './team';
 import { suggestBoard } from './room';
 import { STATIONS, blankLine } from './line';
@@ -302,11 +302,18 @@ export function checkViews(def: AppDef, vw: ViewsDraft) {
   );
   const k = vw.dash.widgets.filter((w) => w.kind === 'kpi').length,
     c = vw.dash.widgets.filter((w) => w.kind === 'bar' || w.kind === 'stack' || w.kind === 'line').length;
+  // lists of plain text only (no choice, link, person, yes/no or date field anywhere) have nothing a chart could show
+  const chartable = def.tables.some((t) => t.columns.some((col) => isCat(col) || isDate(col)));
   out.push(
     chk(
       'The dashboard has numbers and charts',
-      k >= 1 && c >= 1,
-      k + ' numbers, ' + c + ' charts' + (vw.dropped ? ', ' + vw.dropped + ' unusable widgets left out' : ''),
+      k >= 1 && (c >= 1 || !chartable),
+      k +
+        ' numbers, ' +
+        c +
+        ' charts' +
+        (vw.dropped ? ', ' + vw.dropped + ' unusable widgets left out' : '') +
+        (chartable ? '' : ' (nothing to chart by)'),
     ),
   );
   return out;
@@ -314,7 +321,8 @@ export function checkViews(def: AppDef, vw: ViewsDraft) {
 export function suggestViews(def: BackedDef) {
   // the rule-based plan: used when the advisor cannot pass, and for tables added later
   const P = def.process,
-    pt = tableOf(def, P.table) as AppTable,
+    staged = P.states.length > 0,
+    pt = mainTable(def) as AppTable,
     views = def.tables.map((t) => ({
       table: t.name,
       use: DATA_VIEWS.filter((v) => !viewFit(def, t, v)).map((v) => ({
@@ -323,6 +331,7 @@ export function suggestViews(def: BackedDef) {
     }));
   const cat = pt.columns.find((c) => isCat(c) && c.name !== P.column),
     date = pt.columns.find(isDate),
+    amount = pt.columns.find((c) => c.type === 'money' || c.type === 'number'),
     w: Dict<unknown>[] = [
       {
         kind: 'kpi',
@@ -340,12 +349,24 @@ export function suggestViews(def: BackedDef) {
       },
     }),
   );
-  w.push({
-    kind: 'bar',
-    label: pt.label + ' by ' + label(P.column).toLowerCase(),
-    table: pt.name,
-    x: P.column,
-  });
+  if (staged)
+    w.push({
+      kind: 'bar',
+      label: pt.label + ' by ' + label(P.column).toLowerCase(),
+      table: pt.name,
+      x: P.column,
+    });
+  else {
+    // no stages to count by: the total of what is added up, and the list by its first category
+    if (amount)
+      w.push({
+        kind: 'kpi',
+        label: 'Total ' + String(amount.label || label(amount.name)).toLowerCase(),
+        table: pt.name,
+        measure: 'sum:' + amount.name,
+      });
+    if (cat) w.push({ kind: 'bar', label: pt.label + ' by ' + String(cat.label).toLowerCase(), table: pt.name, x: cat.name });
+  }
   if (date)
     w.push({
       kind: 'line',
@@ -354,7 +375,7 @@ export function suggestViews(def: BackedDef) {
       x: date.name,
       bucket: 'day',
     });
-  if (cat)
+  if (cat && staged)
     w.push({
       kind: 'stack',
       label: pt.label + ' by ' + String(cat.label).toLowerCase(),
@@ -362,6 +383,17 @@ export function suggestViews(def: BackedDef) {
       x: cat.name,
       split: P.column,
     });
+  if (!w.some((x) => x.kind === 'bar' || x.kind === 'line' || x.kind === 'stack')) {
+    // the main list has nothing to chart by: chart the first list that has
+    const other = def.tables.find((t) => t.columns.some((c) => isCat(c) || isDate(c)));
+    const by = other && (other.columns.find(isCat) || other.columns.find(isDate));
+    if (other && by)
+      w.push(
+        isCat(by)
+          ? { kind: 'bar', label: other.label + ' by ' + String(by.label || label(by.name)).toLowerCase(), table: other.name, x: by.name }
+          : { kind: 'line', label: other.label + ' over time', table: other.name, x: by.name, bucket: 'day' },
+      );
+  }
   w.push({
     kind: 'recent',
     label: 'Latest ' + pt.label.toLowerCase(),
@@ -454,7 +486,7 @@ export function migrateApp(app: AppRecord) {
       id: 's' + (def.screens.length + 301),
       name: 'Dashboard',
       type: 'dashboard',
-      table: def.process.table,
+      table: (mainTable(def) as AppTable).name,
       roles: [],
       columns: [],
       icon: 'pie',
@@ -593,11 +625,7 @@ export function normUI(o: Untrusted, def: BackedDef): UIDraft {
       if (type === 'agents' && !def.team) return null;
       const t =
         tableOf(def, snake(s.table)) ||
-        (type === 'dashboard'
-          ? tableOf(def, def.process.table)
-          : type === 'agents' && def.team
-            ? tableOf(def, def.team.input.table)
-            : null);
+        (type === 'dashboard' ? mainTable(def) : type === 'agents' && def.team ? tableOf(def, def.team.input.table) : null);
       if (t && DATA_VIEWS.includes(type) && viewFit(def, t, type)) type = 'table';
       const scr: Screen = {
         id: 's' + ++n,
@@ -659,7 +687,7 @@ export function normUI(o: Untrusted, def: BackedDef): UIDraft {
       id: 's' + ++n,
       name: (def.dash && def.dash.title) || 'Dashboard',
       type: 'dashboard',
-      table: def.process.table,
+      table: (mainTable(def) as AppTable).name,
       roles: [],
       columns: [],
       icon: 'pie',

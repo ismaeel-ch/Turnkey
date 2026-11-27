@@ -57,6 +57,7 @@ import {
   renderTest,
   roleName,
   runAcceptance,
+  mainTable,
   tableOf,
 } from './engine';
 import {
@@ -415,7 +416,7 @@ export function suggestChanges(app: AppRecord) {
   // example chips under the chat box, made from the app's own tables
   const def = app.def;
   if (!def.tables.length || !def.process) return [];
-  const pt = tableOf(def, def.process.table) as AppTable,
+  const pt = mainTable(def) as AppTable,
     out: string[] = [],
     other = def.tables.find((t) => t !== pt) || pt;
   out.push('Add a ' + (colOf(other, 'notes') ? 'reference code' : 'notes') + ' field to ' + other.label.toLowerCase());
@@ -1682,7 +1683,12 @@ export function buildPack(app: BackedApp) {
     def.migrations.forEach((m) => L.push('- `' + m.sql.replace(/\s+/g, ' ') + '`'));
     L.push('');
   }
-  L.push('## Workflow on ' + def.process.table, '', '| Action | From | To | Roles |', '|---|---|---|---|');
+  L.push(
+    def.process.states.length ? '## Workflow on ' + def.process.table : '## Workflow: none, records are just kept',
+    '',
+    '| Action | From | To | Roles |',
+    '|---|---|---|---|',
+  );
   def.process.transitions.forEach((x) =>
     L.push(
       '| ' +

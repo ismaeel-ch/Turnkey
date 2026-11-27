@@ -59,10 +59,10 @@ function expensePlan(a: Answers): PlanSpec {
   const plan = structuredClone(solo ? PERSONAL_EXPENSES : COMPANY_EXPENSES);
   if (solo && a.approval !== 'none') {
     const expenses = plan.lists[0];
-    expenses.fields.push({ name: 'stage', label: 'Stage', type: 'select', options: ['to_pay', 'paid', 'claimed_back'] });
+    expenses.fields.push({ name: 'status', label: 'Stage', type: 'select', options: ['to_pay', 'paid', 'claimed_back'] });
     plan.stages = {
       list: expenses.name,
-      field: 'stage',
+      field: 'status',
       stages: [
         { id: 'to_pay', label: 'To pay' },
         { id: 'paid', label: 'Paid' },
@@ -87,7 +87,7 @@ function expensePlan(a: Answers): PlanSpec {
     plan.stages.stages = plan.stages.stages.filter((s) => s.id !== 'paid');
     plan.stages.moves = plan.stages.moves.filter((m) => m.to !== 'paid');
     plan.stages.note = 'The Employee submits. The Manager approves, sends it back to Draft with a reason, or rejects it.';
-    for (const l of plan.lists) for (const f of l.fields) if (f.name === 'stage') f.options = plan.stages.stages.map((s) => s.id);
+    for (const l of plan.lists) for (const f of l.fields) if (f.name === 'status') f.options = plan.stages.stages.map((s) => s.id);
   }
   if (!solo && a.visibility === 'all') {
     plan.permissions.claims.employee = { list: 'all', create: true, update: 'own', delete: false };
@@ -126,7 +126,7 @@ function plainPlan(request: string, a: Answers): PlanSpec {
   const stages: PlanStages | null = stageIds.length
     ? {
         list: mainName,
-        field: 'stage',
+        field: 'status',
         stages: stageIds.map((id) => ({ id, label: cap(id.replace(/_/g, ' ')) })),
         moves: stageIds.slice(1).map((id, i) => ({
           label: 'Move to ' + id.replace(/_/g, ' '),
@@ -150,7 +150,7 @@ function plainPlan(request: string, a: Answers): PlanSpec {
         { name: 'name', label: 'Name', type: 'text', required: true },
         { name: 'contact', label: 'Contact', type: 'ref', ref: 'contacts' },
         ...(solo ? [] : [{ name: 'assignee', label: 'Assigned to', type: 'user' as const, role: 'staff' }]),
-        ...(stages ? [{ name: 'stage', label: 'Stage', type: 'select' as const, options: stageIds }] : []),
+        ...(stages ? [{ name: 'status', label: 'Stage', type: 'select' as const, options: stageIds }] : []),
         { name: 'due_on', label: 'Due on', type: 'date' },
         { name: 'notes', label: 'Notes', type: 'longtext' },
       ],

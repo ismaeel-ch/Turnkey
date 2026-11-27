@@ -14,6 +14,7 @@ import {
   AUDIENCES,
   PLAN_LIMITS,
   SLOT_VALUES,
+  STAGE_FIELD,
   type Audience,
   type PlanAnswer,
   type PlanField,
@@ -128,7 +129,7 @@ function normStages(o: Untrusted): PlanStages | null {
   if (!stages.length) return null;
   return {
     list: snake(s.list || s.entity || s.table),
-    field: snake(s.field || s.column) || 'stage',
+    field: snake(s.field || s.column) || STAGE_FIELD,
     stages,
     moves: arr(s.moves || s.transitions)
       .map(normMove)
@@ -181,14 +182,25 @@ export function normAnswer(o: Untrusted, by?: PlanAnswer['by']): PlanAnswer | nu
   return out;
 }
 
-/** Keeps the stage field of the stage list in step with the stages: it exists, it is a choice, its options are the stage ids. */
+/**
+ * Keeps the stage field of the stage list in step with the stages: it is named `status` (what the finished app calls
+ * it, whatever the Planner called it), it exists, it is a choice, and its options are the stage ids.
+ */
 function syncStageField(lists: PlanList[], stages: PlanStages | null) {
   if (!stages) return;
   const list = lists.find((l) => l.name === stages.list);
   if (!list) return;
+  if (stages.field !== STAGE_FIELD) {
+    const named = list.fields.find((f) => f.name === stages.field);
+    // a field already called status takes the job; otherwise the Planner's field is renamed and keeps its label
+    if (named && list.fields.some((f) => f.name === STAGE_FIELD)) list.fields = list.fields.filter((f) => f !== named);
+    else if (named) named.name = STAGE_FIELD;
+    if (list.title === stages.field) list.title = STAGE_FIELD;
+    stages.field = STAGE_FIELD;
+  }
   const ids = stages.stages.map((s) => s.id);
   const field = list.fields.find((f) => f.name === stages.field);
-  if (!field) list.fields.push({ name: stages.field, label: label(stages.field), type: 'select', options: ids });
+  if (!field) list.fields.push({ name: stages.field, label: 'Stage', type: 'select', options: ids });
   else if (field.type === 'select') field.options = ids;
 }
 
@@ -363,7 +375,7 @@ function stagesFor(draft: PlanSpec, labels: string[], people: PlanPerson[], list
   const ids = people.map((p) => p.id);
   return {
     list: list.name,
-    field: draft.stages?.field || 'stage',
+    field: STAGE_FIELD,
     stages,
     moves: stages.slice(1).map((s, i) => {
       const was = old(stages[i].id, s.id);
