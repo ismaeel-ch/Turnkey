@@ -43,7 +43,7 @@ Each line is checked by a person or by the audit (`.claude/skills/hackathon-chec
    calls). Then one team run in a quest app, whose case header shows what its model calls cost. Turn Live off again.
 5. With Live off, the clinic sentence goes through its question and plan, builds, and opens on Sara's welcome; a
    saved build runs, its app opens, and Release and Share work. The "Judge walk" action (Actions,
-   Judge walk, Run workflow) checks both paths (the guided clinic build, then Try a sample) on the live site by clicking through them, 36 steps, and must pass.
+   Judge walk, Run workflow) checks both paths (the guided clinic build, then Try a sample) on the live site by clicking through them, 37 steps, and must pass.
 6. Details, Connections, Microsoft Learn, Test on the live site returns real results from learn.microsoft.com.
 7. The repository is public and the README opens on the live URL and the summary.
 8. Nothing in the repository holds a key (`npm run check:secrets`), and no data in it is real client or company data.

@@ -74,7 +74,7 @@ For: a sales team that answers tenders and requests for proposals.
 | Workflow          | new, assessing, assessed, approved, won, lost, no bid. The agents take a tender from new to assessed. The director approves or declines, and later records the result                                                                                                                                            |
 | Team              | **Qualifier** scores the tender 0 to 5 on fit, capacity, relationship, competition and time. **Pricing** works out three prices with margin and chance of winning and marks one as recommended. **Red team** challenges the bid (strengths, risks, conditions) and gives a go or no-go with a chance of winning. |
 | Human in the loop | the run pauses before the Red team so a person can add a risk or a condition                                                                                                                                                                                                                                     |
-| Also shows        | the Tester catching a planted mistake: the saved Backend answer lets bid managers delete tenders, which the brief forbids. The Tester's case fails, the Backend agent is asked to repair it, and the repair is applied only if every check still passes. Build tab, **Tests**.                                   |
+| Also shows        | the Tester catching a planted mistake: the saved Rules builder answer lets bid managers delete tenders, which the brief forbids. The Tester's case fails, the Rules builder is asked to repair it, and the repair is applied only if every check still passes. Build tab, **Tests**.                             |
 
 Clients, tenders and prices in this app are made up.
 
@@ -113,7 +113,7 @@ browser-side data. Each item says what would have to be true.
 
 1. Open https://turnkey-bay.vercel.app/ with Live off (Demo).
 2. Pick "Sales bidding desk". Watch Build, Workflow: each agent, the check after it, the approval the owner placed.
-   Open **Tests** to see the Tester's failing case and the Backend's repair.
+   Open **Tests** to see the Tester's failing case and the Rules builder's repair.
 3. Open the **App** tab, sign in as a Bid manager, open the Bid room, pick a saved case and press Run. Watch the three
    agents write rows. The run pauses before the Red team.
 4. Ask the chat for a change ("Add a notes field to score lines"). The plan card shows which stations re-run.
