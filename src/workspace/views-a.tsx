@@ -1322,6 +1322,8 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
     </li>
   );
   type Tree = ReactNode | Tree[];
+  // one flat list of keyed rows: nested arrays of children make React ask for keys it cannot see
+  const flatTree = (x: Tree): ReactNode[] => (Array.isArray(x) ? x.flatMap(flatTree) : x == null ? [] : [x]);
   let body: Tree;
   if (self && byParent) {
     const pc = self.name,
@@ -1431,7 +1433,7 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
           Reset
         </Btn>
       </div>
-      {rows.length ? <ul className="tree">{body as ReactNode}</ul> : <NoRows t={t} />}
+      {rows.length ? <ul className="tree">{flatTree(body)}</ul> : <NoRows t={t} />}
     </>
   );
 }

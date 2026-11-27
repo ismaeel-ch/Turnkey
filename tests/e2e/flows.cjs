@@ -83,6 +83,12 @@ async function flowDemo(browser, url) {
   await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 40000 });
   await shot(page, '05-question');
   check('line pauses for the owner (needs you)', (await appState(page)).line.research === 'waiting');
+  // the meeting view: the Researcher raises a hand while it waits on the owner's answer
+  await page.getByRole('button', { name: 'Meeting', exact: true }).click(); await page.waitForSelector('.meet-tile[data-agent=researcher]');
+  const meetWait = await st(page, () => ({ hand: [...document.querySelectorAll('.meet-tile.m-hand')].map((x) => x.dataset.agent), note: (document.querySelector('.meet-note') || {}).textContent || '' }));
+  check('meeting view: the Researcher has a hand raised while the line waits for the owner', meetWait.hand.join(',') === 'researcher' && /Researcher has a hand raised/.test(meetWait.note), meetWait);
+  await shot(page, '05b-meeting-hand');
+  await page.getByRole('button', { name: 'Workflow', exact: true }).click(); await page.waitForSelector('.flow-canvas');
   await page.locator('.gcard.ask .opt').first().click();
   await sleep(2500); await shot(page, '06-building');
   await waitReady(page);
@@ -112,6 +118,12 @@ async function flowDemo(browser, url) {
   await page.locator('.station').nth(1).click(); await page.getByRole('tab', { name: /^Attempts/ }).click(); await sleep(150); await shot(page, '08-attempts');
   await page.getByRole('button', { name: 'Timeline' }).click(); await sleep(150); await shot(page, '09-timeline');
   check('the timeline says a saved build replayed with no model calls and nothing spent', /no model calls, nothing spent/.test(await page.locator('.tl-usage').innerText()));
+  await page.getByRole('button', { name: 'Meeting', exact: true }).click(); await page.waitForSelector('.meet-tile');
+  const meet = await st(page, () => ({ tiles: [...document.querySelectorAll('.meet-tile')].map((x) => x.dataset.agent + ':' + [...x.classList].find((c) => c.indexOf('m-') === 0)), hands: document.querySelectorAll('.meet-hand').length, screen: (document.querySelector('.meet-screen-head') || {}).textContent || '' }));
+  check('meeting view: a tile for the orchestrator and every builder, all done, no hands raised, the line on the shared screen', meet.tiles.slice(0, 6).join(',') === 'orchestrator:m-done,researcher:m-done,database:m-done,backend:m-done,views:m-done,ui:m-done' && meet.tiles.every((t) => /m-done$/.test(t)) && meet.hands === 0 && /sharing the build line/.test(meet.screen) && /6 of 6 stations checked/.test(meet.screen), meet);
+  await page.locator('.meet-tile[data-agent=database]').click(); await page.waitForSelector('.meet-tile[data-agent=database].sel');
+  check('meeting view: pressing a tile opens what that agent made', (await page.locator('section.inspector').first().getAttribute('aria-label')) === 'Database inspector', await page.locator('section.inspector').first().getAttribute('aria-label'));
+  await shot(page, '09b-meeting');
   await page.getByRole('button', { name: 'Workflow', exact: true }).click();
 
   // the built app
@@ -155,6 +167,10 @@ async function flowDemo(browser, url) {
   const hid = await st(page, (aid) => { const F = window.__formwork, other = F.sql(aid, 'SELECT id FROM visit_notes WHERE doctor_id <> (SELECT MIN(id) FROM users WHERE role = ?) LIMIT 1', ['doctor'])[0].id, step = { role: 'doctor', do: 'denied', table: 'visit_notes', action: 'update' }; return { other: F.tourStep(aid, step, { visit_notes: other }), missing: F.tourStep(aid, step, { visit_notes: 9999 }), noAction: F.tourStep(aid, { ...step, action: 'no_such_action' }, { visit_notes: other }) }; }, a.id);
   check('a test counts "not found" as refused when the record exists but is hidden from that person, and not when it is missing', hid.other.ok === true && /^404/.test(hid.other.detail) && hid.missing.ok === false, hid);
   check('a test does not count a 404 for an action the app does not have as refused', hid.noAction.ok === false, hid.noAction);
+  const gap = await st(page, (aid) => { const F = window.__formwork, def = F.state().apps[aid].def, mk = def.tour.find((x) => x.do === 'create'), done = def.tour.find((x) => x.transition === 'complete'); const [c] = F.wf.fill([{ id: 'gap', name: 'A doctor completes a visit', why: '', steps: [mk, done] }], def); return { trs: c.steps.filter((x) => x.do === 'transition').map((x) => x.transition + ':' + x.role), ok: F.tourStep(aid, c.steps).map((r) => r.ok) }; }, a.id);
+  check('a test case that jumps over workflow steps gets the missing steps, run by roles allowed to take them, and passes', gap.trs.join(',') === 'check_in:receptionist,start:doctor,complete:doctor' && gap.ok.every(Boolean), gap);
+  const closed = await st(page, (aid) => { const F = window.__formwork; return { notes: F.tourStep(aid, { role: 'receptionist', do: 'hidden', table: 'visit_notes' }), patients: F.tourStep(aid, { role: 'doctor', do: 'hidden', table: 'patients' }) }; }, a.id);
+  check('"cannot see" with nothing made in the case passes only when the whole table is closed to that person', closed.notes.ok === true && closed.patients.ok === false, closed);
   await view(page, 'API'); await page.waitForSelector('.api-grid');
   await page.locator('.side-i', { hasText: '/visit_notes' }).nth(2).click(); await page.locator('.api-grid .btn.primary').click(); await sleep(100);
   check('receptionist is refused on POST /visit_notes', (await page.locator('.api-grid .badge').first().innerText()).trim() === '403', await page.locator('.api-grid .badge').first().innerText());
@@ -169,6 +185,17 @@ async function flowDemo(browser, url) {
   check('when the source fails, the test says why and shows the labelled sample beside it', /Sample response/.test(await page.locator('.conn-detail').innerText()), await page.locator('.conn-detail').innerText());
   await page.unroute('**/api/connectors/**');
   await shot(page, '22-connections');
+  // Microsoft Learn: the search tool goes through the server's MCP client, the fetch tool stays a sample
+  await page.locator('.conn-card .conn-main', { hasText: 'Microsoft Learn' }).click(); await page.waitForFunction(() => /MCP server/.test((document.querySelector('.conn-detail') || {}).innerText || ''));
+  if (!(await page.locator('#conn-mslearn').isChecked().catch(() => true))) { await page.locator('#conn-mslearn').click(); await sleep(100); }
+  let learnUrl = '';
+  await page.route('**/api/connectors/**', (route) => { learnUrl = route.request().url(); return route.fulfill({ json: { ok: true, items: [{ title: 'Reset a user password', url: 'https://learn.microsoft.com/en-us/entra/', text: 'A made-up answer from the server route.', source: 'Microsoft Learn' }] } }); });
+  await page.locator('.conn-detail tr', { hasText: 'microsoft_docs_search' }).locator('.btn', { hasText: 'Test' }).click(); await page.waitForSelector('.conn-detail .badge.b-success');
+  check('Microsoft Learn search is called through the server route, which speaks to its MCP server', /\/api\/connectors\/mslearn\?.*q=reset/.test(learnUrl) && /Live response/.test(await page.locator('.conn-detail').innerText()), learnUrl);
+  learnUrl = '';
+  await page.locator('.conn-detail tr', { hasText: 'microsoft_docs_fetch' }).locator('.btn', { hasText: 'Test' }).click(); await sleep(200);
+  check('the Microsoft Learn fetch tool has no server client and shows a labelled sample', learnUrl === '' && /Sample response/.test(await page.locator('.conn-detail').innerText()), await page.locator('.conn-detail').innerText());
+  await page.unroute('**/api/connectors/**');
   await page.locator('.titlebar .net').click(); await sleep(200);
   check('offline disables connection tests', await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().isDisabled());
   await shot(page, '23-offline');
@@ -391,6 +418,8 @@ async function flowLive(browser, url) {
     for (const a of agents) {
       const out = Object.assign({ rows: [], update: [], summary: null }, TEAM_OUT[a.name] || { say: 'Nothing to add.' });
       ev.push({ type: 'STEP_STARTED', stepName: a.id }, { type: 'CUSTOM', name: 'check', value: { agent: a.id, ok: true, sentBack: false, by: 'rules' } });
+      // each agent's model call, as the server reports it (src/server/llm/usage.ts CallUsage)
+      ev.push({ type: 'CUSTOM', name: 'usage', value: { model: 'claude-haiku-5-5', tier: 'quick', input: 500, output: 200, cacheRead: 1000, cacheWrite: 0, costUsd: 0.0005, ms: 900, estimated: false } });
       // the researchers' lookup finds Wikipedia down: the server says so in the tool result, and the run carries on
       if (a.id === 'researchers') ev.push({ type: 'TOOL_CALL_START', toolCallId: 'tc1', toolCallName: 'wikipedia.page_summary' }, { type: 'TOOL_CALL_ARGS', toolCallId: 'tc1', delta: '{"title":"Pacific Ocean"}' }, { type: 'TOOL_CALL_END', toolCallId: 'tc1' }, { type: 'TOOL_CALL_RESULT', messageId: 'mt1', toolCallId: 'tc1', role: 'tool', content: JSON.stringify({ agent: a.id, ok: false, unavailable: true, text: 'SOURCE UNAVAILABLE: Wikipedia cannot be used right now.' }) });
       ev.push({ type: 'TEXT_MESSAGE_START', messageId: 'm_' + a.id, role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'm_' + a.id, delta: out.say }, { type: 'TEXT_MESSAGE_END', messageId: 'm_' + a.id });
@@ -405,6 +434,8 @@ async function flowLive(browser, url) {
   const tr = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), T = window.__formwork.teams()[t.app]; return { status: T.status, live: T.live, steps: T.steps.map((x) => [x.status, x.rows.length, x.updated, x.problems.length]), made: Object.keys(T.made).map((k) => k + ':' + T.made[k].length).join(','), error: T.error }; });
   check('live team: one server run of three agents, rows written through the API, a bad row refused without stopping the run', tr.status === 'done' && tr.live && JSON.stringify(tr.steps) === '[["ok",2,0,0],["ok",2,0,1],["ok",0,3,0]]' && tr.made === 'claims:2,evidence:2' && teamRuns.join('|') === 'team:Extractor,team:Researchers,team:Verifier' && !(await st(page, () => window.__calls)).some((x) => x.startsWith('team:')), [tr, teamRuns, await st(page, () => window.__calls)]);
   check('live team: a public source that is down is said plainly, once, and the run still finishes', tr.status === 'done' && (await page.locator('.toasts').innerText()).split('Wikipedia is not answering right now').length === 2, await page.locator('.toasts').innerText());
+  const tu = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), T = window.__formwork.teams()[t.app]; return { calls: T.usage && T.usage.calls, cost: T.usage && T.usage.costUsd, agents: Object.keys(T.agentUsage || {}).join(','), head: document.querySelector('.team-cost')?.textContent || '', per: [...document.querySelectorAll('.team-a-cost')].map((x) => x.textContent).join('|') }; });
+  check('live team: the room shows what the run\'s model calls cost, in total and for each agent', tu.calls === 3 && Math.abs(tu.cost - 0.0015) < 1e-9 && tu.agents === 'extractor,researchers,verifier' && /3 model calls · 5\.1k tokens · 67% from cache · \$0\.0015/.test(tu.head) && tu.per.split('|').length === 3 && tu.per.split('|').every((x) => /1 model call · 1\.7k tokens · .* · \$0\.0005/.test(x)), tu);
   check('live team: the agent could not set the status itself, the workflow did', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Checked', await page.locator('.team-log .badge').first().innerText());
   await shot(page, '54-live-team');
   await st(page, () => { window.__formwork.view().calls = 0; }); // this flow now makes more model calls than one session's cap allows, so start the count again for the last case
@@ -575,8 +606,33 @@ async function flowMisc(browser, url) {
   check('when the SQLite engine does not load, the page says so and offers a reload', /could not start/.test(sqlMsg) && /check the connection/.test(sqlMsg) && (await noSql.page.getByRole('button', { name: 'Reload the page' }).count()) === 1, sqlMsg);
   errors.splice(0, errors.length, ...errors.filter((e) => !/sql-wasm|SQLite engine|Failed to load resource|ERR_FAILED/i.test(e)));
   await noSql.ctx.close();
+  await canvasFieldEdits(browser, url);
 }
 
+async function canvasFieldEdits(browser, url) { // the owner edits fields on the Data page itself; only the touched stations run again
+  const { ctx, page } = await newPage(browser); await enter(page, url); await buildTpl(page, 'clinic');
+  await view(page, 'Data'); await page.locator('.split .side-i', { hasText: 'patients' }).first().click(); await page.getByRole('tab', { name: 'Columns' }).click();
+  await page.waitForSelector('.field-edit'); await shot(page, '64-field-editor');
+  await page.getByLabel('New field name').fill('Allergies'); await page.getByLabel('New field type').selectOption('longtext');
+  await page.locator('.field-edit .btn', { hasText: 'Add field' }).click(); await waitIdle(page);
+  let a = await appState(page);
+  const touch = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); const a = s.apps[t.app]; return { ...a.touched['col:patients.allergies'], said: a.chat.some((m) => m.from === 'user' && /On the Data page: Add Allergies/.test(m.text)) }; });
+  check('an edit on the Data page adds the field with a migration, is written to the chat as yours, and re-runs only from the Database station', a.cols.patients.includes('allergies') && a.mig === 1 && a.line.database === 'ok' && touch.said && touch.by === 'database' && touch.via === 'change', [a.cols.patients, a.mig, a.line, touch]);
+  const plan = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); const c = s.apps[t.app].chat.filter((m) => m.card && m.card.type === 'plan').pop(); return c && c.card; });
+  check('the Data page edit shows the same plan card as a chat change: Research is kept', plan && plan.skip.includes('Research') && plan.rerun[0] === 'Database', plan);
+  check('the Columns tab lists the new field with who made it', /allergies[\s\S]*your request/i.test(await page.locator('.main-body tr', { hasText: 'allergies' }).innerText()));
+  await page.getByLabel('Field to change').selectOption('allergies'); await page.getByLabel('New name for the field').fill('Known allergies');
+  await page.locator('.field-edit .btn', { hasText: 'Rename' }).click(); await waitIdle(page); a = await appState(page);
+  check('renaming a field on the Data page renames the column', a.cols.patients.includes('known_allergies') && !a.cols.patients.includes('allergies') && a.mig === 2, a.cols.patients);
+  await page.getByLabel('Field to change').selectOption('front_desk_note'); await page.locator('.field-edit .btn', { hasText: 'Remove' }).click();
+  await page.waitForSelector('.gcard.ask .btn.danger', { timeout: 8000 });
+  check('removing a field with stored values asks first, and the editor waits', await page.locator('.field-edit .btn', { hasText: 'Add field' }).isDisabled());
+  await page.locator('.gcard.ask .btn.danger').click(); await waitIdle(page); a = await appState(page);
+  check('after a yes, the field is dropped', !a.cols.patients.includes('front_desk_note') && a.mig === 3, a.cols.patients);
+  await page.getByLabel('New field name').fill('phone'); await page.locator('.field-edit .btn', { hasText: 'Add field' }).click(); await sleep(200);
+  check('a field that already exists is refused on the page with the reason, and nothing runs', /already has a phone field/i.test(await page.locator('.field-edit').innerText()) && (await appState(page)).mig === 3);
+  await ctx.close();
+}
 async function flowViews(browser, url) {
   const { ctx, page } = await newPage(browser);
   await enter(page, url); await shot(page, '70-home-library');
@@ -930,6 +986,17 @@ async function flowCustom(browser, url) {
   check('library: "add a normalise step" adds the Normaliser after Database; this app has nothing to tidy', a.flow.reviewers.includes('normalize') && a.reviews.normalize && a.reviews.normalize.status === 'ok' && a.reviews.normalize.f.length === 0, [a.flow.reviewers, a.reviews.normalize]);
   await say(page, 'Remove the brand stylist agent'); await sleep(250); await say(page, 'Remove the normalise step'); await sleep(250); a = await appFull(page);
   check('chat: removing steps takes them out of the flow, and what they changed stays in the app', a.flow.agents.length === 0 && a.flow.reviewers.join() === 'security' && a.theme.indexOf('teal/compact') === 0, [a.flow, a.theme]);
+
+  // ----- B3. the step palette: drag a step onto a gate, as in n8n -----
+  check('palette: every step the plus offers is a tile above the canvas, and a step already in the flow is greyed out', await page.locator('.flow-palette .fp-tile').count() >= 8 && await page.locator('.fp-tile[data-step=security]').isDisabled() && !(await page.locator('.fp-tile[data-step=normalize]').isDisabled()), await page.locator('.flow-palette').innerText());
+  for (let i = 0, was = ''; i < 40; i++) { const b = JSON.stringify(await page.locator('.fl-gate[data-st=database]').boundingBox()); if (b === was) break; was = b; await sleep(150); }
+  await page.locator('.fp-tile[data-step=normalize]').dragTo(page.locator('.fl-gate[data-st=database]')); a = await waitFree(page);
+  check('palette: dropping Normalise tables on the Database gate adds it there and runs it', a.flow.reviewers.includes('normalize') && a.reviews.normalize && a.reviews.normalize.status === 'ok', [a.flow.reviewers, a.reviews.normalize]);
+  for (let i = 0, was = ''; i < 40; i++) { const b = JSON.stringify(await page.locator('.fl-gate[data-st=database]').boundingBox()); if (b === was) break; was = b; await sleep(150); } // the canvas refits after a step is added: wait until the gate stops moving
+  await page.locator('.fp-tile[data-step=insight]').dragTo(page.locator('.fl-gate[data-st=database]')); await page.waitForFunction(() => Array.from(document.querySelectorAll('.toast')).some((t) => /Insight review reads/.test(t.textContent || '')), null, { timeout: 5000 }).catch(() => {}); a = await appFull(page);
+  check('palette: a step dropped where it cannot read anything yet is refused with the reason', !a.flow.reviewers.includes('insight') && /Insight review reads .* so it can go after/.test(await page.locator('.toast').allInnerTexts().then((x) => x.join(' | '))), [a.flow.reviewers, await page.locator('.toast').allInnerTexts()]);
+  await say(page, 'Remove the normalise step'); await sleep(250); a = await appFull(page);
+  check('palette: the step it added comes out like any other', a.flow.reviewers.join() === 'security', a.flow.reviewers);
 
   // ----- C. the same workflow, edited by asking in chat -----
   const tc0 = await st(page, () => window.__formwork.logs.TOOLCALLS.length);

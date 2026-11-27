@@ -111,6 +111,80 @@ export function normCases(o: Untrusted, def: BriefedDef): TestCase[] {
     .filter((c) => c.steps.length)
     .slice(0, 10);
 }
+/**
+ * A model often writes a case that jumps over a workflow step: it creates a record, then runs a transition that only
+ * starts from a later state (409 "Cannot send for approval while it is received"). No repair can fix that test, so
+ * before the cases run, code walks each case through the workflow and adds the missing steps along the shortest path,
+ * each run by a role that may take that step and see the record. A case whose state cannot be followed is left as is.
+ */
+export function fillWorkflowSteps(cases: TestCase[], def: BackedDef): TestCase[] {
+  const P = def.process;
+  if (!P || !P.transitions.length) return cases;
+  const byId = (id: string) => P.transitions.find((x) => x.id === id),
+    path = (from: string, goal: string[]) => {
+      // breadth-first over the transitions; returns the transitions that reach one of the goal states
+      const back: Dict<{ prev: string; tr: (typeof P.transitions)[number] } | null> = { [from]: null },
+        queue = [from];
+      while (queue.length) {
+        const at = queue.shift() as string;
+        if (goal.includes(at)) {
+          const out: (typeof P.transitions)[number][] = [];
+          for (let k = at; back[k]; k = (back[k] as { prev: string }).prev)
+            out.unshift((back[k] as { tr: (typeof P.transitions)[number] }).tr);
+          return out;
+        }
+        P.transitions
+          .filter((x) => x.from.includes(at) && !(x.to in back))
+          .forEach((x) => {
+            back[x.to] = { prev: at, tr: x };
+            queue.push(x.to);
+          });
+      }
+      return null;
+    },
+    runner = (tr: (typeof P.transitions)[number], prefer: string) => {
+      const sees = (r: string) => accOf(def, r, P.table).list !== 'none';
+      return tr.roles.includes(prefer) && sees(prefer)
+        ? prefer
+        : tr.roles.find((r) => accOf(def, r, P.table).list === 'all') || tr.roles.find(sees);
+    };
+  return cases.map((c) => {
+    let state: string | null = null,
+      added = 0;
+    const steps: TourStep[] = [];
+    for (const s of c.steps) {
+      const onProcess = (s.table || P.table) === P.table;
+      if (s.do === 'create' && onProcess) state = P.initial;
+      else if (s.do === 'transition' && onProcess && state) {
+        const tr = byId(s.transition || '');
+        if (!tr) state = null;
+        else {
+          if (!tr.from.includes(state)) {
+            const hops = path(state, tr.from),
+              who = hops && hops.map((h) => runner(h, s.role));
+            if (hops && who && who.every(Boolean) && steps.length + hops.length < 9) {
+              hops.forEach((h, k) =>
+                steps.push({
+                  role: who[k] as string,
+                  user: who[k] === s.role ? s.user || null : null,
+                  do: 'transition',
+                  table: P.table,
+                  values: {},
+                  transition: h.id,
+                  say: roleName(def, who[k] as string) + ' moves it on first: ' + h.label.toLowerCase() + '.',
+                }),
+              );
+              added += hops.length;
+            }
+          }
+          state = tr.to;
+        }
+      }
+      steps.push(s);
+    }
+    return added ? { ...c, steps } : c;
+  });
+}
 /** A case as code writes it, before normCases gives it an id. */
 type CaseDraft = Omit<TestCase, 'id'>;
 export function suggestCases(app: BackedApp): CaseDraft[] {
@@ -276,7 +350,7 @@ export const testerPrompt = (app: BackedApp) =>
   pAccess(app.def) +
   '\n\nWORKFLOW:\n' +
   pFlow(app.def) +
-  '\n\nWrite 5 to 8 test cases that prove the rules and user stories of the brief hold in the finished app. Code will play each case against the real endpoints, so a case is data, not prose.\n- Each case: {"name":"what must be true, in plain words","why":"the rule or user story it protects, quoted or paraphrased from the brief","steps":[...]} with 1 to 5 steps.\n- Each step: {"role":"role id","user":"optional username when two people of one role matter","do":"create|see|hidden|transition|denied|invalid|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list or a transition id","say":"one present-tense sentence naming the person"}.\n- create needs "values" for the required columns and must succeed. invalid is a create that must be refused because required values are missing. see: that person lists the table and must find the record this case created. hidden: must not find it. transition: runs a workflow transition on the record this case created. denied: the attempt must be refused with 403.\n- Cover: every rule in the brief at least once, one refusal per role that has limits, one case about required fields. Do not repeat the guided tour.\n- The app enforces only these things: which roles may see, create, edit and delete each table (all rows, only their own rows where the table has an owner column, or none), which roles may run each transition, and required fields. Do not write a case that depends on anything else, such as a field\'s value, a date or a count ("cannot start until assigned"): no access rule can make it pass.\n' +
+  '\n\nWrite 5 to 8 test cases that prove the rules and user stories of the brief hold in the finished app. Code will play each case against the real endpoints, so a case is data, not prose.\n- Each case: {"name":"what must be true, in plain words","why":"the rule or user story it protects, quoted or paraphrased from the brief","steps":[...]} with 1 to 5 steps.\n- Each step: {"role":"role id","user":"optional username when two people of one role matter","do":"create|see|hidden|transition|denied|invalid|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list or a transition id","say":"one present-tense sentence naming the person"}.\n- create needs "values" for the required columns and must succeed. invalid is a create that must be refused because required values are missing. see: that person lists the table and must find the record this case created. hidden: must not find it (in a case that created nothing in that table, hidden means the person sees none of it). transition: runs a workflow transition on the record this case created; a new record starts in the initial state and a transition runs only from one of its from states, so to reach a later state, add one transition step for every step of the workflow on the way, each by a role that may run it. denied: the attempt must be refused with 403.\n- Cover: every rule in the brief at least once, one refusal per role that has limits, one case about required fields. Do not repeat the guided tour.\n- The app enforces only these things: which roles may see, create, edit and delete each table (all rows, only their own rows where the table has an owner column, or none), which roles may run each transition, and required fields. Do not write a case that depends on anything else, such as a field\'s value, a date or a count ("cannot start until assigned"): no access rule can make it pass.\n' +
   VALUE_RULES +
   '\n\nFORMAT: {"cases":[{"name":"","why":"","steps":[]}]}';
 export function failingTests(app: AppRecord): FailingTest[] {
@@ -497,7 +571,7 @@ export function testerSteps(app: BackedApp, run: Run) {
       );
       Q.by = Q.by === 'model' ? "rules, because the model's cases could not be used" : 'rules';
     }
-    app.def.cases = cases;
+    app.def.cases = fillWorkflowSteps(cases, app.def);
     app.rev++;
     stepEnd(s1, true);
     toolCall(

@@ -468,7 +468,7 @@ export const GUIDE: GuideEntry[] = [
     g: 'data',
     icon: 'plug',
     title: 'Connections',
-    what: 'Outside sources the agents and the built apps may use: Wikipedia, Microsoft Learn, World Bank, OpenAlex, arXiv, PatentsView, and your own. Test on the Connections page calls Wikipedia, World Bank, OpenAlex, arXiv and PatentsView for real through Turnkey’s server; the others show a labelled sample.',
+    what: 'Outside sources the agents and the built apps may use: Wikipedia, Microsoft Learn, World Bank, OpenAlex, arXiv, PatentsView, and your own. Test on the Connections page calls Wikipedia, Microsoft Learn (search), World Bank, OpenAlex, arXiv and PatentsView for real through Turnkey’s server; the others show a labelled sample.',
     how: ['Open Connections.', 'Switch one on, test it, or add your own.'],
     go: {
       label: 'Open Connections',

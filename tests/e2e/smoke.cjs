@@ -8,7 +8,8 @@
 // What it checks, in order:
 //   1. /api/health answers ok, and its version is the one just released (EXPECT_VERSION, when given). The page is
 //      sent with the security headers, the web manifest is served, and an unknown short link answers 404 (or 503
-//      when short links are off).
+//      when short links are off), and one Microsoft Learn search answers through /api/connectors/mslearn (a warning,
+//      not a failure, when Microsoft's server is slow or down).
 //   2. The page loads in a real browser and the workspace opens, with no uncaught error on the page.
 //   3. A sample app builds from its saved build with every generated test passing, Share makes a short link, and that
 //      link opens the app on its own in a fresh browser. Demo mode is on, so none of this calls the model.
@@ -104,6 +105,29 @@ async function checkHttp() {
     else record('an unknown short link answers plainly', 'fail', `HTTP ${res.status}`);
   } catch (e) {
     record('an unknown short link answers plainly', 'fail', firstLine(e));
+  }
+  await checkMsLearn();
+}
+
+/** One search through the Microsoft Learn connector (its keyless MCP server). A refusal by the site's own route is a
+ *  failure; Microsoft's side being slow or down is a warning, since the release cannot fix it. */
+async function checkMsLearn() {
+  const name = 'Microsoft Learn connector answers';
+  try {
+    const res = await fetch(base + '/api/connectors/mslearn?q=' + encodeURIComponent('Azure Functions') + '&limit=1', {
+      signal: AbortSignal.timeout(30000),
+      headers: { 'cache-control': 'no-store' },
+    });
+    const body = await res.json().catch(() => null);
+    if (res.ok && body && body.ok && Array.isArray(body.items) && body.items.length) {
+      record(name, 'pass', `${body.items.length} result: ${String(body.items[0].url || '').slice(0, 80)}`);
+    } else if (body && (body.code === 'upstream' || body.code === 'timeout' || body.code === 'bad_response')) {
+      record(name, 'warn', `HTTP ${res.status} ${body.code}: ${String(body.message || '').slice(0, 120)}`);
+    } else {
+      record(name, 'fail', `HTTP ${res.status} ${body ? JSON.stringify(body).slice(0, 160) : 'no JSON'}`);
+    }
+  } catch (e) {
+    record(name, 'warn', firstLine(e));
   }
 }
 
