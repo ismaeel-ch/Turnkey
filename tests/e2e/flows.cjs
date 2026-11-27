@@ -1083,7 +1083,7 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   check('the build is drawn as a React Flow workflow: request, 7 stations with the Tester, 7 gates, the app', fl.rf && fl.state === 'ready' && fl.nodes.length === 16 && fl.stations === 7 && fl.gates === 7 && fl.old === 0 && fl.nodes.includes('trigger') && fl.nodes.includes('ready'), fl);
   check('every handoff is an edge, and the send-back of the Database station is drawn', fl.edges.length === 16 && fl.edges.includes('e-b1') && fl.edges.includes('e-trig') && fl.edges.includes('e-ready'), fl.edges);
   await shot(page, '91-workflow');
-  await page.locator('.fl-gate').nth(1).click(); await sleep(250);
+  await page.locator('.fl-gate').nth(1).click(); await page.waitForSelector('.insp-body .test', { timeout: 5000 }).catch(() => {}); // the tests load on first use
   check('selecting a gate opens the tests of that station', /^Tests/.test(await page.locator('.insp-head [role=tab][aria-selected=true]').innerText()) && await page.locator('.insp-body .test').count() >= 10 && (await page.locator('.insp-head strong').innerText()) === 'Database');
   await page.locator('.station').nth(3).click(); await sleep(200);
   check('selecting an agent node shows what it wrote', (await page.locator('.insp-head strong').innerText()) === 'Views' && /^Output/.test(await page.locator('.insp-head [role=tab][aria-selected=true]').innerText()) && await page.locator('.station.sel').count() === 1);
