@@ -10,6 +10,9 @@
  *   LLM_DAILY_CALL_CAP      calls from everyone per day             (default 600)
  *   LLM_DAILY_SPEND_USD     dollars of model calls per day, priced from the tokens each call used (default 5).
  *                           Calls cut off midway are counted from an estimate (src/server/llm/usage.ts).
+ *   LLM_VISITOR_DAILY_SPEND_USD  dollars one visitor (one address) may spend per day (default 40% of the daily cap),
+ *                           so one person, or one script, cannot use up the day for everyone else. Only calls made
+ *                           inside `chargeTo` (every model route) count toward it.
  *   LLM_MAX_PROMPT_CHARS    longest prompt accepted                 (default 120000)
  *   LLM_MAX_OUTPUT_TOKENS   most tokens one answer may use, thinking included (default 16000: Sonnet and Haiku think
  *                           by default and the thinking counts here; a Haiku database step used 12000 on a real build)
@@ -18,7 +21,7 @@
  *   LIGHT_GLOBAL_PER_MINUTE the same, from everyone                  (default 600)
  *   LIVE_MODE               set to `off` to refuse every model call (saved builds keep working)
  */
-import { spentToday } from '../llm/usage';
+import { spentToday, spentTodayBy } from '../llm/usage';
 
 type Env = Record<string, string | undefined>;
 
@@ -28,11 +31,13 @@ const num = (v: string | undefined, fallback: number) => {
 };
 
 export function limitsFrom(env: Env = process.env) {
+  const dailySpendUsd = num(env.LLM_DAILY_SPEND_USD, 5);
   return {
     perMinute: num(env.LLM_RATE_PER_MINUTE, 20),
     globalPerMinute: num(env.LLM_GLOBAL_PER_MINUTE, 50),
     dailyCap: num(env.LLM_DAILY_CALL_CAP, 600),
-    dailySpendUsd: num(env.LLM_DAILY_SPEND_USD, 5),
+    dailySpendUsd,
+    visitorDailySpendUsd: num(env.LLM_VISITOR_DAILY_SPEND_USD, dailySpendUsd * 0.4),
     maxPromptChars: num(env.LLM_MAX_PROMPT_CHARS, 120000),
     maxOutputTokens: num(env.LLM_MAX_OUTPUT_TOKENS, 16000),
     maxAnswerChars: num(env.LLM_MAX_ANSWER_CHARS, 32000),
@@ -48,8 +53,19 @@ type Window = { start: number; count: number };
 export const CAP_MESSAGE =
   "Today's allowance for live model calls is used up, so Live builds are paused until midnight UTC. Saved builds, Demo and every app you already built keep working.";
 
-/** `spent` says how many dollars have gone on model calls today; light limiters never check it. */
-export function createLimiter(now: () => number = Date.now, spent: (t: number) => number = spentToday) {
+/** What one visitor reads when their own share of the day is gone, while Live still works for others. */
+export const VISITOR_CAP_MESSAGE =
+  "You have used your share of today's live model calls, so Live builds are paused for you until midnight UTC. Saved builds, Demo and every app you already built keep working.";
+
+/**
+ * `spent` says how many dollars have gone on model calls today, `spentBy` how many of them one visitor's; light
+ * limiters never check either.
+ */
+export function createLimiter(
+  now: () => number = Date.now,
+  spent: (t: number) => number = spentToday,
+  spentBy: (who: string, t: number) => number = spentTodayBy,
+) {
   const visitors = new Map<string, Window>();
   let minute: Window = { start: 0, count: 0 };
   let day: Window = { start: 0, count: 0 };
@@ -73,6 +89,8 @@ export function createLimiter(now: () => number = Date.now, spent: (t: number) =
       const t = now();
       if (Number.isFinite(limits.dailySpendUsd) && spent(t) >= limits.dailySpendUsd)
         return { ok: false, code: 'budget', message: CAP_MESSAGE };
+      if (Number.isFinite(limits.visitorDailySpendUsd) && spentBy(who, t) >= limits.visitorDailySpendUsd)
+        return { ok: false, code: 'budget', message: VISITOR_CAP_MESSAGE };
       day = rollDay(day, t);
       if (day.count + w > limits.dailyCap) return { ok: false, code: 'budget', message: CAP_MESSAGE };
       minute = roll(minute, 60_000, t);
@@ -115,6 +133,7 @@ export function lightLimitsFrom(env: Env = process.env) {
     globalPerMinute: num(env.LIGHT_GLOBAL_PER_MINUTE, 600),
     dailyCap: 1_000_000,
     dailySpendUsd: Infinity,
+    visitorDailySpendUsd: Infinity,
     off: false,
   };
 }

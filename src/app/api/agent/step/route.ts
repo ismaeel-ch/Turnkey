@@ -15,6 +15,7 @@ import { checkPrompt } from '@/server/guard/prompt';
 import { resolveProvider } from '@/server/llm';
 import { parseStepInput } from '@/shared/agent-contract';
 import { withRequestLog } from '@/server/log';
+import { chargeTo } from '@/server/llm/usage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -81,4 +82,5 @@ async function post(request: Request) {
   });
 }
 
-export const POST = withRequestLog('agent.step', post);
+// every model call of the step, repairs included, is charged to the visitor, for their share of the daily cap
+export const POST = withRequestLog('agent.step', (request: Request) => chargeTo(visitorKey(request), () => post(request)));

@@ -13,7 +13,7 @@ import { limiter, limitsFrom } from '@/server/guard/limits';
 import { LlmError } from '@/server/llm';
 import type { BaseEvent } from '@ag-ui/core';
 import { withRequestLog } from '@/server/log';
-import { meterCalls } from '@/server/llm/usage';
+import { chargeTo, meterCalls } from '@/server/llm/usage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -75,4 +75,5 @@ async function post(request: Request) {
   });
 }
 
-export const POST = withRequestLog('agent.team', post);
+// every model call of the run is charged to the visitor, for their share of the daily cap
+export const POST = withRequestLog('agent.team', (request: Request) => chargeTo(visitorKey(request), () => post(request)));

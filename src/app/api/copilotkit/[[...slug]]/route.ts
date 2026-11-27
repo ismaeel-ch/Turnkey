@@ -3,6 +3,7 @@ import { limiter, limitsFrom } from '@/server/guard/limits';
 import { refuse, refuseCrossSite, refuseVerdict, visitorKey } from '@/server/guard/http';
 import { resolveAgents } from '@/server/agui/registry';
 import { withRequestLog } from '@/server/log';
+import { chargeTo } from '@/server/llm/usage';
 
 export const runtime = 'nodejs';
 // one Live station can take a few minutes on a careful model; the step agent caps its own attempts
@@ -36,11 +37,13 @@ const guarded = async (request: Request) => {
   const body = await readCapped(request, maxBytes);
   if (body === null) return refuse(413, 'too_large', 'The request is too large.');
   const agentId = /\/agent\/([^/]+)\/run\/?$/.exec(new URL(request.url).pathname)?.[1];
-  const verdict = limiter.take(visitorKey(request), limits, (agentId && CALLS_PER_RUN[decodeURIComponent(agentId)]) || 1);
+  const who = visitorKey(request);
+  const verdict = limiter.take(who, limits, (agentId && CALLS_PER_RUN[decodeURIComponent(agentId)]) || 1);
   if (!verdict.ok) return refuseVerdict(verdict);
   const headers = new Headers(request.headers);
   headers.delete('content-length');
-  return handler(new Request(request.url, { method: 'POST', headers, body, signal: request.signal }));
+  // the run's model calls (repairs included) are charged to the visitor, for their share of the daily cap
+  return chargeTo(who, () => handler(new Request(request.url, { method: 'POST', headers, body, signal: request.signal })));
 };
 
 /** The body as text, or null once it passes `maxBytes`. Stops reading as soon as it is too large. */

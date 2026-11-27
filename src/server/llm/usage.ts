@@ -73,6 +73,50 @@ const dayOf = (t: number) => new Date(t).toISOString().slice(0, 10);
 export function resetUsageTotals() {
   totals = fresh();
   today = { day: '', costUsd: 0 };
+  visitors = { day: '', spent: new Map() };
+}
+
+/**
+ * Who pays for the model calls made inside `chargeTo`: the visitor key of the request (src/server/guard/http.ts). Every
+ * call that ends inside it, however deep (a repair attempt, a tool loop, a call run from a stream), is added to that
+ * visitor's spend for the day, so the limiter can hold one visitor to a share of the daily dollar cap.
+ */
+const spenders = new AsyncLocalStorage<string>();
+/** Each visitor's calls and spend since midnight UTC. Bounded: past MAX_VISITORS new visitors are not tracked that day. */
+type Spend = { calls: number; usd: number };
+let visitors: { day: string; spent: Map<string, Spend> } = { day: '', spent: new Map() };
+const MAX_VISITORS = 20_000;
+
+export function chargeTo<T>(who: string, fn: () => T): T {
+  return spenders.run(who, fn);
+}
+
+/** The visitor the model calls running now are charged to, if any. */
+export function chargedTo(): string | undefined {
+  return spenders.getStore();
+}
+
+/** Dollars this server instance has spent today on model calls charged to `who`. */
+export function spentTodayBy(who: string, now: number = Date.now()): number {
+  return usageTodayBy(who, now).usd;
+}
+
+/** Calls and dollars charged to `who` today on this server instance. */
+export function usageTodayBy(who: string, now: number = Date.now()): Spend {
+  const s = visitors.day === dayOf(now) ? visitors.spent.get(who) : undefined;
+  return s ? { ...s } : { calls: 0, usd: 0 };
+}
+
+function chargeVisitor(usd: number) {
+  const who = spenders.getStore();
+  if (!who) return;
+  const day = dayOf(Date.now());
+  if (visitors.day !== day) visitors = { day, spent: new Map() };
+  const was = visitors.spent.get(who);
+  if (was) {
+    was.calls += 1;
+    was.usd += Number.isFinite(usd) && usd > 0 ? usd : 0;
+  } else if (visitors.spent.size < MAX_VISITORS) visitors.spent.set(who, { calls: 1, usd: Number.isFinite(usd) && usd > 0 ? usd : 0 });
 }
 
 /** Dollars this server instance has spent on model calls since midnight UTC. */
@@ -180,6 +224,7 @@ export function recordUsage(r: UsageRecord, env: Env = process.env, log?: (line:
   const day = dayOf(Date.now());
   if (today.day !== day) today = { day, costUsd: 0 };
   today.costUsd += capUsd;
+  chargeVisitor(capUsd);
   if (!shouldLog(env)) return;
   if (log) log(usageLine(r));
   else
