@@ -136,6 +136,17 @@ export function previewPlan(draft: PlanSpec, cards: readonly QuestionCard[], ans
     plan.stages = stages;
   }
   plan.stories = plan.stories.filter((s) => people.has(s.role));
+  // Rules are sentences, so they cannot be pruned by id. When an answer took people out and no option wrote new rules,
+  // drop the rules that name someone who is gone ("Managers approve claims" once the app is just for you).
+  const gone = draft.people.filter((p) => !people.has(p.id)).map((p) => p.name.toLowerCase());
+  if (gone.length && plan.rules === draft.rules) {
+    const names = (rule: string) => {
+      const text = rule.toLowerCase(),
+        words = text.split(/[^a-z']+/);
+      return gone.some((g) => (g.includes(' ') ? text.includes(g) : words.some((w) => w === g || w === g + 's' || w === g + 'es')));
+    };
+    plan.rules = plan.rules.filter((r) => !names(r));
+  }
   const asked = new Set(cards.map((c) => c.id));
   plan.answers = [...planAnswers(cards, answers), ...draft.answers.filter((x) => !asked.has(x.slot))];
   return plan;

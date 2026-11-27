@@ -64,6 +64,7 @@ import type { ParsedChange } from './changes';
 import { keepFix } from './tester';
 import { Btn, AgentAv, Dialog, Field, Icon, MBar, Seg, Spinner, Switch } from './ui';
 import { TEAM_BUSY, rebuildAsk } from './shell-a';
+import { buildMode } from './build-mode';
 import { TEAMS } from './team';
 import { REVIEWERS, regStep } from './reviewers';
 import type { Reviewer } from './reviewers';
@@ -1366,7 +1367,9 @@ export function showGate(app: AppRecord, run: Run, st: Station) {
       decided: null,
     },
   );
-  setChat(true);
+  // On a phone the plain list of steps shows this pause in plain words with its own buttons, so stay there instead of
+  // covering it with the chat. Anywhere else the chat card is the way to answer.
+  if (!(NARROW() && (U.view[app.id] || 'build') === 'build' && buildMode(app) === 'steps')) setChat(true);
   return {
     decided(ok: boolean) {
       if (m.card) m.card.decided = ok ? 'approved' : 'stopped';
