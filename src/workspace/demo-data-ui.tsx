@@ -11,6 +11,7 @@ import {
   demoCounts,
   demoUndo,
   dismissDemoUndo,
+  isSettingsTable,
   planDemoRemoval,
   removeDemoData,
   setDemoMark,
@@ -45,6 +46,9 @@ function RemovalBody({ app, plan }: { app: AppRecord; plan: DemoPlan }) {
     goes[t.name] = (plan.goes[t.name] || []).length;
     own[t.name] = (c.byTable[t.name] || { own: 0 }).own;
   });
+  // starter settings are named, not counted: "Your categories and limits."
+  const lists = app.def.tables.filter((t) => isSettingsTable(app, t.name)).map((t) => t.label.toLowerCase()),
+    settings = lists.length > 1 ? lists.slice(0, -1).join(', ') + ' and ' + lists[lists.length - 1] : lists[0] || '';
   const names = plan.keptNames.slice(0, 3).map((n) => '"' + n + '"'),
     more = plan.keptNames.length - names.length;
   return (
@@ -52,7 +56,7 @@ function RemovalBody({ app, plan }: { app: AppRecord; plan: DemoPlan }) {
       <div className="demo-line" data-demo="goes">
         <span className="badge b-danger">Goes</span>
         <span>
-          {plan.goesN ? countsText(app, goes) + ', made up, and ' + (plan.goesN === 1 ? 'its' : 'their') + ' history.' : 'Nothing.'}
+          {plan.goesN ? countsText(app, goes) + ', all made up, with ' + (plan.goesN === 1 ? 'its' : 'their') + ' history.' : 'Nothing.'}
           {plan.edited > 0 &&
             ' ' +
               plan.edited +
@@ -64,6 +68,7 @@ function RemovalBody({ app, plan }: { app: AppRecord; plan: DemoPlan }) {
         <span className="badge b-success">Stays</span>
         <span>
           {plan.ownN ? 'The ' + countsText(app, own) + ' you added. ' : ''}
+          {settings ? 'Your ' + settings + '. ' : ''}
           {'The people who can sign in, and every list, rule and screen.'}
         </span>
       </div>
@@ -130,8 +135,15 @@ export function DemoBar({ app }: { app: AppRecord }) {
       <div className="demo-bar warn" role="status" data-demo-bar="on">
         <Icon n="info" s="16" />
         <span className="grow demo-text">
-          <strong>{"You're looking at demo data."}</strong> {countsText(app, of)}
-          {c.demo === 1 ? ' is made up.' : ' are made up.'}
+          <strong>{"You're looking at demo data."}</strong>{' '}
+          <span className="demo-long">
+            {countsText(app, of)}
+            {c.demo === 1 ? ' is made up.' : ' are made up.'}
+          </span>
+          <span className="demo-short">
+            {records(c.demo)}
+            {c.demo === 1 ? ' is made up.' : ' are made up.'}
+          </span>
           {c.own > 0 && ' Your own ' + records(c.own) + (c.own === 1 ? ' is real.' : ' are real.')}
           {about && (
             <span className="demo-about">
@@ -230,7 +242,7 @@ export function DemoNote({ app, table, row }: { app: AppRecord; table: string; r
   return (
     <div className="demo-note" role="note">
       <span className="badge b-demo">Demo</span>
-      <span className="grow t-cap">This record is made up. It goes when the demo data is removed.</span>
+      <span className="grow t-cap">Made up. It goes when the demo data is removed.</span>
       <Btn
         className="btn subtle sm"
         title="It stops being demo data and stays when the demo data is removed"

@@ -57,24 +57,34 @@ export function demoReady(appId: string): boolean {
   return true;
 }
 
-/** How many records are demo data and how many are someone's own, in all and per table. */
+/**
+ * A list of starter settings (categories, limits, teams), as the approved plan marks it. Its rows are real from day
+ * one: never demo data, never removed, and not counted as records someone added. An app without a plan has none.
+ */
+export const isSettingsTable = (app: Pick<AppRecord, 'plan'>, table: string) =>
+  !!app.plan && arr<{ name: string; settings?: boolean }>(app.plan.lists).some((l) => l.name === table && l.settings === true);
+
+/** How many records are demo data and how many are someone's own, in all and per table. Settings are counted apart. */
 export interface DemoCounts {
   demo: number;
   own: number;
+  settings: number;
   byTable: Dict<{ demo: number; own: number }>;
 }
-const NONE: DemoCounts = { demo: 0, own: 0, byTable: {} };
+const NONE: DemoCounts = { demo: 0, own: 0, settings: 0, byTable: {} };
 export function demoCounts(app: AppRecord): DemoCounts {
   if (!demoReady(app.id)) return NONE;
-  const out: DemoCounts = { demo: 0, own: 0, byTable: {} };
+  const out: DemoCounts = { demo: 0, own: 0, settings: 0, byTable: {} };
   app.def.tables.forEach((t) => {
     const r = sqlPeek(app.id, 'SELECT COALESCE(SUM(' + qi(DEMO_COL) + '), 0) AS d, COUNT(*) AS n FROM ' + qi(t.name))[0];
     if (!r) return;
     const demo = Number(r.d) || 0,
-      own = (Number(r.n) || 0) - demo;
-    out.byTable[t.name] = { demo, own };
+      rest = (Number(r.n) || 0) - demo,
+      settings = isSettingsTable(app, t.name);
+    out.byTable[t.name] = { demo, own: settings ? 0 : rest };
     out.demo += demo;
-    out.own += own;
+    if (settings) out.settings += rest;
+    else out.own += rest;
   });
   return out;
 }
@@ -129,7 +139,7 @@ export function planDemoRemoval(app: AppRecord): DemoPlan {
       else queue.push([t, r]);
     });
   });
-  plan.ownN = queue.length;
+  plan.ownN = queue.filter(([t]) => !isSettingsTable(app, t.name)).length;
   // a record that stays keeps everything it points at, and so on down the chain
   while (queue.length) {
     const [t, r] = queue.pop() as [AppTable, SqlRow];

@@ -729,3 +729,4 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 .demo-plan{display:flex;flex-direction:column;gap:10px}.demo-line{display:flex;align-items:flex-start;gap:8px}.demo-line>.badge{flex:none;min-width:92px;justify-content:center}
 .demo-note{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;border:1px dashed var(--colorStatusWarningBorder1);border-radius:6px;background:var(--colorStatusWarningBackground1)}.demo-note .b-demo{margin-left:0}
 .tbl .demo-cell{width:1%;white-space:nowrap;text-align:right;padding-left:0}.demo-cell .b-demo{margin-left:0}
+.demo-short{display:none}.app.compact .demo-long{display:none}.app.compact .demo-short{display:inline}.app.compact .demo-bar{padding:6px 12px;gap:4px 12px}

@@ -247,6 +247,41 @@ describe('demo data', () => {
     expect(m.demo.canAddDemoData(app)).toBe(false); // none of its starting rows is demo data, so there is nothing to add
     app.shared = null;
   });
+
+  it('a plan that says "start empty" builds with the demo data, checks it, then takes it out; starter settings stay', async () => {
+    const first = app,
+      settings = childTable().parent.name,
+      plan = { demoData: false, lists: first.def.tables.map((t) => ({ name: t.name, settings: t.name === settings })) };
+    const b = m.line.newApp({ request: 'A gym tracks members, class bookings and trainers', mode: 'live' }) as unknown as AppRecord;
+    b.plan = plan as never;
+    await m.line.runBuild(b as never, undefined);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(b.status).toBe('ready');
+    app = b;
+    try {
+      const made = (t: string) => (b.seed?.rows[t] || []).length;
+      expect(made(settings)).toBeGreaterThan(0);
+      // the settings list keeps its rows, unmarked; every other list is empty
+      expect(m.demo.demoCounts(b)).toMatchObject({ demo: 0, own: 0, settings: made(settings) });
+      b.def.tables.forEach((t) => expect(count(t.name)).toBe(t.name === settings ? made(settings) : 0));
+      expect((b.tests as { failed: number }).failed).toBe(0);
+      expect(b.chat.some((c) => /You asked to start empty/.test(c.text))).toBe(true);
+      expect(m.demo.demoUndo(b)).toBeNull();
+      // the tests still pass on the emptied app
+      expect(m.tests.runTestsSync(b)!.failed).toBe(0);
+      // adding the demo data later links it to the settings rows that are already there
+      const added = m.demo.addDemoData(b, { quiet: true });
+      expect(added).toBe(b.def.tables.reduce((k, t) => k + (t.name === settings ? 0 : made(t.name)), 0));
+      expect(count(settings)).toBe(made(settings));
+      expect(brokenLinks()).toBe(0);
+      const { t, c } = childTable();
+      expect(count(t.name, m.db.qi(c.name) + ' IS NOT NULL')).toBeGreaterThan(0);
+      // removing it again never touches the settings
+      expect(m.demo.planDemoRemoval(b)).toMatchObject({ ownN: 0, keptN: 0, goesN: added });
+    } finally {
+      app = first;
+    }
+  }, 60_000);
 });
 
 /** Every column of a table but its id, quoted, for copying a row. */

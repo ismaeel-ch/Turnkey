@@ -40,7 +40,7 @@ import {
   sqlRun,
   topoOrder,
 } from './db';
-import { demoReady, tempDemoData } from './demo-data';
+import { demoReady, isSettingsTable, tempDemoData } from './demo-data';
 import { canRunTeam, normTeam } from './team';
 import { AppPane, newPane } from './runtime';
 
@@ -589,11 +589,23 @@ export function insertSeed(
       num('SELECT MAX("id") FROM ' + qi(t.name)),
     );
   });
+  // a row this call leaves out (a starter setting, or a real record, while only demo rows go in) is already stored:
+  // it has the id of its place unless the list was rebuilt since, and then it is found by its name
+  const stored = (tn: string, pos: number) => {
+    if (num('SELECT COUNT(*) FROM ' + qi(tn) + ' WHERE "id" = ?', [pos])) return pos;
+    const t = tables.find((x) => x.name === tn),
+      row = arr<Row | null>(rowsOf[tn])[pos - 1],
+      name = t && row ? row[t.title] : null;
+    return typeof name === 'string' && name
+      ? num('SELECT "id" FROM ' + qi(tn) + ' WHERE ' + qi(t ? t.title : 'id') + ' = ? LIMIT 1', [name])
+      : 0;
+  };
   const rowId = (tn: string, pos: number) => {
     if (!plan[tn]) return pos; // a table outside this call: the number is an id
+    const k = plan[tn].indexOf(pos);
+    if (k < 0) return stored(tn, pos);
     if (ids[tn]) return ids[tn][pos] || 0;
-    const k = plan[tn].indexOf(pos); // not inserted yet (a row pointing at its own table): the id it is about to get
-    return k < 0 ? 0 : base[tn] + k + 1;
+    return base[tn] + k + 1; // not inserted yet (a row pointing at its own table): the id it is about to get
   };
   for (const t of topoOrder(tables)) {
     const cols = t.columns,
@@ -698,6 +710,8 @@ export function buildDatabase(app: AppRecord, sc: SchemaDraft, ctx: ToolContext)
   let total = 0;
   const rowsOf: Dict<Row[]> = {};
   sc.tables.forEach((t) => {
+    // starter settings (categories, limits) are real from day one: their rows are never marked as demo data
+    if (isSettingsTable(app, t.name)) t.rows = t.rows.map((r) => (r && typeof r === 'object' ? { ...r, _demo: 0 } : r));
     rowsOf[t.name] = t.rows;
   });
   const r2 = toolCall(

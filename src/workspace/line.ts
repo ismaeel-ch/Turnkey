@@ -1,6 +1,6 @@
 import { modelProblem } from '@/shared/api-error';
 import type { AppDef, AppTable, BackedDef, Brief, BriefedDef, Check, Untrusted } from '@/shared/types/app';
-import type { PlanSpec } from '@/shared/plan';
+import { wantsDemoData, type PlanSpec } from '@/shared/plan';
 import type {
   AppRecord,
   ChatCard,
@@ -74,6 +74,7 @@ import { checkScreensShape, checkViews, mendViews, normUI, normViews, renderView
 import { CONNECTORS, REC, allConnectors, callConnector, connOn } from './builds';
 import { TEAMS, checkTeam, stopTeam, teamNeeds } from './team';
 import { checkBoard, normBoard } from './room';
+import { removeDemoData } from './demo-data';
 import { SUITES, TESTS, runTestsSync } from './tests';
 import { applyAuto, flowDefault, flowList, flowOf, runReview, showGate, stepAfter, verifyFindings } from './custom';
 import { REVIEWERS } from './reviewers';
@@ -1422,6 +1423,19 @@ function linePorts(app: BuildApp, run: Run, ctl: RunCtl, o: LineOpts): Ports {
                 ? (v.n === 1 ? 'it passes' : 'all of them pass') + ' every check.'
                 : v.pass + ' of ' + v.n + ' pass every check.') +
               ' Nothing is changed until you apply one.',
+          );
+      }
+      // "No, start empty": the agents still wrote demo data, because the checks need records to act on. Now that the
+      // database is built and checked it is taken out; the rows stay on record so they can be added again.
+      if (!wantsDemoData(app.plan) && stationIdx(o.first.id) <= stationIdx('database')) {
+        const gone = removeDemoData(app, { quiet: true });
+        if (gone && gone.removed)
+          say(
+            app,
+            'orchestrator',
+            'You asked to start empty, so I took out the ' +
+              gone.removed +
+              ' demo records the checks used. "Add demo data again" on the App page brings them back.',
           );
       }
       say(
