@@ -510,7 +510,7 @@ async function flowLive(browser, url) {
   check('live: the View advisor\'s plan was normalised (aliases mapped, broken widget left out, dashboard for every role)', a.views.bookings.includes('board') && a.views.bookings.includes('chart') && a.views.classes.includes('timeline') && a.widgets === 6 && a.dashRoles === 3, [a.views, a.widgets, a.dashRoles, a.attempts]);
   await page.getByRole('button', { name: 'Timeline' }).click(); await page.waitForSelector('.tl-usage');
   const tlu = await st(page, () => { const u = document.querySelector('.tl-usage'); return { calls: u.dataset.calls, cost: u.dataset.cost, text: u.textContent, db: [...document.querySelectorAll('.tl-row')].map((r) => r.querySelector('.tl-cost')?.textContent || '').join('|') }; });
-  check('live: the timeline shows the cost, tokens and cache hits the server reported for every model call, and each agent\'s cost', tlu.calls === '7' && tlu.cost === '0.007000' && /7 model calls · 14k tokens · 79% from cache · \$0\.007/.test(tlu.text) && tlu.db.split('|')[2] === '$0.002', tlu);
+  check('live: the timeline shows the cost, tokens and cache hits the server reported for every model call, the Planner\'s before the build included, and each agent\'s cost', tlu.calls === '8' && tlu.cost === '0.008000' && /8 model calls · 16k tokens · 79% from cache · \$0\.008/.test(tlu.text) && tlu.db.split('|')[2] === '$0.002', tlu);
   await page.getByRole('button', { name: 'Workflow', exact: true }).click();
   await sleep(200); await shot(page, '50-live-built');
   await view(page, 'App'); await page.locator('.persona-btn').first().click(); await land(page); await page.waitForSelector('.kb-col'); await shot(page, '51-live-app');
