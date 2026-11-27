@@ -5,6 +5,14 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-11-27
+
+### Fixed
+
+- The person menu in a built app's header shows a full-size avatar that is white with the person's own colour for
+  the initials, in light and in dark. In dark it was a small grey circle.
+  ([#294](https://github.com/ismaeel-ch/Turnkey/issues/294))
+
 ## [0.5.7] - 2026-11-27
 
 Built apps look like Fluent 2 products.
