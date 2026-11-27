@@ -110,8 +110,10 @@ _The Bid room of the built BidDesk app, with the three agents' verdict for one t
 
 ## The five-minute walk-through
 
-1. Open the live app and press **Get started**. Choose **Skip and use the demo account**, keep **Demo** selected (it
-   replays saved builds and calls no model), pick **Sales bidding desk** as the first app, and open the workspace.
+1. Open the live app and press **Try a sample**. It signs you in with a demo account, keeps **Demo** on (saved
+   builds, no model calls) and starts building the **Sales bidding desk** at once, with a four-step tour. (**Get
+   started** sets up your own account and lets you pick another app; **Describe your own** opens an empty workspace
+   for your own sentence.)
 2. Watch the **Build** tab. Each agent is a node with a check gate under it. The Tester's first run catches the
    Backend agent's slip (a bid manager could delete a tender), the Backend repairs it, and run 2 passes all 170 tests.
    The build takes about 30 seconds. Switch between **Workflow**, **Timeline** and **Log** to see the same run three

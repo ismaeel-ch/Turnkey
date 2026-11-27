@@ -101,6 +101,16 @@ export async function requestJson(
   }
 }
 
+/** The raw answer, for a source that needs its headers or reads its own body format (the MCP connector). */
+export async function requestResponse(
+  doFetch: Fetcher,
+  url: string,
+  init: { method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: unknown } = {},
+): Promise<{ ok: true; response: Response } | ConnectorError> {
+  const res = await send(doFetch, url, init);
+  return res.ok ? res : res.error;
+}
+
 /** Same as requestJson, but returns the body as text (for Atom XML). */
 export async function requestText(
   doFetch: Fetcher,
@@ -121,19 +131,26 @@ async function sendOnce(
   doFetch: Fetcher,
   url: string,
   init: { method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: unknown },
+  timeoutMs: number = TIMEOUT_MS,
 ): Promise<{ ok: true; response: Response } | { ok: false; error: ConnectorError; retry: boolean; retryAfter: string | null }> {
   const headers: Record<string, string> = { 'user-agent': USER_AGENT, accept: 'application/json', ...init.headers };
   const hasBody = init.body !== undefined;
   if (hasBody) headers['content-type'] = 'application/json';
+  // a timer of our own rather than AbortSignal.timeout, so the limit can be cut to what is left of the budget
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(new DOMException('The source did not answer in time.', 'TimeoutError')), timeoutMs);
+  // On success the timer keeps running so reading the body is held to the same limit; it never keeps the process up.
+  (timer as { unref?: () => void }).unref?.();
   try {
     const response = await doFetch(url, {
       method: init.method ?? (hasBody ? 'POST' : 'GET'),
       headers,
       body: hasBody ? JSON.stringify(init.body) : undefined,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: timeout.signal,
       redirect: 'error',
     });
     if (!response.ok) {
+      clearTimeout(timer);
       const retry = response.status === 429 || response.status >= 500;
       return {
         ok: false,
@@ -144,6 +161,7 @@ async function sendOnce(
     }
     return { ok: true, response };
   } catch (err) {
+    clearTimeout(timer);
     const name = err instanceof Error ? err.name : '';
     if (name === 'TimeoutError' || name === 'AbortError') {
       return { ok: false, error: fail('timeout', 'The source did not answer in time.'), retry: true, retryAfter: null };
@@ -159,7 +177,8 @@ async function send(
 ): Promise<{ ok: true; response: Response } | { ok: false; error: ConnectorError }> {
   const started = Date.now();
   for (let n = 1; ; n++) {
-    const r = await sendOnce(doFetch, url, init);
+    // a later try gets only what is left of the budget, so the whole request never runs past it
+    const r = await sendOnce(doFetch, url, init, Math.min(TIMEOUT_MS, TOTAL_BUDGET_MS - (Date.now() - started)));
     if (r.ok) return r;
     const wait = backoffMs(n, r.retryAfter);
     if (!r.retry || n >= MAX_TRIES || Date.now() - started + wait >= TOTAL_BUDGET_MS) {

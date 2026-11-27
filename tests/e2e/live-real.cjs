@@ -20,6 +20,9 @@ const SENTENCES = {
   helpdesk: 'An IT helpdesk where employees raise tickets, support agents work a queue by priority, and the team lead watches what is due.',
   leave: 'Employees request leave, managers approve or reject it, and HR keeps balances and the team calendar.',
   gym: 'A gym tracks members, class bookings and trainers',
+  biddesk: 'A sales team bids on tenders: bid managers prepare each bid with a price, three agents score the tender, price it and challenge it, the sales director approves it before it goes out, and everyone sees what was won or lost.',
+  grants: 'A community foundation reviews grant applications: programme officers record each one, three agents score it, size the award and check it, the board chair approves every grant, and trustees can read everything.',
+  purchasing: 'Staff raise purchase requests, their budget holder approves or rejects each one, the buyer orders from an approved supplier, and the person who asked confirms delivery.',
 };
 const QUEST_CHIP = { factcheck: 'Company blog draft', priorart: 'Smart bottle cap', debate: 'One codebase first' };
 

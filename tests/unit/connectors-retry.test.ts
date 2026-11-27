@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { wikipedia } from '@/server/connectors/wikipedia';
-import { backoffMs, clearConnectorCache, MAX_TRIES, setConnectorRetry, TOTAL_BUDGET_MS } from '@/server/connectors/shared';
+import { backoffMs, clearConnectorCache, MAX_TRIES, setConnectorRetry, TIMEOUT_MS, TOTAL_BUDGET_MS } from '@/server/connectors/shared';
 import { fakeFetch, fixture, jsonResponse } from './connectors.helpers';
 
 const f = fixture<{ search: unknown; summary: unknown }>('wikipedia');
@@ -84,6 +84,48 @@ describe('connector retries', () => {
     const r = await wikipedia.search('electron', { fetch: doFetch });
     expect(r).toEqual({ ok: false, code: 'upstream', message: 'The source answered with status 502.' });
     expect(calls).toHaveLength(1);
+  });
+
+  it('a source that never answers is given up on within the time budget: a later try gets only the time left', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const started = Date.now();
+    const gaveUpAt: number[] = [];
+    // a source that holds every request open until the caller stops waiting
+    const { doFetch, calls } = fakeFetch(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            gaveUpAt.push(Date.now() - started);
+            reject(init.signal?.reason);
+          });
+        }),
+    );
+    const pending = wikipedia.search('electron', { fetch: doFetch });
+    await vi.advanceTimersByTimeAsync(TOTAL_BUDGET_MS + TIMEOUT_MS);
+    const r = await pending;
+    expect(r).toEqual({ ok: false, code: 'timeout', message: 'The source did not answer in time (tried 2 times).' });
+    expect(calls).toHaveLength(2);
+    // the first try waits its full limit; the second only what is left, so the request ends at the budget, not past it
+    expect(gaveUpAt).toEqual([TIMEOUT_MS, TOTAL_BUDGET_MS]);
+  });
+
+  it('a slow body is held to the same limit as the answer', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const { doFetch } = fakeFetch(
+      (_url, init) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('{"query":'));
+              init.signal?.addEventListener('abort', () => controller.error(init.signal?.reason));
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    const pending = wikipedia.search('electron', { fetch: doFetch });
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS + 1);
+    expect(await pending).toMatchObject({ ok: false, code: 'bad_response' });
   });
 
   it('a failure is not cached, so the next lookup tries the source again', async () => {

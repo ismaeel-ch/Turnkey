@@ -7,12 +7,22 @@ import { PassThrough } from 'node:stream';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { backendLabel, complete, resolveProvider, type ChatRequest, type ToolDef } from '@/server/llm';
-import { costOf, effortFor, EFFORT_BY_TIER, isClaudeModel, priceOf, withRequiredNote, MUST_CALL_A_TOOL } from '@/server/llm/features';
+import {
+  costOf,
+  effortFor,
+  fallbackCostOf,
+  FALLBACK_PRICE,
+  EFFORT_BY_TIER,
+  isClaudeModel,
+  priceOf,
+  withRequiredNote,
+  MUST_CALL_A_TOOL,
+} from '@/server/llm/features';
 import { anthropic } from '@/server/llm/providers/anthropic';
 import { claudeCode, resultUsage, type SpawnFn } from '@/server/llm/providers/claude-code';
 import { markCache, openAiCompatible, readUsage } from '@/server/llm/providers/openai-compatible';
 import { forgetToolModes } from '@/server/llm/tools';
-import { recordUsage, resetUsageTotals, usageLine, usageTotals, withUsage } from '@/server/llm/usage';
+import { recordUsage, resetUsageTotals, spentToday, usageLine, usageTotals, withUsage } from '@/server/llm/usage';
 import { GET as health } from '@/app/api/health/route';
 
 const sse = (lines: string[], status = 200) =>
@@ -223,6 +233,10 @@ describe('token and cost logging', () => {
       8,
     );
     expect(costOf('gpt-5-mini', { input: 10 })).toBeNull();
+    // the cap's fallback is the dearest listed price, so an unlisted model never makes the cap stop late
+    expect(FALLBACK_PRICE.output).toBeGreaterThanOrEqual(priceOf('claude-fable')!.output);
+    expect(fallbackCostOf({ input: 1_000_000, output: 100_000 })).toBeCloseTo(15, 6);
+    expect(fallbackCostOf(undefined)).toBe(0);
   });
   it('logs one line per call with tokens, cache and cost, and never the prompt or the key', async () => {
     const lines: string[] = [];
@@ -255,6 +269,9 @@ describe('token and cost logging', () => {
       unpriced: 1,
       budgetUsd: 10,
     });
+    // 3 fresh + 7 cached prompt tokens at the fallback price count toward the cap, not toward the cost
+    expect(spentToday()).toBeCloseTo(0.25 + (3 * 10 + 7 * 1) / 1e6, 9);
+    expect(usageTotals({}).unpricedUsd).toBeCloseTo((3 * 10 + 7 * 1) / 1e6, 9);
     expect(usageTotals({}).budgetUsd).toBe(25);
     expect(usageLine({ provider: 'x', model: 'm', tier: 'quick', effort: 'low', usage: {}, ms: 3 })).toContain('$?');
   });
