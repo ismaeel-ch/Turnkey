@@ -5,6 +5,22 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-27
+
+The agents shown as a meeting, and Live Tester fixes.
+
+### Added
+
+- The agents can be shown as a Teams-style meeting. ([#191](https://github.com/ismaeel-ch/Turnkey/pull/191))
+
+### Fixed
+
+- The Live Tester fills in skipped workflow steps and treats "cannot see" on a closed table as passing. ([#183](https://github.com/ismaeel-ch/Turnkey/pull/183))
+
+### Tests
+
+- The production smoke test makes one Microsoft Learn search through the site's connector route.
+
 ## [0.4.4] - 2026-11-27
 
 Drag workflow steps from a palette, a Tester fix for hidden records, and phone layout fixes.
@@ -12,6 +28,8 @@ Drag workflow steps from a palette, a Tester fix for hidden records, and phone l
 ### Added
 
 - Drag workflow steps onto a gate from a palette above the canvas. ([#140](https://github.com/ismaeel-ch/Turnkey/pull/140))
+- A Microsoft Learn connector, called through its keyless MCP server. ([#188](https://github.com/ismaeel-ch/Turnkey/pull/188))
+- Team runs show what their model calls cost; unpriced models count toward the daily cap. ([#185](https://github.com/ismaeel-ch/Turnkey/pull/185))
 
 ### Fixed
 
