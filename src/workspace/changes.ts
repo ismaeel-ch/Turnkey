@@ -1,4 +1,16 @@
-import type { AppTable, BackedDef, Check, Migration, ColumnDef, ColumnType, DashWidget, Row, Screen, Untrusted } from '@/shared/types/app';
+import type {
+  AppTable,
+  BackedDef,
+  Check,
+  Migration,
+  ColumnDef,
+  ColumnType,
+  DashWidget,
+  RecordStep,
+  Row,
+  Screen,
+  Untrusted,
+} from '@/shared/types/app';
 import type { AppRecord, Dict, StationLine, ToolContext } from '@/shared/types/workspace';
 import {
   BRAND,
@@ -86,6 +98,7 @@ import {
 import { FLOW_HELP, LEVELS, NOTE_FOR, agentThe, answerGate, flowChat, flowList, flowOf, parseFlow } from './custom';
 import { REVIEWERS } from './reviewers';
 import { logChange } from './release';
+import { AWAY_DAYS, bringBackColumn, putAwayColumn } from './carry';
 import { recordTouches, snapshotDef } from './provenance';
 
 /* ===== Turnkey prototype · changes from chat: operations, migrations, partial re-runs, build pack ===== */
@@ -444,12 +457,13 @@ export function suggestChanges(app: AppRecord) {
 
 /* ---------- turning one operation into a checked step ---------- */
 /** One entry of the app's migration log. */
-export const mig = (def: { migrations: unknown[] }, sql: string, note: string): Migration => ({
+export const mig = (def: { migrations: unknown[] }, sql: string, note: string, step?: RecordStep): Migration => ({
   n: def.migrations.length + 1,
   at: Date.now(),
   by: 'database',
   sql,
   note,
+  ...(step ? { step } : {}),
 });
 export function renameEverywhere(app: AppRecord & { def: BackedDef }, t: AppTable, old: string, nn: string) {
   const def = app.def,
@@ -558,6 +572,14 @@ export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
         sql,
         run(ctx) {
           sqlRun(app.id, sql, null, 'database');
+          // values put away when a field of this name was removed, or when the app went back a version, return with it
+          if (type !== 'ref' && type !== 'user') {
+            try {
+              bringBackColumn(app.id, t.name, col.name);
+            } catch {
+              // the old values do not fit the new field (a choice they are not part of): they stay put away
+            }
+          }
           t.columns.push(
             Object.assign(
               {
@@ -567,7 +589,7 @@ export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
               col,
             ),
           );
-          def.migrations.push(mig(def, sql, 'Added ' + t.name + '.' + col.name));
+          def.migrations.push(mig(def, sql, 'Added ' + t.name + '.' + col.name, { op: 'add_field', table: t.name, column: col.name }));
           def.screens.forEach((s) => {
             if (s.table === t.name && s.type === 'table' && s.columns.length < 7 && type !== 'longtext') s.columns.push(col.name);
           });
@@ -604,11 +626,22 @@ export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
         text: 'Remove ' + c.label + ' from ' + t.label,
         sql,
         destructive: Number(n) > 0,
-        loss: n + ' stored value' + (n === 1 ? '' : 's') + ' will be deleted',
+        loss:
+          n +
+          ' stored value' +
+          (n === 1 ? ' leaves' : 's leave') +
+          ' the app. ' +
+          (n === 1 ? 'It is' : 'They are') +
+          ' put away for ' +
+          AWAY_DAYS +
+          ' days and ' +
+          (n === 1 ? 'comes' : 'come') +
+          ' back if you add the field again',
         run() {
+          if (Number(n) > 0) putAwayColumn(app.id, t.name, c.name);
           sqlRun(app.id, sql, null, 'database');
           t.columns = t.columns.filter((x) => x !== c);
-          def.migrations.push(mig(def, sql, 'Removed ' + t.name + '.' + c.name));
+          def.migrations.push(mig(def, sql, 'Removed ' + t.name + '.' + c.name, { op: 'remove_field', table: t.name, column: c.name }));
           def.screens.forEach((s) => {
             if (s.table === t.name) {
               s.columns = s.columns.filter((x) => x !== c.name);
@@ -676,7 +709,9 @@ export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
           arr<Row>(app.seed && app.seed.rows[t.name]).forEach((r) => {
             if (r[c.name] != null && r[c.name] !== '') r[c.name] = snake(String(r[c.name]));
           });
-          def.migrations.push(mig(def, sql, 'Turned ' + t.name + '.' + c.name + ' into a choice'));
+          def.migrations.push(
+            mig(def, sql, 'Turned ' + t.name + '.' + c.name + ' into a choice', { op: 'to_choice', table: t.name, column: c.name }),
+          );
         },
       };
     }
@@ -706,7 +741,9 @@ export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
           c.name = nn;
           c.label = lab;
           renameEverywhere(app, t, old, nn);
-          def.migrations.push(mig(def, sql, 'Renamed ' + t.name + '.' + old + ' to ' + nn));
+          def.migrations.push(
+            mig(def, sql, 'Renamed ' + t.name + '.' + old + ' to ' + nn, { op: 'rename_field', table: t.name, from: old, to: nn }),
+          );
         },
       };
     }
