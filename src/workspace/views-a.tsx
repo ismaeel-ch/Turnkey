@@ -1,26 +1,8 @@
 import { useState, useEffect, useRef, type DragEvent, type FormEvent, type FunctionComponent, type ReactNode } from 'react';
 import type { AppDef, AppTable, AppUser, ColumnDef, Screen, StoredRow } from '@/shared/types/app';
 import type { AppRecord, Dict, ExplorerState, Pane, ViewFilter, ViewOptions } from '@/shared/types/workspace';
-import {
-  MON,
-  MONTH,
-  S,
-  clone,
-  copyText,
-  cx,
-  dayDiff,
-  fmtDate,
-  fmtNum,
-  fmtTime,
-  isoDate,
-  label,
-  notify,
-  parseISO,
-  saveSoon,
-  str,
-  toast,
-  today,
-} from './core';
+import { MON, MONTH, S, clone, copyText, cx, dayDiff, isoDate, label, notify, parseISO, saveSoon, str, toast, today } from './core';
+import { colFmt, defaultView, fmtOf } from './app-settings';
 import { VIEW_ICON, VIEW_LABEL, accOf, apiCall, appUsers, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isMeasure, isNum, isRate, viewCfg, viewFit, viewsOf } from './viewspec';
 import { Btn, Empty, FilterChip, Icon, Input, MBar, Menu, Seg, Select, type MenuEntry } from './ui';
@@ -185,7 +167,7 @@ export function vxState(pane: Pane, scr: PageRef, app: AppRecord, user: AppUser,
       !test && !pane.test && app && user && S.prefs ? (S.prefs[prefKey(app, user, scr)] as Partial<ExplorerState> | undefined) : null;
     all[scr.id] = Object.assign(
       {
-        view: scr.type,
+        view: defaultView(app.def, scr),
         q: '',
         filters:
           scr.range && scr.date
@@ -521,6 +503,7 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
     drill,
     canCreate: acc.create,
   };
+  const F = fmtOf(def);
   const chip = (f: ViewFilter, i: number) => {
     const c = colOf(t, f.col);
     if (!c) return null;
@@ -530,8 +513,8 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
         ? RANGES[String(f.val)]
         : f.op === 'between'
           ? from === to
-            ? fmtDate(from)
-            : fmtDate(from) + ' to ' + fmtDate(to)
+            ? F.date(from)
+            : F.date(from) + ' to ' + F.date(to)
           : f.val == null
             ? ''
             : isCat(c)
@@ -541,7 +524,7 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
                   }
                 ).label
               : isDate(c)
-                ? fmtDate(String(f.val))
+                ? F.date(String(f.val))
                 : String(f.val);
     return (
       <FilterChip
@@ -861,7 +844,7 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
               <span className="tab-n">{l.length}</span>
               {nums.map((c) => (
                 <span key={c.name} className="muted t-cap">
-                  {c.label} {fmtNum(sum(c, l))}
+                  {c.label} {colFmt(app.def, c)(sum(c, l))}
                 </span>
               ))}
             </button>
@@ -1006,9 +989,9 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
                 {cols.map((c, i) => (
                   <td key={c.name} className={isNum(c) ? 'num' : ''}>
                     {isRate(c)
-                      ? 'Average ' + fmtNum(avg(c, list))
+                      ? 'Average ' + colFmt(app.def, c)(avg(c, list))
                       : isMeasure(c)
-                        ? fmtNum(sum(c, list))
+                        ? colFmt(app.def, c)(sum(c, list))
                         : i === 0
                           ? 'Total of ' + list.length
                           : ''}
@@ -1177,11 +1160,14 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
     P = def.process && def.process.table === t.name ? def.process : null,
     isDT = dc.type === 'datetime',
     tk = isoDate(base),
-    id = 'cl' + scr.id + pane.n;
+    id = 'cl' + scr.id + pane.n,
+    // the week starts on the day chosen in the app's settings
+    ws = fmtOf(def).weekStart,
+    dows = ws ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const first = week
-      ? new Date(base.getFullYear(), base.getMonth(), base.getDate() - ((base.getDay() + 6) % 7) + off * 7)
+      ? new Date(base.getFullYear(), base.getMonth(), base.getDate() - ((base.getDay() - ws + 7) % 7) + off * 7)
       : new Date(base.getFullYear(), base.getMonth() + off, 1),
-    start = week ? first : new Date(first.getFullYear(), first.getMonth(), 1 - ((first.getDay() + 6) % 7)),
+    start = week ? first : new Date(first.getFullYear(), first.getMonth(), 1 - ((first.getDay() - ws + 7) % 7)),
     byDay: Dict<StoredRow[]> = {};
   rows.forEach((r) => {
     const a = parseISO(asText(r[dc.name]));
@@ -1212,7 +1198,7 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
     keys = Object.keys(byDay).sort(),
     near = shown || !keys.length ? null : keys.find((k) => k > isoDate(end)) || keys[keys.length - 1],
     nearD = near ? parseISO(near) : null,
-    monday = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)).getTime(),
+    monday = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() - ws + 7) % 7)).getTime(),
     nearOff = !nearD
       ? 0
       : week
@@ -1269,7 +1255,7 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
         </p>
       )}
       <div className={cx('cal-grid', week && 'wk')}>
-        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
+        {dows.map((d) => (
           <div key={d} className="cal-dow">
             {d}
           </div>
@@ -1303,7 +1289,7 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
                   title={rowTitle(app, user, t, r) + (P ? ' · ' + stateLabel(def, t, colOf(t, P.column), r[P.column]) : '')}
                   onClick={() => open(r)}
                 >
-                  {isDT && <span className="cal-t">{fmtTime(asText(r[dc.name]))}</span>}
+                  {isDT && <span className="cal-t">{fmtOf(def).time(asText(r[dc.name]))}</span>}
                   <span className="ellipsis">{rowTitle(app, user, t, r, lab)}</span>
                 </button>
               ))}
@@ -1472,7 +1458,7 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
                     <span className="tab-n">{l.length}</span>
                     {num ? (
                       <span className="muted t-cap">
-                        {num.label} {fmtNum(total(l))}
+                        {num.label} {colFmt(app.def, num)(total(l))}
                       </span>
                     ) : null}
                   </button>

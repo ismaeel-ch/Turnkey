@@ -6,6 +6,7 @@ import { dbDrop, dbExists, dbSave, qi, sqlRun } from './db';
 import { appUsers } from './engine';
 import { REC } from './registry';
 import { runTestsSync } from './tests';
+import { normSettings } from './app-settings';
 import { APPLY, STATIONS, blankDef, blankLine, deleteApp, newRun, pushChat } from './line';
 import type { BuildApp, Station } from './line';
 import { normCases } from './tester';
@@ -293,6 +294,8 @@ export function packOf(app: AppRecord, o: { data: string; as?: string | null }):
     tests: {
       cases: def.cases || [],
     },
+    // what was chosen on the app's own Settings page travels with it
+    ...(def.settings ? { settings: def.settings } : {}),
   };
 }
 export function readPack(json: string): Pack {
@@ -400,6 +403,8 @@ export function appFromPack(pack: Pack, key: string, preview?: boolean): AppReco
     throw e;
   }
   app.def.cases = normCases(pack.tests, app.def);
+  // a link is untrusted: its settings are checked against the app that was just rebuilt from it
+  if (pack.settings) app.def.settings = normSettings(pack.settings, app.def);
   app.rev++;
   run.status = 'ok';
   run.t1 = Date.now();

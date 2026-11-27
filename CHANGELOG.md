@@ -7,6 +7,15 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ### Added
 
+- Every built app has its own Settings page, opened from a gear in the app's header by the people who run it. It
+  has up to seven sections. General: the app's name, colour, navigation and row height. People: add a person, rename them,
+  change what kind of person they are, remove them, and choose which kinds of people may open Settings. Stages: what
+  each stage is called. Limits (in an app that works things out): the numbers in its rules, such as the amount above
+  which an order needs the director. Formats: currency, thousands and decimal marks, date style, 12 or 24 hour clock and the day
+  the week starts on. Pages: the page each kind of person lands on and the view each list opens in. Data: remove or
+  add back the demo data, download or restore the database, and Start over. Each choice applies at once with no
+  agent run, is kept with the app (so a share link, a release and an earlier version carry it), and is noted for the
+  next release. The builder has a Settings button above the app that opens the page as someone who may.
 - A form with seven fields or more is filled in step by step in a built app: what the record needs first, then who
   and what it belongs to, then dates and amounts, then the rest, and a last step that shows every answer before
   anything is saved. Next stays on a step while a required field is empty. Shorter forms and edits stay on one page.

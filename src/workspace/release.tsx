@@ -219,6 +219,8 @@ export function appSig(app: AppRecord) {
         d.theme,
         d.tour,
         d.cases || null,
+        // left out while nothing was set, so an app released before there were settings keeps its signature
+        ...(d.settings ? [d.settings, d.users] : []),
         // only when there are rules, so an app from before rules existed keeps the signature it had
         ...(d.logic && d.logic.rules.length ? [d.logic] : []),
       ]),

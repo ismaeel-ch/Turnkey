@@ -1,7 +1,7 @@
 // Runs the browser checks against a production build of the app.
 //
 //   npm run test:e2e                 every flow (about 20 minutes)
-//   npm run test:e2e -- demo         one flow: demo, live, misc, views, quests, new, custom, round6, react, sizes
+//   npm run test:e2e -- demo         one flow: demo, live, misc, views, quests, new, custom, round6, react, sizes, history, settings
 //   npm run test:e2e -- demo,live    several
 //   npm run test:e2e -- offline      install and offline (tests/e2e/offline.cjs, a fresh browser with a service worker)
 //   npm run test:e2e -- smoke        the production smoke test (tests/e2e/smoke.cjs); safe against the live site with TK_URL

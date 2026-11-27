@@ -1,23 +1,7 @@
 import type { FormEvent } from 'react';
 import type { AppAction, AppDef, BackedDef, AppTable, AppUser, ColumnDef, Row, Screen, StoredRow, TableDef } from '@/shared/types/app';
 import type { AppRecord, Dict, Pane, PaneForm, RecordRef, Stage, Walk } from '@/shared/types/workspace';
-import {
-  BRAND,
-  U,
-  arr,
-  confirmBox,
-  cx,
-  fmtDate,
-  fmtDateTime,
-  fmtNum,
-  initials,
-  label,
-  needNet,
-  notify,
-  online,
-  openDialog,
-  toast,
-} from './core';
+import { BRAND, U, arr, confirmBox, cx, initials, label, needNet, notify, online, openDialog, toast } from './core';
 import { DBX, dbExists } from './db';
 import { formSteps, missingIn, stepWithError, type FormStep } from './form-steps';
 import { ACCENTS, accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec, type ApiResult } from './engine';
@@ -34,12 +18,14 @@ import { AppLogo } from './release';
 import { isYear } from './viewspec';
 import { FirstRun, FirstTour, guideMenu, replayFirstRun } from './firstrun';
 import { roleLine, soleUser } from './onboarding';
+import { SETTINGS_SCREEN, canOpenSettings, fmtOf, homeScreen } from './app-settings';
 import { later } from './later';
 import { isLocked } from './logic';
 import { CalcMark, KeyNumbers, LineItems, Moves, StagePath, keyNumbers, movesFor } from './record-extras';
 
 // Loaded the first time they are drawn, to keep them out of the first page load.
 const TeamConsole = later(() => import('./room-ui'), 'TeamConsole');
+const SettingsPage = later(() => import('./app-settings-ui'), 'SettingsPage');
 
 /* ===== Turnkey prototype · runtime: draws a built app from its definition =====
    Nothing here is specific to one app. Tables, columns, roles, workflow, screens and layout all come from
@@ -85,14 +71,15 @@ export function cellText(app: AppRecord, user: AppUser, t: TableName, c: ColumnD
   if (v == null || v === '' || !c) return '';
   switch (c.type) {
     case 'date':
-      return fmtDate(String(v));
+      return fmtOf(app.def).date(String(v));
     case 'datetime':
-      return fmtDateTime(String(v));
+      return fmtOf(app.def).dateTime(String(v));
     case 'bool':
       return v ? 'Yes' : 'No';
     case 'money':
+      return fmtOf(app.def).money(v);
     case 'number':
-      return isYear(c) ? String(v) : fmtNum(v);
+      return isYear(c) ? String(v) : fmtOf(app.def).num(v);
     case 'select':
       return stateLabel(app.def, t, c, v);
     case 'user':
@@ -221,7 +208,12 @@ export function AppPane({
     );
   if (!user) return <AppLogin app={app} pane={pane} users={users} solo={solo} />;
   const screens = def.screens.filter((s) => s.roles.includes(user.role)),
-    scr = screens.find((s) => s.id === pane.screen) || screens[0];
+    // the people who run the app have one more page, Settings; a check's pane never opens it
+    admin = !pane.test && canOpenSettings(def, user.role),
+    inSet = admin && pane.screen === SETTINGS_SCREEN,
+    // a person lands on the page chosen for them in Settings, or on their first
+    scr = inSet ? undefined : screens.find((s) => s.id === pane.screen) || homeScreen(def, user.role, screens);
+  const settings = () => patchPane(pane, { screen: SETTINGS_SCREEN, rec: null, form: null, sheet: null });
   const go = (id: string) => patchPane(pane, { screen: id, rec: null, form: null, sheet: null }),
     th = def.theme,
     navKind = ['top', 'rail'].includes(th.nav) ? th.nav : 'side';
@@ -244,6 +236,7 @@ export function AppPane({
   );
   // the first-use guide stays in the person menu for good; a check's pane has none
   const guide = pane.test ? [] : guideMenu(app, user, pane);
+  if (admin) guide.push({ label: 'Settings', icon: 'settings', on: settings });
   const items: (MenuEntry | '-')[] = tidyMenu<MenuEntry>([
     ...(users.length > 1
       ? [
@@ -285,8 +278,19 @@ export function AppPane({
         <span className="app-logo">
           <Icon n={def.theme.icon} />
         </span>
-        <strong className="app-name ellipsis">{compact && scr ? scr.name : app.name}</strong>
+        <strong className="app-name ellipsis">{compact && inSet ? 'Settings' : compact && scr ? scr.name : app.name}</strong>
         <span className="grow" />
+        {admin && !compact && (
+          <button
+            className={cx('app-gear', inSet && 'on')}
+            aria-label="Settings"
+            aria-current={inSet ? 'page' : undefined}
+            title="Settings"
+            onClick={settings}
+          >
+            <Icon n="settings" s="20" />
+          </button>
+        )}
         {compact ? (
           <button
             className="persona"
@@ -320,10 +324,12 @@ export function AppPane({
       <div className="app-body">
         {!compact && navKind !== 'top' && nav(navKind)}
         <main className="app-main">
-          {!pane.test && (
+          {!pane.test && !inSet && (
             <FirstRun app={app} user={user} pane={pane} scr={scr} compact={compact} builder={!given} alone={!!only} quiet={!!quiet} />
           )}
-          {scr ? (
+          {inSet ? (
+            <SettingsPage app={app} user={user} pane={pane} compact={compact} />
+          ) : scr ? (
             <Screen key={scr.id + ':' + user.id} app={app} user={user} pane={pane} scr={scr} />
           ) : (
             <Empty icon="lock" title="Nothing to open" text={roleName(def, user.role) + ' has no screens.'} />
@@ -1067,13 +1073,15 @@ export function RecordDrawer({
                   {a.detail ? ' · ' + a.detail : ''}
                   <span className="muted t-cap">
                     {' · '}
-                    {fmtDateTime(a.at)}
+                    {fmtOf(app.def).dateTime(a.at)}
                   </span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="muted t-cap">Nothing since it was created{row.created_at ? ' on ' + fmtDate(String(row.created_at)) : ''}.</p>
+            <p className="muted t-cap">
+              Nothing since it was created{row.created_at ? ' on ' + fmtOf(app.def).date(String(row.created_at)) : ''}.
+            </p>
           )}
         </section>
       </div>
@@ -1114,7 +1122,9 @@ export function StageView({ app }: { app: AppRecord }) {
     only = soleUser(app, users),
     // who the first pane shows: the person picked, or the only kind of person there is
     shown = users.find((u) => u.id === p0.uid) || only,
-    saved = app.tpl ? REC[app.tpl] : undefined;
+    saved = app.tpl ? REC[app.tpl] : undefined,
+    // the person Settings opens as: whoever is on show when they may open it, else the first person who may
+    boss = shown && canOpenSettings(def, shown.role) ? shown : users.find((u) => canOpenSettings(def, u.role));
   const setUser = (pane: Pane, id: number | null) => patchPane(pane, { uid: id, screen: null, rec: null, form: null, guide: null });
   const split = () => toggleSplit(st, users);
   return (
@@ -1162,6 +1172,15 @@ export function StageView({ app }: { app: AppRecord }) {
           <span className="hide-sm">Replay first run</span>
         </Btn>
         <LookMenu app={app} />
+        <Btn
+          className="btn sm stage-settings"
+          disabled={!boss}
+          title={boss ? "Open the app's own Settings page, as " + boss.name : 'Nobody in this app can open Settings'}
+          onClick={() => boss && patchPane(p0, { uid: boss.id, screen: SETTINGS_SCREEN, rec: null, form: null, guide: null })}
+        >
+          <Icon n="settings" s="16" />
+          <span className="hide-sm">Settings</span>
+        </Btn>
         <Btn
           className="btn sm"
           id="report-problem"
