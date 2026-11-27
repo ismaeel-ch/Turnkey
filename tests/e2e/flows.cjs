@@ -2100,10 +2100,18 @@ async function flowSizes(browser, url) {
     const { ctx, page } = await newPage(browser, { viewport: { width: w, height: h } });
     await page.goto(url); await page.waitForSelector('.ob-card', { timeout: 20000 }); await sleep(200);
     await fitBoth(page, at + 'onboarding');
+    if (phone) { // the steps bar keeps its own height on the shorter steps instead of sharing the spare height with the form
+      await page.getByRole('button', { name: 'Get started' }).click(); await page.waitForSelector('.ob-rail');
+      const rail = await st(page, () => Math.round(document.querySelector('.ob-rail').getBoundingClientRect().height));
+      check(at + 'onboarding: the steps bar stays a slim bar at the top', rail < 80, rail);
+      await page.getByRole('button', { name: 'Back' }).click(); await sleep(150);
+    }
     await enter(page, url); await fitBoth(page, at + 'home');
     await page.fill('#home-prompt', 'a clinic that books patient appointments'); await page.locator('#home-go').click(); await page.waitForSelector('.iv-ask'); await fitBoth(page, at + 'the questions before a build');
     if (phone) { const o = await st(page, () => { const r = (s) => document.querySelector(s).getBoundingClientRect(); return { ask: r('.iv-ask').top, plan: r('.iv-canvas').top }; }); check(at + 'the question card comes first and the plan so far is under it', o.ask < o.plan, o); }
     await page.locator('.iv-usual').click(); await page.waitForSelector('.iv-act .iv-build'); await fitBoth(page, at + 'the plan to approve');
+    if (phone) { const lead = await st(page, () => [...document.querySelectorAll('.iv-flow:not(.iv-also)')].some((f) => { const k = [...f.children], top = (e) => Math.round(e.getBoundingClientRect().top); return k.some((e, i) => i && top(e) > top(k[i - 1]) + 4 && e.firstElementChild && e.firstElementChild.tagName.toLowerCase() === 'svg'); }));
+      check(at + 'the plan: no line of stages starts with an arrow', !lead); }
     await page.locator('.iv-over').click(); await page.waitForSelector('#home-prompt'); await page.fill('#home-prompt', '');
     if (phone) {
       const b = await st(page, () => { const r = (s) => document.querySelector(s).getBoundingClientRect(), a = r('.act-launch'), ws = r('.ws-btn'), ac = r('.acct'), bar = r('.titlebar.phone'); const hit = (x, y) => x.left < y.right && y.left < x.right && x.top < y.bottom && y.top < x.bottom; return { inBar: a.top >= bar.top && a.bottom <= bar.bottom, overWs: hit(a, ws), overAcct: hit(a, ac), w: a.width, h: a.height }; });
