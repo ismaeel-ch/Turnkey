@@ -158,15 +158,24 @@ async function guidedWalk(page) {
     await page.waitForSelector('.app .demo-bar:has-text("Demo data removed")', { timeout: 30000 });
     return bar.slice(0, 120);
   });
-  await step(page, 'Guided: release 1.0, then a change gets a plan before it is made', async () => {
-    await openTab(page, 'Release');
-    await page.waitForSelector('#rel-go', { timeout: 15000 });
-    await page.locator('#rel-go').click();
-    await page.waitForFunction(() => /Version 1\.0 · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''), null, {
+  // shots 7 and 8 of the demo video: the release, the change and the next release all happen in the agents chat
+  const relCard = '.gcard.relask[data-card="relask"]';
+  const chatSaid = (re) =>
+    page.waitForFunction((src) => new RegExp(src).test([...document.querySelectorAll('.chat .msg-t')].map((x) => x.innerText).join(' ')), re, {
       timeout: 60000,
     });
-    await page.fill('#improve-text', 'Add a notes field to patients');
-    await page.locator('#improve-go').click();
+  const say = async (text) => {
+    await page.fill('.composer textarea', text);
+    await page.press('.composer textarea', 'Enter');
+    await sleep(400);
+  };
+  await step(page, 'Guided: release 1.0 from the chat, then a change typed in the chat gets a plan first', async () => {
+    const tip = page.locator('.chat .rel-tips .chip', { hasText: 'Release version 1.0' });
+    await tip.click();
+    await page.waitForSelector(relCard, { timeout: 15000 });
+    await page.locator(relCard + ' [data-act="release"]').click();
+    await chatSaid('Version 1\\.0 is released');
+    await say('Add a notes field to patients');
     const go = page.locator('.gcard.cplan [data-act="go"]');
     for (let i = 0; i < 100 && !(await go.count()); i++) {
       const o = page.locator('.gcard.ask .opt:not([disabled])');
@@ -174,21 +183,22 @@ async function guidedWalk(page) {
       await sleep(300);
     }
     expect(await go.count(), 'no plan card with Go ahead');
-    const plan = clean(await page.locator('.gcard.cplan').last().innerText());
-    await go.last().click();
+    return clean(await page.locator('.gcard.cplan').last().innerText()).slice(0, 120);
+  });
+  await step(page, 'Guided: "go ahead", "it works" and "release" typed in the chat ship version 1.1', async () => {
+    await say('go ahead');
     await page.waitForSelector('.gcard.tryit', { timeout: 120000 });
     const a = await waitBuilt(page, 120000);
     expect(a.tests && a.tests.failed === 0, 'tests ' + JSON.stringify(a.tests));
-    return plan.slice(0, 120);
-  });
-  await step(page, 'Guided: try it, then release the change as 1.1', async () => {
-    await page.locator('.gcard.tryit [data-act="works"]').last().click();
-    await page.locator('.gcard.tryit [data-act="release"]').last().click({ timeout: 30000 });
-    await page.waitForSelector('#rel-go', { timeout: 15000 });
-    await page.locator('#rel-go').click();
-    await page.waitForFunction(() => /Version 1\.1 · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''), null, {
-      timeout: 60000,
-    });
+    await say('it works');
+    await say('release');
+    await page.waitForSelector(relCard, { timeout: 15000 });
+    await page.locator(relCard + ' .seg button', { hasText: 'New feature' }).click();
+    const card = clean(await page.locator(relCard).innerText());
+    expect(/Release version 1\.1\b/.test(card), 'release card: ' + card.slice(0, 160));
+    await say('yes');
+    await chatSaid('Version 1\\.1 is released');
+    await openTab(page, 'Release');
     await page.locator('.rel-hist').evaluate((el) => el.scrollIntoView({ block: 'center' }));
     await sleep(400);
     const v = clean(await page.locator('.rel-hist').innerText());
