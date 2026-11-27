@@ -1470,6 +1470,7 @@ async function firstUse(browser, url) {
   const stops = [];
   for (let i = 0; i < 6 && await page.locator('.fr-pop').count(); i++) {
     await page.waitForFunction((n) => { const p = document.querySelector('.fr-pop'); return p && p.dataset.i === String(n) && document.activeElement === p; }, i);
+    await page.waitForSelector('.fr-hole', { timeout: 2000 }).catch(() => {}); // the tour measures what it points at a moment after a stop opens
     stops.push(await st(page, () => { const p = document.querySelector('.fr-pop'), h = document.querySelector('.fr-hole'), a = document.querySelector('.fr-tour').getBoundingClientRect(), r = p.getBoundingClientRect(); return { text: p.innerText.replace(/\n+/g, ' | '), hole: !!h, inside: r.left >= a.left && r.right <= a.right + 1 && r.top >= a.top && r.bottom <= a.bottom + 1, bubbles: document.querySelectorAll('.fr-pop').length }; }));
     if (i === 1) await shot(page, 'fu-04-tour');
     await page.keyboard.press('ArrowRight'); await sleep(60);
