@@ -11,7 +11,7 @@ import { AGENT_NAMES, planFromDef, teamFor } from '@/shared/plan';
 import type { AppRecord } from '@/shared/types/workspace';
 import { U, cx, notify, setChat } from './core';
 import { showHow } from './build-mode';
-import { AgentAv, Avatar, Btn, Card, Icon, Spinner } from './ui';
+import { AgentAv, Avatar, Btn, Card, Icon, Spinner, refocus, useFocusOnArrive } from './ui';
 import { RUNS, stopRun } from './line';
 import { answerGate, flowOf, stepAfter } from './custom';
 import { REVIEWERS } from './reviewers';
@@ -64,6 +64,11 @@ function madeTags(app: AppRecord): string[] {
 
 /** The pause for the owner: what to look at, and the two answers. */
 function ApprovalAsk({ app, st }: { app: AppRecord; st: BuildStep }) {
+  // the buttons go away with the pause: the keyboard goes back to the top of the steps
+  const answer = (ok: boolean) => {
+    answerGate(app, ok);
+    refocus(['.steps-view h2']);
+  };
   const rules = st.station === 'backend' ? rulesInWords(app.def) : [],
     facts = rules.length ? rules : (app.line[st.station]?.facts || []).slice(0, 4);
   return (
@@ -82,10 +87,10 @@ function ApprovalAsk({ app, st }: { app: AppRecord; st: BuildStep }) {
         </ul>
       )}
       <div className="row wrap">
-        <Btn className="btn primary sm" onClick={() => answerGate(app, true)}>
+        <Btn className="btn primary sm" onClick={() => answer(true)}>
           Looks right, continue
         </Btn>
-        <Btn className="btn sm" onClick={() => answerGate(app, false)}>
+        <Btn className="btn sm" onClick={() => answer(false)}>
           Stop here
         </Btn>
       </div>
@@ -138,12 +143,23 @@ export function StepsView({ app }: { app: AppRecord }) {
     head = stepsHeadline(app, B, busy),
     total = B.steps.length,
     tags = madeTags(app),
-    ready = app.status === 'ready' && !busy;
+    ready = app.status === 'ready' && !busy,
+    head1 = useFocusOnArrive<HTMLHeadingElement>(),
+    asking = B.steps.find((st) => st.state === 'ask');
+  // read out by a screen reader when the build needs the owner or is done, not at every step: this text is there from
+  // the start and only changes at those moments, so it is announced
+  const say = asking
+    ? 'The build is waiting for you: ' + asking.title + '. ' + asking.text
+    : ready && B.at === 0
+      ? app.name + ' is ready.'
+      : '';
   return (
     <section className="steps-view" data-tour="steps" aria-label="The build, step by step">
       <div className="steps-head">
         <div className="col gap0 grow">
-          <h2 className="t-sub1">{head.title}</h2>
+          <h2 className="t-sub1" tabIndex={-1} ref={head1}>
+            {head.title}
+          </h2>
           <span className="muted" id="steps-sub">
             {head.sub}
           </span>
@@ -183,8 +199,11 @@ export function StepsView({ app }: { app: AppRecord }) {
           ))}
         </div>
       )}
+      <div className="fr-sr" role="status" id="steps-say">
+        {say}
+      </div>
       {ready && B.at === 0 && (
-        <div className="steps-ready" role="status">
+        <div className="steps-ready">
           <Icon n="checkCircle" />
           <span className="grow">
             <strong>{app.name} is ready.</strong> Open it and try every screen.

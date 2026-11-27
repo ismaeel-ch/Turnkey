@@ -34,7 +34,7 @@ import {
 } from './interview';
 import { STATIONS } from './line';
 import { REVIEWERS } from './reviewers';
-import { Btn, Card, Icon, Input, MBar, Spinner, Switch } from './ui';
+import { Btn, Card, Icon, Input, MBar, Spinner, Switch, refocus, useFocusOnArrive } from './ui';
 
 /* ===== The interview before a build, as the owner sees it =====
    Two screens on the Home tab after "Continue": the question cards with the plan filling in beside them, then the
@@ -303,7 +303,7 @@ function Assumed({ iv, plan }: { iv: Interview; plan: PlanSpec }) {
                   {a.question} <strong>{a.answer}</strong>
                 </span>
                 {iv.cards.some((c) => c.id === a.slot) && (
-                  <button className="iv-link" onClick={() => changeAnswer(a.slot)}>
+                  <button className="iv-link" onClick={() => changeAnswer(a.slot)} aria-label={'Change the answer to: ' + a.question}>
                     Change
                   </button>
                 )}
@@ -420,6 +420,7 @@ function Answered({ iv, except }: { iv: Interview; except?: string }) {
 
 function AskCard({ iv, card }: { iv: Interview; card: QuestionCard }) {
   const [words, setWords] = useState('');
+  const head = useFocusOnArrive<HTMLHeadingElement>();
   const asked = cardsToAsk(iv.cards, iv.answers),
     many = card.kind === 'many',
     picked = many ? ticksOf(iv, card) : iv.answers[card.id]?.picked || [];
@@ -429,13 +430,13 @@ function AskCard({ iv, card }: { iv: Interview; card: QuestionCard }) {
   };
   return (
     <Card className="card iv-ask" data-card={card.id}>
-      <span className="badge b-info iv-n">
+      <span className="badge b-info iv-n" id="iv-n">
         {'Question '}
         {asked.indexOf(card) + 1}
         {' of '}
         {asked.length}
       </span>
-      <h3 className="t-sub2" id="iv-q">
+      <h3 className="t-sub2" id="iv-q" tabIndex={-1} ref={head} aria-describedby="iv-n">
         {card.title}
       </h3>
       <p className="t-cap muted">
@@ -500,6 +501,25 @@ function AskCard({ iv, card }: { iv: Interview; card: QuestionCard }) {
   );
 }
 
+/** After the last answer: the one way on, to the plan. */
+function AllAsked() {
+  const head = useFocusOnArrive<HTMLHeadingElement>();
+  return (
+    <>
+      <div className="row gap8">
+        <Icon n="checkCircle" cls="iv-yes" />
+        <h3 className="t-sub2" tabIndex={-1} ref={head}>
+          {"That's everything I need"}
+        </h3>
+      </div>
+      <p>Check the plan once, then I start building.</p>
+      <Btn className="btn primary iv-review" onClick={reviewPlan}>
+        Review the plan
+      </Btn>
+    </>
+  );
+}
+
 function PlannerError({ iv }: { iv: Interview }) {
   return (
     <MBar
@@ -540,16 +560,7 @@ function Chat({ iv, plan }: { iv: Interview; plan: PlanSpec | null }) {
               Writing the plan from your answers.
             </div>
           ) : (
-            <>
-              <div className="row gap8">
-                <Icon n="checkCircle" cls="iv-yes" />
-                <h3 className="t-sub2">{"That's everything I need"}</h3>
-              </div>
-              <p>Check the plan once, then I start building.</p>
-              <Btn className="btn primary iv-review" onClick={reviewPlan}>
-                Review the plan
-              </Btn>
-            </>
+            <AllAsked />
           )}
         </Card>
       )}
@@ -618,7 +629,13 @@ function Steps({ iv }: { iv: Interview }) {
         {step(3, 'Plan', onPlan ? 'on' : '')}
         {step(4, 'Build', '')}
       </ol>
-      <Btn className="btn subtle sm iv-over" onClick={leaveInterview}>
+      <Btn
+        className="btn subtle sm iv-over"
+        onClick={() => {
+          leaveInterview();
+          refocus(['#home-prompt']);
+        }}
+      >
         <Icon n="arrowLeft" s="16" />
         Start over
       </Btn>
@@ -666,7 +683,8 @@ function Questions({ iv, plan }: { iv: Interview; plan: PlanSpec | null }) {
 
 /** Screen 3: the plan to approve. Nothing is built until "Build it". */
 function PlanScreen({ iv, plan }: { iv: Interview; plan: PlanSpec }) {
-  const t = teamFor(plan);
+  const t = teamFor(plan),
+    head = useFocusOnArrive<HTMLHeadingElement>();
   const actions = (big?: boolean) => (
     <div className="row wrap gap8">
       {iv.cards.length > 0 && (
@@ -685,7 +703,7 @@ function PlanScreen({ iv, plan }: { iv: Interview; plan: PlanSpec }) {
       <section className="iv-canvas" aria-label="The plan" tabIndex={0}>
         <div className="col gap4">
           <span className="t-cap muted">{"Here is what I'll build"}</span>
-          <h1 className="t-title2" id="iv-name">
+          <h1 className="t-title2" id="iv-name" tabIndex={-1} ref={head}>
             {plan.name}
           </h1>
           <p className="lead muted">{plan.summary}</p>

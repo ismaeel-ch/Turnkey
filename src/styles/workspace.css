@@ -830,3 +830,5 @@ td.iv-no{color:var(--colorNeutralForeground3)}
 .dialog.compare.fui-DialogSurface,.dialog.compare{width:min(1320px,calc(100% - 16px));max-width:none}.cmp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;height:min(62vh,640px);min-height:320px}.cmp-side{display:flex;flex-direction:column;gap:6px;min-width:0;min-height:0}.cmp-side .device{flex:1;box-shadow:var(--shadow4)}.cmp-h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 @media (max-width:820px){.cmp{grid-template-columns:minmax(0,1fr);height:auto}.cmp-side .device{height:420px}}
 .improve .textarea{width:100%}.improve .chip{cursor:pointer;text-align:left}.improve h3{margin:0}.improve p{margin:0}
+/* a heading that takes focus from script (the next question, the plan, the steps) is read out, not outlined */
+h1[tabindex="-1"]:focus,h2[tabindex="-1"]:focus,h3[tabindex="-1"]:focus{outline:none}

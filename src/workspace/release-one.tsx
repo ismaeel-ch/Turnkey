@@ -25,7 +25,7 @@ import {
   waitingChanges,
 } from './release';
 import type { Waiting } from './release';
-import { Btn, Field, Icon, MBar, Spinner } from './ui';
+import { Btn, Field, Icon, MBar, Spinner, refocus } from './ui';
 
 /* ===== Turnkey · one change released on its own =====
    The draft can hold a fix the owner needs out today beside a new feature that is only half done. Releasing the draft
@@ -226,11 +226,23 @@ function WaitingItem({ app, w, open, onOpen }: { app: AppRecord; w: Waiting; ope
     why = w.set ? aloneBlock(app, ids) : null,
     v = w.set ? aloneVersion(app, ids) : '',
     others = waitingChanges(app).filter((x) => x.id !== w.id).length;
+  const mine = '[data-change="' + (w.id || 'other') + '"] ';
   const go = async () => {
     setBusy(true);
     await releaseAlone(app, ids);
     setBusy(false);
     onOpen(false);
+    // this change has left the list: the keyboard goes to the next one that can go out, or to the release form
+    refocus(['#rel-wait [data-act="alone"]:not([disabled])', '#rel-go']);
+  };
+  // the question opens in place of the button that asked for it, and closing it puts the button back
+  const open1 = () => {
+    onOpen(true);
+    refocus([mine + '[data-act="alone-go"]']);
+  };
+  const close1 = () => {
+    onOpen(false);
+    refocus([mine + '[data-act="alone"]']);
   };
   return (
     <li className="rel-wait-item" data-change={w.id || 'other'}>
@@ -238,13 +250,7 @@ function WaitingItem({ app, w, open, onOpen }: { app: AppRecord; w: Waiting; ope
         <span className={'badge ' + (w.kind === 'fix' ? 'b-warning' : 'b-outline')}>{w.kind ? KIND_WORD[w.kind] : 'Other'}</span>
         <strong className="grow">{w.title}</strong>
         {w.set && !open && (
-          <Btn
-            className="btn subtle sm"
-            data-act="alone"
-            disabled={!!why}
-            title={why || 'People get only this change now'}
-            onClick={() => onOpen(true)}
-          >
+          <Btn className="btn subtle sm" data-act="alone" disabled={!!why} title={why || 'People get only this change now'} onClick={open1}>
             <Icon n="rocket" s="16" />
             {'Release on its own as ' + v}
           </Btn>
@@ -262,11 +268,17 @@ function WaitingItem({ app, w, open, onOpen }: { app: AppRecord; w: Waiting; ope
           tone="info"
           action={
             <span className="row gap8">
-              <Btn className="btn primary sm" data-act="alone-go" disabled={busy || !!why} onClick={() => void go()}>
+              <Btn
+                className="btn primary sm"
+                data-act="alone-go"
+                aria-describedby="rel-alone-ask"
+                disabled={busy || !!why}
+                onClick={() => void go()}
+              >
                 {busy ? <Spinner /> : <Icon n="rocket" s="16" />}
                 {'Release version ' + v}
               </Btn>
-              <Btn className="btn sm" data-act="alone-no" disabled={busy} onClick={() => onOpen(false)}>
+              <Btn className="btn sm" data-act="alone-no" disabled={busy} onClick={close1}>
                 Not now
               </Btn>
             </span>
@@ -298,11 +310,10 @@ export function WaitingList({ app }: { app: AppRecord }) {
   if (!relOf(app) || list.length < 2) return null;
   return (
     <Field
-      id="rel-wait"
       label="Waiting in the draft"
       hint="Each change you asked for since the live version. One that is ready can go out on its own while the rest keep waiting."
     >
-      <ul className="plain rel-wait" id="rel-wait">
+      <ul className="plain rel-wait" id="rel-wait" aria-label="Waiting in the draft">
         {list.map((w) => (
           <WaitingItem key={w.id || 'other'} app={app} w={w} open={open === w.id} onOpen={(x) => setOpen(x ? w.id : null)} />
         ))}
