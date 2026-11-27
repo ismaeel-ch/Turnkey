@@ -16,7 +16,7 @@
  */
 import type { AppDef, RecordStep } from '@/shared/types/app';
 import type { AppFlow, AppRecord, Dict, StationLine, Touch } from '@/shared/types/workspace';
-import type { SqlDatabase } from '@/shared/types/sqljs';
+import type { SqlDatabase, SqlValue } from '@/shared/types/sqljs';
 import {
   canRedo,
   canUndo,
@@ -30,6 +30,7 @@ import {
 } from '@/shared/history';
 import { openHistoryDb, type HistoryDb } from '@/platform/storage/history-db';
 import { S, U, activeTab, clone, commit, emit, hashStr, notify, subscribe, toast, uid } from './core';
+import { AWAY, AWAY_SQL } from './carry';
 import { DBX, dbBump, dbExists, dbFlush, dbOpen, qi } from './db';
 import { PENDING, RUNS } from './line';
 import { columnPlan, stepsFromTo } from './record-steps';
@@ -221,14 +222,38 @@ const colsOf = (d: SqlDatabase, table: string): string[] => {
 /**
  * Builds the database for a version: its own file, with the rows of `cur` copied in for every table and field both
  * have. A table whose rows cannot go in (a field the version requires is missing now) keeps the version's rows.
+ * Values in a field the version does not have are put away (src/workspace/carry.ts), and values put away under the
+ * name of a field it has come back, so undoing the removal of a field brings its values back too.
  */
-function carryRows(next: SqlDatabase, cur: SqlDatabase | null, tables: string[], steps: RecordStep[] = []) {
+function carryRows(
+  next: SqlDatabase,
+  cur: SqlDatabase | null,
+  tables: string[],
+  steps: RecordStep[] = [],
+  /** the fields of each list the app has now: only their values are put away, not the runtime's own columns */
+  own: Dict<string[]> = {},
+) {
   if (!cur) return;
   next.run('PRAGMA foreign_keys = OFF');
+  const all = (text: string, params?: SqlValue[]): SqlValue[][] => {
+      try {
+        const r = cur.exec(text, params);
+        return r.length ? r[0].values : [];
+      } catch {
+        return [];
+      }
+    },
+    held = all('SELECT "table_name", "column_name", "row_id", "value", "at" FROM ' + qi(AWAY)), // what is put away now
+    back = new Set<string>(),
+    put: SqlValue[][] = [],
+    now = new Date().toISOString();
   for (const t of tables) {
     const a = colsOf(next, t),
       // a field that was renamed between the two versions keeps its values under the name this version uses
-      pairs = columnPlan(steps, t, colsOf(cur, t), a).pairs;
+      plan = columnPlan(steps, t, colsOf(cur, t), a),
+      pairs = plan.pairs,
+      mine: SqlValue[][] = [],
+      came: string[] = [];
     if (!a.length || !pairs.length) continue;
     next.run('SAVEPOINT carry');
     try {
@@ -242,11 +267,47 @@ function carryRows(next: SqlDatabase, cur: SqlDatabase | null, tables: string[],
       } finally {
         ins.free();
       }
+      if (t !== 'users' && t !== 'activity') {
+        for (const c of plan.away.filter((x) => (own[t] || []).includes(x)))
+          all('SELECT "id", ' + qi(c) + ' FROM ' + qi(t) + ' WHERE ' + qi(c) + ' IS NOT NULL AND ' + qi(c) + " <> ''").forEach((r) =>
+            mine.push([t, c, r[0], r[1], now]),
+          );
+        for (const c of plan.back) {
+          const vals = held.filter((h) => h[0] === t && h[1] === c);
+          if (!vals.length) continue;
+          next.run('SAVEPOINT back');
+          try {
+            for (const h of vals) next.run('UPDATE ' + qi(t) + ' SET ' + qi(c) + ' = ? WHERE "id" = ?', [h[3], h[2]]);
+            next.run('RELEASE back');
+            came.push(t + '|' + c);
+          } catch {
+            next.run('ROLLBACK TO back'); // the values do not fit the field as it is in this version: they stay put away
+            next.run('RELEASE back');
+          }
+        }
+      }
       next.run('RELEASE carry');
+      mine.forEach((r) => put.push(r));
+      came.forEach((k) => back.add(k));
     } catch {
       next.run('ROLLBACK TO carry');
       next.run('RELEASE carry');
     }
+  }
+  // the holding table goes with the records: what is still put away, and what this version has no field for
+  const keep = held.filter((h) => !back.has(h[0] + '|' + h[1])).concat(put);
+  try {
+    next.run('DROP TABLE IF EXISTS ' + qi(AWAY));
+    if (keep.length) {
+      next.run(AWAY_SQL);
+      for (const r of keep)
+        next.run(
+          'INSERT OR REPLACE INTO ' + qi(AWAY) + ' ("table_name", "column_name", "row_id", "value", "at") VALUES (?, ?, ?, ?, ?)',
+          r,
+        );
+    }
+  } catch {
+    // the version's own holding table stays as it was
   }
 }
 
@@ -259,7 +320,17 @@ function restoreDb(app: AppRecord, snap: AppSnap) {
     cur = null;
   }
   const next = new DBX.SQL.Database(snap.db);
-  carryRows(next, cur, ['users', ...snap.def.tables.map((t) => t.name), 'activity'], stepsFromTo(app.def.migrations, snap.def.migrations));
+  const own: Dict<string[]> = {};
+  app.def.tables.forEach((t) => {
+    own[t.name] = t.columns.map((c) => c.name);
+  });
+  carryRows(
+    next,
+    cur,
+    ['users', ...snap.def.tables.map((t) => t.name), 'activity'],
+    stepsFromTo(app.def.migrations, snap.def.migrations),
+    own,
+  );
   next.run('PRAGMA foreign_keys = ON');
   clearTimeout(DBX.timers[app.id] ?? undefined);
   DBX.timers[app.id] = null;

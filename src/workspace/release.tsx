@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from 'react';
 import type { BriefedDef, Logo, RecordStep, Theme, Untrusted } from '@/shared/types/app';
-import type { AppRecord, ChatMessage, Dict, Release, ViewState } from '@/shared/types/workspace';
+import type { AppRecord, ChatMessage, Dict, Release, StartWith, ViewState } from '@/shared/types/workspace';
 import { ACC_HEX } from '@/styles/theme.generated';
 import { toStyle } from '@/platform/dom';
 import { ICONS } from './icons';
@@ -35,12 +35,13 @@ import { TEAMS } from './team';
 import { runTestsSync, testStats } from './tests';
 import { RUNS, STATIONS, pushChat } from './line';
 import { Btn, Card, Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner, Textarea } from './ui';
-import { appFromPack, framed, openShare, openShared, packOf, readPack, squeeze, unsqueeze } from './share';
+import { appFromPack, framed, openShare, openShared, packOf, readPack, settingsLists, squeeze, startWith, unsqueeze } from './share';
 import type { Pack } from './share';
 import { carryData } from './carry';
-import { appBusy, record as keepDraft } from './history';
+import { appBusy, historyOf, record as keepDraft, restoreVersion } from './history';
 import { inverseSteps, verCmp, verParts } from './record-steps';
 import type { VersionSteps } from './record-steps';
+import { currentVersion } from '@/shared/history';
 import { saveShortLink } from '@/platform/share-link';
 import { exportMarkdown, exportPage, exportPdf, exportSqlite, exportZip } from './export';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
@@ -371,8 +372,22 @@ export function logChange(app: AppRecord, text: string, station?: string) {
   });
   if (app.log.length > 80) app.log.splice(0, app.log.length - 80);
 }
+/**
+ * The release the live version is the same as. Going back goes out under a new number, so the live version can be a
+ * copy of an earlier one: what the draft changed is counted from that one.
+ */
+export function baseOf(app: AppRecord): Release | null {
+  let r = relOf(app);
+  for (let i = 0; r && r.back && i < 20; i++) {
+    const v = r.back,
+      b = relList(app).find((x) => x.v === v);
+    if (!b) break;
+    r = b;
+  }
+  return r;
+}
 export const draftLog = (app: AppRecord) => {
-  const r = relOf(app);
+  const r = baseOf(app);
   return (app.log || []).filter((x) => !r || x.at > r.at);
 };
 export const PAST: [RegExp, string][] = [
@@ -438,7 +453,7 @@ export const relHistory = (app: AppRecord): VersionSteps[] =>
     .map((r) => ({ v: r.v, steps: r.steps || [] }));
 /** What the draft has done to the records since the last release. */
 export const draftSteps = (app: AppRecord): RecordStep[] => {
-  const r = relOf(app);
+  const r = baseOf(app);
   return arr<{ at: number; step?: RecordStep }>(app.def.migrations)
     .filter((m) => m.step && (!r || m.at > r.at))
     .map((m) => m.step as RecordStep);
@@ -461,7 +476,32 @@ export async function refreshShortLink(app: AppRecord, code: string) {
   if (!r.ok && r.reason === 'forbidden') delete app.short; // the name belongs to someone else now: Share makes a new one
   return r.ok;
 }
-export async function releaseApp(app: AppRecord, kind: string, notes: string[]) {
+/**
+ * What the short link hands a person who opens the app for the first time: the version, holding the records the
+ * owner chose for new people. The copy kept with the release always holds the demo data, so it stays small and the
+ * app can go back to it.
+ */
+async function firstCopy(app: AppRecord, rel: Release): Promise<string> {
+  const start = startWith(rel.start);
+  if (!rel.pack || start === 'demo') return rel.pack || '';
+  const pack = packOf(app, { data: start, as: '' });
+  pack.ver = rel.v;
+  pack.uid = app.uid;
+  pack.notes = rel.notes;
+  pack.kind = rel.kind;
+  pack.history = relHistory(app);
+  if (app.short) pack.slug = app.short.slug;
+  return squeeze(JSON.stringify(pack));
+}
+/** Puts a version that was just released under the short link. */
+function publish(app: AppRecord, rel: Release) {
+  const fallback = rel.pack || '';
+  void firstCopy(app, rel)
+    .catch(() => fallback)
+    .then((code) => (code ? refreshShortLink(app, code) : false))
+    .then((ok) => ok && commit());
+}
+export async function releaseApp(app: AppRecord, kind: string, notes: string[], opts?: { start?: StartWith | null }) {
   const why = releaseBlock(app);
   if (why) {
     toast(why, 'warning');
@@ -478,6 +518,8 @@ export async function releaseApp(app: AppRecord, kind: string, notes: string[]) 
     k = prev ? (REL_KIND[kind] && kind !== 'first' && kind !== 'rollback' ? kind : suggestKind(app)) : 'first',
     v = prev ? verNext(prev.v, k) : '1.0',
     steps = prev ? draftSteps(app) : [],
+    // what a new person starts with: the owner's choice, or the choice of the version before (demo data before the choice existed)
+    start = startWith((opts && opts.start) || (prev && prev.start)),
     list = arr(notes)
       .map((x) => str(x).slice(0, 200))
       .filter(Boolean)
@@ -518,6 +560,7 @@ export async function releaseApp(app: AppRecord, kind: string, notes: string[]) 
       pages: app.def.screens.length,
     },
     steps,
+    start,
   };
   app.releases = [rel].concat(relList(app));
   app.releases.slice(6).forEach((r) => {
@@ -573,7 +616,7 @@ export async function releaseApp(app: AppRecord, kind: string, notes: string[]) 
   app.updated = Date.now();
   toast('Version ' + v + ' of ' + app.name + ' is released.', 'success');
   commit();
-  void refreshShortLink(app, code).then((ok) => ok && commit());
+  publish(app, rel);
   return rel;
 }
 export async function openVersion(app: AppRecord, rel: Release) {
@@ -652,7 +695,9 @@ export async function goBackTo(app: AppRecord, rel: Release, why?: string): Prom
     return null;
   }
   if (goBackBlock(app, rel)) return null; // something started while the version was being unpacked
-  const kept = keepDraft(app), // the draft as it is now goes into the draft history, so going back can be undone
+  keepDraft(app); // the draft as it is now goes into the draft history, so going back can be undone
+  const hist = historyOf(app.id),
+    kept = hist ? currentVersion(hist) : null, // that version, whether it was saved just now or when the draft last changed
     before = recordTotal(app);
   let tmp: AppRecord | null = null,
     moved: ReturnType<typeof carryData> = null;
@@ -726,7 +771,9 @@ export async function goBackTo(app: AppRecord, rel: Release, why?: string): Prom
     size: code.length,
     inside: { tables: app.def.tables.length, pages: app.def.screens.length },
     steps: inverseSteps(relSteps),
+    start: startWith(live.start),
   };
+  app.log = (app.log || []).filter((x) => x.at <= rel.at); // what was changed after that version is not in the app now
   app.releases = [back].concat(relList(app));
   app.releases.slice(6).forEach((r) => {
     r.pack = null;
@@ -756,8 +803,48 @@ export async function goBackTo(app: AppRecord, rel: Release, why?: string): Prom
   );
   toast('Version ' + v + ' is live: the same as ' + rel.v + '. No records were deleted.', 'success');
   commit();
-  void refreshShortLink(app, code).then((ok) => ok && commit());
+  publish(app, back);
   return back;
+}
+/** Whether the draft that going back replaced is still kept, so its changes can be brought back. */
+export const canBringBack = (app: AppRecord) => {
+  const t = app.takenBack;
+  return !!(t && t.version && historyOf(app.id)?.versions.some((v) => v.id === t.version));
+};
+/**
+ * Puts what going back took out into the draft again, with the records as they are now. Nothing is released: the
+ * owner tries it, has it fixed, and releases when it is right.
+ */
+export function bringBack(app: AppRecord): boolean {
+  const t = app.takenBack;
+  if (!t || !t.version || !canBringBack(app)) {
+    toast('The draft from before you went back is no longer kept. Ask for the changes again in the chat.', 'info');
+    return false;
+  }
+  if (appBusy(app)) {
+    toast('Wait until the agents have finished, then bring the changes back.', 'warning');
+    return false;
+  }
+  const rev = app.rev;
+  restoreVersion(app, t.version);
+  if (app.rev === rev) return false;
+  app.takenBack = null;
+  const ts = runTestsSync(app);
+  pushChat(
+    app,
+    'orchestrator',
+    'What was taken back is in the draft again. Nothing was released: people still have version ' +
+      (relOf(app)?.v || '') +
+      '. Your records are as they were' +
+      (ts
+        ? ts.failed
+          ? ', and ' + ts.failed + ' of ' + ts.total + ' tests fail on the draft.'
+          : ', and all ' + ts.total + ' tests pass.'
+        : '.') +
+      (t.why ? ' You said what went wrong: "' + t.why + '". Tell me what to fix before you release it again.' : ''),
+  );
+  commit();
+  return true;
 }
 const AWAY_KEPT = '30 days';
 export function GoBackDialog({ p }: { p: { app: string; v: string } }) {
@@ -927,6 +1014,85 @@ function setRelForm(id: string, patch: Partial<RelForm>) {
   U.rel[id] = { ...relForm(id), ...patch };
   notify();
 }
+/** Ends a line the owner typed, or a list of them, with a full stop. */
+const sentence = (x: string) => (/[.!?]$/.test(x.trim()) ? x.trim() : x.trim() + '.');
+const wordList = (a: string[]) => (a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0] || '');
+/** What a person who opens the app for the first time starts with. People who already have it keep their own records. */
+function StartChoice({
+  app,
+  value,
+  first,
+  onChange,
+}: {
+  app: AppRecord;
+  value: StartWith;
+  first: boolean;
+  onChange: (x: StartWith) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const seedN = app.def.tables.reduce((n, t) => n + (((app.seed && app.seed.rows) || {})[t.name] || []).length, 0),
+    total = recordTotal(app),
+    keep = settingsLists(app, app.def.tables),
+    kept = app.def.tables.filter((t) => keep.has(t.name)).map((t) => t.label.toLowerCase()),
+    items: { id: StartWith; name: string; text: string; usual?: boolean }[] = [
+      {
+        id: 'empty',
+        name: 'Empty',
+        text: (kept.length ? 'Only your ' + wordList(kept) : 'No records') + '. Right for a real launch.',
+        usual: true,
+      },
+      {
+        id: 'demo',
+        name: 'Demo data',
+        text: 'The ' + seedN + ' made-up records the app was built with. Right for showing people how it works.',
+      },
+      {
+        id: 'live',
+        name: 'The records as they are now',
+        text: total + ' record' + (total === 1 ? '' : 's') + ', with everything you added or changed while trying the app.',
+      },
+    ],
+    now = items.find((x) => x.id === value) || items[0];
+  if (!first && !open)
+    return (
+      <div className="row wrap gap8" id="rel-start">
+        <span>
+          {'New people start with: '}
+          <strong>{now.name.toLowerCase()}</strong>
+          {'. People who already have the app keep their own records.'}
+        </span>
+        <Btn className="btn subtle sm" id="rel-start-change" onClick={() => setOpen(true)}>
+          Change
+        </Btn>
+      </div>
+    );
+  return (
+    <div className="col gap8" id="rel-start">
+      <strong className="t-sub2" id="rel-start-h">
+        {first ? 'What should your people start with?' : 'What should new people start with?'}
+      </strong>
+      {!first && <span className="t-cap muted">People who already have the app keep their own records.</span>}
+      <div className="choices three" role="group" aria-labelledby="rel-start-h">
+        {items.map((it) => (
+          <button
+            key={it.id}
+            type="button"
+            className={cx('choice', it.id === value && 'on')}
+            aria-pressed={it.id === value}
+            data-start={it.id}
+            onClick={() => onChange(it.id)}
+          >
+            <span className="row wrap gap8">
+              <strong>{it.name}</strong>
+              {it.usual ? <span className="badge b-outline">Usual choice</span> : null}
+            </span>
+            <span className="t-cap muted">{it.text}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 export function ReleaseView({ app }: { app: AppRecord }) {
   const rel = relOf(app),
     dirty = isDirty(app),
@@ -936,7 +1102,11 @@ export function ReleaseView({ app }: { app: AppRecord }) {
   const kind = rel ? R.kind || suggestKind(app) : 'first',
     v = rel ? verNext(rel.v, kind) : '1.0',
     text = R.text != null ? R.text : draftNotes(app).join('\n'),
-    can = !block && (!rel || dirty);
+    can = !block && (!rel || dirty),
+    // a real launch starts empty; a later version starts new people the way the one before it did
+    start: StartWith = R.start || (rel ? startWith(rel.start) : 'empty'),
+    waiting = rel ? draftLog(app).length : 0,
+    taken = app.takenBack || null;
   const go = async () => {
     setRelForm(app.id, { busy: true });
     const r = await releaseApp(
@@ -946,8 +1116,9 @@ export function ReleaseView({ app }: { app: AppRecord }) {
         .split('\n')
         .map((x) => x.replace(/^[-•*]\s*/, '').trim())
         .filter(Boolean),
+      { start },
     );
-    setRelForm(app.id, r ? { busy: false, text: null, kind: null } : { busy: false });
+    setRelForm(app.id, r ? { busy: false, text: null, kind: null, start: null } : { busy: false });
   };
   const kinds = [
     {
@@ -998,18 +1169,35 @@ export function ReleaseView({ app }: { app: AppRecord }) {
                 </span>
               )}
             </span>
-            <span className="muted">
-              {!rel
-                ? 'Releasing makes this the version people get when you share or install the app. Until then it is a draft only you can see.'
-                : dirty
-                  ? 'People with the link or the installed app still have version ' +
-                    rel.v +
-                    '. Release the draft to give them your changes.'
-                  : 'Released ' +
-                    ago(rel.at) +
-                    (rel.by ? ' by ' + rel.by : '') +
-                    '. Any change you ask for from here on goes into a new draft.'}
-            </span>
+            <dl className="rel-two">
+              <div>
+                <dt>Live</dt>
+                <dd id="rel-live">
+                  {rel
+                    ? 'Version ' +
+                      rel.v +
+                      ', released ' +
+                      ago(rel.at) +
+                      (rel.by ? ' by ' + rel.by : '') +
+                      (rel.back ? ', the same as ' + rel.back : '') +
+                      '. This is what people with the link or the installed app have.'
+                    : 'Nothing yet. Releasing makes this the version people get when you share or install the app.'}
+                </dd>
+              </div>
+              <div>
+                <dt>Draft</dt>
+                <dd id="rel-draft">
+                  {!rel
+                    ? 'The app as you built it. Only you can see it.'
+                    : dirty
+                      ? (waiting ? waiting + ' change' + (waiting === 1 ? '' : 's') + ' waiting' : 'Changes waiting') +
+                        '. Only you can see ' +
+                        (waiting === 1 ? 'it' : 'them') +
+                        ' until you release.'
+                      : 'The same as the live version. Any change you ask for goes here first, and people get it when you release.'}
+                </dd>
+              </div>
+            </dl>
             <span className="row wrap gap8 t-cap">
               {st ? (
                 <span className={cx('ck', st.fresh && st.failed ? 'bad' : 'ok')}>
@@ -1031,7 +1219,22 @@ export function ReleaseView({ app }: { app: AppRecord }) {
         </Card>
         {(!rel || dirty) && (
           <Card className="card rel-form">
-            <h3 className="widget-h">{rel ? 'Release the draft as version ' + v : 'Release version 1.0'}</h3>
+            <h3 className="widget-h">{rel ? 'Release the draft as version ' + v : 'Before you release'}</h3>
+            {!rel && (
+              <ul className="plain ticks" id="rel-ready">
+                <li className={st && st.fresh && st.failed ? 'bad' : undefined}>
+                  <Icon n={st && st.fresh && st.failed ? 'warning' : 'checkCircle'} s="16" />
+                  <span>
+                    {st && st.fresh
+                      ? st.failed
+                        ? st.failed + ' of ' + st.total + ' checks fail. Version 1.0 goes out only when every check passes.'
+                        : 'Every check passes: ' + st.passed + ' of ' + st.total + '.'
+                      : 'Every check runs once more when you release.'}
+                  </span>
+                </li>
+              </ul>
+            )}
+            <StartChoice app={app} value={start} first={!rel} onChange={(x) => setRelForm(app.id, { start: x })} />
             {rel && (
               <Field
                 id="rel-kind"
@@ -1050,7 +1253,7 @@ export function ReleaseView({ app }: { app: AppRecord }) {
             )}
             <Field
               id="rel-notes"
-              label="What is new"
+              label={rel ? 'What is new' : 'First release, becomes version 1.0'}
               hint={
                 rel
                   ? 'Written from the ' +
@@ -1060,7 +1263,7 @@ export function ReleaseView({ app }: { app: AppRecord }) {
                     ' since version ' +
                     rel.v +
                     '. One line each. Edit them freely: people see these when they update.'
-                  : 'One line each. People see these in About this app.'
+                  : 'One line each. People see these in About this app. Turnkey chooses the number: you do not have to.'
               }
             >
               <Textarea
@@ -1166,39 +1369,6 @@ export function ReleaseView({ app }: { app: AppRecord }) {
             </div>
           </div>
         </Card>
-        <Card className="card rel-export" id="rel-export">
-          <h3 className="widget-h">Export the deliverable</h3>
-          <p className="muted">
-            One document made from the app as it is now{rel && dirty ? ' (the draft, not version ' + rel.v + ')' : ''}: the brief, tables,
-            rules, screens, tests, which agent made what and the run timeline. Hand it to the team that builds the production version.
-          </p>
-          <div className="row wrap">
-            <Btn className="btn primary" id="exp-md" onClick={() => exportMarkdown(app)}>
-              <Icon n="download" s="16" />
-              Document (.md)
-            </Btn>
-            <Btn className="btn" id="exp-pdf" onClick={() => exportPdf(app)}>
-              <Icon n="download" s="16" />
-              PDF (print)
-            </Btn>
-            <Btn className="btn" id="exp-html" onClick={() => exportPage(app)}>
-              <Icon n="download" s="16" />
-              Page (.html)
-            </Btn>
-            <Btn className="btn" id="exp-sqlite" onClick={() => exportSqlite(app)}>
-              <Icon n="download" s="16" />
-              Database (.sqlite)
-            </Btn>
-            <Btn className="btn" id="exp-zip" onClick={() => exportZip(app)}>
-              <Icon n="download" s="16" />
-              Everything (.zip)
-            </Btn>
-          </div>
-          <span className="t-cap muted">
-            PDF opens your browser&apos;s print dialog: choose Save as PDF. The zip holds the document, the page, the database and the
-            app&apos;s definition.
-          </span>
-        </Card>
         <Card className="card rel-hist">
           <h3 className="widget-h">
             Versions
@@ -1209,6 +1379,27 @@ export function ReleaseView({ app }: { app: AppRecord }) {
               </>
             ) : null}
           </h3>
+          {taken && (
+            <MBar
+              tone="info"
+              action={
+                canBringBack(app) ? (
+                  <Btn className="btn sm" id="rel-bring-back" disabled={appBusy(app)} onClick={() => bringBack(app)}>
+                    Put them back in the draft
+                  </Btn>
+                ) : null
+              }
+            >
+              <span id="rel-taken">
+                <strong>{'You went back from version ' + taken.from + ' to ' + taken.to + '.'}</strong>
+                {' Taken out: ' + sentence(taken.items.map((x) => x.replace(/\.$/, '')).join('; '))}
+                {taken.why ? ' What went wrong: ' + sentence(taken.why) : ''}
+                {canBringBack(app)
+                  ? ' Putting them back changes only the draft. People keep what they have until you release.'
+                  : ' Ask for them again in the chat when you want them back.'}
+              </span>
+            </MBar>
+          )}
           {relList(app).length ? (
             <ol className="rel-list">
               {relList(app).map((r, i) => (
@@ -1273,6 +1464,39 @@ export function ReleaseView({ app }: { app: AppRecord }) {
           ) : (
             <p className="muted">No version yet. The first release is 1.0.</p>
           )}
+        </Card>
+        <Card className="card rel-export" id="rel-export">
+          <h3 className="widget-h">Export the deliverable</h3>
+          <p className="muted">
+            One document made from the app as it is now{rel && dirty ? ' (the draft, not version ' + rel.v + ')' : ''}: the brief, tables,
+            rules, screens, tests, which agent made what and the run timeline. Hand it to the team that builds the production version.
+          </p>
+          <div className="row wrap">
+            <Btn className="btn primary" id="exp-md" onClick={() => exportMarkdown(app)}>
+              <Icon n="download" s="16" />
+              Document (.md)
+            </Btn>
+            <Btn className="btn" id="exp-pdf" onClick={() => exportPdf(app)}>
+              <Icon n="download" s="16" />
+              PDF (print)
+            </Btn>
+            <Btn className="btn" id="exp-html" onClick={() => exportPage(app)}>
+              <Icon n="download" s="16" />
+              Page (.html)
+            </Btn>
+            <Btn className="btn" id="exp-sqlite" onClick={() => exportSqlite(app)}>
+              <Icon n="download" s="16" />
+              Database (.sqlite)
+            </Btn>
+            <Btn className="btn" id="exp-zip" onClick={() => exportZip(app)}>
+              <Icon n="download" s="16" />
+              Everything (.zip)
+            </Btn>
+          </div>
+          <span className="t-cap muted">
+            PDF opens your browser&apos;s print dialog: choose Save as PDF. The zip holds the document, the page, the database and the
+            app&apos;s definition.
+          </span>
         </Card>
       </div>
     </div>

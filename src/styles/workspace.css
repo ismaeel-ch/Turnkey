@@ -809,3 +809,4 @@ td.iv-no{color:var(--colorNeutralForeground3)}
 .fr-hole{position:absolute;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.45);outline:2px solid var(--acc);pointer-events:none;transition:left .2s,top .2s,width .2s,height .2s}
 .fr-pop{position:absolute;background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke1);border-radius:8px;box-shadow:var(--shadow28);padding:14px 16px;display:flex;flex-direction:column;gap:8px;outline:none}
 .empty>.row{justify-content:center}
+.rel-two{margin:0;display:grid;gap:4px}.rel-two>div{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px}.rel-two dt{font-weight:600}.rel-two dd{margin:0;color:var(--colorNeutralForeground2)}ul.ticks li.bad .ic{color:var(--colorStatusWarningForeground1)}
