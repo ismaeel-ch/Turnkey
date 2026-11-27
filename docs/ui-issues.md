@@ -38,3 +38,24 @@ first-screen choice (#128). Screenshots are in `screens/ui-qa-new-features/` in 
 | 19  | Agent room, team cost           | Per-agent cost lines wrapped with a dot at the start of a line; the run total squeezed the case title.                                                          | Fixed  |
 | 20  | Phone, Connections detail       | The tool table needed sideways scrolling to reach Test.                                                                                                         | Fixed  |
 | 21  | First screen                    | Wrapped station chips started a line with an arrow; the tour still said "Workflow, Timeline and Log show the same run three ways".                              | Fixed  |
+
+## Third pass: the workspace against Fluent 2's ramps
+
+A pass on 27 Nov 2026 over the workspace's own screens (welcome, Home, questions, plan, build steps, Release, Details,
+dialogs, menus), in light and dark, at 1440 px and 390 px, against Fluent 2's type ramp, corner radii, colour tokens
+and control sizes. Before and after screenshots are in `screens/fluent2-workspace/` in the project's shared folder.
+The agents chat and a built app's screens have their own passes.
+
+| #   | Where                           | What is wrong                                                                                                                                                              | Status |
+| --- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 22  | Every screen                    | Text sizes between the steps of Fluent's ramp (9, 11, 13, 15, 17, 18, 22, 26 px) and line heights to match (15, 18, 30, 34 px). Captions are 12/16 now, body text 14/20.   | Fixed  |
+| 23  | Every screen                    | Corner radii between Fluent's steps (3, 5, 9, 10, 14, 18, 28 px). They are `borderRadiusMedium`, `Large`, `XLarge`, `2XLarge` or `Circular` now.                           | Fixed  |
+| 24  | Home, prompt box                | A framed text area inside a framed box: two borders around one field. The box is the field's one frame, with Fluent's focus underline.                                     | Fixed  |
+| 25  | Home cards, Build "ready" bar   | The main action of a card or a page ("Build this app", "Open the app") was a small 24 px button. Main actions are Fluent's standard 32 px.                                 | Fixed  |
+| 26  | Release, steps across the top   | Step markers not yet reached were filled with `colorNeutralBackground5`, pure black in dark. They are outlined, like the markers on the welcome and the questions screens. | Fixed  |
+| 27  | Title bar, dark                 | A tab under the pointer turned pure black (`colorNeutralBackground5`). It uses `colorNeutralBackground3Hover`.                                                             | Fixed  |
+| 28  | Danger buttons, tour, step dots | Colours written as `#fff` or `rgba(0,0,0,.5)` instead of `colorNeutralForegroundOnBrand`, `colorBackgroundOverlay` and the danger hover and pressed tokens.                | Fixed  |
+
+Rules for new workspace CSS, checked by `offRamp` in `tests/e2e/flows.cjs`: font sizes, line heights, weights and
+radii are written as Fluent tokens (`var(--fontSizeBase300)`, `var(--lineHeightBase300)`, `var(--fontWeightSemibold)`,
+`var(--borderRadiusMedium)`), never as pixel values; run `npm run theme` after using a token for the first time.
