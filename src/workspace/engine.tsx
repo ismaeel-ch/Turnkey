@@ -1792,6 +1792,15 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
       sqlPeek(app.id, 'SELECT id FROM ' + qi(tn) + ' WHERE id = ?', [rid]).length
     )
       return pass('404 · hidden from ' + roleName(def, u.role).toLowerCase());
+    // "cannot see other people's records" written as a refused list: on a table this person sees only part of, the
+    // list answers 200 with their own records, and the refusal is that the others are left out
+    if (act === 'list' && r.status === 200 && Array.isArray(r.data)) {
+      const stored = Number(sqlPeek(app.id, 'SELECT COUNT(*) AS n FROM ' + qi(tn))[0]?.n || 0);
+      if (r.data.length < stored)
+        return pass(
+          '200 OK · ' + u.name + ' sees ' + r.data.length + ' of the ' + stored + ' ' + t.label.toLowerCase() + ', not the others',
+        );
+    }
     return fail(
       'Expected a refusal, got ' +
         r.status +
