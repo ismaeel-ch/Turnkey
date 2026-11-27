@@ -961,8 +961,12 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
                 </span>
                 <span className="t-cap muted">{a.job}</span>
                 {used && used.calls > 0 && (
-                  <span className="t-cap muted mono team-a-cost" title="What this agent's model calls cost in the last run">
-                    {used.calls + (used.calls === 1 ? ' model call' : ' model calls') + ' · ' + usageLine(used)}
+                  <span className="t-cap muted team-a-cost" title="What this agent's model calls cost in the last run">
+                    {/* a line that wraps breaks after a dot, never before one */}
+                    {(used.calls + (used.calls === 1 ? ' model call' : ' model calls') + ' · ' + usageLine(used)).replace(
+                      / · /g,
+                      '\u00a0· ',
+                    )}
                   </span>
                 )}
                 {a.tools.length > 0 && (
@@ -1114,7 +1118,12 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
                     {run ? ' · ' + (run.live ? 'live run' : 'saved run') : ''}
                     {run && run.usage && run.usage.calls > 0 && (
                       <span className="team-cost" title="Every model call of this run, as the server reported it">
-                        {' · ' + run.usage.calls + (run.usage.calls === 1 ? ' model call' : ' model calls') + ' · ' + usageLine(run.usage)}
+                        {(
+                          run.usage.calls +
+                          (run.usage.calls === 1 ? ' model call' : ' model calls') +
+                          ' · ' +
+                          usageLine(run.usage)
+                        ).replace(/ · /g, '\u00a0· ')}
                       </span>
                     )}
                   </span>

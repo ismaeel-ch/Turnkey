@@ -1065,14 +1065,15 @@ export function BuildView({ app }: { app: AppRecord }) {
         )}
         <span className="grow" />
         {busy ? (
-          <Btn className="btn sm" onClick={() => stopRun(app)}>
+          <Btn className="btn sm" aria-label="Stop" title="Stop" onClick={() => stopRun(app)}>
             <Icon n="stop" s="16" />
-            Stop
+            <span className="hide-sm">Stop</span>
           </Btn>
         ) : (
-          <Btn className="btn sm" onClick={() => rebuildAsk(app)}>
+          // on a phone the four views fill the row, so the button keeps only its icon
+          <Btn className="btn sm" aria-label="Run again" title="Run again" onClick={() => rebuildAsk(app)}>
             <Icon n="rerun" s="16" />
-            Run again
+            <span className="hide-sm">Run again</span>
           </Btn>
         )}
       </div>
