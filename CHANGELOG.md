@@ -11,9 +11,11 @@ A faster first load, a UI pass over the newest features, and steadier CI.
 
 ### Changed
 
-- Faster first load: the welcome screen shows before SQLite loads, the icons ship once, and React Flow and the guide
-  load on demand. ([#201](https://github.com/ismaeel-ch/Turnkey/pull/201))
-- The debug drawer and the meeting view load on first use. ([#202](https://github.com/ismaeel-ch/Turnkey/pull/202))
+- The debug drawer and the meeting view load the first time they open, not with the page. ([#202](https://github.com/ismaeel-ch/Turnkey/pull/202))
+- The first page loads faster on a phone. The welcome screen shows without waiting for the SQLite engine, which is
+  fetched once that screen is up; the icon symbols ship once instead of twice; React Flow loads after the first
+  screen. Lighthouse on a simulated phone: largest paint 7.9 s to about 6.2 s, page JavaScript
+  592 KB to 563 KB gzip. The feature guide loads the first time it opens. ([#201](https://github.com/ismaeel-ch/Turnkey/pull/201))
 
 ### Fixed
 
@@ -23,14 +25,6 @@ A faster first load, a UI pass over the newest features, and steadier CI.
 ### Tests
 
 - CI retries the browser install, and the command palette checks wait for it to open. ([#195](https://github.com/ismaeel-ch/Turnkey/pull/195))
-
-### Changed
-
-- The debug drawer and the meeting view load the first time they open, not with the page.
-- The first page loads faster on a phone. The welcome screen shows without waiting for the SQLite engine, which is
-  fetched once that screen is up; the icon symbols ship once instead of twice; React Flow loads after the first
-  screen. Lighthouse on a simulated phone: largest paint 7.9 s to about 6.2 s, page JavaScript
-  592 KB to 563 KB gzip. The feature guide loads the first time it opens. ([#201](https://github.com/ismaeel-ch/Turnkey/pull/201))
 
 ## [0.4.6] - 2026-11-27
 
