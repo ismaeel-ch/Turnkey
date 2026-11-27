@@ -2,6 +2,7 @@
 //   - the manifest is linked and passes Chrome's installability checks
 //   - the service worker registers and takes control; API routes are not in its cache
 //   - after one visit with a saved build, a reload with the network off shows the workspace and the build still runs
+//   - a newer version on the server shows an Update button in the top bar
 //   - offline, the top bar says so, Live is switched off, and a new Demo build runs and draws its workflow canvas
 //   - an app's own manifest and icon come from /a/manifest and /a/icon
 //   - a shared app, open on its own, links its own manifest: Chrome finds it installable under the app's name, and its
@@ -47,6 +48,14 @@ const check = (name, ok, detail) => {
   }
   const appId = await page.evaluate(() => { window.__formwork.save(); return Object.keys(window.__formwork.state().apps)[0]; });
   check('a build is saved', !!appId, appId);
+
+  // a release while the tab is open: when the tab comes back into view it asks the server, and offers a reload
+  check('no update is offered while the server runs this version', !(await page.locator('.tb-update').count()));
+  await ctx.route('**/api/health', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, version: '99.0.0' }) }));
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const offered = await page.waitForSelector('.tb-update', { timeout: 10000 }).then(() => true, () => false);
+  check('a newer version on the server shows an Update button in the top bar', offered && /Update/.test(await page.locator('.tb-update').innerText()));
+  await ctx.unroute('**/api/health');
 
   // manifest and installability
   const manifestHref = await page.evaluate(() => document.querySelector('link[rel=manifest]')?.href);
