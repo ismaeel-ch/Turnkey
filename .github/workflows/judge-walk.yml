@@ -33,7 +33,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install the test browser
-        run: npx playwright install --with-deps chromium
+        run: scripts/install-test-browser.sh
       - name: Walk the demo path
         env:
           TK_URL: ${{ inputs.url }}

@@ -249,8 +249,8 @@ async function shortcuts(page) {
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('ArrowUp');
-  const wrapped = await page.evaluate(() => { const o = document.querySelectorAll('.palette-opt'); return o.length > 2 && o[o.length - 1].getAttribute('aria-selected') === 'true'; });
-  check('the arrow keys move through the commands and wrap around', wrapped);
+  const wrap = await page.evaluate(() => { const o = [...document.querySelectorAll('.palette-opt')], a = document.activeElement; return { n: o.length, sel: o.findIndex((x) => x.getAttribute('aria-selected') === 'true'), focus: a ? a.tagName + (a.getAttribute('role') ? '[' + a.getAttribute('role') + ']' : '') : '' }; });
+  check('the arrow keys move through the commands and wrap around', wrap.n > 2 && wrap.sel === wrap.n - 1, wrap);
   await page.keyboard.press('Escape');
   await noDialog();
   check('Escape closes the palette', !(await page.locator('.dialog').count()));

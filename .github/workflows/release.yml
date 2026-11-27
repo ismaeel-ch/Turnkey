@@ -259,7 +259,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install the test browser
-        run: npx playwright install --with-deps chromium
+        run: scripts/install-test-browser.sh
       - name: Page, version, short link, one Live build and one model call on the production address
         env:
           TK_URL: ${{ needs.deploy.outputs.url }}

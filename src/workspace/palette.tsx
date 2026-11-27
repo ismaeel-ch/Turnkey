@@ -5,7 +5,7 @@
  * The palette follows the ARIA combobox pattern: focus stays in the search box, the arrow keys move the active option
  * (aria-activedescendant), Enter runs it, Escape closes the dialog.
  */
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Input } from '@fluentui/react-components';
 import { keyLabel, rankCommands } from '@/platform/command-match';
 import { closeDialog, cx } from './core';
@@ -60,17 +60,53 @@ export function PaletteDialog() {
     if (c) document.getElementById(optId(c))?.scrollIntoView({ block: 'nearest' });
   }, [shown, cur]);
 
-  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+  /** Moves through or runs the commands; false for a key the palette leaves alone. */
+  const move = (key: string, ctrl: boolean): boolean => {
     const n = shown.length;
-    if (e.key === 'ArrowDown') setActive(n ? (cur + 1) % n : 0);
-    else if (e.key === 'ArrowUp') setActive(n ? (cur - 1 + n) % n : 0);
-    else if (e.key === 'Home' && e.ctrlKey) setActive(0);
-    else if (e.key === 'End' && e.ctrlKey) setActive(Math.max(0, n - 1));
-    else if (e.key === 'Enter') {
+    if (key === 'ArrowDown') setActive(n ? (cur + 1) % n : 0);
+    else if (key === 'ArrowUp') setActive(n ? (cur - 1 + n) % n : 0);
+    else if (key === 'Home' && ctrl) setActive(0);
+    else if (key === 'End' && ctrl) setActive(Math.max(0, n - 1));
+    else if (key === 'Enter') {
       if (shown[cur]) run(shown[cur]);
-    } else return;
-    e.preventDefault();
+    } else return false;
+    return true;
   };
+  const moveNow = useRef(move);
+  useLayoutEffect(() => {
+    moveNow.current = move;
+  });
+
+  /*
+   * Keys pressed in the moment after the palette opens must not be lost. Until the search box has had focus, Fluent's
+   * dialog may have put focus on its close button, and the dialog that closed just before may hand focus back to the
+   * page behind. Either way the keys belong to the palette: arrows and Enter act on the list, and a typed letter moves
+   * focus to the search box so the letter lands there. Registered before the first paint, so no key slips past.
+   */
+  useLayoutEffect(() => {
+    let had = false;
+    const onFocus = () => {
+      had = true;
+    };
+    const input = box.current;
+    input?.addEventListener('focus', onFocus);
+    const onDown = (e: globalThis.KeyboardEvent) => {
+      const el = box.current;
+      if (!el || e.target === el || e.defaultPrevented || e.altKey || e.metaKey) return;
+      const t = e.target instanceof Node ? e.target : null;
+      if (had && t && el.closest('.dialog')?.contains(t)) return; // the person moved on to a button in the palette
+      if (moveNow.current(e.key, e.ctrlKey)) {
+        e.preventDefault();
+        e.stopPropagation();
+        el.focus();
+      } else if (e.key.length === 1 && !e.ctrlKey) el.focus();
+    };
+    document.addEventListener('keydown', onDown, true);
+    return () => {
+      input?.removeEventListener('focus', onFocus);
+      document.removeEventListener('keydown', onDown, true);
+    };
+  }, []);
 
   // groups in the order their first command appears, so the best match leads
   const groups: { name: string; items: Command[] }[] = [];
@@ -101,7 +137,9 @@ export function PaletteDialog() {
           setQ(d.value);
           setActive(0);
         }}
-        onKeyDown={onKey}
+        onKeyDown={(e) => {
+          if (move(e.key, e.ctrlKey)) e.preventDefault();
+        }}
       />
       <div id="palette-list" role="listbox" aria-label="Commands" className="palette-list">
         {groups.map((g) => (
