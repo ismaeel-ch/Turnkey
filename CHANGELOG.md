@@ -5,6 +5,10 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-11-28
+
+Built apps work things out: calculated fields, rules, moves with a condition, locked stages, and four new samples.
+
 ### Added
 
 - Built apps can work things out. A field can be calculated from a formula (a line total, an order total from its
@@ -15,6 +19,17 @@ versions are semantic versions. Each release lists the pull requests merged into
   starts with "Waiting for you": the records the signed-in person can take forward.
 - Four saved builds that use all of it, under "Apps that work things out" on Home: Order desk with budgets, Vet
   practice, Project planner and Service dispatch.
+
+- Fourteen fields fit in one list of a plan (ten before), and a built table keeps sixteen.
+
+### Fixed
+
+- Found by building four free-text prompts on the real model: a condition from the plan lands on the move it belongs
+  to when two moves join the same stages; a walkthrough booking that hits a taken time moves to the next free day; a
+  step that adds a line joins the record the walkthrough just made; a move step always moves the record with stages;
+  a test case the app refuses by one of its own approved rules is withdrawn instead of being sent for repair.
+- A change through the chat cannot rename or remove a field that a formula, rule or condition reads. It says what
+  reads the field.
 
 ## [0.5.7] - 2026-11-27
 
