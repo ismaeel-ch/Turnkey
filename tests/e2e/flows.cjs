@@ -2396,7 +2396,150 @@ async function fluentMotion(browser, url) {
     await ctx.close();
   }
 }
-const FLOWS = { demo: flowDemo, live: flowLive, misc: flowMisc, views: flowViews, quests: flowQuests, new: flowNew, custom: flowCustom, round6: flowRound6, react: flowReact, sizes: flowSizes, history: flowHistory };
+// The Settings page every built app has: who may open it, and that each setting changes how the app behaves.
+async function flowSettings(browser, url) {
+  const { ctx, page } = await newPage(browser);
+  await enter(page, url); await buildTpl(page, 'purchasing'); await view(page, 'App'); await page.waitForSelector('.app, .app-login');
+  const app = () => st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), a = s.apps[t.app]; return { name: a.name, settings: a.def.settings || null, users: a.def.users.map((u) => u.name + ':' + u.role), theme: a.def.theme, stages: a.def.process.states.map((x) => x.label), rev: a.rev, tested: a.tests ? a.tests.rev : null, log: (a.log || []).map((x) => x.text) }; });
+  // signs the first pane in as one person, through "Preview as"
+  const as = async (name) => { const all = await page.locator('.stage-bar select').first().locator('option').allInnerTexts(); await page.locator('.stage-bar select').first().selectOption({ label: all.find((x) => x.startsWith(name)) }); await page.waitForFunction((n) => { const p = document.querySelector('.device .app-head .persona'); return p && p.innerText.includes(n); }, name); await sleep(120); };
+  const sec = async (name) => { await page.locator('.set-nav .set-tab', { hasText: name }).click(); await page.waitForSelector('.set[data-settings="' + name.toLowerCase() + '"]'); await sleep(80); };
+  const gear = () => page.locator('.device .app-gear').count();
+  const line = (name) => page.locator('.set-line', { has: page.locator('.set-line-t label', { hasText: name }) }).first();
+  let lastToast = ''; // each message in this flow differs from the one before it
+  const toastText = async () => { await page.waitForFunction((prev) => { const t = [...document.querySelectorAll('.toast')].pop(); return !!t && t.innerText !== prev; }, lastToast); return (lastToast = await page.locator('.toast').last().innerText()); };
+
+  await as('Mariam Javed'); const staffGear = await gear();
+  await as('Nida Hamid'); const holderGear = await gear();
+  await as('Junaid Akhtar'); const buyerGear = await gear();
+  check('settings: only the kind of person who runs the app has the gear in the header', staffGear === 0 && holderGear === 1 && buyerGear === 0, { staffGear, holderGear, buyerGear });
+  const before = await app();
+  check('settings: an app nobody has configured carries no settings of its own', before.settings === null, before.settings);
+
+  await page.locator('.stage-settings').click(); await page.waitForSelector('.set-card');
+  const who = (await page.locator('.device .app-head .persona').innerText()).replace(/\s+/g, ' ');
+  const secs = await page.locator('.set-nav .set-tab').allInnerTexts();
+  check("settings: the builder's Settings button opens the page as someone who may open it", /Nida Hamid/.test(who) && /Only Budget holder can open this page/.test(await page.locator('.set-head').innerText()), who);
+  check('settings: the page has its six sections, General first', secs.join() === 'General,People,Stages,Formats,Pages,Data' && (await page.locator('.set').getAttribute('data-settings')) === 'general', secs);
+  await shot(page, 'set-1-general');
+
+  // --- formats drive every list, record and total
+  await sec('Formats');
+  await line('Currency').locator('select').selectOption('PKR'); await line('Dates').locator('select').selectOption('dmy'); await line('Numbers').locator('select').selectOption('dot');
+  await page.locator('.set-line', { hasText: 'Week starts on' }).getByRole('button', { name: 'Sunday' }).click(); await sleep(100);
+  const sample = await page.locator('.set-sample strong').innerText();
+  check('settings, formats: the example line follows each choice', /^Rs\s12\.345,50 · 0,25 · \d\d\/\d\d\/\d{4}, 14:05$/.test(sample), sample);
+  await shot(page, 'set-2-formats');
+  let a = await app();
+  check('settings, formats: kept in the app, noted for the next release, and the test results still stand', a.settings && a.settings.formats.currency === 'PKR' && a.settings.formats.dates === 'dmy' && a.settings.formats.weekStart === 'sun' && a.tested === a.rev && a.log.some((x) => /^Settings: /.test(x)), { f: a.settings && a.settings.formats, tested: a.tested, rev: a.rev });
+  await nav(page, 'Approvals'); await page.waitForSelector('.kb-card, .board'); const board = await page.locator('.app-main').innerText();
+  check('settings, formats: amounts of money carry the currency sign with the chosen marks', /Rs\s180\.000/.test(board) && !/180,000/.test(board), board.slice(0, 400));
+  await nav(page, 'Deliveries'); await page.waitForSelector('.cal-grid'); const dows = await page.locator('.cal-dow').allInnerTexts();
+  check('settings, formats: the calendar week starts on Sunday', dows.join() === 'Sun,Mon,Tue,Wed,Thu,Fri,Sat', dows);
+  await page.locator('.app-gear').click(); await page.waitForSelector('.set-card');
+  check('settings: the gear comes back to the section that was open', (await page.locator('.set').getAttribute('data-settings')) === 'formats');
+  await page.getByRole('button', { name: 'Back to the usual formats' }).click(); await sleep(150); a = await app();
+  check('settings, formats: "Back to the usual formats" puts every format back', a.settings.formats.currency === '' && a.settings.formats.numbers === 'comma' && a.settings.formats.dates === 'words' && a.settings.formats.weekStart === 'mon', a.settings.formats);
+  await line('Currency').locator('select').selectOption('PKR');
+
+  // --- stage names
+  await sec('Stages');
+  const first = page.locator('.set-stage').first(), was = await first.locator('.badge').innerText();
+  await first.locator('input').fill('Awaiting sign-off'); await first.locator('input').press('Enter'); await sleep(200);
+  await nav(page, 'Approvals'); await page.waitForSelector('.kb-card, .board'); const cols = await page.locator('.app-main').innerText();
+  check('settings, stages: a renamed stage shows under its new name on the board', cols.includes('Awaiting sign-off') && !cols.includes(was + '\n4'), { was, cols: cols.slice(0, 500) });
+  await page.locator('.app-gear').click(); await sec('Stages');
+  await first.locator('input').fill(await page.locator('.set-stage').nth(1).locator('.badge').innerText()); await first.locator('input').press('Enter');
+  const dupe = await toastText();
+  check('settings, stages: two stages cannot share a name, and the box goes back', /already called/.test(dupe) && (await first.locator('input').inputValue()) === 'Awaiting sign-off', dupe);
+
+  // --- people
+  await sec('People');
+  await page.locator('.set-add input').fill('Hina Qureshi'); await page.locator('.set-add .btn.primary').click(); await toastText();
+  a = await app();
+  const row = (name) => page.locator('.set-person', { has: page.locator('input[value="' + name + '"]') });
+  check('settings, people: a new person is on the list and in the definition, so a copy or release has them too', a.users.includes('Hina Qureshi:requester') && await row('Hina Qureshi').count() === 1, a.users);
+  await row('Nida Hamid').locator('select').selectOption('buyer'); const only = await toastText();
+  check('settings, people: the only person of a kind cannot become another kind', /Nida Hamid is the only budget holder/.test(only) && (await row('Nida Hamid').locator('select').inputValue()) === 'approver', only);
+  check('settings, people: nobody removes themselves', await row('Nida Hamid').locator('.set-person-x').isDisabled());
+  await row('Mariam Javed').locator('.set-person-x').click(); const kept = await toastText();
+  check('settings, people: someone with records stays on the list', /Mariam Javed added or was given \d+ records?/.test(kept), kept);
+  await row('Hina Qureshi').locator('select').selectOption('buyer'); await sleep(150);
+  await page.locator('.set-line', { hasText: 'Buyer' }).last().locator('.switch').click(); await sleep(150);
+  a = await app();
+  check('settings, people: a second kind of person can be let into Settings', a.settings.admins.sort().join() === 'approver,buyer' && a.users.includes('Hina Qureshi:buyer'), a.settings.admins);
+  await shot(page, 'set-3-people');
+  await as('Hina Qureshi'); const hinaGear = await gear();
+  await as('Usman Tariq'); const usmanGear = await gear();
+  check('settings, people: the new buyer signs in and has the gear; a staff member still has none', hinaGear === 1 && usmanGear === 0, { hinaGear, usmanGear });
+  await as('Nida Hamid'); await page.locator('.app-gear').click(); await sec('People');
+  await row('Hina Qureshi').locator('.set-person-x').click(); await toastText(); a = await app();
+  check('settings, people: a person with no records can be removed', !a.users.some((u) => /Hina/.test(u)) && await row('Hina Qureshi').count() === 0, a.users);
+
+  // --- first page and first view
+  await sec('Pages');
+  const homeSel = line('Staff member').locator('select'), homeName = (await homeSel.locator('option').allInnerTexts())[1];
+  await homeSel.selectOption({ label: homeName });
+  const viewLine = page.locator('.set-card', { hasText: 'How each list opens' }).locator('.set-line').last(), listName = await viewLine.locator('label').innerText();
+  const viewOpts = await viewLine.locator('select option').allInnerTexts(), pick = viewOpts.find((x) => !/as built/.test(x));
+  await viewLine.locator('select').selectOption({ label: pick }); await sleep(150);
+  await shot(page, 'set-4-pages');
+  await nav(page, listName); await page.waitForSelector('.vswitch [role=tab]'); const onView = await page.locator('.vswitch [role=tab][aria-selected=true]').innerText();
+  check('settings, pages: a list opens in the view chosen for it', onView.trim() === pick, { listName, pick, onView });
+  await as('Mariam Javed'); const landed = await page.locator('.device .app-nav .nav-i.on').innerText();
+  check('settings, pages: a kind of person lands on the page chosen for them', landed.trim() === homeName, { homeName, landed });
+
+  // --- general: name and look
+  await as('Nida Hamid'); await page.locator('.app-gear').click(); await sec('General');
+  await page.locator('.set-name').fill('Buy Smart'); await page.locator('.set-name').press('Enter'); await sleep(150);
+  const teal = page.locator('.set-swatch[aria-label="Teal"]'); await teal.click();
+  await page.locator('.set-line', { hasText: 'Navigation' }).getByRole('button', { name: 'Side', exact: true }).click(); await sleep(200);
+  a = await app(); const cls = await page.locator('.device .app').getAttribute('class');
+  check('settings, general: the new name is in the header and on the tab', a.name === 'Buy Smart' && (await page.locator('.device .app-name').innerText()) === 'Buy Smart' && /Buy Smart/.test(await page.locator('.titlebar .wtab.on').innerText()), a.name);
+  check('settings, general: colour and navigation change the app at once', /acc-teal/.test(cls) && /nav-side/.test(cls) && a.theme.accent === 'teal' && (await teal.getAttribute('aria-checked')) === 'true', cls);
+  await page.locator('.set-name').fill('   '); await page.locator('.set-name').press('Enter'); const noName = await toastText();
+  check('settings, general: an empty name is refused and the box goes back', /needs a name/.test(noName) && (await page.locator('.set-name').inputValue()) === 'Buy Smart', noName);
+
+  // --- data
+  await sec('Data');
+  const demoLine = await page.locator('.set-card', { hasText: 'Demo data' }).first().innerText();
+  await page.locator('.set-startover').click(); await page.waitForSelector('.dialog'); const overTitle = await page.locator('.dialog').innerText();
+  await page.locator('.dialog').getByRole('button', { name: 'Cancel' }).click(); await sleep(150);
+  check('settings, data: demo data, a copy to download, a file to restore and Start over (which asks first) are all here', /\d+ demo records/.test(demoLine) && await page.locator('.set-demo-rm, .set-demo-add').count() === 1 && await page.locator('.set-export').count() === 1 && await page.locator('.set-import').count() === 1 && /Start Buy Smart over\?/.test(overTitle), { demoLine, overTitle: overTitle.slice(0, 80) });
+  await shot(page, 'set-5-data');
+
+  // --- a narrow pane: the phone layout
+  await page.locator('.stage-bar .btn', { hasText: 'Two users' }).click(); await sleep(300);
+  const narrow = page.locator('.device').first();
+  check('settings, narrow: a pane as wide as a phone shows the section tabs in a row above the cards', await narrow.locator('.set.narrow').count() === 1 && await narrow.locator('.app-gear').count() === 0);
+  const fit = await st(page, () => { const m = document.querySelector('.device .app-main'), bad = [...m.querySelectorAll('.set-card, .set-card *')].filter((e) => e.getBoundingClientRect().right > m.getBoundingClientRect().right + 1).length; return { over: m.scrollWidth - m.clientWidth, bad }; });
+  check('settings, narrow: nothing is wider than the pane', fit.over <= 0 && fit.bad === 0, fit);
+  await shot(page, 'set-6-narrow');
+  await narrow.locator('.app-tabs .tab-i').first().click(); await sleep(150); await narrow.locator('.app-head .persona').click(); await page.waitForSelector('.sheet');
+  const rows = await page.locator('.sheet .sheet-l').allInnerTexts(); await page.locator('.sheet .sheet-i', { hasText: 'Settings' }).click(); await sleep(200);
+  check('settings, narrow: the account sheet has Settings, and it opens the page', rows.includes('Settings') && await narrow.locator('.set.narrow').count() === 1 && (await narrow.locator('.app-name').innerText()) === 'Settings', rows);
+  await page.locator('.stage-bar .btn', { hasText: 'Two users' }).click(); await sleep(200);
+
+  // --- everything is still there after a reload
+  await st(page, () => window.__formwork.save()); await sleep(600);
+  await page.reload(); await page.waitForSelector('.work-head', { timeout: 20000 }); await sleep(800); await view(page, 'App'); await page.waitForSelector('.app, .app-login');
+  a = await app(); await as('Nida Hamid'); await nav(page, 'Approvals'); await page.waitForSelector('.kb-card, .board'); const again = await page.locator('.app-main').innerText();
+  check('settings: every choice is still there after a reload', a.name === 'Buy Smart' && a.settings.formats.currency === 'PKR' && a.stages[0] === 'Awaiting sign-off' && a.theme.accent === 'teal' && /Rs\s180,000/.test(again) && again.includes('Awaiting sign-off'), { name: a.name, f: a.settings.formats });
+  // --- an app that works things out: the numbers in its rules are settings too
+  await page.locator('.brand').click(); await page.waitForSelector('.home'); await buildTpl(page, 'orders'); await view(page, 'App'); await page.waitForSelector('.app, .app-login');
+  const rules = () => st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), a = s.apps[t.app]; return { moves: a.def.process.transitions.filter((x) => x.when).map((x) => x.id + ': ' + x.when + ' / ' + x.unless), plan: a.plan && a.plan.stages ? a.plan.stages.moves.filter((x) => x.when).map((x) => x.when) : [], rev: a.rev, tested: a.tests ? a.tests.rev : null }; });
+  await page.locator('.stage-settings').click(); await page.waitForSelector('.set-card'); await sec('Limits');
+  const lims = await page.locator('.set-limit label').allInnerTexts(), total = page.locator('.set-limit', { hasText: 'Total' }).first();
+  check('settings, limits: the amount that sends an order to the director and the share that warns about a budget are listed', lims.some((x) => /^Total/.test(x)) && lims.some((x) => /^Yearly budget/.test(x)) && (await total.locator('input').inputValue()) === '5000' && /"Approve" is offered when total is at most 5,000/.test(await total.innerText()), lims);
+  await total.locator('input').fill('300'); await total.locator('input').press('Enter'); await page.waitForFunction(() => /at most 300/.test(document.querySelector('.set-limit').innerText));
+  const r = await rules();
+  check('settings, limits: a new number goes into both moves that split at it, and into the reasons people are shown', r.moves.includes('approve: total <= 300 / Orders over 300 need the director.') && r.moves.some((x) => /^approve_large_order: total > 300 \/ Orders up to 300 /.test(x)) && r.tested !== r.rev, r);
+  await shot(page, 'set-7-limits');
+  await total.locator('input').fill('lots'); await total.locator('input').press('Enter'); const notNum = await toastText();
+  check('settings, limits: something that is not a number above zero is refused and the box goes back', /A limit is a number above zero/.test(notNum) && (await total.locator('input').inputValue()) === '300', notNum);
+  await ctx.close();
+}
+const FLOWS = { demo: flowDemo, live: flowLive, misc: flowMisc, views: flowViews, quests: flowQuests, new: flowNew, custom: flowCustom, round6: flowRound6, react: flowReact, sizes: flowSizes, history: flowHistory, settings: flowSettings };
 (async () => {
   const url = (process.env.TK_URL || '').replace(/\/?$/, '/');
   if (!/^https?:/.test(url)) { console.error('TK_URL is not set. Run the checks with: npm run test:e2e'); process.exit(2); }

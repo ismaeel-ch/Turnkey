@@ -1085,6 +1085,8 @@ export interface Pane {
   test?: boolean;
   /** the first-use tour while it runs: the stop on show (src/workspace/firstrun.tsx) */
   guide?: { stop: number } | null;
+  /** the section of the app's Settings page last opened (src/workspace/app-settings-ui.tsx) */
+  setTab?: string;
 }
 
 /** The walkthrough player: the step on show, each step's result, and what the tour remembers. */
