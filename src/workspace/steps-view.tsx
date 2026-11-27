@@ -4,7 +4,7 @@
  * log and the meeting stay behind "Show how it was built".
  */
 import { ProgressBar } from '@fluentui/react-components';
-import { AGENT_NAMES, teamFor } from '@/shared/plan';
+import { AGENT_NAMES, planFromDef, teamFor } from '@/shared/plan';
 import type { AppRecord } from '@/shared/types/workspace';
 import { S, U, commit, cx, notify, setChat } from './core';
 import { AgentAv, Avatar, Btn, Card, Icon, Spinner } from './ui';
@@ -24,7 +24,10 @@ export function showHow(app: AppRecord, on: boolean) {
 }
 /** The steps of this app's build, read from the store. */
 export const stepsOf = (app: AppRecord): BuildSteps => {
-  const flow = flowOf(app);
+  const flow = flowOf(app),
+    // a saved build, a share link and an app made before plans existed have no plan of their own: theirs is read off
+    // what was built. There is none until the build has made its lists, and then the list comes from the stations.
+    plan = app.plan ?? planFromDef(app.def);
   return buildSteps({
     app,
     flow,
@@ -33,8 +36,7 @@ export const stepsOf = (app: AppRecord): BuildSteps => {
     tests: testStats(app),
     running: !!RUNS[app.id],
     names: AGENT_NAMES,
-    // an app built before plans existed has none: its list comes from the stations alone
-    team: app.plan ? teamFor(app.plan) : null,
+    team: plan ? teamFor(plan) : null,
   });
 };
 

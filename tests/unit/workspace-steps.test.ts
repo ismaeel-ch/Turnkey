@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AGENT_NAMES, COMPANY_EXPENSES, PERSONAL_EXPENSES, teamFor } from '@/shared/plan';
+import { AGENT_NAMES, COMPANY_EXPENSES, PERSONAL_EXPENSES, planFromDef, teamFor } from '@/shared/plan';
 import type { AppDef } from '@/shared/types/app';
 import type { AppFlow, AppRecord, ReviewerInfo, StationLine } from '@/shared/types/workspace';
 import { type StepsInput, buildSteps, rulesInWords, stepsHeadline } from '@/workspace/steps';
@@ -257,6 +257,34 @@ describe('the steps of an app built from a plan', () => {
     expect(B.steps[2]).toMatchObject({ title: 'Add the rules', who: 'Turnkey', kind: 'code' });
     expect(B.steps[1].text).toBe(team.steps[1].why);
     expect(B.skipped.map((s) => s.who)).toEqual(['Rules builder', 'Access checker', 'List checker']);
+  });
+
+  it('does not call an agent "not needed" when the workflow put it to work', () => {
+    const team = teamFor(PERSONAL_EXPENSES);
+    // the plan would leave the rules to code and skip the access check; this workflow runs both
+    const B = buildSteps(
+      input(app('building', { research: line('ok') }), { flow: flow({ reviewers: ['security'] }), team, running: true }),
+    );
+    expect(B.steps[2]).toMatchObject({ title: 'Add the rules and approvals', who: 'Rules builder', kind: 'agent' });
+    expect(B.steps[2].text).toBe('Starts after the lists.');
+    expect(B.skipped.map((s) => s.who)).toEqual(['List checker']);
+  });
+
+  it('reads the plan of a saved build off what was built', () => {
+    const plan = planFromDef(def);
+    expect(plan).not.toBeNull();
+    if (!plan) return;
+    const B = buildSteps(input(app('ready', built()), { team: teamFor(plan), tests: pass }));
+    expect(B.steps.map((s) => s.title)).toEqual([
+      'Understand and plan',
+      'Set up the lists',
+      'Add the rules and approvals',
+      'Choose views and the overview',
+      'Build the screens',
+      'Test everything',
+    ]);
+    expect(B.steps.every((s) => s.state === 'done')).toBe(true);
+    expect(B.skipped.map((s) => s.who)).toEqual(['List checker']);
   });
 
   it('gives the pause the reason the plan gave it', () => {

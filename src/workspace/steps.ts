@@ -177,10 +177,10 @@ export interface StepsInput {
   names: Readonly<Record<string, string>>;
   /** the team picked from the app's plan, when it was built from one: step names, reasons and who was not needed */
   team?: {
-    steps: { id: string; name: string; why: string }[];
+    steps: { id: string; name: string; by?: string; why: string }[];
     reviews: { id: string; why: string }[];
     pauses: { after: string; why: string }[];
-    notNeeded: { who: string; why: string }[];
+    notNeeded: { agent: string; who: string; why: string }[];
   } | null;
 }
 
@@ -258,6 +258,8 @@ export function buildSteps({ app, flow, reviewers, after, tests, running, names,
       plan = planned(id);
     if (!L) return;
     const byCode = !!L.byRules || flow.by[id] === 'rules',
+      // the plan's words for a step fit only when the step was done the way the plan said: by an agent, or by code
+      fits = !!plan && (!plan.by || (plan.by === 'code') === byCode),
       held = L.status === 'waiting' && L.hold === 'approval',
       state: StepState =
         L.status === 'ok' || held
@@ -272,7 +274,7 @@ export function buildSteps({ app, flow, reviewers, after, tests, running, names,
     steps.push({
       id,
       kind: byCode ? 'code' : 'agent',
-      title: plan ? plan.name : p.title,
+      title: plan && fits ? plan.name : p.title,
       who: byCode ? BY_CODE : names[p.agent] || '',
       agent: byCode ? null : p.agent,
       station: id,
@@ -286,7 +288,7 @@ export function buildSteps({ app, flow, reviewers, after, tests, running, names,
             : state === 'bad'
               ? 'This step did not finish.'
               : state === 'wait'
-                ? (plan && plan.why) || p.wait
+                ? (plan && fits && plan.why) || p.wait
                 : L.status === 'sentback'
                   ? 'One part was not right. It is being fixed.'
                   : L.status === 'checking'
@@ -340,7 +342,12 @@ export function buildSteps({ app, flow, reviewers, after, tests, running, names,
     first = steps.findIndex((s) => s.state !== 'done');
   return {
     steps,
-    skipped: team ? team.notNeeded.map((x) => ({ who: x.who, why: x.why })) : [],
+    // the plan says who was not needed; the workflow says who ran. An agent the owner put back to work is not listed.
+    skipped: team
+      ? team.notNeeded
+          .filter((x) => !flow.reviewers.includes(x.agent) && !steps.some((st) => st.agent === x.agent))
+          .map((x) => ({ who: x.who, why: x.why }))
+      : [],
     done,
     at: first + 1,
     asking: steps.find((s) => s.state === 'ask') || null,
