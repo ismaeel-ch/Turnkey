@@ -18,13 +18,16 @@ import {
   me,
   myApps,
   notify,
+  online,
   openDialog,
   openTab,
+  saveFile,
+  snake,
   str,
   toast,
   uid,
 } from './core';
-import { dbCount, dbDrop, dbExists, dbSave, qi, sqlRun } from './db';
+import { b64, dbCount, dbDrop, dbExists, dbSave, qi, sqlRun } from './db';
 import { appUsers, deriveEndpoints, roleName } from './engine';
 import { REC } from './builds';
 import { runTestsSync, testStats } from './tests';
@@ -36,7 +39,6 @@ import { AppPane, newPane } from './runtime';
 import type { SoloItem } from './mobile';
 import {
   AppLogo,
-  carryData,
   clearIdentity,
   draftNotes,
   installInputOf,
@@ -44,13 +46,15 @@ import {
   relOf,
   releaseApp,
   releaseBlock,
+  relHistory,
   setIdentity,
-  verCmp,
   verText,
 } from './release';
+import { carryData, keepSafetyCopy, safetyCopyOf } from './carry';
+import { normHistory, stepsBetween, verCmp } from './record-steps';
 import { appInstallLinks, holdInstallLinks, setInstallLinks } from '@/platform/pwa/app';
 import { lastInstalledAt, onInstallPrompt, runningInstalled } from '@/platform/pwa/prompt';
-import { loadShortLink, saveShortLink, slugFromPath } from '@/platform/share-link';
+import { SLUG_RE, loadShortLink, saveShortLink, slugFromPath } from '@/platform/share-link';
 
 /* ===== Turnkey prototype · share an app by link, and the app-only view =====
    A share link carries the app itself: the five definitions the agents wrote and the rows to start with, compressed into the part of
@@ -217,6 +221,7 @@ export function packOf(app: AppRecord, o: { data: string; as?: string | null }):
             c.type === 'ref' ? (pos[String(c.ref)] || {})[k] || null : c.type === 'user' ? upos[k] || null : c.type === 'bool' ? !!v : v;
         });
         if (!t.owner && upos[String(r.created_by)]) x._by = upos[String(r.created_by)];
+        if (r.is_demo) x._demo = 1; // made-up rows stay marked in the copy (src/workspace/demo-data.ts)
         return x;
       });
     });
@@ -305,6 +310,8 @@ export function appFromPack(pack: Pack, key: string, preview?: boolean): AppReco
           .map((n) => str(n).slice(0, 200))
           .filter(Boolean)
           .slice(0, 12),
+        kind: ['first', 'fix', 'feature', 'major', 'rollback'].includes(str(pack.kind)) ? str(pack.kind) : '',
+        ...(SLUG_RE.test(str(pack.slug)) ? { slug: str(pack.slug) } : {}),
       },
       name: str(pack.name).slice(0, 40) || 'Shared app',
       icon: 'apps',
@@ -461,24 +468,45 @@ export async function openShared(input: unknown, o: OpenOpts = {}): Promise<AppR
           )
         : null;
     if (old && old.shared && verCmp(mine.ver, old.shared.ver) > 0) {
-      // a newer version of an app this browser already has: update it and keep the records
-      const kept = carryData(old, made);
-      mine.updated = {
-        from: old.shared.ver || 'an earlier version',
-        kept: kept ? kept.rows : null,
-        at: Date.now(),
-      };
-      if (old.installed) made.installed = old.installed;
-      deleteApp(old);
-      emit('CUSTOM', {
-        name: 'app_updated',
-        app: made.id,
-        value: {
-          from: mine.updated.from,
-          to: mine.ver,
-          rowsKept: kept ? kept.rows : 0,
-        },
-      });
+      // a newer version of an app this browser already has: update it and keep the records. The records follow what
+      // each version in between did to the tables (a renamed field keeps its values), and it is all or nothing.
+      const kept = carryData(old, made, stepsBetween(normHistory(pack.history), old.shared.ver, mine.ver));
+      if (kept) {
+        keepSafetyCopy(old, made, old.shared.ver, kept.rows); // the records as they were, before anything changed them
+        mine.updated = {
+          from: old.shared.ver || 'an earlier version',
+          kept: kept.rows,
+          at: Date.now(),
+          away: kept.away,
+        };
+        if (old.installed) made.installed = old.installed;
+        if (!mine.slug && old.shared.slug) mine.slug = old.shared.slug;
+        deleteApp(old);
+        emit('CUSTOM', {
+          name: 'app_updated',
+          app: made.id,
+          value: {
+            from: mine.updated.from,
+            to: mine.ver,
+            rowsKept: kept.rows,
+            putAway: kept.away,
+          },
+        });
+      } else {
+        // the records could not all be moved: this device stays on the version that holds them
+        delete S.shared[key];
+        deleteApp(made);
+        old.shared.failed = { to: mine.ver, at: Date.now() };
+        app = old;
+        emit('CUSTOM', {
+          name: 'app_update_failed',
+          app: old.id,
+          value: {
+            from: old.shared.ver,
+            to: mine.ver,
+          },
+        });
+      }
     }
   }
   const sh = app.shared as SharedInfo;
@@ -591,7 +619,10 @@ export async function makeShare() {
       pack.ver = rel.v;
       pack.uid = app.uid;
       pack.notes = rel.notes;
+      pack.kind = rel.kind;
+      pack.history = relHistory(app);
     }
+    if (app.short) pack.slug = app.short.slug; // an installed copy asks this address for newer versions
     const json = JSON.stringify(pack),
       code = await squeeze(json);
     if (U.share !== sh || tag !== sh.data + '|' + sh.as) return;
@@ -945,7 +976,8 @@ export function AboutAppDialog({ p }: { p: { app: string } }) {
   const def = app.def,
     st = testStats(app),
     rel = relOf(app),
-    notes = app.shared ? arr<string>(app.shared.notes) : rel ? rel.notes : [];
+    notes = app.shared ? arr<string>(app.shared.notes) : rel ? rel.notes : [],
+    safe = app.shared ? safetyCopyOf(app.id) : null;
   return (
     <Dialog
       title={'About ' + app.name}
@@ -1011,9 +1043,73 @@ export function AboutAppDialog({ p }: { p: { app: string } }) {
             <dd>{app.shared.by}</dd>
           </>
         ) : null}
+        {safe ? (
+          <>
+            <dt>Safety copy</dt>
+            <dd>
+              {'Your ' + safe.rows + ' records as they were on version ' + safe.ver + ', kept on this device before the update. '}
+              <Btn
+                className="btn sm"
+                id="about-safe"
+                onClick={() => saveFile(snake(app.name) + '-before-update.sqlite', b64.dec(safe.db), 'application/vnd.sqlite3')}
+              >
+                <Icon n="download" s="16" />
+                Save it as a file
+              </Btn>
+            </dd>
+          </>
+        ) : null}
       </dl>
     </Dialog>
   );
+}
+
+/* ---------- updates ---------- */
+/* An app that came from a short link asks that address for a newer version when it opens with a connection. It never
+   updates by itself: the person is told what is new and chooses Update now or Later. Records are kept either way. */
+const CHECKED: Dict<number> = {};
+export async function checkForUpdate(app: AppRecord, force?: boolean) {
+  const sh = app.shared;
+  if (!sh || sh.preview || !sh.slug || !sh.uid || !online()) return null;
+  if (!force && Date.now() - (CHECKED[app.id] || 0) < 10 * 60000) return null;
+  CHECKED[app.id] = Date.now();
+  const got = await loadShortLink(sh.slug);
+  if (!got.ok) return null;
+  let pack: Pack;
+  try {
+    pack = readPack(await unsqueeze(got.code));
+  } catch {
+    return null;
+  }
+  const ver = str(pack.ver);
+  if (str(pack.uid) !== sh.uid || !/^\d+(\.\d+){0,2}$/.test(ver) || verCmp(ver, sh.ver) <= 0) return null;
+  if (sh.failed && sh.failed.to === ver) return null; // this version was tried here and could not take the records
+  const so = U.solo;
+  if (!so || so.app !== app.id) return null;
+  so.update = {
+    ver,
+    kind: str(pack.kind),
+    notes: arr(pack.notes)
+      .map((n) => str(n).slice(0, 200))
+      .filter(Boolean)
+      .slice(0, 12),
+    code: got.code,
+  };
+  notify();
+  return so.update;
+}
+export async function updateNow(app: AppRecord) {
+  const so = U.solo,
+    up = so && so.app === app.id ? so.update : null;
+  if (!so || !up || up.busy) return;
+  up.busy = true;
+  notify();
+  try {
+    await openShared(up.code, { slug: app.shared?.slug, back: so.back });
+  } catch (e) {
+    up.busy = false;
+    toast(errText(e), 'danger');
+  }
 }
 
 /* ---------- the app-only view ---------- */
@@ -1022,7 +1118,9 @@ export function SoloShell() {
     app = S.apps[so.app],
     shared = app.shared,
     signed = !!(S.session && me()),
-    up = shared && shared.updated && !shared.updated.seen ? shared.updated : null;
+    up = shared && shared.updated && !shared.updated.seen ? shared.updated : null,
+    failed = shared && shared.failed && !shared.failed.seen ? shared.failed : null,
+    next = so.update && !so.update.later ? so.update : null;
   useEffect(() => {
     setIdentity(app);
     // the browser installs whatever manifest the page links: while the app is open alone, that is the app's own
@@ -1044,6 +1142,10 @@ export function SoloShell() {
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one listener per app, not one per store update
+  }, [app.id]);
+  useEffect(() => {
+    void checkForUpdate(app);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- asked once each time an app is opened on its own
   }, [app.id]);
   const reset = async () => {
     if (
@@ -1116,12 +1218,78 @@ export function SoloShell() {
             {up.kept == null
               ? 'Your earlier records could not be carried over, so it starts with sample data.'
               : 'Your ' + up.kept + ' records were kept.'}
+            {up.away
+              ? ' ' +
+                up.away +
+                ' value' +
+                (up.away === 1 ? ' is' : 's are') +
+                ' put away, because this version has no field for ' +
+                (up.away === 1 ? 'it' : 'them') +
+                '.'
+              : ''}
             {shared?.notes.length ? ' New: ' + shared.notes.slice(0, 2).join(' · ') : ''}
           </span>
           <Btn
             className="btn sm"
             onClick={() => {
               up.seen = true;
+              commit();
+            }}
+          >
+            OK
+          </Btn>
+        </div>
+      )}
+      {next && (
+        <div className="solo-note update" role="status" id="solo-update">
+          <Icon n="sync" s="16" />
+          <span className="grow">
+            <strong>
+              {'Version '}
+              {next.ver}
+              {' is ready.'}
+            </strong>
+            {next.kind === 'fix'
+              ? ' This update fixes a problem.'
+              : next.kind === 'rollback'
+                ? ' The owner went back to an earlier version.'
+                : ''}
+            {next.notes.length ? ' What is new: ' + next.notes.slice(0, 2).join(' · ') : ''}
+            {' Your records are kept.'}
+          </span>
+          <Btn className="btn sm primary" id="solo-update-go" disabled={!!next.busy} onClick={() => updateNow(app)}>
+            {next.busy ? <Spinner /> : null}
+            Update now
+          </Btn>
+          <Btn
+            className="btn sm"
+            disabled={!!next.busy}
+            onClick={() => {
+              next.later = true;
+              notify();
+            }}
+          >
+            Later
+          </Btn>
+        </div>
+      )}
+      {failed && (
+        <div className="solo-note warn" role="status" id="solo-update-failed">
+          <Icon n="warning" s="16" />
+          <span className="grow">
+            <strong>
+              {'Version '}
+              {failed.to}
+              {' could not be applied here.'}
+            </strong>
+            {' Your records are safe and the app is still on version '}
+            {shared?.ver}
+            {'. Tell the person who shared it with you.'}
+          </span>
+          <Btn
+            className="btn sm"
+            onClick={() => {
+              failed.seen = true;
               commit();
             }}
           >

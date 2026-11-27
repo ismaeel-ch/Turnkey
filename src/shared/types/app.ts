@@ -303,12 +303,20 @@ export interface Theme {
 }
 
 /** One schema change made after the first build. */
+/** One change to a table that every device's records must follow when it updates (src/workspace/record-steps.ts). */
+export type RecordStep =
+  | { op: 'rename_field'; table: string; from: string; to: string }
+  | { op: 'to_choice'; table: string; column: string }
+  | { op: 'add_field'; table: string; column: string }
+  | { op: 'remove_field'; table: string; column: string };
 export interface Migration {
   n: number;
   at: number;
   by: string;
   sql: string;
   note: string;
+  /** what the records must do to follow this change on another device */
+  step?: RecordStep;
 }
 export interface AppDef {
   brief: Brief | null;

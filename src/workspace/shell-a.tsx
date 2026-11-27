@@ -81,6 +81,7 @@ import { AppLogo, ReleaseView, isDirty, relOf } from './release';
 import { ApiView, ChatPanel, ConnView, DataView } from './shell-b';
 import { startTour } from './shell-c';
 import { RerunBar } from './rerun';
+import { StepsView, buildMode, showHow } from './steps-view';
 import { openPalette, openShortcuts } from './commands';
 import { touchOf, touchText } from './provenance';
 import { fmtUsd, usageLine } from '@/platform/agui/usage';
@@ -1016,7 +1017,8 @@ export function Workspace({ app }: { app: AppRecord }) {
   );
 }
 export function BuildView({ app }: { app: AppRecord }) {
-  const mode = U.bview[app.id] || 'line',
+  const mode = buildMode(app),
+    plain = mode === 'steps',
     busy = !!RUNS[app.id],
     sel = U.sel[app.id] || 'research';
   const run = app.runs.find((r) => r.id === U.runSel[app.id]) || app.runs[app.runs.length - 1];
@@ -1028,74 +1030,24 @@ export function BuildView({ app }: { app: AppRecord }) {
     }, 50);
   };
   return (
-    <div className="build scroll">
-      <BuildSummary app={app} />
-      <div className="build-bar">
-        <Seg
-          label="How to view the agents"
-          items={[
-            {
-              id: 'line',
-              label: 'Workflow',
-              icon: 'flow',
-              title: 'Agents, check gates and handoffs',
-            },
-            {
-              id: 'timeline',
-              label: 'Timeline',
-              icon: 'timeline',
-              title: 'Who worked when',
-            },
-            {
-              id: 'log',
-              label: 'Log',
-              icon: 'list',
-              title: 'Every step in order',
-            },
-            {
-              id: 'meeting',
-              label: 'Meeting',
-              icon: 'people',
-              title: 'The agents as a meeting: who is speaking, who has a hand raised',
-            },
-          ]}
-          value={mode}
-          onChange={(v) => {
-            U.bview[app.id] = v;
-            notify();
-          }}
-        />
-        {run && (
-          <span className="t-cap muted hide-sm">
-            {RUN_KIND[run.kind] || 'Run'} {run.n}
-            {' · '}
-            {/* eslint-disable-next-line react-hooks/purity -- a run's elapsed time; the store re-renders while it runs */}
-            {run.status === 'running' ? 'running' : fmtMs((run.t1 || Date.now()) - run.t0)}
-            {' · '}
-            {run.mode === 'live' && (run.kind === 'build' || run.kind === 'rerun')
-              ? run.calls + ' model calls'
-              : run.replayed
-                ? run.replayed + ' replayed, 0 model calls'
-                : run.calls + ' model calls'}
-            {run.retries ? ' · ' + run.retries + ' sent back' : ''}
-          </span>
-        )}
-        <span className="grow" />
-        {busy ? (
-          <Btn className="btn sm" aria-label="Stop" title="Stop" onClick={() => stopRun(app)}>
-            <Icon n="stop" s="16" />
-            <span className="hide-sm">Stop</span>
-          </Btn>
-        ) : (
-          // on a phone the four views fill the row, so the button keeps only its icon
-          <Btn className="btn sm" aria-label="Run again" title="Run again" onClick={() => rebuildAsk(app)}>
-            <Icon n="rerun" s="16" />
-            <span className="hide-sm">Run again</span>
-          </Btn>
-        )}
-      </div>
+    <div className={cx('build scroll', plain && 'plain')}>
+      {plain ? (
+        <StepsView app={app} />
+      ) : (
+        <>
+          <div className="how-bar">
+            <Btn className="btn subtle sm" id="hide-how" title="Back to the plain list of steps" onClick={() => showHow(app, false)}>
+              <Icon n="arrowLeft" s="16" />
+              Back to the steps
+            </Btn>
+            <span className="t-cap muted hide-sm">How it was built: every agent, every check and every hand-off.</span>
+          </div>
+          <BuildSummary app={app} />
+          <HowBar app={app} mode={mode} run={run} busy={busy} />
+        </>
+      )}
       <RerunBar app={app} />
-      {app.line.research.status === 'waiting' && app.line.research.hold !== 'approval' && (
+      {!plain && app.line.research.status === 'waiting' && app.line.research.hold !== 'approval' && (
         <MBar
           tone="warning"
           action={
@@ -1107,7 +1059,7 @@ export function BuildView({ app }: { app: AppRecord }) {
           The Researcher has a question for you. The line is paused until you answer.
         </MBar>
       )}
-      {busy && RUNS[app.id].gate && (
+      {!plain && busy && RUNS[app.id].gate && (
         <MBar
           tone="warning"
           action={
@@ -1142,10 +1094,14 @@ export function BuildView({ app }: { app: AppRecord }) {
             </Btn>
           }
         >
-          {app.status === 'failed' ? 'The last build failed. The log and the debug drawer show where.' : 'This build did not finish.'}
+          {app.status === 'failed'
+            ? plain
+              ? 'The last build failed. "Show how it was built" shows where.'
+              : 'The last build failed. The log and the debug drawer show where.'
+            : 'This build did not finish.'}
         </MBar>
       )}
-      {mode === 'line' ? (
+      {plain ? null : mode === 'line' ? (
         <FlowView app={app} sel={sel} />
       ) : mode === 'timeline' ? (
         <TimelineView app={app} run={run} />
@@ -1156,7 +1112,76 @@ export function BuildView({ app }: { app: AppRecord }) {
       ) : (
         <LogView app={app} run={run} />
       )}
-      {!PHONE() && <Inspector app={app} sid={sel} />}
+      {!plain && !PHONE() && <Inspector app={app} sid={sel} />}
+    </div>
+  );
+}
+/** The bar over "how it was built": the four ways to see the run, the run's numbers, and Stop or Run again. */
+function HowBar({ app, mode, run, busy }: { app: AppRecord; mode: string; run: Run | undefined; busy: boolean }) {
+  return (
+    <div className="build-bar">
+      <Seg
+        label="How to view the agents"
+        items={[
+          {
+            id: 'line',
+            label: 'Workflow',
+            icon: 'flow',
+            title: 'Agents, check gates and handoffs',
+          },
+          {
+            id: 'timeline',
+            label: 'Timeline',
+            icon: 'timeline',
+            title: 'Who worked when',
+          },
+          {
+            id: 'log',
+            label: 'Log',
+            icon: 'list',
+            title: 'Every step in order',
+          },
+          {
+            id: 'meeting',
+            label: 'Meeting',
+            icon: 'people',
+            title: 'The agents as a meeting: who is speaking, who has a hand raised',
+          },
+        ]}
+        value={mode}
+        onChange={(v) => {
+          U.bview[app.id] = v;
+          notify();
+        }}
+      />
+      {run && (
+        <span className="t-cap muted hide-sm">
+          {RUN_KIND[run.kind] || 'Run'} {run.n}
+          {' · '}
+          {/* eslint-disable-next-line react-hooks/purity -- a run's elapsed time; the store re-renders while it runs */}
+          {run.status === 'running' ? 'running' : fmtMs((run.t1 || Date.now()) - run.t0)}
+          {' · '}
+          {run.mode === 'live' && (run.kind === 'build' || run.kind === 'rerun')
+            ? run.calls + ' model calls'
+            : run.replayed
+              ? run.replayed + ' replayed, 0 model calls'
+              : run.calls + ' model calls'}
+          {run.retries ? ' · ' + run.retries + ' sent back' : ''}
+        </span>
+      )}
+      <span className="grow" />
+      {busy ? (
+        <Btn className="btn sm" aria-label="Stop" title="Stop" onClick={() => stopRun(app)}>
+          <Icon n="stop" s="16" />
+          <span className="hide-sm">Stop</span>
+        </Btn>
+      ) : (
+        // on a phone the four views fill the row, so the button keeps only its icon
+        <Btn className="btn sm" aria-label="Run again" title="Run again" onClick={() => rebuildAsk(app)}>
+          <Icon n="rerun" s="16" />
+          <span className="hide-sm">Run again</span>
+        </Btn>
+      )}
     </div>
   );
 }

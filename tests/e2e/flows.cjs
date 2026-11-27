@@ -27,13 +27,15 @@ const waitIdle = async (page) => { await sleep(250); await page.waitForFunction(
 const say = async (page, text) => { await page.fill('.composer textarea', text); await page.press('.composer textarea', 'Enter'); await sleep(200); };
 const view = async (page, name) => { if (['Tests', 'Data', 'API', 'Connections'].includes(name)) { const on = await page.locator('.subtabs').count(); if (!on) await page.locator('.views .tab', { hasText: 'Details' }).click(); return page.locator('.subtabs').getByRole('tab', { name, exact: true }).click(); } return page.locator('.views .tab', { hasText: name }).first().click(); };
 const setSpeed = (page, v) => st(page, (x) => { window.__formwork.state().settings.speed = x; }, v);
+// Build opens on the plain list of steps. The checks of the workflow canvas, the timeline, the log and the meeting turn on the owner's setting that opens Build on "how it was built"; plainSteps() checks the list itself and the button that sets this.
+const howBuilt = (page) => st(page, () => { window.__formwork.state().settings.buildDetail = true; });
 const waitTeam = (page, ms) => page.waitForFunction(() => { const s = window.__formwork.state(), t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]), T = t && window.__formwork.teams()[t.app]; return T && T.status !== 'running'; }, null, { timeout: ms || 40000 });
 const teamNow = (page) => st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), T = window.__formwork.teams()[t.app]; return T ? { status: T.status, live: T.live, steps: T.steps.map((x) => x.status), rows: T.steps.map((x) => x.rows.length), updated: T.steps.map((x) => x.updated), tools: T.steps.map((x) => x.tools.length), notes: T.notes.length, wait: !!T.wait, error: T.error } : null; });
-async function enter(page, url) { // first run, demo account, empty workspace, no tour
+async function enter(page, url, o) { // first run, demo account, empty workspace, no tour; { plain: true } leaves Build on its list of steps
   await page.goto(url); await page.waitForSelector('.ob-card', { timeout: 20000 });
   await page.getByRole('button', { name: 'Get started' }).click(); await page.getByRole('button', { name: /Skip and use the demo account/ }).click(); await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click(); await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click();
-  await page.waitForSelector('.home'); await setSpeed(page, 'instant');
+  await page.waitForSelector('.home'); await setSpeed(page, 'instant'); if (!(o && o.plain)) await howBuilt(page);
 }
 const buildTpl = async (page, id) => { await page.locator('[data-tpl="' + id + '"] .tpl-build').click(); for (let i = 0; i < 300; i++) { const a = await appState(page); if (a && (a.status === 'ready' || a.status === 'failed')) break; const o = page.locator('.gcard.ask .opt:not([disabled])'); if (await o.count()) await o.first().click().catch(() => {}); await sleep(120); } await waitReady(page); };
 const onApp = (page) => page.waitForFunction(() => { const s = window.__formwork.state(), t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]); return t && t.app; });
@@ -91,7 +93,7 @@ async function flowDemo(browser, url) {
   await page.getByRole('button', { name: 'Continue' }).click();
   await shot(page, '02-onboarding-pick');
   await page.getByRole('button', { name: 'Continue' }).click();
-  await setSpeed(page, 'fast');
+  await setSpeed(page, 'fast'); await howBuilt(page);
   await page.getByRole('button', { name: 'Open my workspace' }).click();
   await page.waitForSelector('.tour-pop', { timeout: 8000 });
   await sleep(500); await shot(page, '03-tour-start');
@@ -408,7 +410,7 @@ async function flowLive(browser, url) {
   await page.locator('.choice').nth(1).click(); await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click();
   await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click();
-  await page.waitForSelector('.home'); await setSpeed(page, 'instant');
+  await page.waitForSelector('.home'); await setSpeed(page, 'instant'); await howBuilt(page);
   await page.fill('#home-prompt', 'A gym tracks members, class bookings and trainers'); await page.locator('.prompt .btn.primary').click();
   await waitReady(page, 60000); const a = await appState(page);
   check('live build is ready from model output', a.status === 'ready' && a.name === 'FitTrack', [a.status, a.name, a.last]);
@@ -524,7 +526,7 @@ async function liveOnStepAgent(browser, url) {
   await page.locator('.choice').nth(1).click(); await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click();
   await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click();
-  await page.waitForSelector('.home'); await setSpeed(page, 'instant');
+  await page.waitForSelector('.home'); await setSpeed(page, 'instant'); await howBuilt(page);
   await page.fill('#home-prompt', 'A gym tracks members, class bookings and trainers'); await page.locator('.prompt .btn.primary').click();
   await waitReady(page, 60000); const a = await appState(page);
   const steps = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), A = s.apps[t.app], r = A.runs[A.runs.length - 1]; return r.steps.filter((x) => x.station === 'database').map((x) => x.label + ':' + x.ok); });
@@ -540,7 +542,7 @@ async function flowMisc(browser, url) {
   check('short password is refused', (await page.locator('.ob-body').innerText()).includes('at least 4'));
   await page.fill('#ob-pass', 'secret12'); await page.getByRole('button', { name: 'Continue' }).click(); await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click(); await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click();
-  await page.waitForSelector('.home'); await setSpeed(page, 'instant');
+  await page.waitForSelector('.home'); await setSpeed(page, 'instant'); await howBuilt(page);
   check('home greets the account by name', (await page.locator('.home h1').innerText()).includes('Muhammad'));
   await page.locator('[data-tpl="clinic"] .tpl-build').click(); await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').nth(1).click(); await waitReady(page);
   let a = await appState(page);
@@ -630,7 +632,7 @@ async function flowMisc(browser, url) {
   const blocked = await newPage(browser, { init: "Storage.prototype.setItem = function () { throw new Error('storage disabled'); }; Object.defineProperty(window, 'indexedDB', { get() { return undefined; } });" });
   const p2 = blocked.page; await p2.goto(url); await p2.waitForSelector('.ob-card');
   await p2.getByRole('button', { name: 'Get started' }).click(); await p2.getByRole('button', { name: /Skip and use the demo account/ }).click(); await p2.getByRole('button', { name: 'Continue' }).click(); await p2.getByRole('button', { name: 'Continue' }).click();
-  await setSpeed(p2, 'instant'); await p2.locator('.ob-body .switch').click(); await p2.getByRole('button', { name: 'Open my workspace' }).click();
+  await setSpeed(p2, 'instant'); await howBuilt(p2); await p2.locator('.ob-body .switch').click(); await p2.getByRole('button', { name: 'Open my workspace' }).click();
   await p2.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 20000 }); await p2.locator('.gcard.ask .opt').first().click(); await waitReady(p2); const m = await appState(p2);
   check('without browser storage the app still builds and says nothing will be kept', m.status === 'ready' && (await p2.locator('.mbar.bar').first().innerText()).includes('not available'), m.status);
   await blocked.ctx.close();
@@ -848,7 +850,68 @@ async function flowQuests(browser, url) {
   await ctx.close();
 }
 
+async function plainSteps(browser, url) { // Build opens on a plain list of steps; the canvas and its views are behind "Show how it was built"
+  const { ctx, page } = await newPage(browser);
+  await enter(page, url, { plain: true }); await setSpeed(page, 'fast');
+  const list = () => st(page, () => ({ rows: [...document.querySelectorAll('.steps-list .step')].map((x) => x.dataset.step + ':' + x.dataset.state), titles: [...document.querySelectorAll('.step-top strong')].map((x) => x.textContent), who: [...document.querySelectorAll('.step-top .t-cap')].map((x) => x.textContent), text: [...document.querySelectorAll('.step-text')].map((x) => x.textContent), head: (document.querySelector('.steps-head h2') || {}).textContent, sub: (document.querySelector('#steps-sub') || {}).textContent, how: document.querySelectorAll('.react-flow, .build-sum, .build-bar, .inspector').length, bar: (() => { const b = document.querySelector('.steps-view [role=progressbar]'); return b ? b.getAttribute('aria-valuenow') + '/' + b.getAttribute('aria-valuemax') : ''; })(), detail: window.__formwork.state().settings.buildDetail }));
+  await page.locator('[data-tpl="leave"] .tpl-build').click();
+  await page.waitForSelector('.step[data-step=research][data-state=ask]', { timeout: 30000 });
+  let v = await list();
+  check('Build opens on a plain list of steps: six jobs and who does each, with no canvas, tiles, view switcher or inspector', v.how === 0 && v.titles.join('|') === 'Understand and plan|Set up the lists|Add the rules and approvals|Choose views and the overview|Build the screens|Test everything' && v.who.join('|') === 'Planner|List builder|Rules builder|View advisor|Screen designer|Tester', v);
+  check('steps: the question the build stops for is the step that needs you, and the heading says the build is paused', v.rows.join() === 'research:ask,database:wait,backend:wait,views:wait,screens:wait,tests:wait' && v.head === 'Building TimeOff' && /^Step 1 of 6\. The build is paused for one answer from you\.$/.test(v.sub) && await page.locator('.step[data-step=research]').getByRole('button', { name: 'Answer in chat' }).isVisible(), v);
+  await shot(page, 'steps-1-question');
+  await page.locator('.gcard.ask .opt').first().click();
+  const working = await page.waitForFunction(() => document.querySelectorAll('.step[data-state=now]').length === 1 && [...document.querySelectorAll('.steps-head button')].some((b) => /Stop/.test(b.textContent)), null, { timeout: 20000 }).then(() => true, () => false);
+  check('steps: while it builds, one step is working and the Stop button is there', working);
+  await waitReady(page); v = await list();
+  check('steps: when the app is built every step is done and says what it made in plain words', v.rows.every((x) => /:done$/.test(x)) && v.rows.length === 6 && /^3 kinds of people and 3 lists planned\./.test(v.text[0]) && /^3 lists with \d+ fields, and \d+ example records\.$/.test(v.text[1]) && /^4 stages, 4 ways to move a record, and who can see what for 3 kinds of people\.$/.test(v.text[2]) && /^\d+ views and an overview with \d+ tiles\.$/.test(v.text[3]) && /^10 screens for 3 kinds of people\.$/.test(v.text[4]) && /^\d+ checks, all pass\.$/.test(v.text[5]), v.text);
+  check('steps: the heading says the app is built, the bar is full and the tags count what was made', v.head === 'TimeOff is built' && v.sub === 'All 6 steps are done. Every check passes.' && v.bar === '6/6' && /^3 lists\|4 stages\|\d+ views\|10 screens\|\d+ checks pass$/.test((await page.locator('.steps-tag').allInnerTexts()).join('|')), v);
+  await shot(page, 'steps-2-built');
+  await page.locator('#steps-open').click(); await page.waitForSelector('.stage');
+  check('steps: Open the app goes to the working app', (await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return window.__formwork.view().view[t.app]; })) === 'app');
+  await view(page, 'Build'); await page.waitForSelector('.steps-view');
+  // the technical view is one press away, and the choice is kept
+  await page.locator('#show-how').click(); await page.waitForSelector('.react-flow .fl-gate');
+  v = await list();
+  check('"Show how it was built" opens the workflow canvas with the summary tiles and the four views, in place of the list', v.rows.length === 0 && await page.locator('.build-sum .kpi').count() === 6 && await page.locator('.build-bar .seg button').count() === 4 && await page.locator('.fl-node.station').count() === 7 && await page.locator('.inspector').count() === 1);
+  await page.getByRole('button', { name: 'Timeline' }).click(); await page.waitForSelector('.tl-usage');
+  await page.getByRole('button', { name: 'Log', exact: true }).click(); await page.waitForSelector('.line-wrap .tbl tbody tr');
+  await page.getByRole('button', { name: 'Meeting', exact: true }).click(); await page.waitForSelector('.meet-tile');
+  check('the timeline, the log and the meeting are behind it too, and the choice is remembered as a setting', v.detail === true && await page.locator('.meet-tile').count() >= 6);
+  await page.getByRole('button', { name: 'Workflow', exact: true }).click(); await page.waitForSelector('.react-flow .fl-gate'); await shot(page, 'steps-3-how');
+  await page.locator('#hide-how').click(); await page.waitForSelector('.steps-view'); v = await list();
+  check('"Back to the steps" returns to the list and remembers that', v.rows.length === 6 && v.how === 0 && v.detail === false, v);
+  // human in the loop: one pause to check the rules, asked for in chat, answered on the step itself
+  await say(page, 'Ask me after the rules are written'); let a = await waitFree(page); v = await list();
+  check('a pause asked for after the build is for the next build: the workflow holds it and the finished list keeps its six steps', a.flow.approve.backend === true && v.rows.length === 6 && v.sub === 'All 6 steps are done. Every check passes.', [a.flow.approve, v.rows]);
+  await setSpeed(page, 'instant');
+  await page.getByRole('button', { name: 'More actions' }).first().click(); await page.getByRole('menuitem', { name: 'Run the build again' }).click(); await confirmYes(page);
+  for (let i = 0; i < 400 && !(await page.locator('.step[data-step=ok_backend][data-state=ask]').count()); i++) { const q = page.locator('.gcard.ask .opt:not([disabled])'); if (await q.count()) await q.first().click().catch(() => {}); await sleep(90); }
+  v = await list(); a = await appFull(page);
+  const ask = await st(page, () => { const el = document.querySelector('.step[data-step=ok_backend]'); return el ? { rules: [...el.querySelectorAll('.step-rules li')].map((x) => x.textContent), buttons: [...el.querySelectorAll('.step-ask button')].map((x) => x.textContent), text: el.querySelector('.step-text').textContent } : null; });
+  check('steps: the build stops after the rules and "Your approval" is the step that needs you', a.gate && a.line.backend.hold === 'approval' && v.rows.join() === 'research:done,database:done,backend:done,ok_backend:ask,views:wait,screens:wait,tests:wait' && /^Step 4 of 7\. The build is paused for one answer from you\.$/.test(v.sub) && ask && ask.text === 'Waiting for you: do the rules look right?', [v.rows, v.sub, ask]);
+  check('steps: the pause lists the rules in plain words, one line for each kind of person, with both answers', ask && ask.rules.length === 3 && /^Employee: sees every record in holidays, and only their own leave requests and leave balances\./.test(ask.rules[0]) && /^Manager: sees every record in .*Can approve and reject\.$/.test(ask.rules[1]) && ask.buttons.join('|') === 'Looks right, continue|Stop here', ask);
+  await shot(page, 'steps-4-pause');
+  await page.locator('.step[data-step=ok_backend]').getByRole('button', { name: 'Looks right, continue' }).click();
+  await waitReady(page); a = await waitFree(page); v = await list();
+  check('steps: "Looks right, continue" approves, the build finishes, and the approval is a done step', a.status === 'ready' && a.line.backend.approved && a.tests.failed === 0 && v.rows.join() === 'research:done,database:done,backend:done,ok_backend:done,views:done,screens:done,tests:done' && v.text[3] === 'You approved the rules.' && v.sub === 'All 7 steps are done. Every check passes.', [a.status, v.rows, v.sub]);
+  // a review the workflow holds is a step of its own, under its plain name
+  await say(page, 'Add a security review'); a = await waitFree(page); v = await list();
+  check('steps: a review added to the workflow appears after the step it reads, as "Check who can see what" by the Access checker', a.reviews.security && a.reviews.security.status === 'ok' && v.rows.indexOf('rv_security:done') === 3 && v.titles[3] === 'Check who can see what' && v.who[3] === 'Access checker', [v.rows, v.titles, v.who]);
+  await ctx.close();
+  // on a phone the list fits the screen and the canvas is still one press away
+  const ph = await newPage(browser, { viewport: { width: 390, height: 844 } }), pp = ph.page; await enter(pp, url, { plain: true }); await buildTpl(pp, 'leave'); await pp.waitForSelector('.steps-view'); await sleep(300);
+  const fit = await st(pp, () => ({ rows: document.querySelectorAll('.steps-list .step').length, wide: [...document.querySelectorAll('.steps-view, .steps-view *')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.left < -1 || r.right > innerWidth + 1); }).length, scroll: document.documentElement.scrollWidth > innerWidth, how: (() => { const r = document.querySelector('#show-how').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.height >= 32; })(), open: (() => { const r = document.querySelector('#steps-open').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })() }));
+  check('phone: the list of steps fits the screen, with Show how it was built and Open the app in reach', fit.rows === 6 && fit.wide === 0 && !fit.scroll && fit.how && fit.open, fit);
+  await shot(pp, 'steps-5-phone');
+  await pp.locator('#show-how').click(); await pp.waitForSelector('.react-flow .fl-node.station');
+  check('phone: Show how it was built opens the canvas, and Back to the steps returns', await pp.locator('.build-sum .kpi').count() === 6 && await pp.locator('#hide-how').isVisible());
+  await pp.locator('#hide-how').click(); await pp.waitForSelector('.steps-view');
+  await ph.ctx.close();
+}
+
 async function flowNew(browser, url) { // workflow canvas, generated tests, share links, the app-only view, the guide, phones
+  await plainSteps(browser, url);
   const { ctx, page } = await newPage(browser);
   await enter(page, url); await setSpeed(page, 'instant');
   await buildTpl(page, 'clinic'); await sleep(900);
@@ -972,7 +1035,7 @@ async function flowCustom(browser, url) {
   await ctx.setOffline(false); await sleep(300);
   await page.locator('.choice').nth(1).click(); await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click();
-  await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click(); await page.waitForSelector('.home'); await setSpeed(page, 'instant');
+  await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click(); await page.waitForSelector('.home'); await setSpeed(page, 'instant'); await howBuilt(page);
   const mode = () => st(page, () => { const F = window.__formwork, m = F.wf.mode(), sw = document.getElementById('sw-live'); return { id: m.id, on: m.on, live: m.live, demo: F.state().settings.demo, sw: sw ? { on: sw.checked, off: sw.disabled } : null, why: (document.getElementById('mode-why') || {}).innerText || '', net: (document.querySelector('.titlebar .net') || {}).innerText || '' }; });
   const toasts = async () => (await page.locator('.toast').allInnerTexts()).join(' | ');
   let m = await mode();
@@ -1226,8 +1289,15 @@ async function flowRound6(browser, url) {
   const lg0 = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return JSON.stringify(window.__formwork.wf.logo(s.apps[t.app])); });
   await page.locator('#rel-logo-next').click(); await sleep(200); a = await appFull(page); const lg1 = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return JSON.stringify(window.__formwork.wf.logo(s.apps[t.app])); });
   check('icon: designed as data by the UI agent (a shield with a spark here); another design changes it and makes a draft', /"glyph":"briefcase","shape":"shield","fill":"gradient","mark":"spark"/.test(lg0) && lg1 !== lg0 && a.dirty && /Your pick/.test(await page.locator('#rel-logo-text').innerText()) && /Fixes · 1\.1\.1/.test(await page.locator('.rel-form .seg button.on').innerText()), [lg0, lg1]);
-  await page.locator('.rel-item').nth(1).locator('.btn', { hasText: 'Go back to this' }).click(); await page.waitForSelector('.dialog .dfoot .btn'); await page.locator('.dialog .dfoot .btn').last().click(); await sleep(900); a = await appFull(page);
-  check('going back to 1.0 restores that version as the draft: the later field is gone, the tests pass, the history stays', !a.cols.tenders.includes('notes') && a.tests.failed === 0 && a.rel.join() === '1.1,1.0' && a.dirty && a.status === 'ready', [a.cols.tenders, a.tests, a.rel]);
+  // going back: one press, released at once as the next number, and no record is deleted
+  await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); window.__formwork.sql(t.app, 'UPDATE "tenders" SET "client" = \'Kept through going back\', "notes" = \'Typed into the newer field\' WHERE "id" = 1'); window.__formwork.save(); }); await sleep(300);
+  const rowsBefore = (await appFull(page)).rows;
+  await page.locator('.rel-item').nth(1).locator('.btn', { hasText: 'Go back to this' }).click(); await page.waitForSelector('.dialog.goback'); const gb = (await page.locator('.dialog.goback').innerText()).replace(/\s+/g, ' ');
+  check('going back says what comes back, what goes away for now, and that no record is deleted', /Go back to version 1\.0\?/.test(gb) && /What goes away for now/.test(gb) && /Added Notes/.test(await page.locator('#goback-undone').innerText()) && /Your records: nothing is deleted\. All \d+ stay/.test(gb) && /goes out at once as version 1\.1\.1, the same as 1\.0/.test(gb), gb.slice(0, 500)); await shot(page, 'r6-03c-go-back');
+  await page.fill('#goback-why', 'Nobody used the notes'); await page.locator('#goback-go').click(); await page.waitForFunction(() => /Version 1\.1\.1 · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''), null, { timeout: 20000 }); await sleep(300); a = await appFull(page);
+  const kept = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), app = s.apps[t.app]; return { client: window.__formwork.sql(t.app, 'SELECT "client" AS c FROM "tenders" WHERE "id" = 1')[0].c, away: window.__formwork.sql(t.app, 'SELECT "value" AS v FROM "tk_put_away" WHERE "table_name" = \'tenders\' AND "column_name" = \'notes\'').map((r) => r.v), taken: app.takenBack, kind: app.releases[0].kind, back: app.releases[0].back }; });
+  check('going back to 1.0 is released at once as 1.1.1: the later field is gone, the tests pass, the history stays', !a.cols.tenders.includes('notes') && a.tests.failed === 0 && a.rel.join() === '1.1.1,1.1,1.0' && !a.dirty && a.status === 'ready' && kept.kind === 'rollback' && kept.back === '1.0' && /Same as 1\.0/.test(await page.locator('.rel-item').first().innerText()), [a.cols.tenders, a.tests, a.rel, kept.kind]);
+  check('going back keeps every record, and puts away the values the older version has no field for', a.rows === rowsBefore && kept.client === 'Kept through going back' && kept.away.join() === 'Typed into the newer field' && kept.taken && kept.taken.to === '1.0' && kept.taken.why === 'Nobody used the notes' && kept.taken.items.some((x) => /Added Notes/.test(x)), [a.rows, rowsBefore, kept]);
 
   // ----- the app on its own: link, install, update that keeps the records -----
   const g = await newPage(browser), gp = g.page; await gp.goto(url + '#app=' + link10.split('#app=')[1]); await gp.waitForSelector('.solo .app', { timeout: 30000 }); await sleep(300);
@@ -1241,6 +1311,17 @@ async function flowRound6(browser, url) {
   const up = await st(gp, () => { const s = window.__formwork.state(), all = Object.values(s.apps).filter((y) => y.shared), x = all[0]; return { n: all.length, ver: x.shared.ver, updated: x.shared.updated, installed: !!x.installed, notes: x.shared.notes, cols: x.def.tables[0].columns.map((c) => c.name).includes('notes'), client: window.__formwork.sql(x.id, 'SELECT "client" AS c FROM "tenders" WHERE "id" = 1')[0].c, risks: window.__formwork.sql(x.id, 'SELECT COUNT(*) AS n FROM "risks"')[0].n }; });
   check('opening the link of version 1.1 updates the installed copy and keeps its records', up.n === 1 && up.ver === '1.1' && up.updated && up.updated.from === '1.0' && up.updated.kept > 10 && up.installed && up.cols && up.client === 'Changed by the person who installed it' && up.risks === 3 && /Added Notes/.test(up.notes.join(' ')), up);
   check('the app says what happened: updated, records kept, what is new', /Updated to version 1\.1 from 1\.0\. Your \d+ records were kept\. New: Added Notes/.test((await gp.locator('.solo-note.ok').innerText()).replace(/\s+/g, ' ')), await gp.locator('.solo-note.ok').innerText());
+  // the installed copy asks the short link for a newer version by itself: the owner went back, which went out as 1.1.1
+  await st(gp, () => { const s = window.__formwork.state(), x = Object.values(s.apps).find((y) => y.shared); window.__formwork.sql(x.id, 'UPDATE "tenders" SET "notes" = \'Written on the device\' WHERE "id" = 1'); window.__formwork.save(); }); await sleep(600);
+  const uidOf = await st(gp, () => Object.values(window.__formwork.state().apps).find((y) => y.shared).shared.uid);
+  await gp.goto('about:blank'); await gp.goto(url + '#app=i.' + uidOf); await gp.waitForSelector('.solo .app', { timeout: 30000 }); const offered = await gp.waitForSelector('#solo-update', { timeout: 15000 }).then(() => true).catch(() => false);
+  const offer = offered ? (await gp.locator('#solo-update').innerText()).replace(/\s+/g, ' ') : '';
+  check('an installed app checks for a newer version when it opens, says what it is, and asks before updating', offered && /Version 1\.1\.1 is ready\./.test(offer) && /The owner went back to an earlier version/.test(offer) && /Your records are kept/.test(offer) && await gp.locator('#solo-update .btn', { hasText: 'Later' }).count() === 1 && await st(gp, () => Object.values(window.__formwork.state().apps).find((y) => y.shared).shared.ver) === '1.1', offer); await shot(gp, 'r6-04b-update-ready');
+  if (offered) { await gp.locator('#solo-update-go').click(); await gp.waitForFunction(() => { const x = Object.values(window.__formwork.state().apps).filter((y) => y.shared); return x.length === 1 && x[0].shared.ver === '1.1.1'; }, null, { timeout: 30000 }).catch(() => {}); await sleep(400); }
+  const up2 = await st(gp, () => { const s = window.__formwork.state(), all = Object.values(s.apps).filter((y) => y.shared), x = all[0]; return { n: all.length, ver: x.shared.ver, installed: !!x.installed, kind: x.shared.kind, cols: x.def.tables[0].columns.map((c) => c.name).includes('notes'), client: window.__formwork.sql(x.id, 'SELECT "client" AS c FROM "tenders" WHERE "id" = 1')[0].c, risks: window.__formwork.sql(x.id, 'SELECT COUNT(*) AS n FROM "risks"')[0].n, away: window.__formwork.sql(x.id, 'SELECT "value" AS v FROM "tk_put_away"').map((r) => r.v) }; });
+  check('Update now moves the device to 1.1.1 and keeps its records; what the older version has no field for is put away', up2.n === 1 && up2.ver === '1.1.1' && up2.kind === 'rollback' && up2.installed && !up2.cols && up2.client === 'Changed by the person who installed it' && up2.risks === 3 && up2.away.join() === 'Written on the device' && /Updated to version 1\.1\.1 from 1\.1\. Your \d+ records were kept\. 1 value is put away/.test((await gp.locator('.solo-note.ok').innerText()).replace(/\s+/g, ' ')), up2);
+  const safe = await st(gp, () => { const x = Object.values(window.__formwork.state().apps).find((y) => y.shared), c = window.__formwork.safety(x.id); return c ? { ver: c.ver, rows: c.rows, file: atob(c.db.slice(0, 20)).slice(0, 13) } : null; });
+  check('before the update changed anything, a safety copy of the records was kept on the device', safe && safe.ver === '1.1' && safe.rows > 10 && safe.file === 'SQLite format', safe);
   await g.ctx.close();
 
   // ----- the three quest rooms -----

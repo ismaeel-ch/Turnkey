@@ -29,6 +29,19 @@ export const research = obj({
   stories: list(obj({ want: text }), 2, 'user stories'),
 });
 
+/**
+ * The Planner's plan. Unlike the brief it may have one kind of person and no stages. The browser's `normPlan` and
+ * `checkPlan` (src/shared/plan) do the real checking; this refuses only an answer with no plan in it.
+ */
+export const plan = obj({
+  name: text,
+  summary: text,
+  people: list(named, 1, 'kinds of people'),
+  lists: list(obj({ name: text, fields: list(named, 1, 'fields') }), 1, 'lists'),
+});
+/** The Planner's first answer: the cards may be empty when the request already says everything. */
+export const questions = obj({ reflect: z.string().optional(), cards: z.array(anyItem).optional(), draft: plan });
+
 export const database = obj({
   tables: list(obj({ name: text, columns: list(obj({ name: text }), 1, 'columns') }), 1, 'tables'),
   users: list(obj({ role: text }), 1, 'users'),
@@ -75,6 +88,8 @@ export const team = obj({});
 export const anyObject = obj({});
 
 export const SCHEMAS: Record<StepRole, z.ZodType> = {
+  questions,
+  plan,
   research,
   database,
   backend,

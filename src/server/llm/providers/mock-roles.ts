@@ -1,12 +1,13 @@
 /**
  * Saved answers for Turnkey's agent prompts, so the whole Live path runs with no key: `LLM_PROVIDER=mock`.
  *
- * Given a prompt that begins "You are the <Name> agent on Turnkey, a line of agents…" (the Researcher, Database,
+ * Given a prompt that begins "You are the <Name> agent on Turnkey, a line of agents…" (the Planner, Researcher, Database,
  * Backend, View advisor, UI and Tester, the Orchestrator that reads changes from chat, and the owner's own
  * reviewers), or "You are <Name>, one of N agents inside the app…" (an app's own team), it returns a valid answer for
  * that role, worked out from what the prompt itself says (the request, the brief, the tables, the access rules). The
  * answers are deliberately plain and generic: they pass the same checks a model's answers must pass.
  */
+import { plannerPlan, plannerQuestions } from './mock-planner';
 
 type Col = { name: string; type: string; options: string[]; ref: string; role: string; required: boolean };
 type Table = { name: string; title: string; owner: string | null; columns: Col[] };
@@ -530,6 +531,8 @@ export function roleAnswer(prompt: string): string | null {
   if (role === 'team') return json({ say: 'Nothing to add in this stand-in mode.' });
   if (/ reviewer$|^Reviewer$/i.test(role)) return json({ findings: [] });
   switch (role) {
+    case 'Planner':
+      return json(/\n\nWrite the final plan\./.test(prompt) ? plannerPlan(prompt) : plannerQuestions(prompt));
     case 'Researcher':
       return json(researcher(prompt));
     case 'Database':
