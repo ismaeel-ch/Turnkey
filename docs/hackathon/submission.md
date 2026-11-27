@@ -4,6 +4,14 @@ What goes into the Agent-A-Thon portal, and what to check before pressing submit
 **Mon 30 Nov 2026, 2:00 PM PKT**. The latest submitted version is the one evaluated, so submit early and again after
 the final release.
 
+## On the portal, step by step
+
+1. Open https://ssi-ai-hackathon.vercel.app/ and go to **Submit**. Sign in with the SSI email you registered with.
+2. Paste the three fields below. Paste the summary from the box, not from a rendered page, so nothing is reformatted.
+3. Submit. The portal takes resubmissions until the deadline and judges the latest one, so submit once now and again
+   after the last release.
+4. Keep the live site up and leave the model key in place until winners are announced (about mid-December).
+
 ## The three fields
 
 | Field             | Value                                   |
@@ -14,20 +22,20 @@ the final release.
 
 ## Summary
 
-Copy the text inside the box. It is 570 characters, counted with spaces. The same text is in the README and in
+Copy the text inside the box. It is 568 characters, counted with spaces. The same text is in the README and in
 the project's `submission/summary.md`.
 
 ```text
-Turnkey turns one sentence into a working business app. A Planner agent asks a few questions and shows a plain-words plan; once the owner approves, code picks the team (lists, rules, views, screens, tests, access) and a LangGraph workflow streams every step over AG-UI. Code checks each handoff and sends failed work back; failing tests go back for repair. Each app opens with a welcome per role and removable demo data. After release 1.0, a fix gets a plan, a draft and release 1.1. Built apps can carry agent teams that search public sources. Demo mode needs no model.
+Turnkey turns one sentence into a working business app. A Planner agent asks a few questions and shows a plain-words plan; once the owner approves, code picks the team (lists, rules, views, screens, tests, access) and a LangGraph workflow streams every step over AG-UI. Code checks each handoff and sends failed work back; failing tests go back for repair. Each app opens with a welcome per role and removable demo data. Any later change gets a plan and a draft, then ships as 1.1. Built apps can carry agent teams that search public sources. Demo mode needs no model.
 ```
 
-Every claim in it is on `main` and in release v0.5.0: the Planner's questions and plan (`src/workspace/planner.ts`,
+Every claim in it is on `main` and in release v0.5.3: the Planner's questions and plan (`src/workspace/planner.ts`,
 `src/workspace/interview.ts`, `src/shared/plan`), the team picked by code from the plan (`teamFor` in
 `src/shared/plan/team.ts`), the build held to the plan (`src/shared/plan/build.ts`), the workflow graph
 (`src/platform/orchestrator`), AG-UI streaming (`src/platform/model-client.ts`, `src/server/agui`), the checks and
 send-backs (`src/workspace/line.ts`), the Tester's repair (`src/workspace/tester.tsx`), the welcome for each role
 (`src/workspace/firstrun.tsx`), removable demo data (`src/workspace/demo-data.ts`), fixes after a release
-(`src/workspace/improve.tsx`, `src/workspace/release.tsx`), team lookups (`src/server/graph/team/connector-tools.ts`)
+(`src/workspace/improve.tsx`, `src/workspace/release-ui.tsx`, `src/workspace/steps-view.tsx`), team lookups (`src/server/graph/team/connector-tools.ts`)
 and Demo with no model.
 
 ## Before pressing submit
