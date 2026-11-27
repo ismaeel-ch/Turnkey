@@ -17,7 +17,7 @@ agent keeps this page current; the compliance-auditor checks it after each miles
 - **Built** means in `main` and covered by the browser checks (12 flows in `tests/e2e`, run in CI before every merge), or covered by unit tests for server code. Updated 26 Nov
   after release v0.3.2: everything below is built unless a row says otherwise. This page is updated in a follow-up pull request when those merge.
 - Where an evaluator looks: the app's top-level tabs are **Build**, **App**, **Release** and **Details**. Under Build
-  the switch **Workflow / Timeline / Log** shows the same run three ways. **Debug mode** (Settings, or the bug icon in
+  the switch **Workflow / Timeline / Log / Meeting** shows the same run four ways. **Debug mode** (Settings, or the bug icon in
   the title bar) opens the event, tool-call, model-usage, SQL and API-call tabs. The orchestration diagrams are in
   [`docs/architecture/overview.md`](../architecture/overview.md).
 

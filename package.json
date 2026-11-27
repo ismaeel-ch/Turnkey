@@ -1,6 +1,6 @@
 {
   "name": "turnkey",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "private": true,
   "description": "Turnkey: describe the app your work needs and a team of agents builds its database, backend, views, pages and tests on a workflow you can watch and change.",
   "license": "MIT",
@@ -62,7 +62,9 @@
     "fake-indexeddb": "^6.2.8",
     "jsdom": "^31.0.1",
     "knip": "^6.48.0",
+    "pixelmatch": "7.1.0",
     "playwright": "1.63.0",
+    "pngjs": "7.0.0",
     "prettier": "^3.10.1",
     "typescript": "^5",
     "undici": "^6.29.1",

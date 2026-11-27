@@ -9,7 +9,32 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 - The first page loads faster on a phone. The welcome screen shows without waiting for the SQLite engine, which is
   fetched once that screen is up; the icon symbols ship once instead of twice; React Flow loads after the first
-  screen. Lighthouse on a simulated phone: largest paint 7.9 s to about 6.2 s, page JavaScript 592 KB to 563 KB gzip. The feature guide loads the first time it opens.
+  screen. Lighthouse on a simulated phone: largest paint 7.9 s to about 6.2 s, page JavaScript
+  592 KB to 563 KB gzip. The feature guide loads the first time it opens. ([#201](https://github.com/ismaeel-ch/Turnkey/pull/201))
+
+## [0.4.6] - 2026-11-27
+
+Edit fields on the Data page, change an app's look on the App page, and visual regression tests.
+
+### Added
+
+- Edit fields on the Data page; only the stations the edit touches run again. ([#192](https://github.com/ismaeel-ch/Turnkey/pull/192))
+- Change the app's look on the App page; Rename follows the same busy rules. ([#194](https://github.com/ismaeel-ch/Turnkey/pull/194))
+
+### Fixed
+
+- Run again waits while the app's own agent team is running, and says why. ([#170](https://github.com/ismaeel-ch/Turnkey/pull/170))
+- The Tester passes a denied step on 404 only when the record itself is not found; link-preview lookups are cached
+  and capped. ([#187](https://github.com/ismaeel-ch/Turnkey/pull/187))
+
+### Changed
+
+- The docs and the Judge walk cover Try a sample, the Meeting view and canvas edits. ([#196](https://github.com/ismaeel-ch/Turnkey/pull/196))
+
+### Tests
+
+- Visual regression tests: 22 screenshots of the main screens, desktop and phone, light and dark, compared in CI.
+  ([#138](https://github.com/ismaeel-ch/Turnkey/pull/138))
 
 ## [0.4.5] - 2026-11-27
 

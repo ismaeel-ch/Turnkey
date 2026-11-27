@@ -12,10 +12,10 @@ _From one sentence to the running app, played at twice its speed. In Demo the se
 
 ## See it in 60 seconds
 
-1. Open the live app, press **Get started**, choose **Skip and use the demo account**, keep **Demo**, pick **Sales
-   bidding desk**.
+1. Open the live app and press **Try a sample**. It keeps **Demo** on and starts building the **Sales bidding desk**.
 2. Watch the **Build** tab: six agents hand work to each other, a check runs after each, the Tester catches a planted
-   slip and the Backend agent repairs it. Open **Agents** (activity panel) to see every step, tool call and hand-off.
+   slip and the Backend agent repairs it. Switch to **Meeting** to see the agents as a call, with the one at work as
+   the speaker, or open **Agents** (activity panel) for every step, tool call and hand-off.
 3. Open the **App** tab: the app it built, with its own sign-in per role, and a **Bid room** where the app's own three
    agents work on a tender.
 
@@ -41,9 +41,11 @@ the build. Code, not a model, decides whether each answer is good enough:
   Backend agent, whose fix must pass the same checks as any change. An app is ready only when its tests pass.
 - **The owner decides.** The Researcher asks when the brief has a real trade-off, the owner can put approval gates
   after any station, add review agents or their own agents to the line, and a change that deletes data waits for a
-  yes. Editing the workflow re-runs only the stations it touches.
-- **Visible.** Every step is an AG-UI event: the canvas, the timeline, the log, the Agents panel and debug mode all
-  read the same stream, and each table, field and screen shows which agent made or last changed it.
+  yes. Editing the workflow re-runs only the stations it touches, and so does editing the app itself on the canvas:
+  adding, renaming or removing a field on the Data page, or changing the navigation, row density or colour from the
+  **Look** menu on the App page, goes through the same plan card as a change typed in chat.
+- **Visible.** Every step is an AG-UI event: the canvas, the timeline, the log, the meeting view, the Agents panel and
+  debug mode all read the same stream, and each table, field and screen shows which agent made or last changed it.
 
 In **Live**, each agent's turn runs on the server as a small LangGraph graph (draft, check the JSON against the
 role's schema, repair, at most three model calls) behind the CopilotKit runtime, streamed to the browser over AG-UI.
@@ -116,15 +118,19 @@ _The Bid room of the built BidDesk app, with the three agents' verdict for one t
    for your own sentence.)
 2. Watch the **Build** tab. Each agent is a node with a check gate under it. The Tester's first run catches the
    Backend agent's slip (a bid manager could delete a tender), the Backend repairs it, and run 2 passes all 170 tests.
-   The build takes about 30 seconds. Switch between **Workflow**, **Timeline** and **Log** to see the same run three
-   ways, and open **Agents** on the left edge for every step, tool call and hand-off.
+   The build takes about 30 seconds. Switch between **Workflow**, **Timeline**, **Log** and **Meeting** to see the same
+   run four ways (Meeting shows a tile per agent, rings the one at work and raises a hand when an agent waits for
+   you), and open **Agents** on the left edge for every step, tool call and hand-off.
 3. Open the **App** tab and sign in as Sana Malik (bid manager), then as Omar Farooq (sales director) from **Preview
    as**: each role sees only what its rules allow. In the **Bid room**, pick **Port fleet tracking** and press **Run
    the agents**. The Qualifier scores it, Pricing prices it, and the run stops for you to add a condition before the
-   Red team gives its verdict.
+   Red team gives its verdict. In Live, the case header and each agent's line show what its model calls cost.
 4. In the chat sidebar, press **Add a notes field to score lines** (or type a change). The Orchestrator shows a plan,
    only the stations the change touches run again, and the tests are regenerated.
-5. Open **Release**, release version 1.0 (every test runs first), and press **Share by link**. Turn on debug mode
+5. Or change the app on the canvas. Under **Details**, **Data**, pick **tenders**, open **Columns** and add a field:
+   the edit appears in chat as yours, and the plan keeps Research and runs again from Database. On the **App** tab,
+   the **Look** menu moves the navigation to an icon rail, and only Screens onwards runs again.
+6. Open **Release**, release version 1.0 (every test runs first), and press **Share by link**. Turn on debug mode
    (bug icon in the title bar) to see AG-UI events, tool calls, SQL and model usage.
 
 ![The Release tab after version 1.0: share and install, and Export the deliverable as a Markdown document, a printable PDF, a web page, the SQLite database or everything in a zip](docs/images/export.png)
@@ -136,7 +142,8 @@ Each Live session is capped at 40 model calls.
 
 ## What is in it
 
-- **Workspace:** workflow canvas, timeline and log; Agents panel and a "How it works" page; chat sidebar with the
+- **Workspace:** workflow canvas, timeline, log and meeting view; edits to fields and the look on the canvas that
+  re-run only the stations they touch; Agents panel and a "How it works" page; chat sidebar with the
   agents' cards; 14 view types and dashboards in the built apps; releases with a test gate; share by short link;
   install a built app under its own name and icon; works offline for saved builds; phone and tablet layouts; Fluent 2
   UI (`@fluentui/react-components` v9); first-run guide.
@@ -146,7 +153,8 @@ Each Live session is capped at 40 model calls.
 - **Server:** `/api/copilotkit` (CopilotKit runtime, AG-UI agents `step` and `team`), `/api/agent/team` (team runs as
   server-sent AG-UI events), `/api/llm`, `/api/connectors/<name>`, `/api/share`, `/api/health`. A model gateway for a
   Claude API key, LiteLLM, any OpenAI-compatible service, the Claude Code CLI (local only) and a stand-in for tests,
-  with effort per tier, prompt caching and a cost line per call.
+  with effort per tier, prompt caching and a cost line per call, shown per agent in team runs. Microsoft Learn is
+  reached through its public MCP server (no key), and the Connections page tests it live.
 - **Guard rails:** only Turnkey's own agent prompts are relayed; per-visitor and global rate limits; a daily call cap
   and a daily dollar cap; 40 model calls per Live session; `LIVE_MODE=off` switch; cross-site calls refused. See
   [Budget](#budget).
@@ -164,9 +172,9 @@ the cheaper model tier. `/api/health` shows the calls and the spend so far.
 
 ## Submission summary
 
-> Turnkey turns one sentence into a working business app: SQLite database, role-guarded backend, views, pages and tests. Five builder agents and a Tester run on a LangGraph workflow the owner can watch and edit, and every step streams over AG-UI. Code checks each handoff and sends failed work back, failing tests go back to the Backend for repair, and the owner approves big trade-offs. Built apps get agent teams of their own that look up public sources: fact-check, prior-art, debate, bidding, grant review. Demo mode needs no model.
+> Turnkey turns one sentence into a working business app: SQLite database, role-guarded backend, views, pages and tests. Five builder agents and a Tester run on a LangGraph workflow the owner can watch and edit, and every step streams over AG-UI. Code checks each handoff and sends failed work back, failing tests go back to the Backend for repair, and the owner approves big trade-offs. Canvas edits re-run only the agents they touch. Built apps get agent teams of their own that look up public sources: fact-check, prior-art, debate, bidding, grant review. Demo mode needs no model.
 
-(Counted: 534 characters.) Evidence for each rule and criterion: [`docs/hackathon/criteria.md`](docs/hackathon/criteria.md).
+(Counted: 582 characters.) Evidence for each rule and criterion: [`docs/hackathon/criteria.md`](docs/hackathon/criteria.md).
 
 ## More documents
 

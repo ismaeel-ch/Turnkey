@@ -1,0 +1,60 @@
+name: Update visual baselines
+
+# Takes new baseline screenshots for the visual flow (tests/e2e/visual.cjs) on CI's own browser and fonts, and commits
+# them to the branch you name. Use it after a pull request changes how screens look on purpose: run it from the
+# Actions tab (or `gh api -X POST repos/<owner>/<repo>/actions/workflows/visual-baselines.yml/dispatches -f ref=main
+# -f inputs[branch]=<branch>`), look at the images in the commit, then re-add the ready-to-merge label so CI runs
+# again (a commit pushed by this workflow does not start CI by itself). See docs/process/visual-tests.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to take the baselines on and commit them to (never main)
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: visual-baselines-${{ inputs.branch }}
+  cancel-in-progress: true
+
+jobs:
+  update:
+    name: update baselines
+    if: inputs.branch != 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.branch }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium
+      - name: Production build
+        run: npm run build
+      - name: Take the screenshots
+        run: |
+          export CHROME_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
+          rm -rf tests/e2e/visual
+          VISUAL_UPDATE=1 npm run test:e2e -- visual
+      - name: Commit them to the branch
+        env:
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A tests/e2e/visual
+          if git diff --cached --quiet; then
+            echo "The baselines did not change." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git commit -m "Update visual baselines"
+          git push origin "HEAD:$BRANCH"
+          echo "New baselines committed to $BRANCH. Re-add the ready-to-merge label to run CI." >> "$GITHUB_STEP_SUMMARY"
