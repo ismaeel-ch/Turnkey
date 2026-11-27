@@ -1,7 +1,7 @@
 import { AreaBoundary } from '@/platform/area-boundary';
 import { engineProblem, storageProblem } from './errors';
 import { modelHost } from '@/platform/model-client';
-import { type ReactNode, Suspense, lazy, useState, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { type ReactElement, type ReactNode, Suspense, lazy, useState, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 import type { BackedDef, TourStep } from '@/shared/types/app';
 import type { SqlValue } from '@/shared/types/sqljs';
@@ -91,6 +91,7 @@ import { REVIEW_RULES, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from 
 import { REVIEWERS } from './reviewers';
 import { fillWorkflowSteps, keepFix, suggestCases } from './tester';
 import { AgentAv, Btn, Dialog, Field, Icon, Input, Logo, MBar, Seg, Select, Spinner, Switch, TONE_ICON } from './ui';
+import { DialogMotion, ToastMotion } from './motion';
 import { PhoneSheets } from './mobile';
 import { activityNow } from './activity';
 import { APICACHE, stageOf } from './runtime';
@@ -1032,7 +1033,7 @@ export function RenameDialog({ p }: { p: AppPick & { name: string } }) {
     });
   };
   return (
-    <Dialog title="Rename app" onClose={closeDialog}>
+    <Dialog title="Rename app" onClose={closeDialog} x={false}>
       <form className="col gap12" onSubmit={save}>
         <Field id="rn-name" label="App name">
           <Input
@@ -1047,11 +1048,11 @@ export function RenameDialog({ p }: { p: AppPick & { name: string } }) {
           />
         </Field>
         <div className="row end">
-          <Btn type="button" className="btn" onClick={closeDialog}>
-            Cancel
-          </Btn>
           <Btn type="submit" className="btn primary">
             Rename
+          </Btn>
+          <Btn type="button" className="btn" onClick={closeDialog}>
+            Cancel
           </Btn>
         </div>
       </form>
@@ -1104,7 +1105,7 @@ export function AddConnDialog({ p }: { p: AddConnForm }) {
     toast(str(f.name) + ' added', 'success');
   };
   return (
-    <Dialog title="Add a connection" onClose={closeDialog}>
+    <Dialog title="Add a connection" onClose={closeDialog} x={false}>
       <form className="col gap12" onSubmit={add}>
         <Field id="ac-kind" label="Kind">
           <Select
@@ -1168,11 +1169,11 @@ export function AddConnDialog({ p }: { p: AddConnForm }) {
         </Field>
         {f.err && <MBar tone="warning">{f.err}</MBar>}
         <div className="row end">
-          <Btn type="button" className="btn" onClick={closeDialog}>
-            Cancel
-          </Btn>
           <Btn type="submit" className="btn primary">
             Add connection
+          </Btn>
+          <Btn type="button" className="btn" onClick={closeDialog}>
+            Cancel
           </Btn>
         </div>
       </form>
@@ -1248,6 +1249,9 @@ interface ConfirmProps {
   done: (ok: boolean) => void;
 }
 export function DialogHost() {
+  return <DialogMotion>{dialogNow()}</DialogMotion>;
+}
+function dialogNow(): ReactElement | null {
   const d = U.dialog;
   if (!d) return null;
   // openDialog's callers give each dialog the fields it reads; the dialog's props type says which
@@ -1361,22 +1365,24 @@ export function Toasts() {
   const ref = useToastRoom();
   return (
     <div className="toasts" aria-live="polite" ref={ref}>
-      {U.toasts.map((t) => (
-        <div key={t.id} className={'toast m-' + t.tone}>
-          <Icon n={TONE_ICON[t.tone] || 'info'} />
-          <span className="grow">{t.text}</span>
-          <Btn
-            className="btn subtle icon sm"
-            aria-label="Dismiss"
-            onClick={() => {
-              U.toasts = U.toasts.filter((x) => x !== t);
-              notify();
-            }}
-          >
-            <Icon n="dismiss" s="12" />
-          </Btn>
-        </div>
-      ))}
+      <ToastMotion>
+        {U.toasts.map((t) => (
+          <div key={t.id} className={'toast m-' + t.tone}>
+            <Icon n={TONE_ICON[t.tone] || 'info'} />
+            <span className="grow">{t.text}</span>
+            <Btn
+              className="btn subtle icon sm"
+              aria-label="Dismiss"
+              onClick={() => {
+                U.toasts = U.toasts.filter((x) => x !== t);
+                notify();
+              }}
+            >
+              <Icon n="dismiss" s="12" />
+            </Btn>
+          </div>
+        ))}
+      </ToastMotion>
     </div>
   );
 }

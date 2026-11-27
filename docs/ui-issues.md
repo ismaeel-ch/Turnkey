@@ -59,3 +59,51 @@ The agents chat and a built app's screens have their own passes.
 Rules for new workspace CSS, checked by `offRamp` in `tests/e2e/flows.cjs`: font sizes, line heights, weights and
 radii are written as Fluent tokens (`var(--fontSizeBase300)`, `var(--lineHeightBase300)`, `var(--fontWeightSemibold)`,
 `var(--borderRadiusMedium)`), never as pixel values; run `npm run theme` after using a token for the first time.
+
+## Fourth pass: motion, actions and spacing against Fluent 2
+
+A pass on 27 Nov 2026 over every main screen of the workspace and of a built app, desktop and phone, against Fluent
+2's pages on motion, layout, buttons, dialogs, drawers, fields and message bars (issue #291). Before and after
+screenshots are in `screens/fluent2-motion/` in the project's shared folder.
+
+| #   | Where                               | What is wrong                                                                                                                                                              | Status |
+| --- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 29  | Every screen                        | Almost nothing moved, and what did used its own timings (`.18s ease-out`, `.22s cubic-bezier(.2,.8,.2,1)`). Motion follows Fluent 2 now, on its duration and curve tokens. | Fixed  |
+| 30  | Dialogs, toasts, record panel, form | They vanished the instant they were closed. Each plays a short exit first (Fluent: what leaves accelerates and is quicker than its entrance).                              | Fixed  |
+| 31  | Every dialog and form               | The main action was last, to the right of Cancel. Fluent puts it first: to the left of, or above, the other actions.                                                       | Fixed  |
+| 32  | Dialogs with Cancel, Close or Done  | A Close icon in the corner next to a button that closes the dialog. The icon shows only when no button closes it.                                                          | Fixed  |
+| 33  | Share dialog, link notes            | "Release version 1.0 and make the link" is "Release and share" (Fluent: one or two words on a dialog button). "OK" on a note is "Got it".                                  | Fixed  |
+| 34  | The plan, before a build            | "Change something" stood before "Build it". The main action leads.                                                                                                         | Fixed  |
+| 35  | Many places                         | Paddings and gaps between the steps of Fluent's spacing ramp (3, 5, 7, 9, 14, 18 px). They are 4, 6, 8, 12, 16 or 20 px now.                                               | Fixed  |
+
+How things move, in `src/styles/motion.css` (CSS, for what only arrives) and `src/workspace/motion.tsx` (Fluent's
+motion components, for what also leaves):
+
+| What                                            | Motion                                   | Duration, curve                                                      |
+| ----------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
+| A view of the workspace, a page of a built app  | Fade                                     | `durationFast` (150 ms), `curveLinear`                               |
+| Rows, cards, tiles, steps: a set of items       | Rise 8 px and fade, 30 ms apart, six max | `durationGentle` (250 ms), `curveDecelerateMid`                      |
+| A chat message, a log line                      | Rise 8 px and fade                       | `durationNormal` (200 ms), `curveDecelerateMid`                      |
+| A card in chat, a question, the command palette | Scale from 96% and fade                  | `durationGentle`, `curveDecelerateMid`                               |
+| A message bar                                   | Drop 8 px and fade                       | `durationNormal`, `curveDecelerateMid`                               |
+| The chat panel, the record panel of a built app | Slide from the end edge and fade         | in `durationGentle` decelerating, out `durationFast` accelerating    |
+| A dialog                                        | Fluent's own: scale and fade             | Fluent's defaults, in and out                                        |
+| A toast                                         | Rise 8 px and fade, and back             | in `durationNormal`, out `durationFast`                              |
+| A sheet on a phone                              | Slide up from the bottom edge            | `durationSlow` (300 ms), `curveDecelerateMid`                        |
+| A card or row under the pointer                 | Shadow, fill and border ease             | `durationFaster` (100 ms), `curveEasyEase`                           |
+| A bar that fills, the tour's highlight          | Grows or travels in place                | `durationSlower` or `durationSlow`, `curveDecelerateMid` or EasyEase |
+
+Rules for new UI, checked by `fluentMotion` in `tests/e2e/flows.cjs`:
+
+- Durations and curves are Fluent's tokens (`var(--durationNormal)`, `var(--curveDecelerateMid)`, or `motionTokens`
+  in script), never numbers. Run `npm run theme` after using a token for the first time.
+- A change of destination is a fade. Large surfaces are not slid across the screen.
+- Only the first six items of a set are offset, so a long list does not keep anyone waiting.
+- Keyframes live inside `@media (prefers-reduced-motion: no-preference)`. With reduced motion on, nothing moves.
+- In a dialog, drawer or form the main action comes first and there is one of them. `Dialog` in `ui.tsx` orders its
+  footer itself and leaves out the Close icon when a footer button closes the dialog.
+- Paddings, margins and gaps are 2, 4, 6, 8, 10, 12, 16, 20, 24, 28, 32, 36 or 40 px.
+
+Left as it is, on purpose: the steps of onboarding and of the tours keep "Back" on the left and the forward button
+on the right, as Fluent's own teaching popover does, and keep the word "Continue", which the demo video, the judge
+walk and the README use.

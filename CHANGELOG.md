@@ -5,16 +5,29 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-11-28
+
+Motion, action order and spacing follow Fluent 2 everywhere, in the workspace and in built apps.
+
 ### Added
 
+- Motion that follows Fluent 2, in the workspace and in built apps: a quick fade between views and pages, lists and
+  cards that come in one after another, cards and rows that answer the pointer, and dialogs, toasts, the record
+  panel and the form of a built app that play a short exit when closed. Every duration and curve is a Fluent token,
+  and nothing moves when the device asks for reduced motion. ([#292](https://github.com/ismaeel-ch/Turnkey/pull/292))
 - A form with seven fields or more is filled in step by step in a built app: what the record needs first, then who
   and what it belongs to, then dates and amounts, then the rest, and a last step that shows every answer before
-  anything is saved. Next stays on a step while a required field is empty. Shorter forms and edits stay on one page.
+  anything is saved. Next stays on a step while a required field is empty. Shorter forms and edits stay on one page. ([#299](https://github.com/ismaeel-ch/Turnkey/pull/299))
 
 ### Changed
 
+- The main action comes first in every dialog and form ("Create" then "Cancel"), as Fluent 2 asks, and a dialog
+  with a button that closes it no longer has a Close icon as well. "Release version 1.0 and make the link" is
+  "Release and share". ([#292](https://github.com/ismaeel-ch/Turnkey/pull/292))
+- Paddings and gaps are steps of Fluent 2's spacing ramp, and small controls have 44 px of touch room on a phone.
+  ([#292](https://github.com/ismaeel-ch/Turnkey/pull/292))
 - Renaming a field that a formula reads is no longer refused. Every calculated field, rule and move condition that
-  reads it is rewritten to the new name, in the app and in its plan, and the worked-out values stay the same.
+  reads it is rewritten to the new name, in the app and in its plan, and the worked-out values stay the same. ([#299](https://github.com/ismaeel-ch/Turnkey/pull/299))
 
 ## [0.5.9] - 2026-11-28
 
