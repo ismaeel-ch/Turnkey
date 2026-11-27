@@ -1036,7 +1036,7 @@ export function BuildView({ app }: { app: AppRecord }) {
             </Btn>
           }
         >
-          The Researcher has a question for you. The line is paused until you answer.
+          The Planner has a question for you. The line is paused until you answer.
         </MBar>
       )}
       {!plain && busy && RUNS[app.id].gate && (
@@ -2009,7 +2009,7 @@ export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
     return (
       <div>
         <p className="muted t-cap">
-          {touchText(touchOf(app, 'theme'), 'Made by the UI agent').replace(/^Made by/, 'Layout chosen by') + ': '}
+          {touchText(touchOf(app, 'theme'), 'Made by the Screen designer').replace(/^Made by/, 'Layout chosen by') + ': '}
           <span className={'swatch acc-' + def.theme.accent} />
           {label(def.theme.accent)}
           {' accent, '}
@@ -2056,7 +2056,7 @@ export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
     <div>
       <div className="row between wrap">
         <span className="muted t-cap">
-          The UI agent wrote these steps from the user stories. Code plays them against the real endpoints inside a savepoint, then rolls
+          The Screen designer wrote these steps from the user stories. Code plays them against the real endpoints inside a savepoint, then rolls
           back.
         </span>
         <Btn className="btn sm" onClick={() => startWalk(app)}>

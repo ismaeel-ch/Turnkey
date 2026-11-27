@@ -2560,7 +2560,7 @@ REC.biddesk = {
     'A sales team bids on tenders: bid managers prepare each bid with a price, three agents score the tender, price it and challenge it, the sales director approves it before it goes out, and everyone sees what was won or lost.',
   blurb: 'Tenders, scores, price options and a go or no-go. A director approves every bid.',
   keys: ['bid', 'bidding', 'tender', 'rfp', 'proposal', 'quotation', 'quote', 'procurement', 'sales'],
-  slip: 'This saved build keeps one slip on purpose, so the repair loop has something to do in Demo: the Backend agent let bid managers delete tenders, which the brief forbids.',
+  slip: 'This saved build keeps one slip on purpose, so the repair loop has something to do in Demo: the Rules builder let bid managers delete tenders, which the brief forbids.',
   usage: {
     research: [1310, 690, 6300],
     database: [2610, 3340, 16200],
@@ -3982,8 +3982,8 @@ export const CONNECTORS: Connector[] = [
     auth: 'No key needed',
     icon: 'globe',
     acc: 'steel',
-    about: 'Looks up domain terms while the Researcher writes the brief, and facts for the fact-check desk.',
-    usedBy: 'Researcher agent, Fact-check desk (Researchers agent)',
+    about: 'Looks up domain terms while the Planner writes the brief, and facts for the fact-check desk.',
+    usedBy: 'Planner, Fact-check desk (Researchers agent)',
     tools: [
       {
         name: 'search_pages',
@@ -4010,7 +4010,7 @@ export const CONNECTORS: Connector[] = [
     icon: 'book',
     acc: 'royalBlue',
     about: 'Searches official Microsoft documentation. Built apps can call it from a record.',
-    usedBy: 'Built apps (Suggest docs), Researcher agent',
+    usedBy: 'Built apps (Suggest docs), Planner',
     tools: [
       {
         name: 'microsoft_docs_search',

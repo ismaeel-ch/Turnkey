@@ -51,7 +51,7 @@ import {
   pFlow,
   pTables,
   pace,
-  planOf,
+  teamPlanOf,
   pushChat,
   runBuild,
   say,
@@ -119,8 +119,8 @@ export const normAgent = (a: Untrusted, i: number): AddedAgent | null => {
 export const stName = (id: string): string => STATIONS.find((s) => s.id === id)?.name || label(id);
 export const firstStationOf = (agent: string) => STATIONS.findIndex((s) => s.agent === agent);
 export const agentThe = (id: string, low?: boolean) => {
-  const n = AGENTS[id].name,
-    t = id === 'researcher' || id === 'views' ? 'The ' + n : 'The ' + n + ' agent';
+  // the builder agents' names are plain nouns ("List builder"), so they read without the word "agent"
+  const t = 'The ' + AGENTS[id].name;
   return low ? 't' + t.slice(1) : t;
 };
 
@@ -514,7 +514,7 @@ export const FLOW_TOOLS: Dict<(app: AppRecord, a: Untrusted) => FlowResult> = {
       f = flowOf(app),
       t = str(a.text).replace(/\s+/g, ' ').slice(0, NOTE_MAX);
     if (!NOTE_FOR.includes(ag))
-      throw new Error('I can keep an instruction for the Researcher, Database, Backend, View advisor and UI agents.');
+      throw new Error('I can keep an instruction for the ' + NOTE_FOR.map((id) => AGENTS[id].name).join(', ').replace(/, ([^,]+)$/, ' and $1') + '.');
     if ((f.notes[ag] || '') === t)
       return {
         same: true,
@@ -782,7 +782,7 @@ export function flowEdit(app: AppRecord, calls: FlowCall[]) {
 
 /* ---------- chat: a message about the workflow becomes tool calls ---------- */
 export const ST_WORDS: [RegExp, string][] = [
-  [/\b(brief|research(er)?|requirements?)\b/, 'research'],
+  [/\b(brief|research(er)?|planner|requirements?)\b/, 'research'],
   [/\b(tables?|database|schema|data model|sqlite)\b/, 'database'],
   [/\b(back ?end|endpoints?|api|access rules?|rules|permissions?)\b/, 'backend'],
   [/\b(views?|view advisor|advisor|dashboards?|charts?)\b/, 'views'],
@@ -790,15 +790,15 @@ export const ST_WORDS: [RegExp, string][] = [
   [/\b(walk ?through|tour|acceptance( test)?|app is (ready|finished|done))\b/, 'walkthrough'],
 ];
 export const AG_WORDS: [RegExp, string][] = [
-  [/\bresearch(er)?\b/, 'researcher'],
-  [/\b(database|data|tables?|schema)\b/, 'database'],
-  [/\bback ?end\b/, 'backend'],
+  [/\b(research(er)?|planner)\b/, 'researcher'],
+  [/\b(database|data|tables?|schema|lists? builder)\b/, 'database'],
+  [/\b(back ?end|rules? builder)\b/, 'backend'],
   [/\b(view advisor|views?|advisor|dashboards?)\b/, 'views'],
   [/\b(ui|screens?|pages?|front ?end|design(er)?|layout)\b/, 'ui'],
 ];
 export const RV_WORDS: [RegExp, string][] = [
   [/\b(security|access|permissions?|rights)\b/, 'security'],
-  [/\b(data|schema|tables?|database)\b/, 'data'],
+  [/\b(data|schema|tables?|database|lists?)\b/, 'data'],
   [/\b(insights?|dashboards?|analytics|charts?)\b/, 'insight'],
   [/\b(wording|labels?|copy|ux|usability|text|pages?)\b/, 'wording'],
 ];
@@ -825,7 +825,7 @@ export const NUMW: Dict<number> = {
   twice: 2,
 };
 export const FLOW_HELP =
-  'You can also change how I build: “ask me before the screens are built”, “add a normalise step”, “add an agent called Brand stylist after screens that uses the colour teal”, “add a security review”, “allow 2 attempts”, “tell the UI agent to keep page names short”, “let the rules build the views”, “run again from views”, “show the workflow”.';
+  'You can also change how I build: “ask me before the screens are built”, “add a normalise step”, “add an agent called Brand stylist after screens that uses the colour teal”, “add a security review”, “allow 2 attempts”, “tell the Screen designer to keep page names short”, “let the rules build the views”, “run again from views”, “show the workflow”.';
 export const STEP_WORDS: [RegExp, string][] = [
   [/\b(normali[sz](e|er|ation|ing)?|tidy(ing)? (up )?(the )?tables|clean(ing)? (up )?(the )?tables)\b/, 'normalize'],
   [/\b(styl(e|ist|ing)|ui customi[sz]ation|polish(ing)? (the )?ui|look and feel)\b/, 'style'],
@@ -837,7 +837,7 @@ export function stepByWords(q: string, app?: AppRecord | null) {
     own =
       mine.find((a) => a.name.toLowerCase() === s) ||
       mine.find((a) => s && (a.name.toLowerCase().includes(s) || s.includes(a.name.toLowerCase())));
-  return own ? own.id : pickWord(STEP_WORDS, s) || (/review/.test(s) ? pickWord(RV_WORDS, s) : null);
+  return own ? own.id : pickWord(STEP_WORDS, s) || (/review|check/.test(s) ? pickWord(RV_WORDS, s) : null);
 }
 /** What a chat message asks of the workflow, or null when it is not about the workflow. */
 export interface FlowAsk {
@@ -901,7 +901,7 @@ export function parseFlow(text: string, app?: AppRecord | null): FlowAsk | null 
         rerun: st,
       };
   }
-  if ((m = /^(?:run|redo|repeat|do|start) (?:the |a |an )?(.+?) review(?:er)?(?: again| now)?$/.exec(s))) {
+  if ((m = /^(?:run|redo|repeat|do|start) (?:the |a |an )?(.+?) (?:review|check)(?:er)?(?: again| now)?$/.exec(s))) {
     const id = pickWord(RV_WORDS, m[1]);
     if (id)
       return {
@@ -1035,7 +1035,7 @@ export function parseFlow(text: string, app?: AppRecord | null): FlowAsk | null 
       ))
   ) {
     const ag = pickWord(AG_WORDS, m[1].toLowerCase());
-    if (ag && /agent|researcher|advisor/i.test(raw))
+    if (ag && /agent|researcher|planner|advisor|builder|designer/i.test(raw))
       return {
         calls: [
           {
@@ -1050,11 +1050,11 @@ export function parseFlow(text: string, app?: AppRecord | null): FlowAsk | null 
   }
   if (
     (m =
-      /^(?:please )?(?:tell|ask|instruct|remind|brief) (?:the )?(researcher|research agent|view advisor|(?:[a-z -]+?) agent)(?:\s*[:,]\s*|\s+to\s+|\s+that\s+|\s+)(.+)$/i.exec(
+      /^(?:please )?(?:tell|ask|instruct|remind|brief) (?:the )?(researcher|research agent|planner|list builder|rules builder|screen designer|view advisor|(?:[a-z -]+?) agent)(?:\s*[:,]\s*|\s+to\s+|\s+that\s+|\s+)(.+)$/i.exec(
         raw,
       )) ||
     (m =
-      /^(?:note|instruction|standing instruction) (?:for|to) (?:the )?(researcher|research agent|view advisor|(?:[a-z -]+?) agent)\s*[:,]\s*(.+)$/i.exec(
+      /^(?:note|instruction|standing instruction) (?:for|to) (?:the )?(researcher|research agent|planner|list builder|rules builder|screen designer|view advisor|(?:[a-z -]+?) agent)\s*[:,]\s*(.+)$/i.exec(
         raw,
       ))
   ) {
@@ -1110,7 +1110,7 @@ export function parseFlow(text: string, app?: AppRecord | null): FlowAsk | null 
     };
   if (
     (m =
-      /^(?:add|include|insert|use|turn on|switch on|enable|i want) (?:an? |the |every |all (?:the |four )?)?(.*?) ?review(?:er|ers|s)?(?: steps?)?(?: (?:after|to|on|for|of) .+)?$/.exec(
+      /^(?:add|include|insert|use|turn on|switch on|enable|i want) (?:an? |the |every |all (?:the |four )?)?(.*?) ?(?:review|check)(?:er|ers|s)?(?: steps?)?(?: (?:after|to|on|for|of) .+)?$/.exec(
         s,
       ))
   ) {
@@ -1123,7 +1123,7 @@ export function parseFlow(text: string, app?: AppRecord | null): FlowAsk | null 
           },
         })),
       };
-    const id = pickWord(RV_WORDS, m[1] + ' ' + s.replace(/^.*?review(?:er|ers|s)?/, ''));
+    const id = pickWord(RV_WORDS, m[1] + ' ' + s.replace(/^.*?(?:review|check)(?:er|ers|s)?/, ''));
     if (id)
       return {
         calls: [
@@ -1147,7 +1147,7 @@ export function parseFlow(text: string, app?: AppRecord | null): FlowAsk | null 
   }
   if (
     (m =
-      /^(?:remove|drop|delete|turn off|switch off|disable|skip|no more) (?:the |all (?:the )?|every )?(.*?) ?review(?:er|ers|s)?(?: steps?)?$/.exec(
+      /^(?:remove|drop|delete|turn off|switch off|disable|skip|no more) (?:the |all (?:the )?|every )?(.*?) ?(?:review|check)(?:er|ers|s)?(?: steps?)?$/.exec(
         s,
       ))
   ) {
@@ -1350,7 +1350,7 @@ export function showGate(app: AppRecord, run: Run, st: Station) {
   const s = stepStart(run, st.id, 'orchestrator', 'Waiting for your approval', 'wait'),
     next = STATIONS[stationIdx(st.id) + 1];
   // A pause that comes from the plan gives the plan's own reason; one the owner switched on is theirs.
-  const plan = planOf(app),
+  const plan = teamPlanOf(app),
     planned = plan ? teamFor(plan).pauses.find((p) => p.after === st.id) : undefined;
   const m = say(
     app,
@@ -1710,6 +1710,8 @@ REVIEW_RULES.style = (app) => {
     });
   return rankFindings(out);
 };
+/** The name a built-in review goes by in its prompt. The owner sees the plain name; the prompt keeps the role the server recognises. */
+const PROMPT_AS: Record<string, string> = { data: 'Data reviewer', security: 'Security reviewer' };
 export function reviewPrompt(app: AppRecord, id: string) {
   const def = app.def as BriefedDef,
     rv = REVIEWERS[id];
@@ -1761,7 +1763,7 @@ export function reviewPrompt(app: AppRecord, id: string) {
         })
       : '');
   return (
-    HEAD(rv.name) +
+    HEAD(PROMPT_AS[id] || rv.name) +
     (stepAuto(flowOf(app), id)
       ? 'You are a step in the build workflow of the app "' +
         app.name +

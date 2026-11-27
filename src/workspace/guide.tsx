@@ -149,7 +149,7 @@ export const GUIDE: GuideEntry[] = [
     g: 'build',
     icon: 'bot',
     title: 'The six agents',
-    what: "Researcher writes the brief. Database designs the tables and seed rows. Backend writes the workflow and who may do what. View advisor recommends how each table is best viewed, designs the dashboard and picks the layout of the agents' room. UI lays out the pages, designs the app icon and writes the tour. Tester writes test cases from the brief and sends failures back for repair. The Orchestrator is code, not a model.",
+    what: "The Planner writes the plan and the brief. The List builder designs the tables and demo data. The Rules builder writes the workflow and who may do what. The View advisor recommends how each table is best viewed, designs the dashboard and picks the layout of the agents' room. The Screen designer lays out the pages, designs the app icon and writes the tour. Tester writes test cases from the brief and sends failures back for repair. The Orchestrator is code, not a model.",
     how: ['Select each agent node on the canvas.', 'Read its Output tab in the inspector.'],
     go: {
       label: 'Show the workflow',
@@ -161,7 +161,7 @@ export const GUIDE: GuideEntry[] = [
     icon: 'shield',
     title: 'Check gates and send-backs',
     what: "Code checks every handoff. If an agent's work fails a check it is sent back with the exact reasons, at most twice unless you set fewer attempts. On the last try code mends what it can, and if that fails a safe default is used, so a build always ends with a working app.",
-    how: ['Build CareDesk: the Database agent is sent back once.', 'Select the Database node and open Attempts.'],
+    how: ['Build CareDesk: the List builder is sent back once.', 'Select the Database node and open Attempts.'],
     go: {
       label: 'Show the workflow',
       view: 'build',
@@ -171,7 +171,7 @@ export const GUIDE: GuideEntry[] = [
     g: 'build',
     icon: 'questionChat',
     title: 'Your decisions',
-    what: 'The agents stop for you whenever a decision is yours: the Researcher asks one question about a real trade-off before anything is built, any change that would delete data waits for your approval, and you can add approvals of your own after any station.',
+    what: 'The agents stop for you whenever a decision is yours: the Planner asks one question about a real trade-off before anything is built, any change that would delete data waits for your approval, and you can add approvals of your own after any station.',
     how: [
       'Start a build and answer the question card in the chat.',
       'Later, ask to remove a field. The change waits until you approve it.',
@@ -261,7 +261,7 @@ export const GUIDE: GuideEntry[] = [
     what: 'Each agent can carry a standing instruction that is added to every request it gets in a Live build. Stations get 1, 2 or 3 attempts before code steps in with a repair or its safe default. Views and Screens can be handed to the built-in rules instead of their agent: plainer output, no model call.',
     how: [
       'Select a station and open its Customize tab.',
-      'Type an instruction and press Save instruction, or ask in chat: “tell the UI agent to keep page names short”.',
+      'Type an instruction and press Save instruction, or ask in chat: “tell the Screen designer to keep page names short”.',
       'Set Attempts per station, or switch Who does this step to Rules.',
     ],
     go: {
@@ -299,7 +299,7 @@ export const GUIDE: GuideEntry[] = [
     g: 'share',
     icon: 'install',
     title: 'The app on its own: icon, link, install, updates',
-    what: 'A share link carries a released version and opens the app alone, under its own name and its own icon. The UI agent designs the icon as data (symbol, shape, fill and mark) and code draws it. Whoever opens the link can install the app. Opening the link of a newer version updates their copy and keeps their records. Inside this prototype installing is simulated; the hosted build gives each released app its own address and web manifest.',
+    what: 'A share link carries a released version and opens the app alone, under its own name and its own icon. The Screen designer designs the icon as data (symbol, shape, fill and mark) and code draws it. Whoever opens the link can install the app. Opening the link of a newer version updates their copy and keeps their records. Inside this prototype installing is simulated; the hosted build gives each released app its own address and web manifest.',
     how: [
       'On Release, try Another design, or save the icon as a PNG.',
       'Press Share by link, then Preview what they see.',
@@ -382,7 +382,7 @@ export const GUIDE: GuideEntry[] = [
     g: 'app',
     icon: 'lock',
     title: 'People, roles and rules',
-    what: 'The Database agent seeds people for every role. The Backend agent decides what each role may list, create, change and delete, and which workflow actions it may take. The rules are enforced in the endpoints, not only hidden in the pages.',
+    what: 'The List builder seeds people for every role. The Rules builder decides what each role may list, create, change and delete, and which workflow actions it may take. The rules are enforced in the endpoints, not only hidden in the pages.',
     how: ['Sign in as two different people and compare what they see.', 'On a desktop, Two users opens the app twice side by side.'],
     go: {
       label: 'Open the app',
@@ -415,7 +415,7 @@ export const GUIDE: GuideEntry[] = [
     g: 'app',
     icon: 'playOutline',
     title: 'The walkthrough',
-    what: 'The UI agent writes a tour of the app. It is played for real, as the named people, and doubles as the acceptance test.',
+    what: 'The Screen designer writes a tour of the app. It is played for real, as the named people, and doubles as the acceptance test.',
     how: ['In the App view press Play walkthrough.'],
     go: {
       label: 'Open the app',

@@ -3,6 +3,7 @@
  * the ones they describe themselves. A leaf module: it imports only the agent list and types, so any module can read
  * REVIEWERS at load time without an import cycle (custom.tsx imports most of the workspace).
  */
+import { AGENT_NAMES } from '@/shared/plan/team';
 import type { ReviewerInfo } from '@/shared/types/workspace';
 import { AGENTS } from './agents';
 
@@ -10,8 +11,8 @@ import { AGENTS } from './agents';
 export type Reviewer = ReviewerInfo;
 export const REVIEWERS: Record<string, Reviewer> = {
   data: {
-    name: 'Data reviewer',
-    short: 'Data review',
+    name: AGENT_NAMES.data,
+    short: 'List check',
     after: 'database',
     icon: 'dbSearch',
     acc: 'forest',
@@ -19,8 +20,8 @@ export const REVIEWERS: Record<string, Reviewer> = {
     job: 'Reads the tables for gaps: nowhere to write notes, no date to plan by, thin sample data.',
   },
   security: {
-    name: 'Security reviewer',
-    short: 'Security review',
+    name: AGENT_NAMES.security,
+    short: 'Access check',
     after: 'backend',
     icon: 'shieldKey',
     acc: 'cranberry',

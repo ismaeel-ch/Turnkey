@@ -39,7 +39,7 @@ export function HistoryButtons({ app }: { app: AppRecord }) {
 }
 
 const whoName = (by: string) =>
-  by === 'you' ? 'You' : by === 'rules' ? 'Built-in rules' : (AGENTS[by]?.name || by) + (AGENTS[by] ? ' agent' : '');
+  by === 'you' ? 'You' : by === 'rules' ? 'Built-in rules' : AGENTS[by]?.name || by;
 
 function Who({ by }: { by: string[] }) {
   const list = by.length ? by : ['orchestrator'];

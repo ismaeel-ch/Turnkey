@@ -846,7 +846,7 @@ export function ShareDialog({ p }: { p: { app: string } }) {
               ? (kept.length ? 'No records, only your ' + kept.join(', ') + '.' : 'No records at all.') + ' Right for a real launch.'
               : sh.data === 'live' && !dirty
                 ? 'A copy of the ' + liveN + ' records as they are now. The activity history stays with you.'
-                : 'The ' + seedN + ' made-up rows the Database agent wrote, with dates that stay around today.'
+                : 'The ' + seedN + ' made-up rows the List builder wrote, with dates that stay around today.'
           }
         >
           <Seg

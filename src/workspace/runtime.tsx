@@ -221,7 +221,7 @@ export function AppPane({
   if (!def.screens.length || !users.length)
     return (
       <div className="app-empty">
-        <Empty icon="layout" title="No screens yet" text="The app appears here when the UI agent has assembled its screens." />
+        <Empty icon="layout" title="No screens yet" text="The app appears here when the Screen designer has laid out its screens." />
       </div>
     );
   if (!user) return <AppLogin app={app} pane={pane} users={users} solo={solo} />;

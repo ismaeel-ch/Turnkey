@@ -72,7 +72,7 @@ const TryItCard = lazy(() => import('./improve').then((m) => ({ default: m.TryIt
 function tableTouchText(app: AppRecord, table: string) {
   const made = touchOf(app, 'table:' + table),
     last = latestTouchOfTable(app, table),
-    first = touchText(made, 'Created by the Database agent from the definition');
+    first = touchText(made, 'Created by the List builder from the definition');
   return last && made && last.at > made.at && last !== made
     ? first + '. Last change: ' + touchText(last).replace(/^./, (c) => c.toLowerCase())
     : first;
@@ -361,7 +361,7 @@ function FieldEditor({ app, table }: { app: AppRecord & { def: BackedDef }; tabl
 }
 export function DataView({ app }: { app: AppRecord }) {
   if (!dbExists(app.id) || !app.def.tables.length)
-    return <Empty icon="database" title="No database yet" text="The Database agent creates the SQLite tables at the second station." />;
+    return <Empty icon="database" title="No database yet" text="The List builder creates the SQLite tables at the second station." />;
   const D = dataOf(app.id);
   const tables = dbTables(app.id),
     cur = tables.find((t) => t.name === D.table) || tables.find((t) => t.name !== 'users' && t.name !== 'activity') || tables[0],
@@ -579,7 +579,7 @@ export function ApiView({ app }: { app: AppRecord }) {
   const def = app.def;
   if (!def.process || !dbExists(app.id))
     return (
-      <Empty icon="server" title="No endpoints yet" text="The Backend agent writes the workflow and access rules at the third station." />
+      <Empty icon="server" title="No endpoints yet" text="The Rules builder writes the workflow and access rules at the third station." />
     );
   const A = apiOf(app.id);
   // the Backend agent writes the workflow only after the brief, so the definition has one here

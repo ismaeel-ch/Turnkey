@@ -52,9 +52,9 @@ export function touchOf(app: AppRecord, key: string): Touch | null {
 }
 
 const whoName = (by: string) =>
-  by === 'rules' ? 'the built-in rules' : by === 'you' ? 'you' : 'the ' + (AGENTS[by]?.name || by) + ' agent';
+  by === 'rules' ? 'the built-in rules' : by === 'you' ? 'you' : 'the ' + (AGENTS[by]?.name || by);
 
-/** Plain words for one record, such as "Changed by the Database agent at your request". */
+/** Plain words for one record, such as "Changed by the List builder at your request". */
 export function touchText(t: Touch | null, fallback = ''): string {
   if (!t) return fallback;
   const who = whoName(t.by);
@@ -63,10 +63,10 @@ export function touchText(t: Touch | null, fallback = ''): string {
   return 'Made by ' + who;
 }
 
-/** A few words for a table cell, such as "Database agent, your request". */
+/** A few words for a table cell, such as "List builder, your request". */
 export function touchShort(t: Touch | null): string {
   if (!t) return '';
-  const who = t.by === 'rules' ? 'Built-in rules' : t.by === 'you' ? 'You' : (AGENTS[t.by]?.name || t.by) + ' agent';
+  const who = t.by === 'rules' ? 'Built-in rules' : t.by === 'you' ? 'You' : AGENTS[t.by]?.name || t.by;
   return who + (t.via === 'change' ? ', your request' : t.via === 'rerun' ? ', re-run' : '');
 }
 
