@@ -5,6 +5,17 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+### Added
+
+- Built apps can work things out. A field can be calculated from a formula (a line total, an order total from its
+  lines, what is left of a budget), a rule can refuse a save with a plain sentence, a move can be held back until a
+  condition is met or a field is filled in, and a stage can lock its records. The Planner writes these into the plan,
+  and the plan screen lists them under "What the app works out and checks".
+- Record pages show a stage path, the worked-out numbers, and linked records as lines with totals. The overview
+  starts with "Waiting for you": the records the signed-in person can take forward.
+- Four saved builds that use all of it, under "Apps that work things out" on Home: Order desk with budgets, Vet
+  practice, Project planner and Service dispatch.
+
 ## [0.5.4] - 2026-11-27
 
 A tidier row of view tabs on every list page of a built app, fixes found by ten more real builds on new sentences,

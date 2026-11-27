@@ -78,6 +78,21 @@ describe.each(COMPLEX_TEMPLATES)('the %s saved build', (id) => {
   });
 });
 
+describe('changing an app that works things out', () => {
+  it('refuses to rename or remove a field a formula reads, and says what reads it', async () => {
+    const changes = await import('@/workspace/changes');
+    const app = APPS.dispatch;
+    const say = (text: string) => changes.handleChat(app as Parameters<typeof changes.handleChat>[0], text, { rules: true });
+    await say('Rename the quantity field in parts_used to how_many');
+    expect(app.def.tables.find((t) => t.name === 'parts_used')?.columns.map((c) => c.name)).toContain('quantity');
+    expect(app.chat.map((m) => m.text || '').join(' ')).toMatch(/Quantity is used by the calculated field Amount in Parts used/);
+    await say('Remove the quantity field from parts_used');
+    expect(app.def.tables.find((t) => t.name === 'parts_used')?.columns.map((c) => c.name)).toContain('quantity');
+    // the changes it offers never include one it would refuse
+    for (const tip of changes.suggestChanges(app)) expect(tip).not.toMatch(/Remove the (quantity|amount|price each)/i);
+  });
+});
+
 describe('the order desk, used through its own endpoints', () => {
   const call = (role: string, method: string, path: string, body?: Record<string, unknown>) => {
     const app = APPS.orders,

@@ -26,4 +26,4 @@ export interface AppLogic {
 }
 
 /** How many rules an app may have, and how many calculated fields a list may have. */
-export const LOGIC_LIMITS = { rules: 12, calcs: 6 } as const;
+export const LOGIC_LIMITS = { rules: 12 } as const;

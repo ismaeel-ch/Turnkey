@@ -282,3 +282,36 @@ export const logicIssues = (def: LogicDef): string[] =>
         }
       : null,
   );
+
+/* ---------- what reads a field ---------- */
+
+/** What is worked out or checked from a field, in plain words. A field something reads cannot be renamed or removed
+ *  without breaking it, so a change to the app asks for that to be changed first. */
+export function usesOfField(def: LogicDef, table: string, field: string): string[] {
+  const out: string[] = [];
+  const hit = (src: string, text: string | undefined) => {
+    if (!text) return false;
+    try {
+      const { reads } = readFormula(def.tables, src, text),
+        st = tableOf(def.tables, src);
+      return (
+        (src === table && reads.fields.includes(field)) ||
+        reads.paths.some((p) => p.field === field && colOf(st, p.head)?.ref === table) ||
+        reads.lists.some((l) => l.list === table && (l.field === field || l.cond.includes(field)))
+      );
+    } catch {
+      return false;
+    }
+  };
+  for (const c of calcsOf(def.tables)) {
+    const t = tableOf(def.tables, c.table);
+    if (!(c.table === table && c.column === field) && hit(c.table, c.formula))
+      out.push('the calculated field ' + (colOf(t, c.column)?.label || label(c.column)) + ' in ' + (t?.label || label(c.table)));
+  }
+  for (const r of def.logic?.rules || []) if (hit(r.table, r.when)) out.push('the rule "' + r.message + '"');
+  const P = def.process;
+  if (P)
+    for (const tr of P.transitions)
+      if (hit(P.table, tr.when) || (P.table === table && (tr.needs || []).includes(field))) out.push('the condition on "' + tr.label + '"');
+  return out;
+}

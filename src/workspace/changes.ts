@@ -104,6 +104,7 @@ import { changePlan, kindOf, stationsFor } from './change-plan';
 import type { StepFacts } from './change-plan';
 import { AWAY_DAYS, bringBackColumn, putAwayColumn } from './carry';
 import { recordTouches, snapshotDef } from './provenance';
+import { usesOfField } from './logic';
 
 /* ===== Turnkey prototype · changes from chat: operations, migrations, partial re-runs, build pack ===== */
 export const COLOR_WORDS: Dict<string> = {
@@ -452,6 +453,8 @@ export function suggestChanges(app: AppRecord) {
       c.name !== other.owner &&
       c.type !== 'ref' &&
       c.type !== 'user' &&
+      !c.formula &&
+      !usesOfField(def, other.name, c.name).length &&
       !def.screens.some((s) => s.table === other.name && (s.group === c.name || s.date === c.name || s.end === c.name)),
   );
   if (drop) out.push('Remove the ' + String(drop.label).toLowerCase() + ' field from ' + other.label.toLowerCase());
@@ -623,6 +626,8 @@ export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
         );
       if (c.name === t.title || c.name === t.owner || (def.process.table === t.name && def.process.column === c.name))
         throw new Error(c.label + ' is the title, owner or status of ' + t.label + ', so it stays.');
+      const readBy = usesOfField(def, t.name, c.name);
+      if (readBy.length) throw new Error(c.label + ' is used by ' + readBy.slice(0, 2).join(' and ') + '. Change that first.');
       if (c.type === 'ref' || c.type === 'user')
         throw new Error(
           c.label +
@@ -749,6 +754,14 @@ export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
         };
       if (colOf(t, nn) || ['id', 'created_at', 'created_by'].includes(nn))
         throw new Error(t.label + ' already has a field called ' + lab + '.');
+      const readBy = usesOfField(def, t.name, c.name);
+      if (readBy.length)
+        throw new Error(
+          c.label +
+            ' is used by ' +
+            readBy.slice(0, 2).join(' and ') +
+            ', which reads it by name. Ask for a new label instead, or change that first.',
+        );
       const sql = 'ALTER TABLE ' + qi(t.name) + ' RENAME COLUMN ' + qi(c.name) + ' TO ' + qi(nn);
       return {
         station: 'database',

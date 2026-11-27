@@ -164,11 +164,14 @@ _The Tester's first run fails one case (a bid manager could delete a tender); th
 
 ## What it builds
 
-Nine saved builds come with the app, each a separate working app. Six have their own agent team inside: the three
+Fourteen saved builds come with the app, each a separate working app. Six have their own agent team inside: the three
 suggested quests, Fact-check desk (Extractor, Researchers, Verifier), Prior-art scout (Search, Analyst, Critic) and
 Debate partner (For, Against, Moderator), plus Sales bidding desk (Qualifier, Pricing, Red team) and Grant review desk
 (Assessor, Budget reviewer, Due diligence). The others are plain business apps: clinic appointments, IT helpdesk,
-leave requests and purchase requests. In Live, a team runs on the server as a LangGraph graph: agents in order,
+leave requests, purchase requests and an expense manager. Four more work things out and enforce rules: an order desk
+with order lines, department budgets and approval by amount; a vet practice where no vet is booked twice and a visit
+closes only when nothing is owed; a project planner with logged hours, progress and health; and a service dispatch
+desk that totals parts and labour. How that works: [`docs/architecture/logic.md`](docs/architecture/logic.md). In Live, a team runs on the server as a LangGraph graph: agents in order,
 lookups in Wikipedia, World Bank, OpenAlex, arXiv or PatentsView where the agent has the tool, a check after each
 agent that can send the work back once, and a pause where a person adds a point. Where a team could be used:
 [`docs/hackathon/use-cases.md`](docs/hackathon/use-cases.md).
