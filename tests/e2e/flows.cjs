@@ -864,7 +864,7 @@ async function canvasFieldEdits(browser, url) { // the owner edits fields on the
 async function flowViews(browser, url) {
   const { ctx, page } = await newPage(browser);
   await enter(page, url); await shot(page, '70-home-library');
-  check('home lists three quests and six business apps', await page.locator('.tpl').count() === 9 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
+  check('home lists three quests and seven business apps', await page.locator('.tpl').count() === 10 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
   await page.locator('[data-tpl="clinic"] .tpl-build').click(); await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').first().click(); await waitReady(page);
   let a = await appState(page);
   check('six stations, and the Views station passed', Object.keys(a.line).length === 6 && a.line.views === 'ok', a.line);
@@ -1590,7 +1590,7 @@ async function flowCustom(browser, url) {
 /* ---------- round 6: plain navigation, the Tester's repair loop, agent rooms, an agent step that changes the schema, releases, the app on its own ---------- */
 async function flowRound6(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
-  check('home: four plain steps, and six business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 9 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
+  check('home: four plain steps, and seven business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 10 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
   await buildTpl(page, 'biddesk'); a = await appFull(page);
   check('workspace: three plain steps and one Details tab', (await page.locator('.views .tab').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim().split(' ')[0]).join() === 'Build,App,Release,Details', await page.locator('.views .tab').allInnerTexts());
   check('bidding desk: every station passed first time, with four tables and its own team of agents', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'tenders,score_lines,price_options,risks', [a.status, a.line]);
