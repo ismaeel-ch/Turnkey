@@ -184,20 +184,30 @@ REC.clinic = {
         appts.push(a);
       }
     }
-    const notes = [
-      ['BP stable on current dose', 'Home readings average 128/82. Continue current medication.', 30],
-      ['Viral cough, no antibiotics', 'Chest clear. Fluids and rest. Review if fever returns.', null],
-      ['HbA1c improved', 'Diet changes are working. Repeat bloods in three months.', 90],
-      ['Knee sprain, no fracture', 'X-ray clear. Brace for two weeks, physiotherapy referral.', 14],
-      ['Routine check-up, all normal', 'Bloods and ECG normal. Next check in a year.', null],
-      ['Migraine frequency down', 'Two episodes this month. Keep the diary going.', 60],
-      ['Contact dermatitis', 'Likely the new detergent. Topical cream for a week.', 7],
-      ['Vaccination given', 'No reaction after 15 minutes of observation.', null],
-    ];
+    // A note is written for the visit it belongs to: its summary follows the appointment's reason.
+    const noteFor: Dict<[string, string, number | null]> = {
+      'Blood pressure review': ['BP stable on current dose', 'Home readings average 128/82. Continue current medication.', 30],
+      'Persistent cough': ['Viral cough, no antibiotics', 'Chest clear. Fluids and rest. Review if fever returns.', null],
+      'Diabetes follow-up': ['HbA1c improved', 'Diet changes are working. Repeat bloods in three months.', 90],
+      'Knee pain after a fall': ['Knee sprain, no fracture', 'X-ray clear. Brace for two weeks, physiotherapy referral.', 14],
+      'Annual check-up': ['Routine check-up, all normal', 'Bloods and ECG normal. Next check in a year.', null],
+      'Migraine review': ['Migraine frequency down', 'Two episodes this month. Keep the diary going.', 60],
+      'Skin rash': ['Contact dermatitis', 'Likely the new detergent. Topical cream for a week.', 7],
+      Vaccination: ['Vaccination given', 'No reaction after 15 minutes of observation.', null],
+      'Lower back pain': ['Muscle strain', 'No red flags. Gentle exercise and pain relief as needed.', 21],
+      'Thyroid results': ['Thyroid levels normal', 'TSH within range. Keep the current dose.', 180],
+      'Chest infection follow-up': ['Infection cleared', 'Chest clear after the antibiotics. No review needed.', null],
+      'Allergy consultation': ['Hay fever confirmed', 'Antihistamine daily through the spring.', 60],
+      'Ear infection': ['Outer ear infection', 'Ear drops for a week. Keep the ear dry.', 7],
+      'Sports injury': ['Ankle sprain', 'Rest, ice and support. Back to sport in three weeks.', 21],
+      'Sleep problems': ['Sleep routine advice', 'No medication for now. Keep a sleep diary.', 30],
+      'Stomach pain': ['Mild gastritis', 'Smaller meals, avoid spicy food. Antacid as needed.', 14],
+    };
     const done = appts
       .map((a, i) => (a.status === 'done' ? i + 1 : 0))
       .filter(Boolean)
-      .slice(0, notes.length);
+      .slice(0, 8);
+    const notes = done.map((id) => noteFor[String(appts[id - 1].reason)]);
     const P = [
       ['Zara Ahmed', '0300 5550101', '1991-03-14', 'female', 'Prefers morning slots'],
       ['Omar Siddiqui', '0321 5550102', '1984-11-02', 'male', ''],
