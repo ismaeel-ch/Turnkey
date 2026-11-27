@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { modelGoneForToday, modelOutage } from '@/shared/api-error';
 import {
   AGENT_NAMES,
   accessRows,
@@ -25,6 +26,7 @@ import {
   pickOption,
   planNow,
   retryPlanner,
+  switchToDemo,
   reviewPlan,
   setDemoData,
   skipCard,
@@ -521,13 +523,25 @@ function AllAsked() {
 }
 
 function PlannerError({ iv }: { iv: Interview }) {
+  // when the model cannot be used, Demo is the way on; trying again only helps when it may be back in a minute
+  const outage = !iv.tpl && modelOutage(iv.errorCode),
+    retry = !modelGoneForToday(iv.errorCode);
   return (
     <MBar
       tone="danger"
       action={
-        <Btn className="btn sm" onClick={retryPlanner}>
-          Try again
-        </Btn>
+        <div className="row gap8 wrap">
+          {outage && (
+            <Btn className="btn sm primary iv-demo-instead" onClick={() => switchToDemo(iv.request)}>
+              Use Demo instead
+            </Btn>
+          )}
+          {retry && (
+            <Btn className="btn sm" onClick={retryPlanner}>
+              Try again
+            </Btn>
+          )}
+        </div>
       }
     >
       {iv.draft ? 'The plan could not be written. ' : 'The questions could not be written. '}

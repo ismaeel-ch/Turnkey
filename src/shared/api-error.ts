@@ -44,12 +44,17 @@ export function modelProblem(code: string | undefined, opts: { offline?: boolean
     case 'not_granted':
     case 'not_configured':
     case 'unauthorized':
-      return 'No model is connected on this site, so Live cannot run. Saved builds, the demo and every built app still work.';
+      return 'No model is connected on this site, so Live cannot run. Saved builds, Demo and every app you built keep working.';
     case 'budget':
     case 'spend_cap':
-      return "Today's allowance for live model calls is used up. Saved builds and built apps still work. Live comes back tomorrow.";
+      // the server says whether the whole day's allowance is gone or only this visitor's share of it
+      return /your share/i.test(opts.detail || '')
+        ? "You have used your share of today's live model calls, so Live is paused for you until midnight UTC. Saved builds, Demo and every app you built keep working."
+        : "Today's allowance for live model calls is used up, so Live is paused until midnight UTC. Saved builds, Demo and every app you built keep working.";
     case 'rate_limited':
-      return 'Too many model calls are running right now. Wait a minute, then run it again.';
+      return 'The model is busy right now. Wait a minute and run it again, or use Demo to keep going.';
+    case 'upstream':
+      return 'The model service had a problem and did not answer. Run it again in a minute, or use Demo to keep going.';
     case 'timeout':
       return 'The model took too long to answer. Run it again; a shorter request may help.';
     case 'internal':
@@ -59,4 +64,31 @@ export function modelProblem(code: string | undefined, opts: { offline?: boolean
     default:
       return 'The model call failed' + (opts.detail ? ': ' + opts.detail : '.');
   }
+}
+
+/**
+ * True when `code` says the model could not be used at all (none connected, allowance used up, busy, down, out of
+ * reach), as opposed to an answer that came back wrong. The workspace then offers Demo as the way to keep going.
+ */
+export function modelOutage(code: string | undefined): boolean {
+  return (
+    !!code &&
+    [
+      'not_granted',
+      'not_configured',
+      'unauthorized',
+      'budget',
+      'spend_cap',
+      'rate_limited',
+      'upstream',
+      'timeout',
+      'internal',
+      'network',
+    ].includes(code)
+  );
+}
+
+/** True when running the same call again cannot help today: no model, or the allowance is used up. */
+export function modelGoneForToday(code: string | undefined): boolean {
+  return code === 'not_granted' || code === 'not_configured' || code === 'unauthorized' || code === 'budget' || code === 'spend_cap';
 }

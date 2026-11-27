@@ -1,4 +1,4 @@
-import { modelProblem } from '@/shared/api-error';
+import { modelOutage, modelProblem } from '@/shared/api-error';
 import type { AppDef, AppTable, BackedDef, Brief, BriefedDef, Check, Untrusted } from '@/shared/types/app';
 import {
   EXTRA_FIELDS,
@@ -210,9 +210,11 @@ export const RUNS: Dict<RunCtl> = {},
   };
 /** Thrown wherever a run is when the owner stops it. The workflow graph knows it as a stop, not a failure. */
 export class Stopped extends StoppedError {}
-export const fatal = (msg: string): Error & { fatal: true } => {
-  const e = new Error(msg) as Error & { fatal: true };
+/** An error that ends the run at once. `code` is set when the model could not be used (see modelOutage). */
+export const fatal = (msg: string, code?: string): Error & { fatal: true; code?: string } => {
+  const e = new Error(msg) as Error & { fatal: true; code?: string };
   e.fatal = true;
+  if (code) e.code = code;
   return e;
 };
 export const SPEED: Dict<number> = {
@@ -403,6 +405,7 @@ export function resetPlanning() {
   PLANNING.calls = PLANNING.tokIn = PLANNING.tokOut = 0;
   delete PLANNING.usage;
   delete PLANNING.agentUsage;
+  delete PLANNING.problem;
 }
 const USAGE_KEYS = ['calls', 'input', 'output', 'cacheRead', 'cacheWrite', 'costUsd', 'unpriced', 'estimated'] as const;
 const sumUsage = (into: UsageSum, from: UsageSum) => USAGE_KEYS.forEach((k) => (into[k] += from[k]));
@@ -1174,7 +1177,16 @@ export function serverStep(run: Run, agent: string, app: { id: string }, p: Untr
   notify();
 }
 /** Who pays for and may stop a model call: a run of the line, a reviewer, the change planner or an app's own team. */
-export type CallRun = { id: string; calls: number; tokIn: number; tokOut: number; usage?: UsageSum; agentUsage?: Dict<UsageSum> };
+export type CallRun = {
+  id: string;
+  calls: number;
+  tokIn: number;
+  tokOut: number;
+  usage?: UsageSum;
+  agentUsage?: Dict<UsageSum>;
+  /** why the model could not be used on this run, as a code (see modelOutage); unset while calls go through */
+  problem?: string;
+};
 export async function callModel(
   // an app, or the Planner's stand-in for the app that does not exist yet: only the id is read
   app: { id: string },
@@ -1185,8 +1197,14 @@ export async function callModel(
   ctl?: { stop: boolean; ctrl?: AbortController | null },
 ): Promise<Untrusted> {
   // ctl: who may stop this call (a build by default, or an app's own agent team)
-  if (!online()) throw fatal('The connection is gone, so Live is paused. Run it again when you are back online.');
-  if (!LIVE.fn) throw fatal(NO_MODEL);
+  if (!online()) {
+    run.problem = 'network';
+    throw fatal('The connection is gone, so Live is paused. Run it again when you are back online.', 'network');
+  }
+  if (!LIVE.fn) {
+    run.problem = 'not_granted';
+    throw fatal(NO_MODEL, 'not_granted');
+  }
   if (U.calls >= CAP) throw fatal('This session reached its cap of ' + CAP + ' model calls.');
   const r: { stop?: boolean; ctrl?: AbortController | null } = ctl || RUNS[app.id] || {},
     t0 = performance.now(),
@@ -1230,13 +1248,17 @@ export async function callModel(
   } catch (e) {
     U.stream[app.id] = 0;
     if (r.stop) throw new Stopped();
-    const code = (e as { code?: string } | null)?.code;
+    const code = (e as { code?: string } | null)?.code,
+      offline = code !== 'not_granted' && !online();
     if (code === 'not_granted') U.live = 'none';
+    // kept on the run, so the failed build can offer Demo as the way to keep going
+    if (offline || modelOutage(code)) run.problem = offline ? 'network' : code;
     throw fatal(
       modelProblem(code, {
-        offline: code !== 'not_granted' && !online(),
+        offline,
         detail: (e as { message?: string } | null)?.message || code || 'unknown error',
       }),
+      offline ? 'network' : code,
     );
   }
   U.stream[app.id] = 0;
@@ -1911,6 +1933,7 @@ export async function runBuild(app: BuildApp, from?: string) {
       say(app, 'orchestrator', 'Stopped. Run it again when you are ready.');
     } else {
       run.status = 'failed';
+      run.error = msg;
       app.status = 'failed';
       STATIONS.forEach((s) => {
         const L = app.line[s.id];

@@ -620,6 +620,14 @@ async function flowLive(browser, url) {
   check('live: a connection lost during a call fails the run and says what to do', c.status === 'failed' && JSON.stringify(c.last || '').includes('could not reach its server'), [c.status, c.last]);
   c = await build('budget', 'A gym built after the allowance ran out');
   check("live: a spent daily allowance says so, and that saved builds still work", c.status === 'failed' && JSON.stringify(c.last || '').includes('allowance') && JSON.stringify(c.last || '').includes('Saved builds'), [c.status, c.last]);
+  // the failed build says why over the steps and offers Demo; Run again is left out because it cannot help until midnight UTC
+  await view(page, 'Build'); await page.waitForSelector('.build-demo-instead');
+  const fb = { text: (await page.locator('.mbar.m-danger', { has: page.locator('.build-demo-instead') }).innerText()).replace(/\s+/g, ' '), again: await page.locator('.mbar.m-danger button', { hasText: 'Run again' }).count() };
+  check('live: a build stopped by the spent allowance says why over the steps, offers Demo, and leaves out Run again', /The build stopped\. .*allowance.*midnight UTC/.test(fb.text) && /Use Demo instead/.test(fb.text) && fb.again === 0, fb);
+  await page.locator('.build-demo-instead').click(); await page.waitForSelector('#home-prompt');
+  const dm = await st(page, () => { const F = window.__formwork, h = F.view().home; return { demo: F.state().settings.demo, mode: F.wf.mode().id, iv: !!h.interview, text: document.querySelector('#home-prompt').value, note: h.note }; });
+  check('live: Use Demo instead turns Demo on and, with no saved build like the sentence, puts it back on Home with the saved builds to pick from', dm.demo === true && dm.mode === 'demo' && !dm.iv && dm.text === 'A gym built after the allowance ran out' && /Demo is on\..*pick one below/.test(dm.note), dm);
+  await page.locator('#sw-live').click({ force: true }); await page.waitForFunction(() => window.__formwork.wf.mode().id === 'live');
   c = await build('deny', 'A gym nobody granted access to');
   check('live: a refused permission stops the run and switches Live off', c.status === 'failed' && (await st(page, () => window.__formwork.view().live)) === 'none', [c.status, c.last]);
   check('live: the failed run says plainly that no model is connected', JSON.stringify(c.last || '').includes('No model is connected'), c.last);
