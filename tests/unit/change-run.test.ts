@@ -2,6 +2,8 @@
 import { createRequire } from 'node:module';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AppRecord, ChangePlan, ChatCard } from '@/shared/types/workspace';
+// Builds replay saved recordings, which the page loads once the first screen has painted.
+import '@/workspace/saved';
 
 // The browser loads sql.js as a script from /vendor; here it comes straight from node_modules.
 vi.mock('@/platform/sqlite', () => ({ loadSqlite: () => createRequire(import.meta.url)('sql.js')() }));

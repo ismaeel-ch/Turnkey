@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { COMPANY_EXPENSES, PERSONAL_EXPENSES, accessRows, previewPlan, slotValue, type PlanSpec, type QuestionCard } from '@/shared/plan';
-import { HOME_TEMPLATES, REC } from '@/workspace/builds';
+import '@/workspace/saved';
+import { HOME_TEMPLATES, QUESTS } from '@/workspace/catalog';
+import { REC } from '@/workspace/registry';
 import { U } from '@/workspace/core';
 import {
   MAX_WRITES,
@@ -22,7 +24,6 @@ import {
   skipCard,
   takeUsual,
 } from '@/workspace/interview';
-import { QUESTS } from '@/workspace/quests';
 
 const SAVED = [...HOME_TEMPLATES, ...QUESTS];
 const tick = () => new Promise((r) => setTimeout(r, 0));

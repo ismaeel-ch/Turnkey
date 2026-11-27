@@ -1,5 +1,6 @@
 import type { AccessRule, SavedCase } from '@/shared/types/workspace';
-import { REC } from './builds';
+import { REC } from './registry';
+import { CARDS } from './catalog';
 
 /* ===== Turnkey prototype · the three hackathon quests, each as its own app =====
    Each quest is built by the same line as any other app. What makes it a quest is its "team": three agents of
@@ -19,17 +20,7 @@ export const everyone = (table: string, roles: string[], write: string[], boss: 
     delete: r === boss,
   }));
 REC.factcheck = {
-  id: 'factcheck',
-  quest: 1,
-  title: 'Fact-check desk',
-  icon: 'shield',
-  accent: 'navy',
-  agents: ['Extractor', 'Researchers', 'Verifier'],
-  sampleNote: 'Evidence in the saved runs is sample data',
-  sentence:
-    'Editors paste a piece of text. Agents split it into claims, look for evidence and give each claim a verdict, and a senior editor signs off before it is published.',
-  blurb: 'An Extractor, Researchers and a Verifier check each text, claim by claim.',
-  keys: ['fact', 'claim', 'verify', 'verdict', 'misinformation', 'evidence', 'newsroom'],
+  ...CARDS.factcheck,
   usage: {
     research: [1240, 600, 6000],
     database: [2460, 2910, 14300],
@@ -1182,17 +1173,7 @@ REC.factcheck = {
   ],
 };
 REC.priorart = {
-  id: 'priorart',
-  quest: 2,
-  title: 'Prior-art scout',
-  icon: 'lightbulb',
-  accent: 'royalBlue',
-  agents: ['Search', 'Analyst', 'Critic'],
-  sampleNote: 'Prior work is illustrative, not real citations',
-  sentence:
-    'Inventors describe an idea. Agents search patents and papers for similar work, compare it with the idea and challenge the result, and an IP reviewer decides whether to pursue it.',
-  blurb: 'Search, Analyst and Critic agents weigh an idea against earlier work.',
-  keys: ['prior art', 'patent', 'invention', 'novelty', 'inventor', 'idea'],
+  ...CARDS.priorart,
   usage: {
     research: [1210, 590, 5900],
     database: [2440, 3050, 14900],
@@ -2338,16 +2319,7 @@ REC.priorart = {
   ],
 };
 REC.debate = {
-  id: 'debate',
-  quest: 3,
-  title: 'Debate partner',
-  icon: 'scales',
-  accent: 'grape',
-  agents: ['For', 'Against', 'Moderator'],
-  sentence:
-    'A team raises a motion before a decision. One agent argues for it, one argues against it, anyone can jump in, and a moderator records what is agreed and what is still open.',
-  blurb: 'For, Against and a Moderator argue a motion, and you can jump in.',
-  keys: ['debate', 'argue', 'motion', 'devil', 'skeptic', 'second opinion', 'decision'],
+  ...CARDS.debate,
   usage: {
     research: [1180, 570, 5700],
     database: [2390, 2870, 14100],
@@ -3415,4 +3387,3 @@ REC.debate = {
     },
   ],
 };
-export const QUESTS = ['factcheck', 'priorart', 'debate'];

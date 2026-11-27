@@ -86,7 +86,8 @@ import {
   tableOf,
 } from './engine';
 import { checkScreensShape, checkViews, mendViews, normUI, normViews, renderViewsTest, suggestViews, viewsOf } from './viewspec';
-import { CONNECTORS, REC, allConnectors, callConnector, connOn } from './builds';
+import { CONNECTORS, allConnectors, callConnector, connOn } from './connections';
+import { REC } from './registry';
 import { TEAMS, checkTeam, stopTeam, teamNeeds } from './team';
 import { checkBoard, normBoard } from './room';
 import { removeDemoData } from './demo-data';
