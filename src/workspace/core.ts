@@ -281,6 +281,7 @@ export function freshState(): State {
       chat: true,
       tourDone: false,
       keys: true,
+      buildDetail: false,
     },
     apps: {},
     shared: {},

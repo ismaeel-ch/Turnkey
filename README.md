@@ -142,7 +142,8 @@ Each Live session is capped at 40 model calls.
 
 ## What is in it
 
-- **Workspace:** workflow canvas, timeline, log and meeting view; edits to fields and the look on the canvas that
+- **Workspace:** a Build tab that opens on a plain list of steps (one row for each job and the agent that does it),
+  with the workflow canvas, timeline, log and meeting view behind "Show how it was built"; edits to fields and the look on the canvas that
   re-run only the stations they touch; Agents panel and a "How it works" page; chat sidebar with the
   agents' cards; 14 view types and dashboards in the built apps; releases with a test gate; share by short link;
   install a built app under its own name and icon; works offline for saved builds; phone and tablet layouts; Fluent 2

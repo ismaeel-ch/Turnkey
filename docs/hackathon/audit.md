@@ -24,14 +24,14 @@ submitting: the deployed site calls Claude with a direct Anthropic key, not the 
 
 ## Level 1 rules
 
-| Rule                                                            | Result             | Notes                                                                                                                                                  |
-| --------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Agents that plan, call tools and act "through your LiteLLM key" | **OWNER DECISION** | The site runs on `ANTHROPIC_API_KEY` (health: `"provider":"anthropic"`). LiteLLM support is built and tested; switching is only environment variables. |
-| Public or made-up data only                                     | PASS               | See the filter.                                                                                                                                        |
-| Live, no login                                                  | PASS               | No sign-in to an outside service. The in-app demo sign-in is part of the generated app, with a "Skip" path.                                            |
-| Working end to end, each agent's steps shown                    | PASS               | Build tab: Workflow canvas, Timeline, Log; agent cards in chat; Debug drawer; which agent made each table, field and screen (#114).                    |
-| Individual work, public repo, key in env vars, Accept Edits     | PASS               | See the filter.                                                                                                                                        |
-| "No other paid tools"                                           | **OWNER DECISION** | Same as the LiteLLM row: a personal Anthropic key is a paid tool outside the $25 organiser budget. Vercel and Vercel Blob are on the free tier.        |
+| Rule                                                            | Result             | Notes                                                                                                                                                                                                                   |
+| --------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agents that plan, call tools and act "through your LiteLLM key" | **OWNER DECISION** | The site runs on `ANTHROPIC_API_KEY` (health: `"provider":"anthropic"`). LiteLLM support is built and tested; switching is only environment variables.                                                                  |
+| Public or made-up data only                                     | PASS               | See the filter.                                                                                                                                                                                                         |
+| Live, no login                                                  | PASS               | No sign-in to an outside service. The in-app demo sign-in is part of the generated app, with a "Skip" path.                                                                                                             |
+| Working end to end, each agent's steps shown                    | PASS               | Build tab: a plain list of steps, one row per agent, and behind "Show how it was built" the Workflow canvas, Timeline and Log; agent cards in chat; Debug drawer; which agent made each table, field and screen (#114). |
+| Individual work, public repo, key in env vars, Accept Edits     | PASS               | See the filter.                                                                                                                                                                                                         |
+| "No other paid tools"                                           | **OWNER DECISION** | Same as the LiteLLM row: a personal Anthropic key is a paid tool outside the $25 organiser budget. Vercel and Vercel Blob are on the free tier.                                                                         |
 
 ## Security review
 

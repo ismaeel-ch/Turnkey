@@ -34,6 +34,8 @@ export interface Settings {
   tourDone: boolean;
   /** single-key shortcuts such as "g b" and "?" (Ctrl/Cmd+K always works); off lets every key reach the page */
   keys: boolean;
+  /** the Build tab opens on "how it was built" (the workflow and its views), not on the plain list of steps */
+  buildDetail: boolean;
 }
 
 export interface Account {
