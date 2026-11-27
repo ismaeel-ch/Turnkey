@@ -13,6 +13,7 @@ import { limiter, limitsFrom } from '@/server/guard/limits';
 import { LlmError } from '@/server/llm';
 import type { BaseEvent } from '@ag-ui/core';
 import { withRequestLog } from '@/server/log';
+import { meterCalls } from '@/server/llm/usage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -54,7 +55,12 @@ async function post(request: Request) {
         }
       };
       try {
-        await agent.run(body, { emit }, request.signal);
+        // every model call of the run is also sent as a CUSTOM `usage` event (model, tokens, cache, cost), as the
+        // agents behind /api/copilotkit do, so the browser can show what a team run spent
+        await meterCalls(
+          (call) => emit({ type: 'CUSTOM', name: 'usage', value: call }),
+          () => agent.run(body, { emit }, request.signal),
+        );
       } finally {
         try {
           controller.close();

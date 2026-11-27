@@ -40,7 +40,29 @@ const land = async (page) => { await page.waitForSelector('.app-nav .nav-i'); aw
 const nav = (page, name) => page.locator('.app-nav .nav-i', { hasText: name }).first().click();
 const vtab = async (page, name) => { await page.locator('.vswitch [role=tab]', { hasText: name }).click(); await sleep(90); };
 
+async function quickStarts(browser, url) { // the two ways in from the first screen, for a judge who opens the URL cold
+  for (const vp of [null, { width: 390, height: 844 }]) {
+    const tag = vp ? 'phone: ' : '';
+    const { ctx, page } = await newPage(browser, vp ? { viewport: vp } : undefined);
+    await page.goto(url); await page.waitForSelector('#ob-sample', { timeout: 20000 });
+    check(tag + 'first screen says what Turnkey does in one line and offers both quick starts', /turns one sentence into a working business app/.test(await page.locator('.ob-body .lead').innerText()) && await page.locator('#ob-own').isVisible());
+    await page.click('#ob-sample');
+    await page.waitForSelector('.tour-pop', { timeout: 8000 });
+    const s = await st(page, () => { const F = window.__formwork, S = F.state(), t = (S.tabs[S.session] || []).find((x) => x.id === S.active[S.session]), a = t && t.app ? S.apps[t.app] : null; return { demo: S.settings.demo, tpl: a && a.tpl, status: a && a.status, steps: document.querySelector('.tour-pop').innerText }; });
+    check(tag + 'Try a sample: the sales bidding desk is building in Demo within a second, with a short tour', s.demo && s.tpl === 'biddesk' && s.status === 'building' && /1 of 4/.test(s.steps), s);
+    await shot(page, vp ? '00-phone-sample' : '00-sample');
+    await ctx.close();
+  }
+  const { ctx, page } = await newPage(browser);
+  await page.goto(url); await page.waitForSelector('#ob-own', { timeout: 20000 });
+  await page.click('#ob-own'); await page.waitForSelector('#home-prompt'); await sleep(500);
+  const h = await st(page, () => ({ focus: document.activeElement && document.activeElement.id, apps: Object.keys(window.__formwork.state().apps).length, tour: !!document.querySelector('.tour-pop') }));
+  check('Describe your own: an empty workspace with the sentence box focused, no build and no tour', h.focus === 'home-prompt' && h.apps === 0 && !h.tour, h);
+  await ctx.close();
+}
+
 async function flowDemo(browser, url) {
+  await quickStarts(browser, url);
   const { ctx, page } = await newPage(browser);
   await page.goto(url); await page.waitForSelector('.ob-card', { timeout: 20000 });
   check('onboarding shows on first run', await page.locator('.ob-steps li').count() === 5);
@@ -130,6 +152,8 @@ async function flowDemo(browser, url) {
   await shot(page, '19-data');
   await page.getByRole('tab', { name: 'SQL console' }).click(); await page.locator('.console .btn.primary').click(); await sleep(100);
   check('SQL console returns rows', await page.locator('.console .tbl tbody tr').count() === 3);
+  const hid = await st(page, (aid) => { const F = window.__formwork, other = F.sql(aid, 'SELECT id FROM visit_notes WHERE doctor_id <> (SELECT MIN(id) FROM users WHERE role = ?) LIMIT 1', ['doctor'])[0].id, step = { role: 'doctor', do: 'denied', table: 'visit_notes', action: 'update' }; return { other: F.tourStep(aid, step, { visit_notes: other }), missing: F.tourStep(aid, step, { visit_notes: 9999 }) }; }, a.id);
+  check('a test counts "not found" as refused when the record exists but is hidden from that person, and not when it is missing', hid.other.ok === true && /^404/.test(hid.other.detail) && hid.missing.ok === false, hid);
   await view(page, 'API'); await page.waitForSelector('.api-grid');
   await page.locator('.side-i', { hasText: '/visit_notes' }).nth(2).click(); await page.locator('.api-grid .btn.primary').click(); await sleep(100);
   check('receptionist is refused on POST /visit_notes', (await page.locator('.api-grid .badge').first().innerText()).trim() === '403', await page.locator('.api-grid .badge').first().innerText());
@@ -1311,6 +1335,10 @@ async function sizesFeatures(browser, url) {
     await enter(page, url); await buildTpl(page, 'clinic'); await waitIdle(page); await sleep(300);
     const esc = async (sel) => { await page.keyboard.press('Escape'); await page.waitForSelector(sel, { state: 'detached', timeout: 5000 }).catch(() => {}); await sleep(150); };
     const blur = () => page.evaluate(() => document.activeElement && document.activeElement.blur());
+    if (phone) {
+      const b = await st(page, () => { const r = (e) => e.getBoundingClientRect(), k = [...document.querySelectorAll('.build-sum .kpi')].map(r), seg = r(document.querySelector('.build-bar .seg')), run = r([...document.querySelectorAll('.build-bar > .btn')].pop()); return { tiles: k.length, inside: k.every((x) => x.left >= 0 && x.right <= innerWidth), rows: new Set(k.map((x) => Math.round(x.top))).size, oneRow: Math.abs(seg.top + seg.height / 2 - (run.top + run.height / 2)) < 4 }; });
+      check(at + 'the Build view shows all six numbers in view, in two rows, with Run again beside the view switch', b.tiles === 6 && b.inside && b.rows === 2 && b.oneRow, b);
+    }
     // the command palette and the shortcuts dialog
     await blur(); await page.keyboard.press('Control+k'); await page.waitForSelector('.dialog.palette .palette-opt'); await sleep(300);
     await fitBoth(page, at + 'the command palette'); await shot(page, 'szf-' + w + '-palette');
@@ -1338,6 +1366,11 @@ async function sizesFeatures(browser, url) {
     // offline: the title bar and the Build view say so
     if (phone) await page.locator('.phone-nav .tab-i', { hasText: 'Build' }).click(); else await view(page, 'Build');
     await ctx.setOffline(true); await sleep(500);
+    if (phone) {
+      await page.waitForSelector('.toasts .toast');
+      const room = await st(page, async () => { const sc = document.querySelector('.build'); sc.scrollTop = sc.scrollHeight; await new Promise((r) => setTimeout(r, 200)); const kids = [...sc.children].filter((e) => e.getBoundingClientRect().height > 0), last = kids[kids.length - 1].getBoundingClientRect(), toast = document.querySelector('.toasts').getBoundingClientRect(); return { last: Math.round(last.bottom), toasts: Math.round(toast.top) }; });
+      check(at + 'scrolled to the end, the last item on the Build view sits above the toasts', room.last <= room.toasts, room);
+    }
     await fitBoth(page, at + 'the builder, offline'); await shot(page, 'szf-' + w + '-offline');
     await ctx.setOffline(false); await sleep(400);
     // an area that could not draw shows its message in place, and the rest of the screen still works
