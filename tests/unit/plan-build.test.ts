@@ -228,10 +228,15 @@ describe('a build that follows its plan', () => {
     const company = planned(COMPANY_EXPENSES);
     flowFromPlan(company);
     expect(company.flow).toMatchObject({ by: {}, approve: { backend: true }, reviewers: ['security'] });
-    // a saved build has no plan to follow, so its workflow is left alone
+    // a saved build replays recorded work, but it gets the same team as its plan: the plan is what the owner saw
     const saved = planned(COMPANY_EXPENSES, 'demo');
     flowFromPlan(saved);
-    expect(saved.flow).toBeUndefined();
+    expect(saved.flow).toMatchObject({ approve: { backend: true }, reviewers: ['security'] });
+    // a damaged plan from storage changes nothing
+    const broken = planned(COMPANY_EXPENSES, 'demo');
+    broken.plan = { ...COMPANY_EXPENSES, lists: null } as never;
+    flowFromPlan(broken);
+    expect(broken.flow).toBeUndefined();
   });
 
   for (const plan of [PERSONAL_EXPENSES, COMPANY_EXPENSES])

@@ -169,7 +169,7 @@ function finishOnboarding(o: OnboardingForm, shortTour = false) {
 function startSample(o: OnboardingForm) {
   finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: true, pick: '', tour: false });
   AFTER_BUILD.sample = () => setTimeout(() => startTour(true), 900);
-  void engineReady.then(() => beginInterview(REC.biddesk.sentence, 'biddesk', false, true));
+  void engineReady.then(() => beginInterview(CARDS.biddesk.sentence, 'biddesk', false, true));
 }
 export function Onboarding() {
   useLayoutEffect(startEngineAfterPaint, []);

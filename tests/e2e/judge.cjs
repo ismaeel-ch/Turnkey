@@ -268,6 +268,14 @@ async function main() {
     });
 
     // ---- 3, 4. the build: stations, checks, the Tester's planted slip and the repair ----
+    // the plan has money and several kinds of people, so the build stops once for the owner to check the rules
+    await step(page, 'Build stops once for you to check the rules, and goes on when approved', async () => {
+      await openTab(page, 'Build');
+      await page.waitForSelector('.step-ask', { timeout: 120000 });
+      const ask = clean(await page.locator('.step-ask').innerText());
+      await page.locator('.step-ask .btn.primary').click();
+      return ask.slice(0, 100);
+    });
     await step(page, 'Build finishes with every test passing', async () => {
       await openTab(page, 'Build');
       const a = await waitBuilt(page, 180000);

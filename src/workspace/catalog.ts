@@ -54,7 +54,7 @@ export const CARDS: Dict<SavedCard> = {
       'A sales team bids on tenders: bid managers prepare each bid with a price, three agents score the tender, price it and challenge it, the sales director approves it before it goes out, and everyone sees what was won or lost.',
     blurb: 'Tenders, scores, price options and a go or no-go. A director approves every bid.',
     keys: ['bid', 'bidding', 'tender', 'rfp', 'proposal', 'quotation', 'quote', 'procurement', 'sales'],
-    slip: 'This saved build keeps one slip on purpose, so the repair loop has something to do in Demo: the Backend agent let bid managers delete tenders, which the brief forbids.',
+    slip: 'This saved build keeps one slip on purpose, so the repair loop has something to do in Demo: the Rules builder let bid managers delete tenders, which the brief forbids.',
   },
   factcheck: {
     id: 'factcheck',

@@ -13,6 +13,7 @@ import {
   teamFor,
   wantsDemoData,
   type PlanSpec,
+  type PlanTeam,
 } from '@/shared/plan';
 import type {
   AppRecord,
@@ -446,14 +447,34 @@ export function applyPlan(app: BuildApp, run: Run): StationResult {
 }
 
 /**
+ * The plan whose team works on this build: the plan the owner approved, in Live and in Demo alike. A saved build
+ * replays recorded work instead of following the plan (planOf), but the plan it showed the owner names a team, so
+ * the replay brings in the same reviews, pause and steps done by code.
+ */
+export const teamPlanOf = (app: AppRecord): PlanSpec | null =>
+  app.mode === 'live' ? planOf(app) : app.plan && wholePlan(app.plan) ? app.plan : null;
+/** A plan with every part the team is worked out from. A saved build's plan is held to no Live limits: it is what was recorded. */
+const wholePlan = (plan: PlanSpec) =>
+  Array.isArray(plan.people) &&
+  Array.isArray(plan.lists) &&
+  plan.lists.every((l) => !!l && Array.isArray(l.fields)) &&
+  !!plan.permissions &&
+  typeof plan.permissions === 'object';
+
+/**
  * Writes the team the plan calls for into the app's workflow, before a planned build starts: the steps code does,
  * the pause for the owner, and the reviews. It only adds: whatever the owner already set by hand stays.
  */
 export function flowFromPlan(app: AppRecord) {
-  const plan = planOf(app);
+  const plan = teamPlanOf(app);
   if (!plan) return;
-  const flow = flowOf(app),
+  let team: PlanTeam;
+  try {
     team = teamFor(plan);
+  } catch {
+    return; // a damaged plan from storage must not stop the build
+  }
+  const flow = flowOf(app);
   for (const step of team.steps) if (step.by === 'code' && CODE_AT.includes(step.id)) flow.by[step.id] = 'rules';
   for (const pause of team.pauses) if (APPROVE_AT.includes(pause.after)) flow.approve[pause.after] = true;
   for (const review of team.reviews)
@@ -1769,7 +1790,7 @@ export async function runBuild(app: BuildApp, from?: string) {
       say(
         app,
         'orchestrator',
-        (planOf(app) ? 'For this app the build ' : 'This app has its own workflow: ') +
+        (teamPlanOf(app) ? 'For this app the build ' : 'This app has its own workflow: ') +
           custom.map((x) => x.text.charAt(0).toLowerCase() + x.text.slice(1)).join(', ') +
           '.' +
           (!live && Object.keys(flow.notes).length

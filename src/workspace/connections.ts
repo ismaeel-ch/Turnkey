@@ -13,8 +13,8 @@ export const CONNECTORS: Connector[] = [
     auth: 'No key needed',
     icon: 'globe',
     acc: 'steel',
-    about: 'Looks up domain terms while the Researcher writes the brief, and facts for the fact-check desk.',
-    usedBy: 'Researcher agent, Fact-check desk (Researchers agent)',
+    about: 'Looks up domain terms while the Planner writes the brief, and facts for the fact-check desk.',
+    usedBy: 'Planner, Fact-check desk (Researchers agent)',
     tools: [
       {
         name: 'search_pages',
@@ -41,7 +41,7 @@ export const CONNECTORS: Connector[] = [
     icon: 'book',
     acc: 'royalBlue',
     about: 'Searches official Microsoft documentation. Built apps can call it from a record.',
-    usedBy: 'Built apps (Suggest docs), Researcher agent',
+    usedBy: 'Built apps (Suggest docs), Planner',
     tools: [
       {
         name: 'microsoft_docs_search',

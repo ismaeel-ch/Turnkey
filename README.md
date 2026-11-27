@@ -192,9 +192,11 @@ _The Bid room of the built BidDesk app, with the three agents' verdict for one t
 
 1. Open the live app in a private window and press **Try a sample**. It keeps **Demo** on and opens the
    **Sales bidding desk**'s interview: one question (demo data, usual answer marked). Press **Use the usual choices and
-   show me the plan**, read the plan, then **Build it**. The build starts with a four-step tour.
+   show me the plan**, read the plan, then **Build it**. The build starts with a four-step tour. Because the plan has
+   money and several kinds of people, the build stops once on **Build** for you to check the rules: press **Looks
+   right, continue**.
 2. On **Build**, press **Show how it was built**. Each agent is a node with a check gate under it. The Tester's first
-   run catches the Backend agent's slip (a bid manager could delete a tender), the Backend repairs it, and run 2
+   run catches the Rules builder's slip (a bid manager could delete a tender), the Rules builder repairs it, and run 2
    passes all 170 tests. Switch between **Workflow**, **Timeline**, **Log** and **Meeting** (a tile per agent, the
    one at work rings, an agent waiting for you raises a hand), and open **Agents** on the left edge for every step,
    tool call and hand-off.

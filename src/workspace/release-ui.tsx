@@ -420,7 +420,7 @@ export function ReleaseView({ app }: { app: AppRecord }) {
                 <AppLogo app={app} size={24} />
               </div>
               <span className="t-cap muted" id="rel-logo-text">
-                {logoOf(app).by === 'you' ? 'Your pick' : 'Designed by the UI agent'}
+                {logoOf(app).by === 'you' ? 'Your pick' : 'Designed by the Screen designer'}
                 {': '}
                 {logoText(app).toLowerCase()}.
               </span>
