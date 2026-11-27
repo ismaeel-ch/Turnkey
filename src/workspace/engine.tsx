@@ -1770,12 +1770,12 @@ export function tourValues(app: AppRecord, t: AppTable, values: Dict<unknown> | 
     return (typeof name === 'string' && name && look.ref(rt.name, name)) || firstId(app.id, rt.name);
   };
   t.columns.forEach((c) => {
-    if (values && values[c.name] !== undefined) {
+    // a link to a list in which the tour already made a record points at that record: the line belongs to the order
+    // the tour just made, whatever row number the step names
+    if (made && c.type === 'ref' && c.ref && made[c.ref] && c.ref !== t.name) out[c.name] = made[c.ref];
+    else if (values && values[c.name] !== undefined) {
       const r = seedValue(c, byPlace(c, values[c.name]), look);
       if (r[0] != null) out[c.name] = r[0];
-    } else if (made && c.type === 'ref' && c.ref && made[c.ref] && c.ref !== t.name) {
-      // a link the step leaves out points at the record the tour made earlier: the line belongs to that order
-      out[c.name] = made[c.ref];
     }
   });
   return out;

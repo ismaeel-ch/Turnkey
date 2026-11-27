@@ -1052,8 +1052,15 @@ export const APP_ICONS = [
   'star',
   'flag',
 ];
+/** For whoever writes steps that are played against an app with calculated fields and rules. */
+export const logicCare = (def: Pick<AppDef, 'tables' | 'process' | 'logic'>) =>
+  def.tables.some((t) => t.columns.some((c) => c.formula)) ||
+  def.logic?.rules.length ||
+  def.process?.transitions.some((x) => x.when || x.needs?.length)
+    ? ' This app works things out and enforces RULES, and those apply to every step. Never put a calculated field (written with " = formula" in TABLES) in "values". A step that must succeed has to keep every rule of its table and meet the "only when" and "needs" of its transition, which may take an earlier step (add a line before a move that needs one, record the work before a bill is paid). You cannot know a worked-out amount in advance: where a rule limits a value by one (a payment up to what is still owed), first create what makes it large enough in the same steps and then use an amount that is certainly within it, such as 1, and do not call it the full amount.'
+    : '';
 export const TOUR_RULES =
-  'tour: 4 to 7 steps that replay the user stories as an acceptance test, in order. Each step: {"role":"role id","do":"create|see|transition|denied|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list","screen":"screen name","say":"one present-tense sentence naming the person"}. create: "values" for the required columns (not status; leave out the owner column when the creating role owns the row). A link column left out of "values" points at the record an earlier step created in that table, which is how a line is added to the order the tour just made. see: that role lists the table and must find the record created earlier. transition: runs a workflow transition on that record; it must be allowed for that role from the record\'s current state. denied: that role attempts "action" on "table" and must be refused by the access rules; leave denied out when the app has only one role. open: opens "screen". ' +
+  'tour: 4 to 7 steps that replay the user stories as an acceptance test, in order. Each step: {"role":"role id","do":"create|see|transition|denied|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list","screen":"screen name","say":"one present-tense sentence naming the person"}. create: "values" for the required columns (not status; leave out the owner column when the creating role owns the row). A link column to a table in which an earlier step created a record always points at that record, whatever "values" says, which is how a line is added to the order the tour just made. see: that role lists the table and must find the record created earlier. transition: runs a workflow transition on that record; it must be allowed for that role from the record\'s current state. denied: that role attempts "action" on "table" and must be refused by the access rules; leave denied out when the app has only one role. open: opens "screen". ' +
   VALUE_RULES;
 /** For the Database agent of a planned build: the lists and fields the owner approved, which it must keep to. */
 const pPlanLists = (app: BuildApp) => {
@@ -1181,6 +1188,7 @@ export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
       : '') +
     '\n- ' +
     TOUR_RULES +
+    logicCare(app.def) +
     '\n\nFORMAT: {"theme":{"accent":"","nav":"","icon":"","logo":{"shape":"","fill":"","mark":""}},"screens":[{"name":"","type":"","table":"","roles":[""],"columns":[""],"icon":"","label":""}],"tour":[]}' +
     fbText(f),
   walkthrough: (app, f) =>
@@ -1197,6 +1205,7 @@ export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
     app.def.screens.map((s) => s.name + ' (' + s.roles.join('|') + ')').join('; ') +
     '\n\nThe tour failed as an acceptance test. Write a corrected tour.\n- ' +
     TOUR_RULES +
+    logicCare(app.def) +
     '\n\nFORMAT: {"tour":[]}' +
     fbText(f),
 };
