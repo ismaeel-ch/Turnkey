@@ -13,6 +13,7 @@
 //   2. The page loads in a real browser and the workspace opens, with no uncaught error on the page.
 //   3. A sample app builds from its saved build with every generated test passing, Share makes a short link, and that
 //      link opens the app on its own in a fresh browser. Demo mode is on, so none of this calls the model.
+//      On that app's Schedule page, the row of view tabs, Filter and Copy CSV is one tidy row (this release's code).
 //   The first-run screen must say "Model connected" when the server has a model, and "No model connected" when not.
 //   4. When a model is configured: one Live build of the clinic sample from its sentence (about ten model calls; the
 //      workspace caps a session at 40), and one tool call through /api/health?probe=1. Both go through the site's own
@@ -204,6 +205,42 @@ async function waitBuilt(page, ms) {
   );
 }
 
+/** The row under a list page's title, on the sample just built: the view tabs, More views, Filter and Copy CSV on one row at one height, with More
+ *  views a frameless square (it was once a wide framed box). This also proves the browser runs this release's code, not an older copy. The picture
+ *  of the row is printed into the log as base64 between ::group:: lines, for anyone who cannot download the job's files. */
+async function viewTabsBar(page) {
+  const name = 'the view tabs bar on a list page is one tidy row';
+  try {
+    await page.keyboard.press('Escape');
+    await page.locator('.views .tab', { hasText: 'App' }).first().click();
+    if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click();
+    await page.locator('.app-nav .nav-i', { hasText: 'Schedule' }).first().click();
+    await page.waitForSelector('.vx-bar', { timeout: 15000 });
+    const b = await page.evaluate(() => {
+      const box = (e) => e && e.getBoundingClientRect();
+      const tab = box(document.querySelector('.vswitch [role=tab]')),
+        moreEl = document.querySelector('.vswitch .menu-wrap > button'),
+        more = box(moreEl),
+        acts = [...document.querySelectorAll('.vx-acts > .menu-wrap > button, .vx-acts > button')].map(box);
+      if (!tab || !more || acts.length !== 2) return { ok: false, found: { tab: !!tab, more: !!more, acts: acts.length } };
+      const mid = (r) => Math.round(r.top + r.height / 2);
+      const row = [more, ...acts].every((r) => Math.abs(mid(r) - mid(tab)) <= 1);
+      const square = Math.round(more.width) === Math.round(more.height) && getComputedStyle(moreEl).borderTopWidth === '0px';
+      return { ok: row && square, row, square, more: [Math.round(more.width), Math.round(more.height)] };
+    });
+    const head = await page.locator('.scr.vx').first().boundingBox();
+    if (head) {
+      const png = await page.screenshot({ clip: { x: head.x, y: head.y, width: head.width, height: Math.min(140, head.height) } });
+      fs.mkdirSync('tests/e2e/shots', { recursive: true });
+      fs.writeFileSync('tests/e2e/shots/smoke-view-tabs.png', png);
+      console.log('::group::picture of the view tabs bar (base64 PNG)\n' + png.toString('base64') + '\n::endgroup::');
+    }
+    record(name, b.ok ? 'pass' : 'fail', JSON.stringify(b));
+  } catch (e) {
+    record(name, 'fail', firstLine(e));
+  }
+}
+
 async function checkBrowser(health) {
   const browser = await chromium.launch();
   const errors = [];
@@ -229,14 +266,6 @@ async function checkBrowser(health) {
       s.settings.speed = 'instant';
     });
 
-    const enabled = await getJson('/api/share')
-      .then((r) => r.enabled === true)
-      .catch(() => false);
-    if (!enabled) {
-      record('Share makes a short link that opens', 'fail', 'short links are not set up on this deployment (GET /api/share)');
-      return;
-    }
-
     let short = '';
     try {
       await page.locator('[data-tpl="clinic"] .tpl-build').click();
@@ -249,6 +278,14 @@ async function checkBrowser(health) {
       });
       if (tests && tests.total > 0 && tests.failed === 0) record('a sample app builds and its tests pass', 'pass', `${tests.total} tests`);
       else record('a sample app builds and its tests pass', 'fail', JSON.stringify(tests));
+      await viewTabsBar(page);
+      const enabled = await getJson('/api/share')
+        .then((r) => r.enabled === true)
+        .catch(() => false);
+      if (!enabled) {
+        record('Share makes a short link that opens', 'fail', 'short links are not set up on this deployment (GET /api/share)');
+        return;
+      }
       // a name of its own, so the check never takes a short name a person would want, such as /clinic
       await page.evaluate((name) => {
         const s = window.__formwork.state();
