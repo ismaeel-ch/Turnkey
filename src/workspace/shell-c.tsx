@@ -109,13 +109,14 @@ import { InstallAppDialog, isDirty, logoOf, relOf, releaseApp } from './release'
 import { HistoryDialog } from './history-ui';
 import { historyHooks } from './history';
 import { Home, Titlebar, Workspace, lineApp } from './shell-a';
-import { DebugDrawer } from './shell-b';
 import { installShortcuts, setSingleKeys } from './commands';
 
 // The command palette and the shortcuts dialog load the first time one opens (Ctrl/Cmd+K or "?").
 const PaletteDialog = lazy(() => import('./palette').then((m) => ({ default: m.PaletteDialog })));
 const ShortcutsDialog = lazy(() => import('./palette').then((m) => ({ default: m.ShortcutsDialog })));
 // The feature guide (Help > Feature guide) loads the first time it opens.
+// The debug drawer loads the first time debug mode is on.
+const DebugDrawer = lazy(() => import('./debug').then((m) => ({ default: m.DebugDrawer })));
 const GuideDialog = lazy(() => import('./guide').then((m) => ({ default: m.GuideDialog })));
 
 /* ===== Turnkey prototype · shell: first-run onboarding, sign-in, dialogs, guided tour, boot ===== */
@@ -1712,7 +1713,9 @@ export function Shell() {
       </main>
       {S.settings.debug && (
         <AreaBoundary name="The debug drawer">
-          <DebugDrawer app={app} />
+          <Suspense fallback={null}>
+            <DebugDrawer app={app} />
+          </Suspense>
         </AreaBoundary>
       )}
       {PHONE() && (

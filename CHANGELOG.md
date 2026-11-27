@@ -7,6 +7,7 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ### Changed
 
+- The debug drawer and the meeting view load the first time they open, not with the page.
 - The first page loads faster on a phone. The welcome screen shows without waiting for the SQLite engine, which is
   fetched once that screen is up; the icon symbols ship once instead of twice; React Flow loads after the first
   screen. Lighthouse on a simulated phone: largest paint 7.9 s to about 6.2 s, page JavaScript
