@@ -114,6 +114,11 @@ describe('http helpers', () => {
     expect(await errorFromResponse(new Response('', { status: 403 }))).toMatchObject({ code: 'unauthorized', status: 401 });
     expect(await errorFromResponse(new Response('Budget has been exceeded', { status: 400 }))).toMatchObject({ code: 'budget' });
     expect(await errorFromResponse(new Response('slow down', { status: 429 }))).toMatchObject({ code: 'rate_limited' });
+    // Anthropic's "overloaded" is the model being busy for everyone: the same as a rate limit, not a broken service
+    expect(await errorFromResponse(new Response('{"type":"error","error":{"type":"overloaded_error"}}', { status: 529 }))).toMatchObject({
+      code: 'rate_limited',
+      status: 429,
+    });
     expect(await errorFromResponse(new Response('', { status: 502 }))).toMatchObject({
       code: 'upstream',
       message: 'the model gateway answered 502',

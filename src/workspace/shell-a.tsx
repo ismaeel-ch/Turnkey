@@ -44,7 +44,8 @@ import { DBX, createTableSQL, dbCount, dbTables } from './db';
 import { TYPE_LABEL, VIEW_ICON, VIEW_LABEL, accOf, colOf, deriveEndpoints, roleName, tableOf } from './engine';
 import { DATA_VIEWS, VIEW_WHAT, viewFit, viewsOf } from './viewspec';
 import { CARDS, HOME_TEMPLATES, QUESTS, matchTemplate } from './catalog';
-import { beginInterview, interviewNow } from './interview';
+import { beginInterview, interviewNow, switchToDemo } from './interview';
+import { modelGoneForToday, modelOutage } from '@/shared/api-error';
 import { TEAMS, TeamAv } from './team';
 import { suiteOf, testable } from './tests';
 import { type Station, AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp, rebuild, startBuild, stopRun } from './line';
@@ -1073,22 +1074,7 @@ export function BuildView({ app }: { app: AppRecord }) {
           A change is waiting for your approval because it deletes data.
         </MBar>
       )}
-      {!busy && (app.status === 'stopped' || app.status === 'failed') && (
-        <MBar
-          tone={app.status === 'failed' ? 'danger' : 'info'}
-          action={
-            <Btn className="btn sm" onClick={() => rebuildAsk(app)}>
-              Run again
-            </Btn>
-          }
-        >
-          {app.status === 'failed'
-            ? plain
-              ? 'The last build failed. "Show how it was built" shows where.'
-              : 'The last build failed. The log and the debug drawer show where.'
-            : 'This build did not finish.'}
-        </MBar>
-      )}
+      {!busy && (app.status === 'stopped' || app.status === 'failed') && <FailedBar app={app} run={run} plain={plain} />}
       {plain ? null : mode === 'line' ? (
         <FlowView app={app} sel={sel} />
       ) : mode === 'timeline' ? (
@@ -1102,6 +1088,43 @@ export function BuildView({ app }: { app: AppRecord }) {
       )}
       {!plain && !PHONE() && <Inspector app={app} sid={sel} />}
     </div>
+  );
+}
+/**
+ * Over a build that failed or was stopped: why, and the way on. When the model could not be used (allowance used up,
+ * busy, no model, offline), Demo is offered beside Run again, and Run again is left out when it cannot help today.
+ */
+function FailedBar({ app, run, plain }: { app: AppRecord; run: Run | undefined; plain: boolean }) {
+  const failed = app.status === 'failed',
+    problem = failed && run && typeof run.problem === 'string' ? run.problem : undefined,
+    why = failed && run && typeof run.error === 'string' ? run.error : '',
+    outage = !!problem && modelOutage(problem);
+  return (
+    <MBar
+      tone={failed ? 'danger' : 'info'}
+      action={
+        <div className="row gap8 wrap">
+          {outage && (
+            <Btn className="btn sm primary build-demo-instead" onClick={() => switchToDemo(app.request || '')}>
+              Use Demo instead
+            </Btn>
+          )}
+          {!(outage && modelGoneForToday(problem)) && (
+            <Btn className="btn sm" onClick={() => rebuildAsk(app)}>
+              Run again
+            </Btn>
+          )}
+        </div>
+      }
+    >
+      {!failed
+        ? 'This build did not finish.'
+        : outage
+          ? 'The build stopped. ' + why
+          : plain
+            ? 'The last build failed. "Show how it was built" shows where.'
+            : 'The last build failed. The log and the debug drawer show where.'}
+    </MBar>
   );
 }
 /** The bar over "how it was built": the four ways to see the run, the run's numbers, and Stop or Run again. */
@@ -2064,8 +2087,8 @@ export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
     <div>
       <div className="row between wrap">
         <span className="muted t-cap">
-          The Screen designer wrote these steps from the user stories. Code plays them against the real endpoints inside a savepoint, then rolls
-          back.
+          The Screen designer wrote these steps from the user stories. Code plays them against the real endpoints inside a savepoint, then
+          rolls back.
         </span>
         <Btn className="btn sm" onClick={() => startWalk(app)}>
           <Icon n="playOutline" s="16" />
