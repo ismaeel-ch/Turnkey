@@ -5,12 +5,31 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-11-28
+
+Motion, action order and spacing follow Fluent 2 everywhere, in the workspace and in built apps.
+
 ### Added
 
 - Motion that follows Fluent 2, in the workspace and in built apps: a quick fade between views and pages, lists and
   cards that come in one after another, cards and rows that answer the pointer, and dialogs, toasts, the record
   panel and the form of a built app that play a short exit when closed. Every duration and curve is a Fluent token,
   and nothing moves when the device asks for reduced motion. ([#292](https://github.com/ismaeel-ch/Turnkey/pull/292))
+
+### Changed
+
+- The main action comes first in every dialog and form ("Create" then "Cancel"), as Fluent 2 asks, and a dialog
+  with a button that closes it no longer has a Close icon as well. "Release version 1.0 and make the link" is
+  "Release and share". ([#292](https://github.com/ismaeel-ch/Turnkey/pull/292))
+- Paddings and gaps are steps of Fluent 2's spacing ramp, and small controls have 44 px of touch room on a phone.
+  ([#292](https://github.com/ismaeel-ch/Turnkey/pull/292))
+
+## [0.5.9] - 2026-11-28
+
+Every built app gets its own Settings page, and the person menu in its header has a proper avatar.
+
+### Added
+
 - Every built app has its own Settings page, opened from a gear in the app's header by the people who run it. It
   has up to seven sections. General: the app's name, colour, navigation and row height. People: add a person, rename them,
   change what kind of person they are, remove them, and choose which kinds of people may open Settings. Stages: what
@@ -20,14 +39,13 @@ versions are semantic versions. Each release lists the pull requests merged into
   add back the demo data, download or restore the database, and Start over. Each choice applies at once with no
   agent run, is kept with the app (so a share link, a release and an earlier version carry it), and is noted for the
   next release. The builder has a Settings button above the app that opens the page as someone who may.
+  ([#290](https://github.com/ismaeel-ch/Turnkey/pull/290))
 
-### Changed
+### Fixed
 
-- The main action comes first in every dialog and form ("Create" then "Cancel"), as Fluent 2 asks, and a dialog
-  with a button that closes it no longer has a Close icon as well. "Release version 1.0 and make the link" is
-  "Release and share". ([#292](https://github.com/ismaeel-ch/Turnkey/pull/292))
-- Paddings and gaps are steps of Fluent 2's spacing ramp, and small controls have 44 px of touch room on a phone.
-  ([#292](https://github.com/ismaeel-ch/Turnkey/pull/292))
+- The person menu in a built app's header shows a full-size avatar that is white with the person's own colour for
+  the initials, in light and in dark. In dark it was a small grey circle.
+  ([#294](https://github.com/ismaeel-ch/Turnkey/issues/294))
 
 ## [0.5.8] - 2026-11-28
 
