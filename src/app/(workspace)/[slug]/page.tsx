@@ -4,7 +4,7 @@ import { isSlug } from '@/server/share/records';
 import { sharedPreview } from '@/server/share/lookup';
 import { BASE_OPEN_GRAPH } from '@/server/site';
 import WorkspaceLoader from '../WorkspaceLoader';
-import { BootHint } from '@/platform/boot-screen';
+import { BootHint, BootScreen } from '@/platform/boot-screen';
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -34,7 +34,9 @@ export default async function SharedAppPage({ params }: Props) {
   return (
     <div id="root">
       <BootHint />
-      <WorkspaceLoader />
+      <WorkspaceLoader>
+        <BootScreen />
+      </WorkspaceLoader>
     </div>
   );
 }

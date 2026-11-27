@@ -3,7 +3,8 @@
   Bundle-size budget for the workspace page, read from the production build in .next (run `npm run build` first).
 
   Counts the JavaScript the browser fetches before the workspace shows: the framework chunks, the page's own chunks
-  and the chunks of the workspace itself (loaded through next/dynamic). Code loaded later on first use, such as the
+  and the chunks of the workspace itself (loaded through next/dynamic; at once for a returning visitor, on the first
+  tap of a first visit). Code loaded later on first use, such as the
   build orchestrator (LangGraph) and the AG-UI client, is not counted. Sizes are gzip, as served.
 
   Fails when the total goes over BUDGET_KB. Raise the budget in the same pull request that needs it, and say why.
