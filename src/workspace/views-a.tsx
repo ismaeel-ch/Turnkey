@@ -1201,6 +1201,18 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
         s.calOpen = null;
       }),
     end = days[count - 1];
+  // When nothing falls in the month or week on screen, say so and offer the nearest one that has records, so a list
+  // whose dates are all next month does not look empty.
+  const shown = days.slice(0, count).some((d) => byDay[isoDate(d)]),
+    keys = Object.keys(byDay).sort(),
+    near = shown || !keys.length ? null : keys.find((k) => k > isoDate(end)) || keys[keys.length - 1],
+    nearD = near ? parseISO(near) : null,
+    monday = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)).getTime(),
+    nearOff = !nearD
+      ? 0
+      : week
+        ? Math.round((monday(nearD) - monday(base)) / 864e5 / 7)
+        : (nearD.getFullYear() - base.getFullYear()) * 12 + nearD.getMonth() - base.getMonth();
   return (
     <>
       <div className="vopts">
@@ -1243,6 +1255,14 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
           <Pick id={id + 'd'} label="Date from" value={dc.name} opts={t.columns.filter(isDate)} onChange={(v) => setCfg('date', v)} />
         )}
       </div>
+      {nearD && (
+        <p className="t-cap muted cal-none">
+          {'Nothing this ' + (week ? 'week' : 'month') + '. '}
+          <button className="link-btn" onClick={() => move(nearOff)}>
+            {'Go to ' + nearD.getDate() + ' ' + MON[nearD.getMonth()] + ' ' + nearD.getFullYear()}
+          </button>
+        </p>
+      )}
       <div className={cx('cal-grid', week && 'wk')}>
         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
           <div key={d} className="cal-dow">
