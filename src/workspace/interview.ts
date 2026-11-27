@@ -37,8 +37,8 @@ import { REC } from './registry';
 export const PLANNER: {
   /** One model call: what was understood, the cards to ask, and the plan for the usual choices. */
   ask: ((request: string) => Promise<{ reflect: string; cards: QuestionCard[]; draft: PlanSpec }>) | null;
-  /** One model call: the plan to approve, from the answers. `draft` is the draft with the answers laid over it. */
-  write: ((request: string, answers: PlanAnswer[], draft: PlanSpec) => Promise<PlanSpec>) | null;
+  /** One model call: the plan to approve, from the answers the owner gave (skipped cards are left out), the draft and the cards. */
+  write: ((request: string, answers: PlanAnswer[], draft: PlanSpec, cards: QuestionCard[]) => Promise<PlanSpec>) | null;
   /** True once a build can start with no demo data. Until then the choice is not offered, so it is never a promise nothing keeps. */
   startEmpty: boolean;
 } = { ask: null, write: null, startEmpty: false };
@@ -153,7 +153,7 @@ export function savedInterview(tpl: string): { reflect: string; cards: QuestionC
     cards.push({
       id: 'q',
       title: q.text,
-      why: 'this is the one real trade-off in this app, and the rules follow your answer.',
+      why: 'this is the one choice that changes what people can do in this app, and the rules follow your answer.',
       kind: 'one',
       options: q.options.map((o, i) => ({ id: String(i), label: o, desc: '', leads: leadsOf(planFromSaved(tpl, i)) })),
       usual: [String(q.recommended)],
@@ -345,7 +345,8 @@ export function reviewPlan() {
   iv.busy = 'writing';
   iv.written++;
   notify();
-  PLANNER.write(iv.request, planAnswers(iv.cards, iv.answers), laid).then(
+  const given = planAnswers(iv.cards, iv.answers).filter((a) => a.by === 'you');
+  PLANNER.write(iv.request, given, iv.draft, iv.cards).then(
     (plan) => {
       if (!mine(iv)) return;
       iv.busy = null;

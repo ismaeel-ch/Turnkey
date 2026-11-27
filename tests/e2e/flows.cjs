@@ -36,6 +36,10 @@ async function enter(page, url) { // first run, demo account, empty workspace, n
   await page.waitForSelector('.home'); await setSpeed(page, 'instant');
 }
 const buildTpl = async (page, id) => { await page.locator('[data-tpl="' + id + '"] .tpl-build').click(); for (let i = 0; i < 300; i++) { const a = await appState(page); if (a && (a.status === 'ready' || a.status === 'failed')) break; const o = page.locator('.gcard.ask .opt:not([disabled])'); if (await o.count()) await o.first().click().catch(() => {}); await sleep(120); } await waitReady(page); };
+const onApp = (page) => page.waitForFunction(() => { const s = window.__formwork.state(), t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]); return t && t.app; });
+// A typed sentence gets the question cards and a plan first. `pick` answers each card by the position of an option; without it the usual choices stand. Then "Build it".
+const describeApp = async (page, text, pick) => { await page.fill('#home-prompt', text); await page.locator('#home-go').click(); await page.waitForSelector('.iv'); if (pick) { for (const n of pick) await page.locator('.iv-ask .iv-opt').nth(n).click(); await page.locator('.iv-review').click(); } else if (await page.locator('.iv-usual').count()) await page.locator('.iv-usual').click(); await page.locator('.iv-act .iv-build').click(); await onApp(page); };
+const ivNow = (page) => st(page, () => { const iv = window.__formwork.view().home.interview, q = (s) => document.querySelector(s), all = (s) => [...document.querySelectorAll(s)].map((x) => x.innerText.replace(/\s+/g, ' ').trim()); return iv ? { step: iv.step, attr: q('.iv') && q('.iv').dataset.step, steps: all('.iv-st'), on: (q('.iv-st[aria-current=step]') || {}).innerText, name: (q('#iv-name') || {}).innerText, sum: (q('#iv-sum') || {}).innerText, people: all('.iv-person strong'), n: (q('.iv-ask .iv-n') || {}).innerText, opts: all('.iv-ask .iv-opt'), answered: all('.iv-answered li'), assumed: all('.iv-assumed li'), access: Object.fromEntries([...document.querySelectorAll('.iv-access tbody tr')].map((r) => [r.querySelector('th').innerText.trim(), [...r.querySelectorAll('td')].map((c) => c.innerText.trim()).join()])), agents: [...document.querySelectorAll('.iv-agent[data-agent]')].map((x) => x.dataset.agent), plan: !!iv.plan, apps: Object.keys(window.__formwork.state().apps).length } : null; });
 const land = async (page) => { await page.waitForSelector('.app-nav .nav-i'); await page.locator('.app-nav .nav-i').nth(1).click(); await sleep(80); }; // the Overview is first now, so the page that used to open first is the second one
 const nav = (page, name) => page.locator('.app-nav .nav-i', { hasText: name }).first().click();
 const vtab = async (page, name) => { await page.locator('.vswitch [role=tab]', { hasText: name }).click(); await sleep(90); };
@@ -272,8 +276,37 @@ async function flowDemo(browser, url) {
   await page.locator('.newtab').click(); await page.waitForSelector('.home'); await shot(page, '32-home');
   await page.fill('#home-prompt', 'something about spaceships'); await page.locator('.prompt .btn.primary').click(); await sleep(100);
   check('demo mode explains an unmatched sentence', await page.locator('.home .mbar').count() === 1);
-  await page.fill('#home-prompt', 'employees request leave and managers approve'); await page.locator('.prompt .btn.primary').click();
-  await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').nth(1).click(); await waitReady(page); a = await appState(page);
+  // a typed sentence: the questions and the plan come first, and nothing is built before "Build it"
+  const apps0 = await st(page, () => Object.keys(window.__formwork.state().apps).length);
+  check('home: the button under the sentence says Continue, and the steps promise questions and a plan before the build', /Continue/.test(await page.locator('#home-go').innerText()) && /A few questions/.test(await page.locator('.how').innerText()) && /A plan you approve/.test(await page.locator('.how').innerText()), await page.locator('.how').innerText());
+  await page.fill('#home-prompt', 'employees request leave and managers approve'); await page.locator('.prompt .btn.primary').click(); await page.waitForSelector('.iv-ask');
+  let iv = await ivNow(page);
+  check('interview: Continue opens the questions, step 2 of 4, and no app exists yet', iv.attr === 'questions' && iv.steps.length === 4 && /Questions/.test(iv.on) && iv.apps === apps0 && !(await page.locator('.gcard').count()), [iv.attr, iv.steps, iv.on, iv.apps]);
+  check('interview: one card at a time, with a reason, a usual choice and a way to skip', iv.n === 'Question 1 of 1' && iv.opts.length === 2 && /Usual choice/.test(iv.opts[0]) && !/Usual choice/.test(iv.opts[1]) && /Why I\'m asking/.test(await page.locator('.iv-ask').innerText()) && await page.locator('.iv-skip').count() === 1 && await page.locator('.iv-usual').count() === 1, [iv.n, iv.opts]);
+  check('interview: the plan so far is beside the card: the app, its people, its lists and who builds it', iv.name === 'TimeOff' && iv.people.join() === 'Employee,Manager,HR officer' && /3 lists, 3 kinds of people, 4 stages, 7 agents/.test(iv.sum) && iv.agents.length === 7 && iv.agents[0] === 'researcher', [iv.name, iv.people, iv.sum, iv.agents]);
+  await shot(page, '33a-interview-question');
+  await page.locator('.iv-skip').click(); await page.waitForSelector('.iv-done'); iv = await ivNow(page);
+  check('interview: a skipped card is answered with the usual choice, and says so', iv.answered.length === 1 && /Only HR/.test(iv.answered[0]) && /usual choice/.test(iv.answered[0]) && !iv.plan, iv.answered);
+  await page.locator('.iv-review').click(); await page.waitForSelector('.iv-act .iv-build'); iv = await ivNow(page);
+  check('plan: step 3, with the people, the lists and fields, the stages and who can see and do what', iv.attr === 'plan' && /Plan/.test(iv.on) && iv.plan && iv.apps === apps0 && await page.locator('.iv-keeps tbody tr').count() === 3 && await page.locator('.iv-moves .iv-stage').count() === 4 && iv.access['Approve, Reject'] === 'No,Yes,No', [iv.attr, iv.on, iv.access]);
+  check('plan: what was skipped is listed under "I assumed", and the usual answer is in the table: only HR cancels approved leave', iv.assumed.length === 1 && /who may cancel it\? Only HR/.test(iv.assumed[0]) && iv.access['Cancel approved leave'] === 'No,No,Yes', [iv.assumed, iv.access['Cancel approved leave']]);
+  check('plan: each agent that will work on the app is listed with its reason, and the one left out says why', await page.locator('.iv-team .iv-agent[data-agent]').count() === 7 && /Access checker/.test(await page.locator('.iv-team').innerText()) && /List checker: not needed/.test(await page.locator('.iv-team').innerText()), await page.locator('.iv-team').innerText());
+  await shot(page, '33b-interview-plan');
+  await page.locator('.iv-assumed .iv-link').click(); await page.waitForSelector('.iv-ask'); await page.locator('.iv-ask .iv-opt').nth(1).click(); await page.waitForSelector('.iv-done'); iv = await ivNow(page);
+  check('plan: Change reopens the card, and a new answer means the plan has to be read again', iv.attr === 'questions' && !iv.plan && /HR, or the employee who asked/.test(iv.answered[0]) && !/usual choice/.test(iv.answered[0]), [iv.attr, iv.plan, iv.answered]);
+  await page.locator('.iv-review').click(); await page.waitForSelector('.iv-act .iv-build'); iv = await ivNow(page);
+  check('plan: the plan follows the answer: the employee may now cancel approved leave, and nothing is assumed', iv.access['Cancel approved leave'] === 'Yes,No,Yes' && iv.assumed.length === 0, [iv.access['Cancel approved leave'], iv.assumed]);
+  await page.locator('.iv-change').first().click(); await page.waitForSelector('.iv-done'); iv = await ivNow(page);
+  check('plan: "Change something" goes back to the answers and keeps them', iv.attr === 'questions' && iv.plan && iv.answered.length === 1, [iv.attr, iv.answered]);
+  await page.locator('.iv-over').click(); await page.waitForSelector('#home-prompt');
+  check('interview: Start over returns to the sentence, which is back in the box, and nothing was built', (await page.inputValue('#home-prompt')) === 'Employees request leave, managers approve or reject it, and HR keeps balances and the team calendar.' && (await st(page, () => Object.keys(window.__formwork.state().apps).length)) === apps0, await page.inputValue('#home-prompt'));
+  await page.locator('#home-skip').click(); await page.waitForSelector('.iv-act .iv-build'); iv = await ivNow(page);
+  check('home: "Skip the questions" goes straight to the plan with the usual choices, and still waits for "Build it"', iv.attr === 'plan' && iv.assumed.length === 1 && iv.apps === apps0, [iv.attr, iv.assumed, iv.apps]);
+  await page.locator('.iv-assumed .iv-link').click(); await page.locator('.iv-ask .iv-opt').nth(1).click(); await page.locator('.iv-review').click(); await page.locator('.iv-ready .btn.primary').click(); await onApp(page);
+  const asked = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), A = s.apps[t.app]; return { q: A.answers.q, plan: !!A.plan, by: A.plan && A.plan.answers[0].by, chat: A.chat.slice(0, 3).map((m) => m.text) }; });
+  await waitReady(page); a = await appState(page);
+  check('"Build it" starts the build with the approved plan, and the answer is in the chat as the Planner\'s question and the owner\'s reply', asked.plan && asked.q === 1 && asked.by === 'you' && /who may cancel it/.test(asked.chat[1]) && asked.chat[2] === 'HR, or the employee who asked', asked);
+  check('the build does not stop to ask what the interview already answered', !(await page.locator('.gcard.ask').count()) && (await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return s.apps[t.app].chat.filter((m) => /who may cancel it/.test(m.text || '')).length; })) === 1);
   check('leave build ready, no send-backs, second answer applied', a.status === 'ready' && a.name === 'TimeOff' && a.retries[0] === 0 && a.tour.every(Boolean), [a.status, a.name, a.retries, a.tour, a.last]);
   await view(page, 'App'); await page.locator('.persona-btn').nth(4).click(); await land(page); await page.waitForSelector('.kb-col'); await shot(page, '33-leave-board');
   await page.locator('.app-nav .nav-i', { hasText: 'Team calendar' }).click(); await page.waitForSelector('.cal-grid'); await shot(page, '34-leave-calendar');
@@ -969,7 +1002,7 @@ async function flowCustom(browser, url) {
   check('the home page says what Live will do here: no model connected, saved builds stand in', /no model connected to this copy/.test(await page.locator('#home-mode').innerText()), await page.locator('#home-mode').innerText());
   await page.fill('#home-prompt', 'something nobody ever saved'); await page.locator('.prompt .btn.primary').click(); await sleep(200);
   check('Live with no model: an unknown sentence gets a plain reason, not a refusal about where the page runs', /No model is connected to this copy/.test(await page.locator('.home .mbar').innerText()) && !/not available in this view/.test(await page.locator('.home').innerText()), await page.locator('.home .mbar').allInnerTexts());
-  await page.fill('#home-prompt', 'a clinic that books patient appointments'); await page.locator('.prompt .btn.primary').click(); let r = await drive(page), a = r.a;
+  await describeApp(page, 'a clinic that books patient appointments'); let r = await drive(page), a = r.a;
   check('Live with no model: a sentence a saved build covers is built from that saved build', a.status === 'ready' && a.tpl === 'clinic' && a.mode === 'demo', [a.status, a.tpl, a.mode]);
   await page.locator('.titlebar .net').click(); await sleep(200); await say(page, 'Add a notes field to patients'); a = await waitFree(page);
   check('offline with Live wanted: a change in chat is read by the built-in rules, and says so', a.cols.patients.includes('notes') && (await page.locator('.msgs').innerText()).includes('You are offline, so Live is paused. Until the connection is back I am reading changes with the built-in rules.'), a.chat);
@@ -1244,7 +1277,9 @@ async function flowRound6(browser, url) {
 async function samplesChecks(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
   check('home: the grant desk and purchase requests are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('.tpl').count() === 9);
-  await page.fill('#home-prompt', 'a community foundation that reviews grant applications'); await page.locator('.prompt .btn.primary').click(); await page.waitForFunction(() => { const s = window.__formwork.state(), t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]); return t && t.app; }); await waitReady(page); a = await appFull(page);
+  await page.fill('#home-prompt', 'a community foundation that reviews grant applications'); await page.locator('.prompt .btn.primary').click(); await page.waitForSelector('.iv-act .iv-build');
+  check('Demo: a saved build with no question of its own goes straight to its plan', (await ivNow(page)).attr === 'plan' && /no questions for this one/.test(await page.locator('.iv-chat').innerText()) && (await ivNow(page)).name === 'GrantDesk', await ivNow(page));
+  await page.locator('.iv-act .iv-build').click(); await onApp(page); await waitReady(page); a = await appFull(page);
   check('Demo: a sentence about grants is built from the grant desk\'s saved build', a.tpl === 'grants' && a.mode === 'demo', [a.tpl, a.mode]);
   check('grant desk: every station passed first time, with four tables and its own team of three agents', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'applications,score_lines,award_options,checks' && a.tests.failed === 0 && a.tests.fresh, [a.status, a.line, a.tests]);
   await view(page, 'App'); await page.locator('.persona-btn').first().click(); await land(page); await page.waitForSelector('.team.room');
@@ -1365,6 +1400,10 @@ async function flowSizes(browser, url) {
     await page.goto(url); await page.waitForSelector('.ob-card', { timeout: 20000 }); await sleep(200);
     await fitBoth(page, at + 'onboarding');
     await enter(page, url); await fitBoth(page, at + 'home');
+    await page.fill('#home-prompt', 'a clinic that books patient appointments'); await page.locator('#home-go').click(); await page.waitForSelector('.iv-ask'); await fitBoth(page, at + 'the questions before a build');
+    if (phone) { const o = await st(page, () => { const r = (s) => document.querySelector(s).getBoundingClientRect(); return { ask: r('.iv-ask').top, plan: r('.iv-canvas').top }; }); check(at + 'the question card comes first and the plan so far is under it', o.ask < o.plan, o); }
+    await page.locator('.iv-usual').click(); await page.waitForSelector('.iv-act .iv-build'); await fitBoth(page, at + 'the plan to approve');
+    await page.locator('.iv-over').click(); await page.waitForSelector('#home-prompt'); await page.fill('#home-prompt', '');
     if (phone) {
       const b = await st(page, () => { const r = (s) => document.querySelector(s).getBoundingClientRect(), a = r('.act-launch'), ws = r('.ws-btn'), ac = r('.acct'), bar = r('.titlebar.phone'); const hit = (x, y) => x.left < y.right && y.left < x.right && x.top < y.bottom && y.top < x.bottom; return { inBar: a.top >= bar.top && a.bottom <= bar.bottom, overWs: hit(a, ws), overAcct: hit(a, ac), w: a.width, h: a.height }; });
       check(at + 'the Agents button sits in the title bar, 44px, and covers neither the workspace switcher nor the account', b.inBar && !b.overWs && !b.overAcct && b.w >= 44 && b.h >= 44, b);

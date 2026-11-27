@@ -7500,6 +7500,12 @@ td.iv-no {
   align-items: center;
   gap: 6px;
 }
+.iv-agent-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
 .iv-stage {
   display: inline-flex;
   align-items: center;
@@ -7699,6 +7705,11 @@ td.iv-no {
   }
   .iv-over {
     min-width: 0;
+  }
+  .iv-act,
+  .fui-Card.iv-act {
+    flex-direction: column;
+    align-items: stretch;
   }
   .iv-act .btn,
   .iv-ready .btn {

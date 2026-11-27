@@ -45,7 +45,8 @@ import { Btn, Card, Icon, Input, MBar, Spinner, Switch } from './ui';
 const count = (n: number, one: string, many: string) => n + ' ' + (n === 1 ? one : many);
 const kinds = (n: number) => count(n, 'kind of person', 'kinds of people');
 const aOrAn = (word: string) => (/^[aeiou]/i.test(word) ? 'an ' : 'a ') + word;
-const PLANNER_ID = STATIONS[0].agent;
+/** the Planner is the first agent on the line (read when drawn: line.ts and this file import each other) */
+const plannerId = () => STATIONS[0].agent;
 
 /** An agent's square badge: a builder agent, a reviewer, or the owner. */
 function Who({ id }: { id: string }) {
@@ -118,13 +119,17 @@ function Moves({ plan, waiting }: { plan: PlanSpec; waiting?: QuestionCard | nul
                 <span className="iv-stage">{s}</span>
               </span>
             ))}
-            {path.also.length > 0 && <span className="t-cap muted">also</span>}
-            {path.also.map((s) => (
-              <span key={s} className="iv-stage">
-                {s}
-              </span>
-            ))}
           </div>
+          {path.also.length > 0 && (
+            <div className="iv-flow iv-also">
+              <span className="t-cap muted">Also</span>
+              {path.also.map((s) => (
+                <span key={s} className="iv-stage">
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
           {st.note && <p className="muted">{st.note}</p>}
         </>
       ) : (
@@ -355,10 +360,12 @@ function Team({ plan, title }: { plan: PlanSpec; title: string }) {
           <li key={r.id + r.tag} className="iv-agent" data-agent={r.id}>
             <Who id={r.id} />
             <span className="col gap0 grow">
-              <strong>{r.who}</strong>
+              <span className="iv-agent-top">
+                <strong>{r.who}</strong>
+                <span className="badge b-outline">{r.tag}</span>
+              </span>
               <span className="t-cap muted">{r.why}</span>
             </span>
-            <span className="badge b-outline hide-sm">{r.tag}</span>
           </li>
         ))}
         {t.notNeeded.map((n) => (
@@ -385,9 +392,9 @@ function Team({ plan, title }: { plan: PlanSpec; title: string }) {
 function PlannerHead({ sub }: { sub: string }) {
   return (
     <div className="row gap8">
-      <Who id={PLANNER_ID} />
+      <Who id={plannerId()} />
       <span className="col gap0">
-        <strong>{AGENT_NAMES[PLANNER_ID] || AGENTS[PLANNER_ID].name}</strong>
+        <strong>{AGENT_NAMES[plannerId()] || AGENTS[plannerId()].name}</strong>
         <span className="t-cap muted">{sub}</span>
       </span>
     </div>
