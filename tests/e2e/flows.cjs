@@ -1328,6 +1328,10 @@ async function sizesFeatures(browser, url) {
     await enter(page, url); await buildTpl(page, 'clinic'); await waitIdle(page); await sleep(300);
     const esc = async (sel) => { await page.keyboard.press('Escape'); await page.waitForSelector(sel, { state: 'detached', timeout: 5000 }).catch(() => {}); await sleep(150); };
     const blur = () => page.evaluate(() => document.activeElement && document.activeElement.blur());
+    if (phone) {
+      const b = await st(page, () => { const r = (e) => e.getBoundingClientRect(), k = [...document.querySelectorAll('.build-sum .kpi')].map(r), seg = r(document.querySelector('.build-bar .seg')), run = r([...document.querySelectorAll('.build-bar > .btn')].pop()); return { tiles: k.length, inside: k.every((x) => x.left >= 0 && x.right <= innerWidth), rows: new Set(k.map((x) => Math.round(x.top))).size, oneRow: Math.abs(seg.top + seg.height / 2 - (run.top + run.height / 2)) < 4 }; });
+      check(at + 'the Build view shows all six numbers in view, in two rows, with Run again beside the view switch', b.tiles === 6 && b.inside && b.rows === 2 && b.oneRow, b);
+    }
     // the command palette and the shortcuts dialog
     await blur(); await page.keyboard.press('Control+k'); await page.waitForSelector('.dialog.palette .palette-opt'); await sleep(300);
     await fitBoth(page, at + 'the command palette'); await shot(page, 'szf-' + w + '-palette');
@@ -1355,6 +1359,11 @@ async function sizesFeatures(browser, url) {
     // offline: the title bar and the Build view say so
     if (phone) await page.locator('.phone-nav .tab-i', { hasText: 'Build' }).click(); else await view(page, 'Build');
     await ctx.setOffline(true); await sleep(500);
+    if (phone) {
+      await page.waitForSelector('.toasts .toast');
+      const room = await st(page, async () => { const sc = document.querySelector('.build'); sc.scrollTop = sc.scrollHeight; await new Promise((r) => setTimeout(r, 200)); const kids = [...sc.children].filter((e) => e.getBoundingClientRect().height > 0), last = kids[kids.length - 1].getBoundingClientRect(), toast = document.querySelector('.toasts').getBoundingClientRect(); return { last: Math.round(last.bottom), toasts: Math.round(toast.top) }; });
+      check(at + 'scrolled to the end, the last item on the Build view sits above the toasts', room.last <= room.toasts, room);
+    }
     await fitBoth(page, at + 'the builder, offline'); await shot(page, 'szf-' + w + '-offline');
     await ctx.setOffline(false); await sleep(400);
     // an area that could not draw shows its message in place, and the rest of the screen still works

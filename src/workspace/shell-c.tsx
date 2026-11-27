@@ -1,7 +1,7 @@
 import { AreaBoundary } from '@/platform/area-boundary';
 import { engineProblem, storageProblem } from './errors';
 import { modelHost } from '@/platform/model-client';
-import { type ReactNode, Suspense, lazy, useState, useLayoutEffect, useSyncExternalStore } from 'react';
+import { type ReactNode, Suspense, lazy, useState, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 import type { BackedDef, TourStep } from '@/shared/types/app';
 import type { SqlValue } from '@/shared/types/sqljs';
@@ -1303,9 +1303,29 @@ export function DialogHost() {
       return null;
   }
 }
+/** How much of the bottom of the screen the toasts cover, as --toasts-h, so a phone view can add that much room
+ * after its last item and scroll it clear of them (workspace.css). 0 when there are none. */
+function useToastRoom() {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current,
+      root = document.documentElement;
+    if (!el) return;
+    const set = () => root.style.setProperty('--toasts-h', (el.offsetHeight ? el.offsetHeight + 8 : 0) + 'px');
+    set();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(set) : null;
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+      root.style.removeProperty('--toasts-h');
+    };
+  }, []);
+  return ref;
+}
 export function Toasts() {
+  const ref = useToastRoom();
   return (
-    <div className="toasts" aria-live="polite">
+    <div className="toasts" aria-live="polite" ref={ref}>
       {U.toasts.map((t) => (
         <div key={t.id} className={'toast m-' + t.tone}>
           <Icon n={TONE_ICON[t.tone] || 'info'} />
