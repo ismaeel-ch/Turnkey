@@ -3,7 +3,7 @@
 // checks cover what axe cannot see: a skip link, visible focus, dialogs that keep focus, and reduced motion.
 // Run it with the other flows: `npm run test:e2e -- a11y` (or `TK_URL=http://localhost:3304 node tests/e2e/a11y.cjs`).
 //   A11Y_REPORT=1 prints every node of every violation, for working through a list of fixes.
-//   A11Y_ONLY=keyboard runs one part (light, dark, phone or keyboard).
+//   A11Y_ONLY=keyboard runs one part (light, dark, phone, keyboard or guided).
 const fs = require('fs');
 const { chromium } = require('playwright');
 const axeSource = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
@@ -107,7 +107,7 @@ async function scheme(browser, s) {
   await page.waitForSelector('#home-prompt');
   await page.fill('#home-prompt', '');
   await build(page, 'clinic');
-  for (const v of ['Build', 'App', 'Tests', 'Data', 'API', 'Connections']) {
+  for (const v of ['Build', 'App', 'Tests', 'Data', 'API', 'Connections', 'Release']) {
     await view(page, v);
     await screen(page, s + ': built app, ' + v + ' view');
     if (v === 'Build') {
@@ -144,6 +144,20 @@ async function scheme(browser, s) {
     await page.locator('.app-nav .nav-i').nth(i).click();
     await screen(page, s + ': the app, page ' + (i + 1) + ' of ' + pages, '.app');
   }
+  // first use: the tour over the app, the checklist after it, and the demo data question
+  await page.locator('.app-nav .nav-i').first().click();
+  await page.locator('.app-head .persona').click();
+  await page.locator('.app-head .menu .mi', { hasText: 'Show me around' }).click();
+  await page.waitForSelector('.fr-pop');
+  await screen(page, s + ': the first-use tour', '.app');
+  for (let k = 0; k < 8 && (await page.locator('.fr-pop').count()); k++) await page.locator('.fr-pop .btn.primary').click();
+  await page.waitForSelector('.fr-list');
+  await screen(page, s + ': the getting started checklist', '.app');
+  await page.locator('.demo-bar .btn', { hasText: 'Remove demo data' }).click();
+  await page.waitForSelector('.dialog .demo-plan');
+  await screen(page, s + ': the remove demo data question', '.dialog');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.dialog'));
   // panels and dialogs from the title bar
   await page.locator('.act-launch').click();
   await page.waitForSelector('.act-panel');
@@ -203,6 +217,113 @@ async function phone(browser, s) {
   await page.locator('.phone-nav .tab-i', { hasText: 'More' }).click();
   await page.waitForSelector('.sheet');
   await screen(page, s + ' 390px: the More sheet');
+  await ctx.close();
+}
+
+/** Where focus is, in words: the element, its name, and whether the keyboard lost its place (focus on the page). */
+const focusNow = (page) => page.evaluate(() => { const a = document.activeElement; return !a || a === document.body ? 'the page' : a.tagName.toLowerCase() + ' "' + (a.getAttribute('aria-label') || a.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60) + '"'; });
+const waitFocus = (page, test) => page.waitForFunction(test, null, { timeout: 3000 }).then(() => true, () => false);
+
+/** The guided build by keyboard: each part that replaces the button pressed takes the focus, so nobody loses their place. */
+async function guided(browser) {
+  const { ctx, page } = await newPage(browser, 'light');
+  await enter(page);
+  await finishOnboarding(page);
+  await page.fill('#home-prompt', 'a clinic that books patient appointments');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.iv-ask');
+  let ok = await waitFocus(page, () => document.activeElement && document.activeElement.id === 'iv-q');
+  check('guided: the first question takes the focus, and is read with its number', ok && (await page.locator('#iv-q').getAttribute('aria-describedby')) === 'iv-n', await focusNow(page));
+  await page.locator('.iv-ask .iv-opt').first().focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.iv-ask[data-card=demo_data]');
+  ok = await waitFocus(page, () => document.activeElement && document.activeElement.id === 'iv-q' && /demo/i.test(document.activeElement.textContent));
+  check('guided: answering a question moves the focus to the next one', ok, await focusNow(page));
+  await page.keyboard.press('Tab');
+  check('guided: Tab from the question goes to its first answer', await page.evaluate(() => document.activeElement.classList.contains('iv-opt')), await focusNow(page));
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.iv-done');
+  ok = await waitFocus(page, () => document.activeElement && /everything I need/.test(document.activeElement.textContent));
+  check('guided: after the last answer the focus is on "That\'s everything I need", one Tab from Review the plan', ok, await focusNow(page));
+  await page.keyboard.press('Tab');
+  check('guided: Tab from there reaches Review the plan', await page.evaluate(() => document.activeElement.classList.contains('iv-review')), await focusNow(page));
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.iv-act .iv-build');
+  ok = await waitFocus(page, () => document.activeElement && document.activeElement.id === 'iv-name' && document.activeElement.tagName === 'H1');
+  check('guided: the plan screen opens with the focus on its title', ok, await focusNow(page));
+  const assumed = await page.evaluate(() => [...document.querySelectorAll('.iv-assumed .iv-link')].map((b) => b.getAttribute('aria-label') || ''));
+  check('guided: each "Change" under "I assumed" says which answer it changes', assumed.every((l) => /^Change the answer to: ./.test(l)), assumed);
+  await page.locator('.iv-change').first().focus();
+  await page.keyboard.press('Enter');
+  ok = await waitFocus(page, () => document.activeElement && document.activeElement.tagName === 'H3' && !!document.activeElement.closest('.iv-chat'));
+  check('guided: "Change something" goes back to the questions, with the focus on the Planner\'s card', ok, await focusNow(page));
+  await page.locator('.iv-over').focus();
+  await page.keyboard.press('Enter');
+  ok = await waitFocus(page, () => document.activeElement && document.activeElement.id === 'home-prompt');
+  check('guided: "Start over" puts the focus back in the sentence box', ok, await focusNow(page));
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.iv-ask');
+  await page.locator('.iv-usual').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.iv-act .iv-build');
+  await page.locator('.iv-act .iv-build').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.steps-view');
+  ok = await waitFocus(page, () => document.activeElement && document.activeElement.matches('.steps-view h2'));
+  check('guided: Build it moves the focus to the steps of the build', ok, await focusNow(page));
+  check('guided: the steps have a place that is read out when the build needs you or is done', (await page.locator('.steps-view #steps-say[role=status]').count()) === 1);
+  for (let i = 0; i < 500 && !/is ready\./.test(await page.locator('#steps-say').innerText()); i++) {
+    const o = page.locator('.gcard.ask .opt:not([disabled])');
+    if (await o.count()) await o.first().click().catch(() => {});
+    await sleep(120);
+  }
+  check('guided: when the build is done, it is read out', /is ready\.$/.test(await page.locator('#steps-say').innerText()), await page.locator('#steps-say').innerText());
+  await page.waitForFunction(() => !document.querySelector('.work-head .spin'), null, { timeout: 60000 });
+
+  // first use: the welcome, the tour and the checklist
+  await view(page, 'App');
+  if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click();
+  await page.waitForSelector('.fr-welcome');
+  await page.getByRole('button', { name: /Show me around/ }).focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.fr-pop');
+  ok = await waitFocus(page, () => document.activeElement && document.activeElement.matches('.fr-pop'));
+  const pop = await page.evaluate(() => { const p = document.querySelector('.fr-pop'); return { modal: p.getAttribute('aria-modal'), text: (document.getElementById(p.getAttribute('aria-describedby')) || {}).textContent || '' }; });
+  check('tour: each stop takes the focus, is a dialog that holds it, and its text is read with it', ok && pop.modal === 'true' && pop.text.length > 10, [await focusNow(page), pop]);
+  const inside = [];
+  for (let k = 0; k < 6; k++) { await page.keyboard.press(k === 5 ? 'Shift+Tab' : 'Tab'); inside.push(await page.evaluate(() => !!document.activeElement.closest('.fr-pop'))); }
+  check('tour: Tab and Shift+Tab go round the stop\'s own buttons and never into the dimmed page', inside.every(Boolean), inside);
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.fr-pop', { state: 'detached' });
+  ok = await waitFocus(page, () => { const a = document.activeElement; return !!a && a !== document.body && !!a.closest('.app-main'); });
+  check('tour: Escape ends it and the focus goes to the screen, not the top of the page', ok, await focusNow(page));
+  await page.locator('.app-head .persona').click();
+  await page.locator('.app-head .menu .mi', { hasText: 'Show me around' }).click();
+  await page.waitForSelector('.fr-pop');
+  for (let k = 0; k < 8 && (await page.locator('.fr-pop').count()); k++) { await page.locator('.fr-pop').focus(); await page.keyboard.press('ArrowRight'); }
+  await page.waitForSelector('.fr-list');
+  ok = await waitFocus(page, () => document.activeElement && document.activeElement.matches('.fr-list .fr-toggle'));
+  check('tour: finishing it with the arrow keys puts the focus on the checklist that follows', ok, await focusNow(page));
+  await page.locator('.fr-list [aria-label="Hide the checklist"]').focus();
+  await page.keyboard.press('Enter');
+  ok = await waitFocus(page, () => { const a = document.activeElement; return !!a && a !== document.body && !!a.closest('.app-main'); });
+  check('checklist: hiding it keeps the focus on the screen', ok, await focusNow(page));
+
+  // demo data: the bar's button goes away once pressed, and the focus goes to what replaced it
+  await page.locator('.demo-bar .btn', { hasText: 'Remove demo data' }).focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.dialog .demo-plan');
+  await page.locator('.dialog .btn', { hasText: 'Remove demo data' }).click();
+  await page.waitForSelector('[data-demo-bar=removed]');
+  ok = await waitFocus(page, () => document.activeElement && document.activeElement.closest('[data-demo-bar=removed]') && /Undo/.test(document.activeElement.textContent));
+  check('demo data: after removing it the focus is on Undo', ok, await focusNow(page));
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('[data-demo-bar=on]');
+  ok = await waitFocus(page, () => document.activeElement && document.activeElement.closest('[data-demo-bar=on]') && /Remove demo data/.test(document.activeElement.textContent));
+  check('demo data: Undo puts the focus back on Remove demo data', ok, await focusNow(page));
+  await view(page, 'Data');
+  const named = await page.evaluate(() => [...document.querySelectorAll('[data-demo-act]')].map((b) => b.getAttribute('aria-label') || ''));
+  check('demo data: the builder\'s buttons keep their names on a narrow screen, where only the icon shows', named.length >= 2 && named.every(Boolean), named);
   await ctx.close();
 }
 
@@ -327,8 +448,8 @@ async function shortcuts(page) {
 
 (async () => {
   const browser = await chromium.launch();
-  // A11Y_ONLY=keyboard (or light, dark, phone) runs one part, while working on it
-  const steps = { light: [() => scheme(browser, 'light')], dark: [() => scheme(browser, 'dark')], phone: [() => phone(browser, 'light'), () => phone(browser, 'dark')], keyboard: [() => keyboard(browser)] };
+  // A11Y_ONLY=keyboard (or light, dark, phone, guided) runs one part, while working on it
+  const steps = { light: [() => scheme(browser, 'light')], dark: [() => scheme(browser, 'dark')], phone: [() => phone(browser, 'light'), () => phone(browser, 'dark')], keyboard: [() => keyboard(browser)], guided: [() => guided(browser)] };
   const only = process.env.A11Y_ONLY;
   for (const step of only && steps[only] ? steps[only] : Object.values(steps).flat()) {
     try { await step(); } catch (e) { errors.push('a11y flow stopped: ' + String(e.stack || e).slice(0, 700)); }

@@ -19,7 +19,16 @@ import {
   type DemoPlan,
 } from './demo-data';
 import { resetAppData } from './line';
-import { Btn, Icon } from './ui';
+import { Btn, Icon, refocus } from './ui';
+
+/* Each of these buttons goes away once pressed (the bar changes, Remove becomes Add), so the keyboard is put on what
+   took its place. */
+const TO_REMOVED = ['[data-demo-bar=removed] .btn', '[data-demo-act=add]'];
+const TO_DEMO = ['[data-demo-bar=on] .btn', '[data-demo-act=remove]'];
+const putBack = (app: AppRecord) => {
+  addDemoData(app);
+  refocus(TO_DEMO);
+};
 
 /* ===== Turnkey · demo data, as the owner and the app's people see it =====
    A bar while the app holds made-up records, a "Demo" tag on each of them, one confirmation that says what goes,
@@ -101,7 +110,10 @@ export async function askRemoveDemo(app: AppRecord) {
     yes: 'Remove demo data',
     danger: true,
   });
-  if (ok) removeDemoData(app);
+  if (ok) {
+    removeDemoData(app);
+    refocus(TO_REMOVED);
+  }
 }
 /** "Start over" is what "Reset data" used to do. It deletes records people added, so it says how many first. */
 export async function askStartOver(app: AppRecord) {
@@ -172,14 +184,28 @@ export function DemoBar({ app }: { app: AppRecord }) {
             ? ' Your ' + records(undo.own) + (undo.own === 1 ? ' is' : ' are') + ' untouched.'
             : ' The lists are empty and ready for real records.'}
         </span>
-        <Btn className="btn sm" onClick={() => undoDemoRemoval(app)}>
+        <Btn
+          className="btn sm"
+          onClick={() => {
+            undoDemoRemoval(app);
+            refocus(TO_DEMO);
+          }}
+        >
           <Icon n="undo" s="16" />
           Undo
         </Btn>
-        <button className="demo-link" onClick={() => addDemoData(app)}>
+        <button className="demo-link" onClick={() => putBack(app)}>
           Add demo data again
         </button>
-        <Btn className="btn subtle icon sm" aria-label="Close this message" onClick={() => dismissDemoUndo(app)}>
+        <Btn
+          className="btn subtle icon sm"
+          aria-label="Close this message"
+          onClick={(e) => {
+            const from = e.currentTarget.closest('.app');
+            dismissDemoUndo(app);
+            refocus(['.app-main h1', '.app-main h2', '.app-main'], from);
+          }}
+        >
           <Icon n="dismiss" s="16" />
         </Btn>
       </div>
@@ -196,6 +222,7 @@ export function DemoActions({ app }: { app: AppRecord }) {
         <Btn
           className="btn sm"
           data-demo-act="remove"
+          aria-label="Remove demo data"
           title="Removes the made-up records. Records you added stay."
           onClick={() => void askRemoveDemo(app)}
         >
@@ -206,9 +233,10 @@ export function DemoActions({ app }: { app: AppRecord }) {
         <Btn
           className="btn sm"
           data-demo-act="add"
+          aria-label="Add demo data again"
           disabled={!canAddDemoData(app)}
           title="Puts the made-up records back, next to the ones you added"
-          onClick={() => addDemoData(app)}
+          onClick={() => putBack(app)}
         >
           <Icon n="add" s="16" />
           <span className="hide-sm">Add demo data again</span>
@@ -217,6 +245,7 @@ export function DemoActions({ app }: { app: AppRecord }) {
       <Btn
         className="btn subtle sm"
         data-demo-act="over"
+        aria-label="Start over"
         title="Empties every list and puts the demo data back. Records you added are deleted."
         onClick={() => void askStartOver(app)}
       >
@@ -231,7 +260,7 @@ export function demoMenuItems(app: AppRecord): { label: string; icon: string; on
   const c = demoCounts(app),
     out: { label: string; icon: string; on: () => void }[] = [];
   if (c.demo > 0) out.push({ label: 'Remove demo data', icon: 'broom', on: () => void askRemoveDemo(app) });
-  else if (canAddDemoData(app)) out.push({ label: 'Add demo data again', icon: 'add', on: () => void addDemoData(app) });
+  else if (canAddDemoData(app)) out.push({ label: 'Add demo data again', icon: 'add', on: () => putBack(app) });
   out.push({ label: 'Start over', icon: 'reset', on: () => void askStartOver(app) });
   return out;
 }

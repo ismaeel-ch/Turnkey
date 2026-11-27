@@ -4,7 +4,11 @@ import type { AppRecord, Dict, Pane } from '@/shared/types/workspace';
 import { S, cx, notify, saveSoon } from './core';
 import { sqlPeek } from './db';
 import { hasDemoData } from './demo-data';
-import { Btn, Empty, Icon } from './ui';
+import { Btn, Empty, Icon, refocus } from './ui';
+
+/** Where the keyboard goes when a first-use card or the tour closes: the checklist if it is there, else the screen. */
+const AFTER_GUIDE = ['.fr-list .fr-toggle', '.app-main h1', '.app-main h2', '.app-main'];
+const backToScreen = (from: Element | null | undefined) => refocus(AFTER_GUIDE, from ? from.closest('.app') : null);
 import {
   emptyDash,
   emptyList,
@@ -137,14 +141,19 @@ function Welcome({
   alone: boolean;
 }) {
   const seen = seenOf(app, user);
-  const close = () => setSeen(app, user, { welcome: true });
+  const card = useRef<HTMLElement>(null);
+  const close = () => {
+    const from = card.current;
+    setSeen(app, user, { welcome: true });
+    backToScreen(from);
+  };
   const act = () => {
     if (guide.action) runAction(pane, guide.action);
     // pressing the main button is a yes to being guided: the checklist comes with it
     setSeen(app, user, { welcome: true, list: seen.list || 'open' });
   };
   return (
-    <section className={cx('fr-card fr-welcome', compact && 'fr-sheet')} aria-label="Welcome">
+    <section className={cx('fr-card fr-welcome', compact && 'fr-sheet')} aria-label="Welcome" ref={card}>
       <div className="row between">
         <h2 className="t-sub1">
           {'Welcome, '}
@@ -211,9 +220,15 @@ function Checklist({ app, user, pane, guide }: { app: AppRecord; user: AppUser; 
     prog = progressOf(app, user, seen),
     items = guide.checklist.map((it) => ({ it, ok: isDone(it, prog) })),
     done = items.filter((x) => x.ok).length,
-    next = items.find((x) => !x.ok);
+    next = items.find((x) => !x.ok),
+    card = useRef<HTMLElement>(null);
+  const hide = () => {
+    const from = card.current;
+    setSeen(app, user, { list: 'off' });
+    backToScreen(from);
+  };
   return (
-    <section className="fr-card fr-list" aria-label="Getting started">
+    <section className="fr-card fr-list" aria-label="Getting started" ref={card}>
       <div className="row between">
         <button className="fr-toggle" aria-expanded={!min} onClick={() => setSeen(app, user, { list: min ? 'open' : 'min' })}>
           <Icon n={min ? 'chevRight' : 'chevDown'} s="16" />
@@ -228,7 +243,7 @@ function Checklist({ app, user, pane, guide }: { app: AppRecord; user: AppUser; 
           className="btn subtle icon sm"
           aria-label="Hide the checklist"
           title="Hide the checklist. It stays under your name at the top."
-          onClick={() => setSeen(app, user, { list: 'off' })}
+          onClick={hide}
         >
           <Icon n="dismiss" s="16" />
         </Btn>
@@ -257,7 +272,7 @@ function Checklist({ app, user, pane, guide }: { app: AppRecord; user: AppUser; 
         ) : (
           <div className="row wrap">
             <span className="grow">You&apos;re set up.</span>
-            <Btn className="btn sm" onClick={() => setSeen(app, user, { list: 'off' })}>
+            <Btn className="btn sm" onClick={hide}>
               Done
             </Btn>
           </div>
@@ -328,11 +343,13 @@ function AppTour({ app, user, pane, guide }: { app: AppRecord; user: AppUser; pa
   if (!stop) return null;
   const end = (finished: boolean) => {
     // back to the top of the page, where the checklist is
-    const main = layer.current ? layer.current.closest('.app')?.querySelector('.app-main') : null;
+    const from = layer.current,
+      main = from ? from.closest('.app')?.querySelector('.app-main') : null;
     if (main) main.scrollTop = 0;
     setStop(pane, null);
     // finishing the tour is a yes to being guided: the checklist follows unless the person hid it
     if (finished && !seenOf(app, user).list && guide.checklist.length) setSeen(app, user, { list: 'open' });
+    backToScreen(from);
   };
   const go = (d: number) => {
     if (i + d < 0) return;
@@ -357,7 +374,17 @@ function AppTour({ app, user, pane, guide }: { app: AppRecord; user: AppUser; pa
       className="fr-tour"
       ref={layer}
       onKeyDown={(e) => {
-        if (e.key === 'Escape') end(false);
+        if (e.key === 'Tab') {
+          // the page under the tour is dimmed and not part of it, so Tab goes round the bubble's own buttons
+          const pop = layer.current?.querySelector('.fr-pop'),
+            all = pop ? [...pop.querySelectorAll<HTMLElement>('button:not([disabled])')] : [];
+          if (all.length) {
+            const at = all.indexOf(document.activeElement as HTMLElement),
+              to = e.shiftKey ? (at <= 0 ? all.length - 1 : at - 1) : at < 0 || at === all.length - 1 ? 0 : at + 1;
+            all[to].focus();
+          }
+          e.preventDefault();
+        } else if (e.key === 'Escape') end(false);
         else if (e.key === 'ArrowRight') go(1);
         else if (e.key === 'ArrowLeft') go(-1);
       }}
@@ -370,7 +397,9 @@ function AppTour({ app, user, pane, guide }: { app: AppRecord; user: AppUser; pa
       <div
         className="fr-pop"
         role="dialog"
+        aria-modal="true"
         aria-label={stop.title}
+        aria-describedby="fr-pop-text"
         style={{ left: px(pos.left), top: px(pos.top), bottom: px(pos.bottom), width: px(pw) }}
         tabIndex={-1}
         ref={(el) => {
@@ -388,7 +417,7 @@ function AppTour({ app, user, pane, guide }: { app: AppRecord; user: AppUser; pa
           {guide.stops.length}
         </div>
         <h3 className="t-sub2">{stop.title}</h3>
-        <p>{stop.text}</p>
+        <p id="fr-pop-text">{stop.text}</p>
         <div className="row between">
           <Btn className="btn subtle sm" onClick={() => end(false)}>
             Skip
