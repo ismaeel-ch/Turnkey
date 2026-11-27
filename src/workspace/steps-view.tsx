@@ -2,11 +2,15 @@
  * The Build tab as an owner first sees it: the build as a short list of steps in plain words (steps.ts), with the
  * one place the build can stop for them, and the finished app one press away. The workflow canvas, the timeline, the
  * log and the meeting stay behind "Show how it was built".
+ *
+ * This file and its model load on first use (shell-a.tsx), so nothing here may be imported by code that runs before
+ * an app is open. Which face the Build tab shows is in build-mode.ts for that reason.
  */
 import { ProgressBar } from '@fluentui/react-components';
-import { AGENT_NAMES, teamFor } from '@/shared/plan';
+import { AGENT_NAMES, planFromDef, teamFor } from '@/shared/plan';
 import type { AppRecord } from '@/shared/types/workspace';
-import { S, U, commit, cx, notify, setChat } from './core';
+import { U, cx, notify, setChat } from './core';
+import { showHow } from './build-mode';
 import { AgentAv, Avatar, Btn, Card, Icon, Spinner } from './ui';
 import { RUNS, stopRun } from './line';
 import { answerGate, flowOf, stepAfter } from './custom';
@@ -14,17 +18,12 @@ import { REVIEWERS } from './reviewers';
 import { testStats } from './tests';
 import { type BuildStep, type BuildSteps, type StepState, buildSteps, rulesInWords, stepsHeadline } from './steps';
 
-/** Which face of the Build tab an app shows: the plain steps, or one of the four views of how it was built. */
-export const buildMode = (app: AppRecord): string => U.bview[app.id] || (S.settings.buildDetail ? 'line' : 'steps');
-/** Open or close "how it was built" for this app. The choice is remembered for the next app and the next visit. */
-export function showHow(app: AppRecord, on: boolean) {
-  U.bview[app.id] = on ? 'line' : 'steps';
-  S.settings.buildDetail = on;
-  commit();
-}
 /** The steps of this app's build, read from the store. */
 export const stepsOf = (app: AppRecord): BuildSteps => {
-  const flow = flowOf(app);
+  const flow = flowOf(app),
+    // a saved build, a share link and an app made before plans existed have no plan of their own: theirs is read off
+    // what was built. There is none until the build has made its lists, and then the list comes from the stations.
+    plan = app.plan ?? planFromDef(app.def);
   return buildSteps({
     app,
     flow,
@@ -33,8 +32,7 @@ export const stepsOf = (app: AppRecord): BuildSteps => {
     tests: testStats(app),
     running: !!RUNS[app.id],
     names: AGENT_NAMES,
-    // an app built before plans existed has none: its list comes from the stations alone
-    team: app.plan ? teamFor(app.plan) : null,
+    team: plan ? teamFor(plan) : null,
   });
 };
 
@@ -57,7 +55,7 @@ function madeTags(app: AppRecord): string[] {
     one = (k: number, w: string) => k + ' ' + w + (k === 1 ? '' : 's');
   return [
     def.tables.length ? one(def.tables.length, 'list') : '',
-    def.process ? one(def.process.states.length, 'stage') : '',
+    def.process && def.process.states.length ? one(def.process.states.length, 'stage') : '',
     views ? one(views, 'view') : '',
     def.screens.length ? one(def.screens.length, 'screen') : '',
     t && t.fresh ? (t.failed ? t.failed + ' of ' + one(t.total, 'check') + ' failing' : one(t.total, 'check') + ' pass') : '',
