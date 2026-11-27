@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react';
+import { Suspense, lazy, useState, useSyncExternalStore } from 'react';
 import type { BriefedDef, Logo, RecordStep, Theme, Untrusted } from '@/shared/types/app';
 import type { AppRecord, ChatMessage, Dict, Release, StartWith, ViewState } from '@/shared/types/workspace';
 import { ACC_HEX } from '@/styles/theme.generated';
@@ -39,7 +39,6 @@ import { appFromPack, framed, openShare, openShared, packOf, readPack, settingsL
 import type { Pack } from './share';
 import { carryData } from './carry';
 import { kindOf } from './change-plan';
-import { ImproveBox } from './improve';
 import { appBusy, historyOf, record as keepDraft, restoreVersion } from './history';
 import { inverseSteps, verCmp, verNext, verParts } from './record-steps';
 import type { VersionSteps } from './record-steps';
@@ -47,6 +46,9 @@ import { currentVersion } from '@/shared/history';
 import { saveShortLink } from '@/platform/share-link';
 import { exportMarkdown, exportPage, exportPdf, exportSqlite, exportZip } from './export';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
+
+// The box for saying what is wrong or missing loads the first time the Release page of a released app shows.
+const ImproveBox = lazy(() => import('./improve').then((m) => ({ default: m.ImproveBox })));
 
 /* ===== Turnkey prototype · releases, the app's own icon, and installing the app on its own =====
    Building gives you a draft. Releasing turns the draft into a numbered version: the tests must pass, the notes say
@@ -1208,9 +1210,11 @@ export function ReleaseView({ app }: { app: AppRecord }) {
           </div>
         </Card>
         {rel && (
-          <Card className="card rel-improve">
-            <ImproveBox app={app} />
-          </Card>
+          <Suspense fallback={null}>
+            <Card className="card rel-improve">
+              <ImproveBox app={app} />
+            </Card>
+          </Suspense>
         )}
         {(!rel || dirty) && (
           <Card className="card rel-form">
