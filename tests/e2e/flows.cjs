@@ -11,7 +11,7 @@ const check = (name, ok, detail) => { results.push({ name, ok: !!ok }); console.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function newPage(browser, opts) {
-  const ctx = await browser.newContext({ viewport: (opts && opts.viewport) || { width: 1440, height: 900 }, colorScheme: (opts && opts.scheme) || 'light' });
+  const ctx = await browser.newContext({ viewport: (opts && opts.viewport) || { width: 1440, height: 900 }, colorScheme: (opts && opts.scheme) || 'light', serviceWorkers: opts && opts.noWorker ? 'block' : 'allow' });
   await ctx.route('https://**/*', (route) => route.abort()); // the app is self-contained: nothing outside its own origin is needed
   if (opts && opts.init) await ctx.addInitScript(opts.init);
   const page = await ctx.newPage();
@@ -49,13 +49,27 @@ const nav = (page, name) => page.locator('.app-nav .nav-i', { hasText: name }).f
 const vtab = async (page, name) => { await page.locator('.vswitch [role=tab]', { hasText: name }).click(); await sleep(90); };
 
 async function quickStarts(browser, url) { // the two ways in from the first screen, for a judge who opens the URL cold
-  { // the first screen does not wait for the SQLite engine; a quick start clicked before it is ready waits for it
+  for (const [intent, next] of [['sample', '.iv-ask'], ['start', '#ob-name']]) { // the welcome the server draws works before the workspace script has run
     const { ctx, page } = await newPage(browser);
+    await page.goto(url); await page.waitForSelector('#boot-welcome [data-boot="' + intent + '"]', { timeout: 20000 });
+    if (intent === 'sample') {
+      await sleep(800);
+      const w = await st(page, () => ({ workspace: !!window.__formwork, card: !!document.querySelector('.ob-card'), lines: document.querySelectorAll('#boot-welcome .ob-st').length, ticks: document.querySelectorAll('#boot-welcome .ticks li').length }));
+      check('first visit: the server draws the whole welcome, and the workspace script waits for the first tap', !w.workspace && !w.card && w.lines === 6 && w.ticks === 3, w);
+    }
+    await page.click('#boot-welcome [data-boot="' + intent + '"]'); await page.waitForSelector(next, { timeout: 20000 });
+    const g = await st(page, () => ({ boot: !!(document.getElementById('boot-welcome') || {}).offsetParent, onboarded: window.__formwork.state().onboarded }));
+    check('first visit: ' + (intent === 'sample' ? 'Try a sample' : 'Get started') + ' pressed on the server\'s welcome loads the workspace and does what was asked', !g.boot && g.onboarded === (intent === 'sample'), g);
+    await ctx.close();
+  }
+  { // the first screen does not wait for the SQLite engine; a quick start clicked before it is ready waits for it
+    // (no service worker: it keeps the engine as it installs, and the page would then get it from there, past the route below)
+    const { ctx, page } = await newPage(browser, { noWorker: true });
     let release; const held = new Promise((r) => { release = r; }); let asked = false;
     await page.route('**/vendor/sql-wasm.wasm*', async (route) => { asked = true; await held; await route.continue(); });
     await page.goto(url); await page.waitForSelector('#ob-sample', { timeout: 20000 });
     await page.waitForFunction(() => !!window.__formwork, null, { timeout: 10000 });
-    check('first visit: the welcome screen shows while the SQLite engine is still loading', !(await page.locator('.splash').count()) && await page.locator('.ob-body .lead').isVisible());
+    check('first visit: the welcome screen shows while the SQLite engine is still loading', !(await page.locator('.splash').count()) && await page.locator('.ob-card .ob-body .lead').isVisible());
     await page.click('#ob-sample'); await page.waitForSelector('.splash', { timeout: 5000 });
     for (let i = 0; i < 100 && !asked; i++) await sleep(50);
     release(); await page.waitForSelector('.iv-ask', { timeout: 15000 });
@@ -68,7 +82,7 @@ async function quickStarts(browser, url) { // the two ways in from the first scr
     const tag = vp ? 'phone: ' : '';
     const { ctx, page } = await newPage(browser, vp ? { viewport: vp } : undefined);
     await page.goto(url); await page.waitForSelector('#ob-sample', { timeout: 20000 });
-    check(tag + 'first screen says what Turnkey does in one line and offers both quick starts', /turns one sentence into a working business app/.test(await page.locator('.ob-body .lead').innerText()) && await page.locator('#ob-own').isVisible());
+    check(tag + 'first screen says what Turnkey does in one line and offers both quick starts', /turns one sentence into a working business app/.test(await page.locator('.ob-card .ob-body .lead').innerText()) && await page.locator('#ob-own').isVisible());
     await page.click('#ob-sample');
     await page.waitForSelector('.iv-ask', { timeout: 8000 });
     const q = await ivNow(page), sq = await st(page, () => { const F = window.__formwork, iv = F.view().home.interview; return { demo: F.state().settings.demo, tpl: iv && iv.tpl, sample: !!(iv && iv.sample), usual: [...document.querySelectorAll('.iv-ask .iv-opt')].filter((x) => /Usual choice/.test(x.innerText)).length, tour: !!document.querySelector('.tour-pop') }; });
@@ -97,7 +111,7 @@ async function flowDemo(browser, url) {
   await quickStarts(browser, url);
   const { ctx, page } = await newPage(browser);
   await page.goto(url); await page.waitForSelector('.ob-card', { timeout: 20000 });
-  check('onboarding shows on first run', await page.locator('.ob-steps li').count() === 5);
+  check('onboarding shows on first run', await page.locator('.ob-card .ob-steps li').count() === 5);
   await shot(page, '01-onboarding');
   await page.getByRole('button', { name: 'Get started' }).click();
   await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
@@ -712,7 +726,7 @@ async function flowMisc(browser, url) {
   await page.goto(url); await page.waitForSelector('.ob-card'); await shot(page, '60-dark-onboarding');
   await page.getByRole('button', { name: 'Get started' }).click();
   await page.fill('#ob-name', 'Muhammad Ismaeel'); await page.fill('#ob-user', 'Ismaeel'); await page.fill('#ob-pass', 'abc'); await page.getByRole('button', { name: 'Continue' }).click(); await sleep(80);
-  check('short password is refused', (await page.locator('.ob-body').innerText()).includes('at least 4'));
+  check('short password is refused', (await page.locator('.ob-card .ob-body').innerText()).includes('at least 4'));
   await page.fill('#ob-pass', 'secret12'); await page.getByRole('button', { name: 'Continue' }).click(); await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click(); await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click();
   await page.waitForSelector('.home'); await setSpeed(page, 'instant'); await howBuilt(page);

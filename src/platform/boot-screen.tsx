@@ -1,9 +1,18 @@
-import { WELCOME_LEAD, WELCOME_NOTE, WELCOME_STEPS, WELCOME_TITLE } from '@/shared/welcome';
+import {
+  WELCOME_LEAD,
+  WELCOME_NOTE,
+  WELCOME_QUICK_NOTE,
+  WELCOME_STATIONS,
+  WELCOME_STEPS,
+  WELCOME_TICKS,
+  WELCOME_TITLE,
+} from '@/shared/welcome';
+import { AGENTS } from '@/workspace/agents';
+import glyphs from './pwa/glyphs.json';
+import { type BootIntent, WELCOMED_KEY } from './boot-intent';
 
-/* What the page shows before the workspace has read its saved state. The server writes it into the HTML, so it paints
-   with the first bytes, and the workspace keeps drawing it until it knows which screen comes first (RootInner in
-   src/workspace/shell-c.tsx). A first visit sees the top of the welcome screen, in the same place and words the workspace then
-   draws (Onboarding in src/workspace/shell-c.tsx); anyone else sees a plain "Loading". BootHint decides which. */
+/* What the page shows before the workspace has drawn its first screen. Server only: the pages draw it into the HTML,
+   and it stays until RootInner in src/workspace/shell-c.tsx knows which screen comes first (see bootScreenDone). */
 
 /** Same picture as Logo in src/workspace/ui.tsx, which this file cannot import without pulling in the workspace. */
 function Logo() {
@@ -18,6 +27,35 @@ function Logo() {
   );
 }
 
+/** Same drawing as Icon in src/workspace/ui.tsx. Only the server draws this screen, so the glyphs stay out of the page's script. */
+function Icon({ n, s }: { n: string; s: string }) {
+  const g = glyphs as Record<string, string>;
+  return (
+    <svg
+      className={'ic s' + s}
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: g[n] || g.circle }}
+    />
+  );
+}
+
+/** Same look as Btn in src/workspace/ui.tsx (Fluent's button) without its script. `data-boot` names what it asks for. */
+function BootBtn({ intent, primary, children }: { intent: BootIntent; primary?: boolean; children: string }) {
+  return (
+    <button type="button" className={primary ? 'boot-btn primary' : 'boot-btn'} data-boot={intent}>
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The server draws this into the page, so it paints with the first bytes and costs no script. A first visit sees
+ * the whole first step of the welcome, the same words and layout as Onboarding in src/workspace/shell-c.tsx, with
+ * buttons that work: WorkspaceLoader notes the one pressed and loads the workspace, which then does what was asked.
+ * Anyone else sees a plain "Loading". BootHint decides which. Hidden once the workspace draws its first screen.
+ */
 export function BootScreen() {
   return (
     <>
@@ -49,29 +87,51 @@ export function BootScreen() {
                 Turnkey
                 {WELCOME_LEAD}
               </p>
-              <p className="muted" role="status">
-                Loading
-              </p>
+              <div className="ob-quick row">
+                <BootBtn intent="sample" primary>
+                  Try a sample
+                </BootBtn>
+                <BootBtn intent="own">Describe your own</BootBtn>
+                <span className="boot-wait muted t-cap" role="status" />
+              </div>
+              <p className="t-cap muted ob-quick-note">{WELCOME_QUICK_NOTE}</p>
+              <div className="ob-line" aria-hidden="true">
+                {WELCOME_STATIONS.map((s, i) => {
+                  const a = AGENTS[s.agent];
+                  return (
+                    <span key={s.id} className="ob-pair">
+                      <span className="ob-st">
+                        <span className={'av sq av-sm acc-' + (a ? a.acc : 'steel')}>
+                          <Icon n={a ? a.icon : 'person'} s="16" />
+                        </span>
+                        {s.name}
+                      </span>
+                      {i < WELCOME_STATIONS.length - 1 && <Icon n="arrowRight" s="16" />}
+                    </span>
+                  );
+                })}
+              </div>
+              <ul className="plain ticks">
+                {WELCOME_TICKS.map((t) => (
+                  <li key={t.icon}>
+                    <Icon n={t.icon} s="16" />
+                    <span>
+                      <strong>{t.lead}</strong>
+                      {t.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="ob-foot">
+              <span className="grow" />
+              <BootBtn intent="start">Get started</BootBtn>
             </div>
           </main>
         </div>
       </div>
     </>
   );
-}
-
-/* The saved state is in IndexedDB, which cannot be read before the first paint, so the workspace keeps one small
-   localStorage flag beside it: set once the welcome is finished, cleared when the data is reset. Outside the
-   workspace's key prefix, so the move to IndexedDB leaves it alone. */
-const WELCOMED_KEY = 'turnkey:welcomed';
-/** Called by the workspace whenever it knows whether the welcome is finished. */
-export function noteWelcomed(done: boolean) {
-  try {
-    if (done) localStorage.setItem(WELCOMED_KEY, '1');
-    else localStorage.removeItem(WELCOMED_KEY);
-  } catch {
-    // storage blocked: the boot screen then shows "Loading", which is right for everyone but a first visit
-  }
 }
 
 /* Runs before the boot screen is parsed. A returning visitor (see WELCOMED_KEY)

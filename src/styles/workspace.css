@@ -830,5 +830,10 @@ td.iv-no{color:var(--colorNeutralForeground3)}
 .dialog.compare.fui-DialogSurface,.dialog.compare{width:min(1320px,calc(100% - 16px));max-width:none}.cmp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;height:min(62vh,640px);min-height:320px}.cmp-side{display:flex;flex-direction:column;gap:6px;min-width:0;min-height:0}.cmp-side .device{flex:1;box-shadow:var(--shadow4)}.cmp-h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 @media (max-width:820px){.cmp{grid-template-columns:minmax(0,1fr);height:auto}.cmp-side .device{height:420px}}
 .improve .textarea{width:100%}.improve .chip{cursor:pointer;text-align:left}.improve h3{margin:0}.improve p{margin:0}
-/* the boot screen written by the server (src/app/(workspace)/BootScreen.tsx): the welcome on a first visit, else "Loading" */
-html:not(.tk-seen) #boot,html.tk-seen #boot-welcome{display:none}
+/* the boot screen written by the server (BootScreen in src/platform/boot-screen.tsx): the welcome on a first visit, else
+   "Loading"; hidden once the workspace has drawn (tk-up). Its buttons look like Fluent's (Btn) without its script. */
+html:not(.tk-seen) #boot,html.tk-seen #boot-welcome,html.tk-up #boot,html.tk-up #boot-welcome{display:none}
+.boot-btn{display:inline-flex;align-items:center;justify-content:center;min-width:96px;height:32px;padding:5px 12px;border:1px solid var(--colorNeutralStroke1);border-radius:4px;background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground1);font-family:var(--fontFamilyBase);font-size:14px;font-weight:600;line-height:20px;white-space:nowrap;cursor:pointer}
+.boot-btn:hover{background:var(--colorNeutralBackground1Hover);border-color:var(--colorNeutralStroke1Hover)}.boot-btn:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:1px}
+.boot-btn.primary{background:var(--colorBrandBackground);border-color:transparent;color:var(--colorNeutralForegroundOnBrand)}.boot-btn.primary:hover{background:var(--colorBrandBackgroundHover)}
+html.tk-opening .boot-btn{cursor:progress}.boot-wait{align-self:center}
