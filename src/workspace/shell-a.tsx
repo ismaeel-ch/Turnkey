@@ -52,6 +52,7 @@ import { type Station, AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp,
 import { CustomTab, FlowChips, ReviewPanel, answerGate, flowList, flowOf, reviewerAt } from './custom';
 import { REVIEWERS } from './reviewers';
 import { TesterPanel } from './tester';
+import { MeetingView } from './meeting';
 import {
   AgentAv,
   Avatar,
@@ -1034,6 +1035,12 @@ export function BuildView({ app }: { app: AppRecord }) {
               icon: 'list',
               title: 'Every step in order',
             },
+            {
+              id: 'meeting',
+              label: 'Meeting',
+              icon: 'people',
+              title: 'The agents as a meeting: who is speaking, who has a hand raised',
+            },
           ]}
           value={mode}
           onChange={(v) => {
@@ -1124,6 +1131,8 @@ export function BuildView({ app }: { app: AppRecord }) {
         <FlowView app={app} sel={sel} />
       ) : mode === 'timeline' ? (
         <TimelineView app={app} run={run} />
+      ) : mode === 'meeting' ? (
+        <MeetingView app={app} run={run} sel={sel} />
       ) : (
         <LogView app={app} run={run} />
       )}

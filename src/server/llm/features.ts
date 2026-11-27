@@ -73,11 +73,25 @@ export function priceOf(model: string): Price | null {
   return null;
 }
 
+/**
+ * The price the daily dollar cap assumes for a model missing from the table: the dearest one listed, so a model nobody
+ * priced can only make the cap stop early, never late.
+ */
+export const FALLBACK_PRICE: Price = price(10, 50, 1);
+
 /** What one call cost in US dollars, from its token counts. Null when the model's price is not known. */
 export function costOf(model: string, usage: Usage | undefined): number | null {
   if (!usage) return null;
   const p = priceOf(model);
-  if (!p) return null;
+  return p ? priced(p, usage) : null;
+}
+
+/** What the daily dollar cap counts for a call of a model with no listed price: its tokens at FALLBACK_PRICE. */
+export function fallbackCostOf(usage: Usage | undefined): number {
+  return usage ? priced(FALLBACK_PRICE, usage) : 0;
+}
+
+function priced(p: Price, usage: Usage): number {
   const usd =
     ((usage.input ?? 0) * p.input +
       (usage.output ?? 0) * p.output +

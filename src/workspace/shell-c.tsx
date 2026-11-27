@@ -59,7 +59,20 @@ import {
   setSaveTimer,
   setU,
 } from './core';
-import { DBX, PEEK, backupWorkspace, dbCount, dbExists, dbFlush, dbRollback, dbSave, dbSavepoint, initSqlite, restoreWorkspace, sqlRun } from './db';
+import {
+  DBX,
+  PEEK,
+  backupWorkspace,
+  dbCount,
+  dbExists,
+  dbFlush,
+  dbRollback,
+  dbSave,
+  dbSavepoint,
+  initSqlite,
+  restoreWorkspace,
+  sqlRun,
+} from './db';
 import { appUsers, reseed, tourExec } from './engine';
 import { DATA_VIEWS, migrateApp } from './viewspec';
 import { REC, TEMPLATES } from './builds';
@@ -72,7 +85,7 @@ import { cancelRerun, queuedRerun } from './rerun';
 import { buildPack, parseChange, planOps, runChange } from './changes';
 import { AddStepDialog, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
 import { REVIEWERS } from './reviewers';
-import { keepFix, suggestCases } from './tester';
+import { fillWorkflowSteps, keepFix, suggestCases } from './tester';
 import { AgentAv, Btn, Dialog, Field, Icon, Input, Logo, MBar, Seg, Select, Spinner, Switch, TONE_ICON } from './ui';
 import { PhoneSheets } from './mobile';
 import { AgentActivity, activityNow } from './activity';
@@ -1198,7 +1211,7 @@ export function AboutDialog() {
           {li([
             "Demo replays recorded agent output, for builds and for the quest apps' agent runs. It makes no model calls, and its token figures are samples.",
             'In Demo the four review steps are rules written in code, and a standing instruction has nothing to act on, because recorded work is replayed.',
-            'Connections without a server client (Microsoft Learn, MCP servers you add) show a labelled sample.',
+            'MCP servers you add on the Connections page have no server client, so Test shows a labelled sample. Microsoft Learn search is the one MCP server Turnkey calls for real.',
             'Everyone who opens a share link works in their own copy, in their own browser. One database shared by everyone would need a store on the server, which the free hosting plan does not keep.',
             'Sign-in to a built app is local to this browser. It shows roles and permissions; it is not an account system.',
             'Live calls are capped per session and per day, to protect the model budget.',
@@ -1904,16 +1917,18 @@ export function boot() {
       release: releaseApp,
       logo: logoOf,
       cases: suggestCases,
+      fill: fillWorkflowSteps,
       keepFix,
     },
     activity: (appId: string) => activityNow(appId),
     history: historyHooks,
     runTests: (app: AppRecord) => runTestsSync(app),
     /** Runs one walkthrough step against an app's data and undoes what it changed. */
-    tourStep: (id: string, step: TourStep, rows?: Dict<number>) => {
+    tourStep: (id: string, step: TourStep | TourStep[], rows?: Dict<number>) => {
       dbSavepoint(id, 'hook');
       try {
-        return tourExec(S.apps[id], { rows: rows || {}, last: null }, step);
+        const st = { rows: rows || {}, last: null };
+        return Array.isArray(step) ? step.map((x) => tourExec(S.apps[id], st, x)) : tourExec(S.apps[id], st, step);
       } finally {
         dbRollback(id, 'hook');
       }

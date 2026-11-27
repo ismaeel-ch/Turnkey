@@ -12,7 +12,8 @@ import type {
   TeamAgent,
   Untrusted,
 } from '@/shared/types/app';
-import type { AppRecord, Dict, Loose } from '@/shared/types/workspace';
+import type { AppRecord, Dict, Loose, UsageSum } from '@/shared/types/workspace';
+import { addUsage, emptyUsage, promptTokens, readCallUsage } from '@/platform/agui/usage';
 import { ICONS } from './icons';
 import {
   ACC_PICK,
@@ -92,6 +93,10 @@ export interface TeamRun {
   calls: number;
   tokIn: number;
   tokOut: number;
+  /** Live runs on the server: what every model call of the run cost, as the server reported it. */
+  usage?: UsageSum;
+  /** The same, by agent id. */
+  agentUsage?: Dict<UsageSum>;
   t0: number;
   t1: number | null;
   error: string;
@@ -448,6 +453,38 @@ export function teamServerTool(app: TeamApp, T: TeamRun, i: number, name: unknow
     notify();
   }
 }
+/** One model call the server made for the run: added to the run and its agent, the Debug log and the agent panel. */
+export function teamUsage(app: TeamApp, T: TeamRun, value: unknown) {
+  const call = readCallUsage(value);
+  if (!call) return;
+  const a = app.def.team.agents[T.i],
+    agent = a ? a.id : 'team';
+  addUsage((T.usage ??= emptyUsage()), call);
+  addUsage(((T.agentUsage ??= {})[agent] ??= emptyUsage()), call);
+  T.tokIn += promptTokens(call);
+  T.tokOut += call.output;
+  ring(
+    MODELCALLS,
+    {
+      t: Date.now(),
+      app: app.id,
+      run: T.id,
+      agent,
+      mode: 'live',
+      model: call.model,
+      tokIn: promptTokens(call),
+      tokOut: call.output,
+      est: call.estimated,
+      cacheRead: call.cacheRead,
+      costUsd: call.costUsd,
+      ms: call.ms,
+      attempt: 1,
+    },
+    200,
+  );
+  // the agent panel adds these up per agent and for the app (src/platform/agui/activity.ts)
+  emit('CUSTOM', { app: app.id, runId: T.id, agent, stepName: agent, server: true, name: 'usage', value: call });
+}
 async function teamServer(app: TeamApp, user: AppUser, T: TeamRun, finishStep: (i: number, out: Untrusted) => Promise<void>) {
   const team = app.def.team,
     at = (id: unknown) => team.agents.findIndex((a) => a.id === id);
@@ -497,6 +534,7 @@ async function teamServer(app: TeamApp, user: AppUser, T: TeamRun, finishStep: (
             emit('CUSTOM', { ...where, name: 'issues', value: { issues: [str(v.reason)] } });
           } else emit('CUSTOM', { ...where, name: 'checks', value: { passed: v.ok ? 1 : 0, failed: v.ok ? 0 : 1, by: v.by } });
         } else if (e.type === 'CUSTOM' && e.name === 'interrupt') snapshot = (e.value || {}).snapshot || null;
+        else if (e.type === 'CUSTOM' && e.name === 'usage') teamUsage(app, T, e.value);
         else if (e.type === 'CUSTOM' && e.name === 'cap') emit('CUSTOM', { app: app.id, runId: T.id, name: 'cap', value: e.value });
         else if (e.type === 'STATE_DELTA') {
           for (const d of arr(e.delta)) {

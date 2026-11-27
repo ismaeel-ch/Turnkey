@@ -175,8 +175,8 @@ function setApi(appId: string, patch: Partial<ApiPanel>) {
 function tryConnector(app: AppRecord, c: Connector, tool: ConnectorTool) {
   if (!connOn(c.id)) return toast('Switch ' + c.name + ' on first.', 'warning');
   if (!needNet('Testing a connection')) return;
-  if (!SERVER_CONNECTORS.includes(c.id)) {
-    // no server connector for this one yet: show the labelled sample
+  if (!liveTool(c.id, tool.name)) {
+    // no server client for this tool yet: show the labelled sample
     U.connOut = { id: c.id, tool: tool.name, r: callConnector(app, 'orchestrator', null, c.id, tool.name, tool.args), real: false };
     return notify();
   }
@@ -205,7 +205,12 @@ function tryConnector(app: AppRecord, c: Connector, tool: ConnectorTool) {
   });
 }
 /** Connectors the server can call for real (`src/server/connectors`), through `/api/connectors/<id>`. */
-const SERVER_CONNECTORS = ['wikipedia', 'worldbank', 'openalex', 'arxiv', 'patentsview'];
+const SERVER_CONNECTORS = ['wikipedia', 'worldbank', 'openalex', 'arxiv', 'patentsview', 'mslearn'];
+/** Tools of those connectors that stay samples: the server client only searches. */
+const SAMPLE_TOOLS = ['microsoft_docs_fetch'];
+function liveTool(id: string, tool: string): boolean {
+  return SERVER_CONNECTORS.includes(id) && !SAMPLE_TOOLS.includes(tool);
+}
 /** The text to search for: the first text argument of the tool's example, which the owner may have edited. */
 function queryOf(args: Dict<unknown> | undefined): string {
   const vals = Object.values(args || {}).filter((v): v is string | number => typeof v === 'string' || typeof v === 'number');
@@ -963,11 +968,13 @@ export function ConnView({ app }: { app: AppRecord }) {
           {'Used by: '}
           {cur.usedBy}
           {'. '}
-          {cur.kind === 'MCP server'
-            ? 'An MCP server. Turnkey does not call MCP servers yet, so Test shows a labelled sample.'
-            : SERVER_CONNECTORS.includes(cur.id)
-              ? 'Test calls it for real through Turnkey’s own server route, so no key ever reaches the browser.'
-              : 'Turnkey has no server client for it yet, so Test shows a labelled sample.'}
+          {cur.kind === 'MCP server' && SERVER_CONNECTORS.includes(cur.id)
+            ? 'An MCP server. Test on the search tool calls it for real through Turnkey’s own server route; the fetch tool shows a labelled sample.'
+            : cur.kind === 'MCP server'
+              ? 'An MCP server you added. Turnkey has no server client for it, so Test shows a labelled sample.'
+              : SERVER_CONNECTORS.includes(cur.id)
+                ? 'Test calls it for real through Turnkey’s own server route, so no key ever reaches the browser.'
+                : 'Turnkey has no server client for it yet, so Test shows a labelled sample.'}
         </p>
         <div className="tbl-wrap">
           <table className="tbl dense">

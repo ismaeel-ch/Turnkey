@@ -39,7 +39,7 @@ describe('adding up and wording', () => {
     addUsage(sum, readCallUsage(call({ costUsd: null, estimated: true }))!);
     expect(sum).toMatchObject({ calls: 2, input: 1600, output: 400, cacheRead: 6000, costUsd: 0.0042, unpriced: 1, estimated: 1 });
     expect(cacheRate(sum)).toBeCloseTo(0.75);
-    expect(usageLine(sum)).toBe('8.4k tokens · 75% from cache · ~$0.0042');
+    expect(usageLine(sum)).toBe('8.4k tokens · 75% from cache · ~$0.0042 · 1 call not priced');
   });
   it('formats dollars and tokens briefly', () => {
     expect(fmtUsd(0)).toBe('$0');

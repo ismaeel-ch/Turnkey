@@ -83,6 +83,12 @@ async function flowDemo(browser, url) {
   await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 40000 });
   await shot(page, '05-question');
   check('line pauses for the owner (needs you)', (await appState(page)).line.research === 'waiting');
+  // the meeting view: the Researcher raises a hand while it waits on the owner's answer
+  await page.getByRole('button', { name: 'Meeting', exact: true }).click(); await page.waitForSelector('.meet-tile[data-agent=researcher]');
+  const meetWait = await st(page, () => ({ hand: [...document.querySelectorAll('.meet-tile.m-hand')].map((x) => x.dataset.agent), note: (document.querySelector('.meet-note') || {}).textContent || '' }));
+  check('meeting view: the Researcher has a hand raised while the line waits for the owner', meetWait.hand.join(',') === 'researcher' && /Researcher has a hand raised/.test(meetWait.note), meetWait);
+  await shot(page, '05b-meeting-hand');
+  await page.getByRole('button', { name: 'Workflow', exact: true }).click(); await page.waitForSelector('.flow-canvas');
   await page.locator('.gcard.ask .opt').first().click();
   await sleep(2500); await shot(page, '06-building');
   await waitReady(page);
@@ -112,6 +118,12 @@ async function flowDemo(browser, url) {
   await page.locator('.station').nth(1).click(); await page.getByRole('tab', { name: /^Attempts/ }).click(); await sleep(150); await shot(page, '08-attempts');
   await page.getByRole('button', { name: 'Timeline' }).click(); await sleep(150); await shot(page, '09-timeline');
   check('the timeline says a saved build replayed with no model calls and nothing spent', /no model calls, nothing spent/.test(await page.locator('.tl-usage').innerText()));
+  await page.getByRole('button', { name: 'Meeting', exact: true }).click(); await page.waitForSelector('.meet-tile');
+  const meet = await st(page, () => ({ tiles: [...document.querySelectorAll('.meet-tile')].map((x) => x.dataset.agent + ':' + [...x.classList].find((c) => c.indexOf('m-') === 0)), hands: document.querySelectorAll('.meet-hand').length, screen: (document.querySelector('.meet-screen-head') || {}).textContent || '' }));
+  check('meeting view: a tile for the orchestrator and every builder, all done, no hands raised, the line on the shared screen', meet.tiles.slice(0, 6).join(',') === 'orchestrator:m-done,researcher:m-done,database:m-done,backend:m-done,views:m-done,ui:m-done' && meet.tiles.every((t) => /m-done$/.test(t)) && meet.hands === 0 && /sharing the build line/.test(meet.screen) && /6 of 6 stations checked/.test(meet.screen), meet);
+  await page.locator('.meet-tile[data-agent=database]').click(); await page.waitForSelector('.meet-tile[data-agent=database].sel');
+  check('meeting view: pressing a tile opens what that agent made', (await page.locator('section.inspector').first().getAttribute('aria-label')) === 'Database inspector', await page.locator('section.inspector').first().getAttribute('aria-label'));
+  await shot(page, '09b-meeting');
   await page.getByRole('button', { name: 'Workflow', exact: true }).click();
 
   // the built app
@@ -154,6 +166,10 @@ async function flowDemo(browser, url) {
   check('SQL console returns rows', await page.locator('.console .tbl tbody tr').count() === 3);
   const hid = await st(page, (aid) => { const F = window.__formwork, other = F.sql(aid, 'SELECT id FROM visit_notes WHERE doctor_id <> (SELECT MIN(id) FROM users WHERE role = ?) LIMIT 1', ['doctor'])[0].id, step = { role: 'doctor', do: 'denied', table: 'visit_notes', action: 'update' }; return { other: F.tourStep(aid, step, { visit_notes: other }), missing: F.tourStep(aid, step, { visit_notes: 9999 }) }; }, a.id);
   check('a test counts "not found" as refused when the record exists but is hidden from that person, and not when it is missing', hid.other.ok === true && /^404/.test(hid.other.detail) && hid.missing.ok === false, hid);
+  const gap = await st(page, (aid) => { const F = window.__formwork, def = F.state().apps[aid].def, mk = def.tour.find((x) => x.do === 'create'), done = def.tour.find((x) => x.transition === 'complete'); const [c] = F.wf.fill([{ id: 'gap', name: 'A doctor completes a visit', why: '', steps: [mk, done] }], def); return { trs: c.steps.filter((x) => x.do === 'transition').map((x) => x.transition + ':' + x.role), ok: F.tourStep(aid, c.steps).map((r) => r.ok) }; }, a.id);
+  check('a test case that jumps over workflow steps gets the missing steps, run by roles allowed to take them, and passes', gap.trs.join(',') === 'check_in:receptionist,start:doctor,complete:doctor' && gap.ok.every(Boolean), gap);
+  const closed = await st(page, (aid) => { const F = window.__formwork; return { notes: F.tourStep(aid, { role: 'receptionist', do: 'hidden', table: 'visit_notes' }), patients: F.tourStep(aid, { role: 'doctor', do: 'hidden', table: 'patients' }) }; }, a.id);
+  check('"cannot see" with nothing made in the case passes only when the whole table is closed to that person', closed.notes.ok === true && closed.patients.ok === false, closed);
   await view(page, 'API'); await page.waitForSelector('.api-grid');
   await page.locator('.side-i', { hasText: '/visit_notes' }).nth(2).click(); await page.locator('.api-grid .btn.primary').click(); await sleep(100);
   check('receptionist is refused on POST /visit_notes', (await page.locator('.api-grid .badge').first().innerText()).trim() === '403', await page.locator('.api-grid .badge').first().innerText());
@@ -168,6 +184,17 @@ async function flowDemo(browser, url) {
   check('when the source fails, the test says why and shows the labelled sample beside it', /Sample response/.test(await page.locator('.conn-detail').innerText()), await page.locator('.conn-detail').innerText());
   await page.unroute('**/api/connectors/**');
   await shot(page, '22-connections');
+  // Microsoft Learn: the search tool goes through the server's MCP client, the fetch tool stays a sample
+  await page.locator('.conn-card .conn-main', { hasText: 'Microsoft Learn' }).click(); await page.waitForFunction(() => /MCP server/.test((document.querySelector('.conn-detail') || {}).innerText || ''));
+  if (!(await page.locator('#conn-mslearn').isChecked().catch(() => true))) { await page.locator('#conn-mslearn').click(); await sleep(100); }
+  let learnUrl = '';
+  await page.route('**/api/connectors/**', (route) => { learnUrl = route.request().url(); return route.fulfill({ json: { ok: true, items: [{ title: 'Reset a user password', url: 'https://learn.microsoft.com/en-us/entra/', text: 'A made-up answer from the server route.', source: 'Microsoft Learn' }] } }); });
+  await page.locator('.conn-detail tr', { hasText: 'microsoft_docs_search' }).locator('.btn', { hasText: 'Test' }).click(); await page.waitForSelector('.conn-detail .badge.b-success');
+  check('Microsoft Learn search is called through the server route, which speaks to its MCP server', /\/api\/connectors\/mslearn\?.*q=reset/.test(learnUrl) && /Live response/.test(await page.locator('.conn-detail').innerText()), learnUrl);
+  learnUrl = '';
+  await page.locator('.conn-detail tr', { hasText: 'microsoft_docs_fetch' }).locator('.btn', { hasText: 'Test' }).click(); await sleep(200);
+  check('the Microsoft Learn fetch tool has no server client and shows a labelled sample', learnUrl === '' && /Sample response/.test(await page.locator('.conn-detail').innerText()), await page.locator('.conn-detail').innerText());
+  await page.unroute('**/api/connectors/**');
   await page.locator('.titlebar .net').click(); await sleep(200);
   check('offline disables connection tests', await page.locator('.conn-detail .btn', { hasText: 'Test' }).first().isDisabled());
   await shot(page, '23-offline');
@@ -390,6 +417,8 @@ async function flowLive(browser, url) {
     for (const a of agents) {
       const out = Object.assign({ rows: [], update: [], summary: null }, TEAM_OUT[a.name] || { say: 'Nothing to add.' });
       ev.push({ type: 'STEP_STARTED', stepName: a.id }, { type: 'CUSTOM', name: 'check', value: { agent: a.id, ok: true, sentBack: false, by: 'rules' } });
+      // each agent's model call, as the server reports it (src/server/llm/usage.ts CallUsage)
+      ev.push({ type: 'CUSTOM', name: 'usage', value: { model: 'claude-haiku-5-5', tier: 'quick', input: 500, output: 200, cacheRead: 1000, cacheWrite: 0, costUsd: 0.0005, ms: 900, estimated: false } });
       // the researchers' lookup finds Wikipedia down: the server says so in the tool result, and the run carries on
       if (a.id === 'researchers') ev.push({ type: 'TOOL_CALL_START', toolCallId: 'tc1', toolCallName: 'wikipedia.page_summary' }, { type: 'TOOL_CALL_ARGS', toolCallId: 'tc1', delta: '{"title":"Pacific Ocean"}' }, { type: 'TOOL_CALL_END', toolCallId: 'tc1' }, { type: 'TOOL_CALL_RESULT', messageId: 'mt1', toolCallId: 'tc1', role: 'tool', content: JSON.stringify({ agent: a.id, ok: false, unavailable: true, text: 'SOURCE UNAVAILABLE: Wikipedia cannot be used right now.' }) });
       ev.push({ type: 'TEXT_MESSAGE_START', messageId: 'm_' + a.id, role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'm_' + a.id, delta: out.say }, { type: 'TEXT_MESSAGE_END', messageId: 'm_' + a.id });
@@ -404,6 +433,8 @@ async function flowLive(browser, url) {
   const tr = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), T = window.__formwork.teams()[t.app]; return { status: T.status, live: T.live, steps: T.steps.map((x) => [x.status, x.rows.length, x.updated, x.problems.length]), made: Object.keys(T.made).map((k) => k + ':' + T.made[k].length).join(','), error: T.error }; });
   check('live team: one server run of three agents, rows written through the API, a bad row refused without stopping the run', tr.status === 'done' && tr.live && JSON.stringify(tr.steps) === '[["ok",2,0,0],["ok",2,0,1],["ok",0,3,0]]' && tr.made === 'claims:2,evidence:2' && teamRuns.join('|') === 'team:Extractor,team:Researchers,team:Verifier' && !(await st(page, () => window.__calls)).some((x) => x.startsWith('team:')), [tr, teamRuns, await st(page, () => window.__calls)]);
   check('live team: a public source that is down is said plainly, once, and the run still finishes', tr.status === 'done' && (await page.locator('.toasts').innerText()).split('Wikipedia is not answering right now').length === 2, await page.locator('.toasts').innerText());
+  const tu = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), T = window.__formwork.teams()[t.app]; return { calls: T.usage && T.usage.calls, cost: T.usage && T.usage.costUsd, agents: Object.keys(T.agentUsage || {}).join(','), head: document.querySelector('.team-cost')?.textContent || '', per: [...document.querySelectorAll('.team-a-cost')].map((x) => x.textContent).join('|') }; });
+  check('live team: the room shows what the run\'s model calls cost, in total and for each agent', tu.calls === 3 && Math.abs(tu.cost - 0.0015) < 1e-9 && tu.agents === 'extractor,researchers,verifier' && /3 model calls · 5\.1k tokens · 67% from cache · \$0\.0015/.test(tu.head) && tu.per.split('|').length === 3 && tu.per.split('|').every((x) => /1 model call · 1\.7k tokens · .* · \$0\.0005/.test(x)), tu);
   check('live team: the agent could not set the status itself, the workflow did', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Checked', await page.locator('.team-log .badge').first().innerText());
   await shot(page, '54-live-team');
   await st(page, () => { window.__formwork.view().calls = 0; }); // this flow now makes more model calls than one session's cap allows, so start the count again for the last case
