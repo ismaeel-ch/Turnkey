@@ -574,8 +574,33 @@ async function flowMisc(browser, url) {
   check('when the SQLite engine does not load, the page says so and offers a reload', /could not start/.test(sqlMsg) && /check the connection/.test(sqlMsg) && (await noSql.page.getByRole('button', { name: 'Reload the page' }).count()) === 1, sqlMsg);
   errors.splice(0, errors.length, ...errors.filter((e) => !/sql-wasm|SQLite engine|Failed to load resource|ERR_FAILED/i.test(e)));
   await noSql.ctx.close();
+  await canvasFieldEdits(browser, url);
 }
 
+async function canvasFieldEdits(browser, url) { // the owner edits fields on the Data page itself; only the touched stations run again
+  const { ctx, page } = await newPage(browser); await enter(page, url); await buildTpl(page, 'clinic');
+  await view(page, 'Data'); await page.locator('.split .side-i', { hasText: 'patients' }).first().click(); await page.getByRole('tab', { name: 'Columns' }).click();
+  await page.waitForSelector('.field-edit'); await shot(page, '64-field-editor');
+  await page.getByLabel('New field name').fill('Allergies'); await page.getByLabel('New field type').selectOption('longtext');
+  await page.locator('.field-edit .btn', { hasText: 'Add field' }).click(); await waitIdle(page);
+  let a = await appState(page);
+  const touch = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); const a = s.apps[t.app]; return { ...a.touched['col:patients.allergies'], said: a.chat.some((m) => m.from === 'user' && /On the Data page: Add Allergies/.test(m.text)) }; });
+  check('an edit on the Data page adds the field with a migration, is written to the chat as yours, and re-runs only from the Database station', a.cols.patients.includes('allergies') && a.mig === 1 && a.line.database === 'ok' && touch.said && touch.by === 'database' && touch.via === 'change', [a.cols.patients, a.mig, a.line, touch]);
+  const plan = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); const c = s.apps[t.app].chat.filter((m) => m.card && m.card.type === 'plan').pop(); return c && c.card; });
+  check('the Data page edit shows the same plan card as a chat change: Research is kept', plan && plan.skip.includes('Research') && plan.rerun[0] === 'Database', plan);
+  check('the Columns tab lists the new field with who made it', /allergies[\s\S]*your request/i.test(await page.locator('.main-body tr', { hasText: 'allergies' }).innerText()));
+  await page.getByLabel('Field to change').selectOption('allergies'); await page.getByLabel('New name for the field').fill('Known allergies');
+  await page.locator('.field-edit .btn', { hasText: 'Rename' }).click(); await waitIdle(page); a = await appState(page);
+  check('renaming a field on the Data page renames the column', a.cols.patients.includes('known_allergies') && !a.cols.patients.includes('allergies') && a.mig === 2, a.cols.patients);
+  await page.getByLabel('Field to change').selectOption('front_desk_note'); await page.locator('.field-edit .btn', { hasText: 'Remove' }).click();
+  await page.waitForSelector('.gcard.ask .btn.danger', { timeout: 8000 });
+  check('removing a field with stored values asks first, and the editor waits', await page.locator('.field-edit .btn', { hasText: 'Add field' }).isDisabled());
+  await page.locator('.gcard.ask .btn.danger').click(); await waitIdle(page); a = await appState(page);
+  check('after a yes, the field is dropped', !a.cols.patients.includes('front_desk_note') && a.mig === 3, a.cols.patients);
+  await page.getByLabel('New field name').fill('phone'); await page.locator('.field-edit .btn', { hasText: 'Add field' }).click(); await sleep(200);
+  check('a field that already exists is refused on the page with the reason, and nothing runs', /already has a phone field/i.test(await page.locator('.field-edit').innerText()) && (await appState(page)).mig === 3);
+  await ctx.close();
+}
 async function flowViews(browser, url) {
   const { ctx, page } = await newPage(browser);
   await enter(page, url); await shot(page, '70-home-library');

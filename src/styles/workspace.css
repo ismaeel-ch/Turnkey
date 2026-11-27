@@ -680,3 +680,4 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 /* 10: the wide canvas is sized to show node text at a readable size, so it can be taller than the window; its
    controls (zoom, Fit, Map, Reset layout) and legend sit above it, where they are in view without scrolling */
 .flow-wrap>.flow-foot{order:-1}
+.field-edit{display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--colorNeutralStroke2)}.field-edit .row>strong{min-width:110px}.field-edit .tk-input{min-width:180px}

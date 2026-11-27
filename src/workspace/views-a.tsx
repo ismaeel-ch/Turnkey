@@ -1431,7 +1431,11 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
           Reset
         </Btn>
       </div>
-      {rows.length ? <ul className="tree">{body as ReactNode}</ul> : <NoRows t={t} />}
+      {rows.length ? (
+        <ul className="tree">{Array.isArray(body) ? ((body as unknown[]).flat(20) as ReactNode[]) : body}</ul>
+      ) : (
+        <NoRows t={t} />
+      )}
     </>
   );
 }

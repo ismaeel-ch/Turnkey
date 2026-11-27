@@ -1,6 +1,6 @@
-import { type ReactNode, useLayoutEffect, useRef } from 'react';
+import { type ReactNode, useLayoutEffect, useRef, useState } from 'react';
 import { fmtUsd, promptTokens, usageLine } from '@/platform/agui/usage';
-import type { BackedDef, BriefedDef } from '@/shared/types/app';
+import type { AppTable, BackedDef, BriefedDef } from '@/shared/types/app';
 import type {
   ApiPanel,
   AppRecord,
@@ -82,7 +82,7 @@ import {
 import { allConnectors, callConnector, connOn } from './builds';
 import { TeamAv, teamAgentOf } from './team';
 import { AGENTS, PENDING, RUNS, STATIONS, answerQuestion, resetAppData } from './line';
-import { handleChat, suggestChanges } from './changes';
+import { editBlocked, editFromCanvas, handleChat, suggestChanges } from './changes';
 import { FlowCards, flowOf, flowTips } from './custom';
 import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto, Select, Spinner, Switch, Tabs, Textarea } from './ui';
 import { isStatusCol, startWalk } from './runtime';
@@ -235,6 +235,146 @@ function sendChat(app: AppRecord, text: string) {
   // handleChat reads the brief's question first; the chat is open on built apps and on builds past the Researcher
   handleChat(app as AppRecord & { def: BackedDef }, t);
 }
+/** The field types the owner can pick when adding a field by hand. Links to other tables are made in chat. */
+const EDIT_TYPES = ['text', 'longtext', 'number', 'money', 'date', 'bool', 'select'];
+/** Edit a table's fields on the canvas itself: add, rename or remove one. Each edit is planned like a chat change,
+ *  so the plan card shows what runs again, removing stored values asks first, and only the touched stations re-run. */
+function FieldEditor({ app, table }: { app: AppRecord & { def: BackedDef }; table: AppTable }) {
+  const [name, setName] = useState('');
+  const [type, setType] = useState('text');
+  const [options, setOptions] = useState('');
+  const [pick, setPick] = useState('');
+  const [to, setTo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const blocked = editBlocked(app);
+  const fixed = new Set([table.title, table.owner, app.def.process.table === table.name ? app.def.process.column : '']);
+  const editable = table.columns.filter((c) => !fixed.has(c.name) && c.type !== 'ref' && c.type !== 'user');
+  const field = editable.find((c) => c.name === pick) || null;
+  const go = async (op: Record<string, unknown>, after: () => void) => {
+    setBusy(true);
+    setErr(null);
+    const why = await editFromCanvas(app, op, 'Data page');
+    setBusy(false);
+    if (why) setErr(why);
+    else after();
+  };
+  const off = busy || !!blocked;
+  return (
+    <div className="field-edit pad" role="group" aria-label={'Edit the fields of ' + table.label}>
+      <div className="row wrap">
+        <strong className="t-cap">Add a field</strong>
+        <Input
+          className="input sm"
+          aria-label="New field name"
+          placeholder="Name, for example Notes"
+          value={name}
+          disabled={off}
+          onChange={(e) => setName(e.currentTarget.value)}
+        />
+        <Select
+          native
+          className="select sm"
+          aria-label="New field type"
+          value={type}
+          disabled={off}
+          onChange={(e) => setType(e.currentTarget.value)}
+        >
+          {EDIT_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {TYPE_LABEL[t]}
+            </option>
+          ))}
+        </Select>
+        {type === 'select' && (
+          <Input
+            className="input sm"
+            aria-label="Choices, separated by commas"
+            placeholder="Choices: low, medium, high"
+            value={options}
+            disabled={off}
+            onChange={(e) => setOptions(e.currentTarget.value)}
+          />
+        )}
+        <Btn
+          className="btn sm primary"
+          disabled={off || !name.trim()}
+          onClick={() =>
+            go(
+              {
+                op: 'add_field',
+                table: table.name,
+                name: name.trim(),
+                type,
+                options:
+                  type === 'select'
+                    ? options
+                        .split(',')
+                        .map((x) => x.trim())
+                        .filter(Boolean)
+                    : undefined,
+              },
+              () => {
+                setName('');
+                setOptions('');
+              },
+            )
+          }
+        >
+          <Icon n="add" s="16" />
+          Add field
+        </Btn>
+      </div>
+      <div className="row wrap">
+        <strong className="t-cap">Change a field</strong>
+        <Select
+          native
+          className="select sm"
+          aria-label="Field to change"
+          value={pick}
+          disabled={off}
+          onChange={(e) => setPick(e.currentTarget.value)}
+        >
+          <option value="">Pick a field</option>
+          {editable.map((c) => (
+            <option key={c.name} value={c.name}>
+              {c.label}
+            </option>
+          ))}
+        </Select>
+        <Input
+          className="input sm"
+          aria-label="New name for the field"
+          placeholder="New name"
+          value={to}
+          disabled={off || !field}
+          onChange={(e) => setTo(e.currentTarget.value)}
+        />
+        <Btn
+          className="btn sm"
+          disabled={off || !field || !to.trim()}
+          onClick={() =>
+            field && go({ op: 'rename_field', table: table.name, name: field.name, to: to.trim() }, () => (setTo(''), setPick('')))
+          }
+        >
+          Rename
+        </Btn>
+        <Btn
+          className="btn sm"
+          disabled={off || !field}
+          onClick={() => field && go({ op: 'remove_field', table: table.name, name: field.name }, () => setPick(''))}
+        >
+          Remove
+        </Btn>
+      </div>
+      <p className="t-cap muted">
+        {blocked ||
+          'Your edit goes to the builders like a message in the chat: they show the plan, ask before deleting stored values, and run again only the stations the edit touches.'}
+      </p>
+      {err && <MBar tone="danger">{err}</MBar>}
+    </div>
+  );
+}
 export function DataView({ app }: { app: AppRecord }) {
   if (!dbExists(app.id) || !app.def.tables.length)
     return <Empty icon="database" title="No database yet" text="The Database agent creates the SQLite tables at the second station." />;
@@ -346,20 +486,23 @@ export function DataView({ app }: { app: AppRecord }) {
           {D.tab === 'rows' ? (
             <Grid rows={sqlPeek(app.id, 'SELECT * FROM ' + qi(cur.name) + ' ORDER BY "id" DESC LIMIT 200')} mask />
           ) : D.tab === 'cols' ? (
-            <Grid
-              rows={sqlPeek(app.id, 'PRAGMA table_info(' + qi(cur.name) + ')').map((c) => {
-                const col = tdef && colOf(tdef, String(c.name));
-                return {
-                  column: c.name,
-                  type: c.type,
-                  required: c.notnull ? 'yes' : '',
-                  default: c.dflt_value,
-                  key: c.pk ? 'primary key' : '',
-                  meaning: col ? TYPE_LABEL[col.type] : '',
-                  'made by': col ? touchShort(touchOf(app, 'col:' + cur.name + '.' + String(c.name))) : '',
-                };
-              })}
-            />
+            <>
+              {tdef && <FieldEditor app={app as AppRecord & { def: BackedDef }} table={tdef} />}
+              <Grid
+                rows={sqlPeek(app.id, 'PRAGMA table_info(' + qi(cur.name) + ')').map((c) => {
+                  const col = tdef && colOf(tdef, String(c.name));
+                  return {
+                    column: c.name,
+                    type: c.type,
+                    required: c.notnull ? 'yes' : '',
+                    default: c.dflt_value,
+                    key: c.pk ? 'primary key' : '',
+                    meaning: col ? TYPE_LABEL[col.type] : '',
+                    'made by': col ? touchShort(touchOf(app, 'col:' + cur.name + '.' + String(c.name))) : '',
+                  };
+                })}
+              />
+            </>
           ) : D.tab === 'ddl' ? (
             <pre className="code pad">{cur.sql};</pre>
           ) : (
