@@ -5,6 +5,25 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-11-27
+
+A faster first load, a UI pass over the newest features, and steadier CI.
+
+### Changed
+
+- Faster first load: the welcome screen shows before SQLite loads, the icons ship once, and React Flow and the guide
+  load on demand. ([#201](https://github.com/ismaeel-ch/Turnkey/pull/201))
+- The debug drawer and the meeting view load on first use. ([#202](https://github.com/ismaeel-ch/Turnkey/pull/202))
+
+### Fixed
+
+- UI pass over the features merged overnight: the dark mode switch, dropdown borders, the Look menu, and phone
+  layouts. ([#199](https://github.com/ismaeel-ch/Turnkey/pull/199))
+
+### Tests
+
+- CI retries the browser install, and the command palette checks wait for it to open. ([#195](https://github.com/ismaeel-ch/Turnkey/pull/195))
+
 ### Changed
 
 - The debug drawer and the meeting view load the first time they open, not with the page.
