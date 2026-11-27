@@ -16,7 +16,8 @@ import {
 import type { Untrusted } from '@/shared/types/app';
 import type { Interview } from '@/shared/types/interview';
 import type { Dict } from '@/shared/types/workspace';
-import { U, errText, label, notify, singular, str } from './core';
+import { S, U, commit, errText, label, notify, openTab, singular, str, toast } from './core';
+import { CARDS, matchTemplate } from './catalog';
 import { normBackend, normBrief, normSchema } from './engine';
 import { startBuild } from './line';
 import type { PlannerCtl } from './planner';
@@ -161,6 +162,10 @@ export function savedInterview(tpl: string): { reflect: string; cards: QuestionC
 /* ---------- the interview on the Home tab ---------- */
 
 export const interviewNow = (): Interview | null => U.home.interview || null;
+const codeOf = (e: unknown) => {
+  const c = (e as { code?: unknown } | null)?.code;
+  return typeof c === 'string' ? c : undefined;
+};
 const mine = (iv: Interview) => U.home.interview === iv;
 /** The Planner's call that is out for an interview, so that leaving the interview stops it. */
 const out = new WeakMap<Interview, PlannerCtl>();
@@ -204,6 +209,7 @@ function open(iv: Interview, got: { reflect: string; cards: QuestionCard[]; draf
   iv.reflect = opening(got.reflect, iv.cards.length);
   iv.busy = null;
   iv.error = '';
+  iv.errorCode = undefined;
   if (skip) takeUsual();
   else notify();
 }
@@ -250,6 +256,7 @@ async function askPlanner(iv: Interview, skip?: boolean) {
     if (!mine(iv)) return;
     iv.busy = null;
     iv.error = errText(e);
+    iv.errorCode = codeOf(e);
     notify();
   }
 }
@@ -258,6 +265,7 @@ export function retryPlanner() {
   const iv = interviewNow();
   if (!iv || iv.busy || iv.tpl) return;
   iv.error = '';
+  iv.errorCode = undefined;
   if (iv.draft) return void reviewPlan();
   iv.busy = 'asking';
   notify();
@@ -351,6 +359,7 @@ export function reviewPlan() {
   if (!iv || iv.busy || !iv.draft || nextCard(iv.cards, iv.answers)) return;
   iv.editing = null;
   iv.error = '';
+  iv.errorCode = undefined;
   if (iv.plan) {
     iv.step = 'plan';
     return notify();
@@ -377,6 +386,7 @@ export function reviewPlan() {
       if (!mine(iv)) return;
       iv.busy = null;
       iv.error = errText(e);
+      iv.errorCode = codeOf(e);
       notify();
     },
   );
@@ -394,6 +404,27 @@ export function setDemoData(on: boolean) {
 }
 /** What runs once a build has started from "Build it". The shell puts the short tour here for "Try a sample". */
 export const AFTER_BUILD: { sample: (() => void) | null } = { sample: null };
+/**
+ * "Use Demo instead", offered when the model cannot be used (no model, allowance used up, busy, out of reach): Demo
+ * goes on, and the closest saved build starts its own interview on the Home tab. When none matches the sentence, the
+ * sentence goes back into the box with a note, and the saved builds below it are the way on.
+ */
+export function switchToDemo(request: string) {
+  const iv = interviewNow();
+  if (iv) stopCall(iv);
+  S.settings.demo = true;
+  openTab(null);
+  const tpl = matchTemplate(request);
+  if (tpl) {
+    toast('Demo is on, so I am using the closest saved build. Switch Live back on in the title bar later.', 'info', 6500);
+    beginInterview(CARDS[tpl].sentence, tpl);
+  } else {
+    U.home.interview = null;
+    U.home.text = request;
+    U.home.note = 'Demo is on. Demo replays saved builds, and none of them matches that sentence, so pick one below.';
+    commit();
+  }
+}
 /** Start over: back to the sentence, which goes back into the box. */
 export function leaveInterview() {
   const iv = interviewNow();

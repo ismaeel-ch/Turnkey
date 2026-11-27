@@ -13,6 +13,8 @@ export interface Interview {
   busy: 'asking' | 'writing' | null;
   /** why the Planner's last call failed, in plain words */
   error: string;
+  /** what kind of failure that was, when the model could not be used (see modelOutage in src/shared/api-error.ts) */
+  errorCode?: string;
   /** what was understood, said back before the first question */
   reflect: string;
   cards: QuestionCard[];
