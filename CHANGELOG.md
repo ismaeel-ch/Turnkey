@@ -5,13 +5,26 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-11-27
+
+A faster first load, a UI pass over the newest features, and steadier CI.
+
 ### Changed
 
-- The debug drawer and the meeting view load the first time they open, not with the page.
+- The debug drawer and the meeting view load the first time they open, not with the page. ([#202](https://github.com/ismaeel-ch/Turnkey/pull/202))
 - The first page loads faster on a phone. The welcome screen shows without waiting for the SQLite engine, which is
   fetched once that screen is up; the icon symbols ship once instead of twice; React Flow loads after the first
   screen. Lighthouse on a simulated phone: largest paint 7.9 s to about 6.2 s, page JavaScript
   592 KB to 563 KB gzip. The feature guide loads the first time it opens. ([#201](https://github.com/ismaeel-ch/Turnkey/pull/201))
+
+### Fixed
+
+- UI pass over the features merged overnight: the dark mode switch, dropdown borders, the Look menu, and phone
+  layouts. ([#199](https://github.com/ismaeel-ch/Turnkey/pull/199))
+
+### Tests
+
+- CI retries the browser install, and the command palette checks wait for it to open. ([#195](https://github.com/ismaeel-ch/Turnkey/pull/195))
 
 ## [0.4.6] - 2026-11-27
 
