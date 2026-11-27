@@ -14,7 +14,7 @@
  *
  * Histories are kept in IndexedDB (src/platform/storage/history-db.ts), at most 30 versions per app.
  */
-import type { AppDef } from '@/shared/types/app';
+import type { AppDef, RecordStep } from '@/shared/types/app';
 import type { AppFlow, AppRecord, Dict, StationLine, Touch } from '@/shared/types/workspace';
 import type { SqlDatabase } from '@/shared/types/sqljs';
 import {
@@ -32,6 +32,7 @@ import { openHistoryDb, type HistoryDb } from '@/platform/storage/history-db';
 import { S, U, activeTab, clone, commit, emit, hashStr, notify, subscribe, toast, uid } from './core';
 import { DBX, dbBump, dbExists, dbFlush, dbOpen, qi } from './db';
 import { PENDING, RUNS } from './line';
+import { columnPlan, stepsFromTo } from './record-steps';
 import { cancelRerun, queuedRerun } from './rerun';
 import { TEAMS } from './team';
 
@@ -221,20 +222,21 @@ const colsOf = (d: SqlDatabase, table: string): string[] => {
  * Builds the database for a version: its own file, with the rows of `cur` copied in for every table and field both
  * have. A table whose rows cannot go in (a field the version requires is missing now) keeps the version's rows.
  */
-function carryRows(next: SqlDatabase, cur: SqlDatabase | null, tables: string[]) {
+function carryRows(next: SqlDatabase, cur: SqlDatabase | null, tables: string[], steps: RecordStep[] = []) {
   if (!cur) return;
   next.run('PRAGMA foreign_keys = OFF');
   for (const t of tables) {
     const a = colsOf(next, t),
-      b = new Set(colsOf(cur, t)),
-      common = a.filter((c) => b.has(c));
-    if (!a.length || !common.length) continue;
+      // a field that was renamed between the two versions keeps its values under the name this version uses
+      pairs = columnPlan(steps, t, colsOf(cur, t), a).pairs;
+    if (!a.length || !pairs.length) continue;
     next.run('SAVEPOINT carry');
     try {
       next.run('DELETE FROM ' + qi(t));
-      const list = common.map(qi).join(', '),
-        rows = cur.exec('SELECT ' + list + ' FROM ' + qi(t)),
-        ins = next.prepare('INSERT INTO ' + qi(t) + ' (' + list + ') VALUES (' + common.map(() => '?').join(', ') + ')');
+      const rows = cur.exec('SELECT ' + pairs.map((p) => qi(p.from)).join(', ') + ' FROM ' + qi(t)),
+        ins = next.prepare(
+          'INSERT INTO ' + qi(t) + ' (' + pairs.map((p) => qi(p.to)).join(', ') + ') VALUES (' + pairs.map(() => '?').join(', ') + ')',
+        );
       try {
         for (const r of rows.length ? rows[0].values : []) ins.run(r);
       } finally {
@@ -257,7 +259,7 @@ function restoreDb(app: AppRecord, snap: AppSnap) {
     cur = null;
   }
   const next = new DBX.SQL.Database(snap.db);
-  carryRows(next, cur, ['users', ...snap.def.tables.map((t) => t.name), 'activity']);
+  carryRows(next, cur, ['users', ...snap.def.tables.map((t) => t.name), 'activity'], stepsFromTo(app.def.migrations, snap.def.migrations));
   next.run('PRAGMA foreign_keys = ON');
   clearTimeout(DBX.timers[app.id] ?? undefined);
   DBX.timers[app.id] = null;

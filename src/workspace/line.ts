@@ -1777,6 +1777,7 @@ export function deleteApp(app: AppRecord) {
   if (app.shared && S.shared) delete S.shared[app.shared.key];
   if (U.solo && (U.solo as { app?: string }).app === app.id) U.solo = null;
   dbDrop(app.id);
+  LS.del('safe:' + app.id); // the safety copy kept before its last update (src/workspace/carry.ts)
   delete S.apps[app.id];
   Object.keys(S.prefs || {}).forEach((k) => {
     if (k.indexOf(app.id + '|') === 0) delete S.prefs[k];

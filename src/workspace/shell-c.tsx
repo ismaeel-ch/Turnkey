@@ -105,7 +105,8 @@ import {
   unsqueeze,
   framed,
 } from './share';
-import { InstallAppDialog, isDirty, logoOf, relOf, releaseApp } from './release';
+import { safetyCopyOf } from './carry';
+import { GoBackDialog, InstallAppDialog, isDirty, logoOf, relOf, releaseApp } from './release';
 import { HistoryDialog } from './history-ui';
 import { historyHooks } from './history';
 import { Home, Titlebar, Workspace, lineApp } from './shell-a';
@@ -1284,6 +1285,8 @@ export function DialogHost() {
       return <WorkflowDialog p={p} />;
     case 'installapp':
       return <InstallAppDialog p={p} />;
+    case 'goback':
+      return <GoBackDialog p={p} />;
     case 'addstep':
       return <AddStepDialog p={p} />;
     case 'guide':
@@ -1985,6 +1988,7 @@ export function boot() {
     },
     activity: (appId: string) => activityNow(appId),
     history: historyHooks,
+    safety: safetyCopyOf,
     runTests: (app: AppRecord) => runTestsSync(app),
     /** Runs one walkthrough step against an app's data and undoes what it changed. */
     tourStep: (id: string, step: TourStep | TourStep[], rows?: Dict<number>) => {

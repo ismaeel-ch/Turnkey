@@ -1287,7 +1287,7 @@ export function ChatCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
           ) : live ? (
             <div className="row">
               <Btn className="btn danger sm" onClick={() => PENDING[app.id](true)}>
-                Approve and delete
+                Approve and remove
               </Btn>
               <Btn className="btn sm" onClick={() => PENDING[app.id](false)}>
                 Keep the data
