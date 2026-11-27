@@ -1,72 +1,127 @@
 # Turnkey
 
-Describe the app your work needs in one sentence. A team of agents builds its database, backend rules, views, pages
-and tests on a workflow you can watch and change, checks each other's work, and hands it over as a working app.
+Describe the app your work needs in one sentence. Turnkey asks you a few questions, shows you a plan in plain words,
+and builds the app only when you press **Build it**: a team of agents makes its lists, rules, screens and tests, checks
+each other's work, and hands it over as a working app with its own welcome for each person who uses it. After the
+first release you say what is wrong or missing, get a plan first, and release the fix as the next version.
 Solo entry for the SSI Agent-A-Thon 2026.
 
 **Live app:** https://turnkey-bay.vercel.app/ (no login; **Demo** replays saved builds and calls no model)
 
-![A Demo build: a sentence about a sales team that bids on tenders is typed on Home, the agents work through the workflow canvas while their cards fill the chat, the Tester catches a slip and the Backend agent repairs it, then the built app opens on its Bid room](docs/images/demo.gif)
+![A clinic sentence is typed on Home, the Planner asks one question, the plan appears, Build it starts six steps that turn to Done, and the built CareDesk app opens on a welcome for the receptionist](docs/images/demo.gif)
 
-_From one sentence to the running app, played at twice its speed. In Demo the sentence picks the closest saved build, so no model is called._
+_From one sentence to the running app, played at twice its speed: question, plan, build, first use. In Demo the
+sentence picks the closest saved build, so no model is called._
 
-## See it in 60 seconds
+## See it in two minutes
 
-1. Open the live app and press **Try a sample**. It keeps **Demo** on and starts building the **Sales bidding desk**.
-2. Watch the **Build** tab: six agents hand work to each other, a check runs after each, the Tester catches a planted
-   slip and the Backend agent repairs it. Switch to **Meeting** to see the agents as a call, with the one at work as
-   the speaker, or open **Agents** (activity panel) for every step, tool call and hand-off.
-3. Open the **App** tab: the app it built, with its own sign-in per role, and a **Bid room** where the app's own three
-   agents work on a tender.
+1. Open the live app and press **Describe your own**. Type `A clinic books appointments for patients with its
+doctors` and press Enter. (With **Live** off in the title bar this replays the saved clinic build and calls no
+   model. With Live on, the Planner model writes the questions and the plan for your own sentence.)
+2. **Questions.** The Planner says what it understood and asks one question at a time, each with a usual choice:
+   "Should the front desk be able to read visit notes?", then whether you want demo data. The plan beside the cards
+   fills in as you answer.
+3. **The plan.** Who uses it, what it keeps, how an appointment moves, who can see and do what, and which agents will
+   build it. Nothing is built until you press **Build it**.
+4. **The build.** The Build tab shows one line per step and the agent doing it, turning from Working to Done. One
+   part is sent back by the checks and fixed. All 142 checks pass.
+5. **First use.** Open the **App** tab and sign in as Sara Malik: the app welcomes her as a receptionist, lists what
+   she can do, and offers a one-minute tour. The made-up records are marked **Demo**; **Remove demo data** empties
+   the lists in one step (and can be undone).
+6. **Release and fix.** On **Release**, release version 1.0. Under "Something wrong, or something missing?", type or
+   pick **Add a notes field to patients**. You get a plan first, the change waits in a draft that only you see, and
+   after **It works** you release it as version 1.1. People with the link keep 1.0 until then.
 
-![The Build tab after the Sales bidding desk build: seven stations on the workflow canvas with a check gate under each, the app's own three agents below them, and 170 of 170 tests passing](docs/images/build-tab.png)
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/guided-questions.png" alt="The interview: steps Describe, Questions, Plan, Build; the plan so far on the left with 3 kinds of people, 3 lists, 6 stages and 7 agents; the Planner's question card on the right with the usual choice marked"></td>
+    <td width="50%"><img src="docs/images/guided-plan.png" alt="The plan for CareDesk: who uses it, how an appointment moves, what each list holds, who can see and do what, with Build it and Change something"></td>
+  </tr>
+  <tr>
+    <td><em>The Planner asks before anything is built. Each card has a usual choice and can be skipped.</em></td>
+    <td><em>The plan in plain words. Nothing is built until the owner presses Build it.</em></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/build-steps.png" alt="CareDesk is built: six steps, each with its agent and what it made, all Done, 142 checks pass, and the agents' cards in the chat"></td>
+    <td><img src="docs/images/first-use.png" alt="The built CareDesk app: a welcome for Sara, the receptionist, with what she can do, Book your first appointment and Show me around, above a demo data bar with Remove demo data"></td>
+  </tr>
+  <tr>
+    <td><em>The build as a list of steps: who did each one and what it made. "Show how it was built" opens the workflow canvas.</em></td>
+    <td><em>The app's first use: a welcome for each kind of person, a short tour, and demo data that is marked and removable.</em></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/fix-after-release.png" alt="After version 1.0: a change waits in the draft, the Try it card with Before and after, It works and Release it as 1.1, and the choice between Fixes 1.0.1, New features 1.1 and Big change 2.0"></td>
+    <td><img src="docs/images/versions.png" alt="The Versions list after the fix: 1.1 current, with Added Notes to Patients, and 1.0 the first release, each with its tests passed and Go back to this"></td>
+  </tr>
+  <tr>
+    <td><em>A change after 1.0 goes to a draft. The owner tries it, says it works, and picks the kind of release.</em></td>
+    <td><em>Every release keeps its tests and notes, and the owner can go back to an earlier one.</em></td>
+  </tr>
+</table>
 
-_The Build tab after the build. Each agent is a node and each check is a gate under it. The chat on the right holds the agents' cards and suggested changes._
-
-A longer walk-through is below, and the three-minute demo script is in
+To see the agents' teamwork in detail, press **Try a sample** on the first screen instead: it asks one question
+about the **Sales bidding desk** with the usual answer marked, shows the plan, and builds it when you press **Build it**. There the Tester catches a planted slip and an agent team inside the app works on a tender.
+The longer walk-through is below, and the three-minute demo script is in
 [`docs/hackathon/demo-video.md`](docs/hackathon/demo-video.md).
 
 ## How the agents work together
 
-Five builder agents and a Tester, each with one job: **Researcher** (brief), **Database** (tables and seed rows),
-**Backend** (workflow, endpoints, access rules), **View advisor** (views and dashboard), **UI** (screens and tour) and
-**Tester** (test cases). The owner's workflow on the canvas is compiled into a LangGraph graph, and that graph runs
-the build. Code, not a model, decides whether each answer is good enough:
+The **Planner** turns the sentence into a plan: up to five question cards with a usual choice each, then the plan
+from the answers. In Live these are two model calls; in Demo the plan is read off the saved build. Code, not a model,
+then picks the team from the plan: **List builder** (lists, fields and demo data), **Rules builder** (stages, actions
+and who can see and do what), **View advisor** (views and the overview), **Screen designer** (screens and the
+welcome for each kind of person) and **Tester** (test cases), with an **Access checker** added when people keep
+records to themselves and a **List checker** when there are many lists. Steps a plan does not need do not run, and
+the Build tab says why. The owner's workflow on the canvas is compiled into a LangGraph graph, and that graph runs
+the build. Code decides whether each answer is good enough:
 
-- **Hand-off.** Each agent gets the checked output of the agents before it.
-- **Check and send back.** After every station, code applies the answer (creates the tables, calls every endpoint as
+- **Hand-off.** Each agent gets the approved plan and the checked output of the agents before it, and is held to the
+  plan (a List builder that leaves out a planned list is sent back).
+- **Check and send back.** After every step, code applies the answer (creates the tables, calls every endpoint as
   every role, draws every view and screen) and checks it. A failure goes back to the same agent with the failures in
   its next prompt, three attempts at most, then a safe built-in default or a clear stop.
-- **Repair from tests.** The Tester writes test cases from the brief; code plays them; a failing test goes back to the
-  Backend agent, whose fix must pass the same checks as any change. An app is ready only when its tests pass.
-- **The owner decides.** The Researcher asks when the brief has a real trade-off, the owner can put approval gates
-  after any station, add review agents or their own agents to the line, and a change that deletes data waits for a
-  yes. Editing the workflow re-runs only the stations it touches, and so does editing the app itself on the canvas:
-  adding, renaming or removing a field on the Data page, or changing the navigation, row density or colour from the
-  **Look** menu on the App page, goes through the same plan card as a change typed in chat.
-- **Visible.** Every step is an AG-UI event: the canvas, the timeline, the log, the meeting view, the Agents panel and
-  debug mode all read the same stream, and each table, field and screen shows which agent made or last changed it.
+- **Repair from tests.** The Tester writes test cases from the plan; code plays them; a failing test goes back to the
+  Rules builder, whose fix must pass the same checks as any change. An app is ready only when its tests pass.
+- **The owner decides.** Nothing is built before the owner approves the plan. The owner can put approval gates after
+  any step, add review agents or their own agents to the line, and a change that deletes data waits for a yes. After
+  a release, a change gets a plan and goes to a draft; people keep the released version until the next release.
+  Editing the workflow re-runs only the steps it touches, and so does editing the app itself on the canvas: adding,
+  renaming or removing a field on the Data page, or changing the navigation, row density or colour from the **Look**
+  menu on the App page, goes through the same plan card as a change typed in chat.
+- **Visible.** Every step is an AG-UI event: the steps list, the canvas, the timeline, the log, the meeting view, the
+  Agents panel and debug mode all read the same stream, and each table, field and screen shows which agent made or
+  last changed it.
 
 In **Live**, each agent's turn runs on the server as a small LangGraph graph (draft, check the JSON against the
 role's schema, repair, at most three model calls) behind the CopilotKit runtime, streamed to the browser over AG-UI.
+Saved builds started from a template card have no plan; their canvas shows the stations by job
+(Research, Database, Backend, Views, Screens, Walkthrough, Tests).
 
 ```mermaid
 flowchart LR
-  you(["Owner: one sentence"]) --> G
-  subgraph line["The build workflow: a LangGraph graph compiled from the canvas"]
+  you(["Owner: one sentence"]) --> P["Planner<br/>questions, then a plan"]
+  P -->|"question cards"| you
+  P --> OK{"Owner approves<br/>the plan"}
+  OK -->|"Build it"| line
+  subgraph line["The build workflow: a LangGraph graph, team picked by code from the plan"]
     direction LR
-    R["Researcher<br/>brief"] --> D["Database<br/>tables, seed data"] --> B["Backend<br/>workflow, endpoints,<br/>access rules"] --> V["View advisor<br/>views, dashboard"] --> U["UI<br/>screens, tour"] --> T["Tester<br/>test cases"]
+    D["List builder<br/>lists, demo data"] --> B["Rules builder<br/>stages, access rules"] --> V["View advisor<br/>views, overview"] --> U["Screen designer<br/>screens, welcome"] --> T["Tester<br/>test cases"]
   end
   G["Checks (code)<br/>after every agent"] --- line
   B -.->|"check failed: send back"| B
   T -.->|"test failed: repair request"| B
-  G -->|"question or approval card"| you
-  line ==> app["Working app<br/>SQLite, endpoints, views, tests"]
-  app --> team["The app's own agent team<br/>looks up public sources,<br/>a checker can send work back"]
+  line ==> app["Working app<br/>SQLite, endpoints, views, tests,<br/>first-use welcome, removable demo data"]
+  app --> rel["Release 1.0"]
+  rel -->|"something wrong or missing:<br/>plan, draft, try it"| rel2["Release 1.1"]
+  app --> team["The app's own agent team<br/>looks up public sources"]
 ```
 
 The full sequence of a build, one agent step on the server, a team run, a change from chat and the release pipeline
 are in [`docs/architecture/overview.md`](docs/architecture/overview.md).
+
+![The Build tab behind "Show how it was built" for the Sales bidding desk: seven stations on the workflow canvas with a check gate under each, and 170 of 170 tests passing](docs/images/build-tab.png)
+
+_Behind "Show how it was built": each agent is a node and each check is a gate under it. The chat on the right holds the agents' cards and suggested changes._
 
 ![The Agents panel, "How it works": you, seven stations with the agent of each, hand-offs checked by code, the app](docs/images/how-it-works.png)
 
@@ -112,36 +167,66 @@ _The Bid room of the built BidDesk app, with the three agents' verdict for one t
 
 ## The five-minute walk-through
 
-1. Open the live app and press **Try a sample**. It signs you in with a demo account, keeps **Demo** on (saved
-   builds, no model calls) and starts building the **Sales bidding desk** at once, with a four-step tour. (**Get
-   started** sets up your own account and lets you pick another app; **Describe your own** opens an empty workspace
-   for your own sentence.)
-2. Watch the **Build** tab. Each agent is a node with a check gate under it. The Tester's first run catches the
-   Backend agent's slip (a bid manager could delete a tender), the Backend repairs it, and run 2 passes all 170 tests.
-   The build takes about 30 seconds. Switch between **Workflow**, **Timeline**, **Log** and **Meeting** to see the same
-   run four ways (Meeting shows a tile per agent, rings the one at work and raises a hand when an agent waits for
-   you), and open **Agents** on the left edge for every step, tool call and hand-off.
-3. Open the **App** tab and sign in as Sana Malik (bid manager), then as Omar Farooq (sales director) from **Preview
-   as**: each role sees only what its rules allow. In the **Bid room**, pick **Port fleet tracking** and press **Run
-   the agents**. The Qualifier scores it, Pricing prices it, and the run stops for you to add a condition before the
-   Red team gives its verdict. In Live, the case header and each agent's line show what its model calls cost.
+**Part 1: a guided build, from a sentence to version 1.1 (about two minutes, no model calls with Live off).**
+
+1. Open the live app and press **Describe your own**. It signs you in with a demo account and opens an empty
+   workspace. If **Live** is on in the title bar, switch it off to follow these steps exactly; leave it on to have the
+   Planner model interview you about your own sentence instead.
+2. Type `A clinic books appointments for patients with its doctors` and press Enter. The steps bar shows Describe,
+   Questions, Plan, Build. Answer "Should the front desk be able to read visit notes?" (or **Skip this one**), then
+   the demo data question. Press **Change** beside an answer to see the plan follow it.
+3. Read the plan: three kinds of people, three lists with their fields, six stages, a table of who can see and do
+   what, and the agents that will build it. Press **Build it**.
+4. The **Build** tab lists six steps with the agent of each. The List builder's first attempt is sent back and fixed;
+   all 142 checks pass. **Show how it was built** opens the same run as a workflow canvas, timeline, log and meeting.
+5. Open **App**, sign in as Sara Malik (receptionist). Her welcome lists what she can do; **Show me around** is a
+   four-stop tour. Pick someone else under **Preview as** to see the welcome for their job. **Remove demo data**
+   empties the lists in one step, and the tests still pass; **Undo** brings the records back.
+6. Open **Release** and release version 1.0 (every test runs first). Under "Something wrong, or something missing?"
+   press **Add a notes field to patients**. The Orchestrator says it is a new feature, shows a plan, and builds it
+   only after **Go ahead**. The change waits in a draft: compare **Before and after**, press **It works**, then
+   **Release it as 1.1**. The release offers Fixes 1.0.1, New features 1.1 or Big change 2.0, and the Versions list
+   keeps both releases with **Go back to this**.
+
+**Part 2: the agents' teamwork in detail (about three minutes).**
+
+1. Open the live app in a private window and press **Try a sample**. It keeps **Demo** on and opens the
+   **Sales bidding desk**'s interview: one question (demo data, usual answer marked). Press **Use the usual choices and
+   show me the plan**, read the plan, then **Build it**. The build starts with a four-step tour. Because the plan has
+   money and several kinds of people, the build stops once on **Build** for you to check the rules: press **Looks
+   right, continue**.
+2. On **Build**, press **Show how it was built**. Each agent is a node with a check gate under it. The Tester's first
+   run catches the Rules builder's slip (a bid manager could delete a tender), the Rules builder repairs it, and run 2
+   passes all 170 tests. Switch between **Workflow**, **Timeline**, **Log** and **Meeting** (a tile per agent, the
+   one at work rings, an agent waiting for you raises a hand), and open **Agents** on the left edge for every step,
+   tool call and hand-off.
+3. Open **App** and sign in as Sana Malik (bid manager), then as Omar Farooq (sales director) from **Preview as**:
+   each role sees only what its rules allow. In the **Bid room**, pick **Port fleet tracking** and press **Run the
+   agents**. The Qualifier scores it, Pricing prices it, and the run stops for you to add a condition before the Red
+   team gives its verdict. In Live, the case header and each agent's line show what its model calls cost.
 4. In the chat sidebar, press **Add a notes field to score lines** (or type a change). The Orchestrator shows a plan,
-   only the stations the change touches run again, and the tests are regenerated.
+   only the steps the change touches run again, and the tests are regenerated.
 5. Or change the app on the canvas. Under **Details**, **Data**, pick **tenders**, open **Columns** and add a field:
    the edit appears in chat as yours, and the plan keeps Research and runs again from Database. On the **App** tab,
    the **Look** menu moves the navigation to an icon rail, and only Screens onwards runs again.
-6. Open **Release**, release version 1.0 (every test runs first), and press **Share by link**. Turn on debug mode
-   (bug icon in the title bar) to see AG-UI events, tool calls, SQL and model usage.
+6. Turn on debug mode (bug icon in the title bar) to see AG-UI events, tool calls, SQL and model usage.
 
 ![The Release tab after version 1.0: share and install, and Export the deliverable as a Markdown document, a printable PDF, a web page, the SQLite database or everything in a zip](docs/images/export.png)
 
 _The Release tab. One deliverable document is made from the app as it is now, in each format._
 
-To see Live agents build from your own words, switch **Live** on in the title bar and type a sentence on a new tab.
-Each Live session is capped at 40 model calls.
+To see Live agents build from your own words, leave **Live** on and type a sentence on a new tab. The Planner asks
+its questions and writes the plan with real model calls, and the build follows the plan you approve. Each Live
+session is capped at 40 model calls.
 
 ## What is in it
 
+- **Guided build:** a sentence opens an interview (up to five question cards from the Planner, each with a usual
+  choice), then a plan in plain words that the owner approves with Build it; code picks the agents from the plan and
+  skips the ones it does not need. Each built app opens with a welcome and a short tour for each kind of person, demo
+  data that is marked and can be removed or added back, and empty screens that say what to do first. After a release,
+  "Something wrong, or something missing?" gives a plan, a draft only the owner sees, a try-it step and the next
+  version (1.0.1, 1.1 or 2.0).
 - **Workspace:** a Build tab that opens on a plain list of steps (one row for each job and the agent that does it),
   with the workflow canvas, timeline, log and meeting view behind "Show how it was built"; edits to fields and the look on the canvas that
   re-run only the stations they touch; Agents panel and a "How it works" page; chat sidebar with the
@@ -173,9 +258,9 @@ the cheaper model tier. `/api/health` shows the calls and the spend so far.
 
 ## Submission summary
 
-> Turnkey turns one sentence into a working business app: SQLite database, role-guarded backend, views, pages and tests. Five builder agents and a Tester run on a LangGraph workflow the owner can watch and edit, and every step streams over AG-UI. Code checks each handoff and sends failed work back, failing tests go back to the Backend for repair, and the owner approves big trade-offs. Canvas edits re-run only the agents they touch. Built apps get agent teams of their own that look up public sources: fact-check, prior-art, debate, bidding, grant review. Demo mode needs no model.
+> Turnkey turns one sentence into a working business app. A Planner agent asks a few questions and shows a plain-words plan; once the owner approves, code picks the team (lists, rules, views, screens, tests, access) and a LangGraph workflow streams every step over AG-UI. Code checks each handoff and sends failed work back; failing tests go back for repair. Each app opens with a welcome per role and removable demo data. After release 1.0, a fix gets a plan, a draft and release 1.1. Built apps can carry agent teams that search public sources. Demo mode needs no model.
 
-(Counted: 582 characters.) Evidence for each rule and criterion: [`docs/hackathon/criteria.md`](docs/hackathon/criteria.md).
+(Counted: 570 characters.) Evidence for each rule and criterion: [`docs/hackathon/criteria.md`](docs/hackathon/criteria.md).
 
 ## More documents
 
@@ -235,7 +320,7 @@ npm run test:e2e -- demo      # one browser flow; CI runs all twelve
 
 The README's pictures come from `scripts/readme-media.mjs`: start a production build (`npm run build`, then
 `PORT=3333 npx next start`) and run `TK_URL=http://localhost:3333 node scripts/readme-media.mjs`. It needs ffmpeg, uses
-Demo data only, and writes the PNGs and `demo.gif` (a sentence typed on Home, through the build, to the running app) to `docs/images/`.
+Demo data only, and writes the PNGs (the guided clinic build first, then the Sales bidding desk) and `demo.gif` (a sentence typed on Home, through the question, the plan and the build, to the app's welcome) to `docs/images/`.
 
 ## The spike
 

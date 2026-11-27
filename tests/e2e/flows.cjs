@@ -58,9 +58,10 @@ async function quickStarts(browser, url) { // the two ways in from the first scr
     check('first visit: the welcome screen shows while the SQLite engine is still loading', !(await page.locator('.splash').count()) && await page.locator('.ob-body .lead').isVisible());
     await page.click('#ob-sample'); await page.waitForSelector('.splash', { timeout: 5000 });
     for (let i = 0; i < 100 && !asked; i++) await sleep(50);
-    release(); await page.waitForSelector('.tour-pop', { timeout: 15000 });
+    release(); await page.waitForSelector('.iv-ask', { timeout: 15000 });
+    await page.locator('.iv-usual').click(); await page.locator('.iv-act .iv-build').click(); await page.waitForSelector('.tour-pop', { timeout: 15000 });
     const s = await st(page, () => { const S = window.__formwork.state(), t = (S.tabs[S.session] || []).find((x) => x.id === S.active[S.session]), a = t && t.app ? S.apps[t.app] : null; return { tpl: a && a.tpl, status: a && a.status }; });
-    check('first visit: Try a sample clicked before the engine is ready waits behind the splash, then builds', asked && s.tpl === 'biddesk' && ['building', 'ready'].includes(s.status), s);
+    check('first visit: Try a sample clicked before the engine is ready waits behind the splash, then asks, plans and builds', asked && s.tpl === 'biddesk' && ['building', 'ready'].includes(s.status), s);
     await ctx.close();
   }
   for (const vp of [null, { width: 390, height: 844 }]) {
@@ -69,9 +70,18 @@ async function quickStarts(browser, url) { // the two ways in from the first scr
     await page.goto(url); await page.waitForSelector('#ob-sample', { timeout: 20000 });
     check(tag + 'first screen says what Turnkey does in one line and offers both quick starts', /turns one sentence into a working business app/.test(await page.locator('.ob-body .lead').innerText()) && await page.locator('#ob-own').isVisible());
     await page.click('#ob-sample');
+    await page.waitForSelector('.iv-ask', { timeout: 8000 });
+    const q = await ivNow(page), sq = await st(page, () => { const F = window.__formwork, iv = F.view().home.interview; return { demo: F.state().settings.demo, tpl: iv && iv.tpl, sample: !!(iv && iv.sample), usual: [...document.querySelectorAll('.iv-ask .iv-opt')].filter((x) => /Usual choice/.test(x.innerText)).length, tour: !!document.querySelector('.tour-pop') }; });
+    check(tag + 'Try a sample: opens the sales bidding desk interview in Demo, with the usual choice marked, before anything is built', sq.demo && sq.tpl === 'biddesk' && sq.sample && q.step === 'questions' && q.apps === 0 && q.card === 'demo_data' && sq.usual === 1 && /BidDesk|bidding desk/i.test(q.name) && !sq.tour, { q, sq });
+    await shot(page, vp ? '00-phone-sample-question' : '00-sample-question');
+    await page.locator('.iv-usual').click(); await page.waitForSelector('.iv-act .iv-build');
+    const p = await ivNow(page);
+    check(tag + 'Try a sample: the usual choices lead straight to the plan, with demo data on and nothing built yet', p.step === 'plan' && p.plan && p.demo === true && p.apps === 0 && p.people.length >= 2, p);
+    await shot(page, vp ? '00-phone-sample-plan' : '00-sample-plan');
+    await page.locator('.iv-act .iv-build').click();
     await page.waitForSelector('.tour-pop', { timeout: 8000 });
-    const s = await st(page, () => { const F = window.__formwork, S = F.state(), t = (S.tabs[S.session] || []).find((x) => x.id === S.active[S.session]), a = t && t.app ? S.apps[t.app] : null; return { demo: S.settings.demo, tpl: a && a.tpl, status: a && a.status, steps: document.querySelector('.tour-pop').innerText }; });
-    check(tag + 'Try a sample: the sales bidding desk is building in Demo within a second, with a short tour', s.demo && s.tpl === 'biddesk' && s.status === 'building' && /1 of 4/.test(s.steps), s);
+    const s = await st(page, () => { const F = window.__formwork, S = F.state(), t = (S.tabs[S.session] || []).find((x) => x.id === S.active[S.session]), a = t && t.app ? S.apps[t.app] : null; return { demo: S.settings.demo, tpl: a && a.tpl, status: a && a.status, plan: !!(a && a.plan), iv: !!F.view().home.interview, steps: document.querySelector('.tour-pop').innerText }; });
+    check(tag + 'Try a sample: Build it starts the sales bidding desk build in Demo with its plan, then the short tour', s.demo && s.tpl === 'biddesk' && s.status === 'building' && s.plan && !s.iv && /1 of 4/.test(s.steps), s);
     await shot(page, vp ? '00-phone-sample' : '00-sample');
     await ctx.close();
   }
@@ -108,7 +118,7 @@ async function flowDemo(browser, url) {
   // the meeting view: the Researcher raises a hand while it waits on the owner's answer
   await page.getByRole('button', { name: 'Meeting', exact: true }).click(); await page.waitForSelector('.meet-tile[data-agent=researcher]');
   const meetWait = await st(page, () => ({ hand: [...document.querySelectorAll('.meet-tile.m-hand')].map((x) => x.dataset.agent), note: (document.querySelector('.meet-note') || {}).textContent || '' }));
-  check('meeting view: the Researcher has a hand raised while the line waits for the owner', meetWait.hand.join(',') === 'researcher' && /Researcher has a hand raised/.test(meetWait.note), meetWait);
+  check('meeting view: the Planner has a hand raised while the line waits for the owner', meetWait.hand.join(',') === 'researcher' && /Planner has a hand raised/.test(meetWait.note), meetWait);
   await shot(page, '05b-meeting-hand');
   await page.getByRole('button', { name: 'Workflow', exact: true }).click(); await page.waitForSelector('.flow-canvas');
   await page.locator('.gcard.ask .opt').first().click();
@@ -236,7 +246,7 @@ async function flowDemo(browser, url) {
   check('who touched what: the new field is marked as the Database agent\'s change at your request, the fields from the build keep their maker', touch.col && touch.col.by === 'database' && touch.col.via === 'change' && touch.phone && touch.phone.by === 'database' && touch.phone.via === 'build', touch);
   await view(page, 'Data'); await page.locator('.split .side-i', { hasText: 'patients' }).first().click(); await page.getByRole('tab', { name: 'Columns' }).click(); await sleep(100);
   const head = await page.locator('.main-head .touch-note').innerText(), madeBy = await page.locator('.main-body tr', { hasText: 'insurance_provider' }).innerText();
-  check('who touched what: the Data page says who made the table and who changed it last, and each field says who made it', /^Made by the Database agent/.test(head) && /Last change: changed by the Database agent at your request/.test(head) && /Database agent, your request/.test(madeBy), [head, madeBy]);
+  check('who touched what: the Data page says who made the table and who changed it last, and each field says who made it', /^Made by the List builder/.test(head) && /Last change: changed by the List builder at your request/.test(head) && /List builder, your request/.test(madeBy), [head, madeBy]);
   await page.getByRole('tab', { name: 'Rows' }).click(); await view(page, 'Build');
   await say(page, 'Remove the front desk note field from patients'); await page.waitForSelector('.gcard.ask .btn.danger', { timeout: 8000 }); await shot(page, '28-approval');
   await page.locator('.gcard.ask .btn.danger').click(); await waitIdle(page); a = await appState(page);
@@ -1083,7 +1093,7 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   check('the build is drawn as a React Flow workflow: request, 7 stations with the Tester, 7 gates, the app', fl.rf && fl.state === 'ready' && fl.nodes.length === 16 && fl.stations === 7 && fl.gates === 7 && fl.old === 0 && fl.nodes.includes('trigger') && fl.nodes.includes('ready'), fl);
   check('every handoff is an edge, and the send-back of the Database station is drawn', fl.edges.length === 16 && fl.edges.includes('e-b1') && fl.edges.includes('e-trig') && fl.edges.includes('e-ready'), fl.edges);
   await shot(page, '91-workflow');
-  await page.locator('.fl-gate').nth(1).click(); await sleep(250);
+  await page.locator('.fl-gate').nth(1).click(); await page.waitForSelector('.insp-body .test', { timeout: 5000 }).catch(() => {}); // the tests load on first use
   check('selecting a gate opens the tests of that station', /^Tests/.test(await page.locator('.insp-head [role=tab][aria-selected=true]').innerText()) && await page.locator('.insp-body .test').count() >= 10 && (await page.locator('.insp-head strong').innerText()) === 'Database');
   await page.locator('.station').nth(3).click(); await sleep(200);
   check('selecting an agent node shows what it wrote', (await page.locator('.insp-head strong').innerText()) === 'Views' && /^Output/.test(await page.locator('.insp-head [role=tab][aria-selected=true]').innerText()) && await page.locator('.station.sel').count() === 1);
@@ -1353,6 +1363,10 @@ async function flowCustom(browser, url) {
   check('Live with no model: an unknown sentence gets a plain reason, not a refusal about where the page runs', /No model is connected to this copy/.test(await page.locator('.home .mbar').innerText()) && !/not available in this view/.test(await page.locator('.home').innerText()), await page.locator('.home .mbar').allInnerTexts());
   await describeApp(page, 'a clinic that books patient appointments'); let r = await drive(page), a = r.a;
   check('Live with no model: a sentence a saved build covers is built from that saved build', a.status === 'ready' && a.tpl === 'clinic' && a.mode === 'demo', [a.status, a.tpl, a.mode]);
+  const named = await st(page, () => [...document.querySelectorAll('.msgs .msg-who')].map((e) => e.textContent.trim()).join('|'));
+  check('the saved build runs the Access checker its plan listed, and the chat names agents as the plan does', a.flow.reviewers.join() === 'security' && a.reviews.security && a.reviews.security.status === 'ok' && /Planner/.test(named) && !/Researcher|Security reviewer/.test(named), [a.flow, a.reviews, named]);
+  await say(page, 'Remove the access check'); a = await waitFree(page); // the canvas checks below start from the standard workflow
+  check('chat: "remove the access check" takes the plan\'s review out again', a.flow.reviewers.length === 0, a.flow);
   await page.locator('.titlebar .net').click(); await sleep(200); await say(page, 'Add a notes field to patients'); a = await waitFree(page);
   check('offline with Live wanted: a change in chat is read by the built-in rules, and says so', a.cols.patients.includes('notes') && (await page.locator('.msgs').innerText()).includes('You are offline, so Live is paused. Until the connection is back I am reading changes with the built-in rules.'), a.chat);
   await page.locator('.titlebar .net').click(); await sleep(200); await page.locator('.tb-mode .switch').click(); await sleep(200); // Demo from here on
@@ -1413,7 +1427,7 @@ async function flowCustom(browser, url) {
   await say(page, 'Allow 2 attempts'); await say(page, 'Tell the UI agent to keep page names to two words'); await say(page, 'add an insight review'); a = await waitFree(page);
   check('chat: attempts, a standing instruction and a second review step', a.flow.attempts === 2 && a.flow.notes.ui === 'Keep page names to two words' && a.flow.reviewers.join() === 'security,insight' && a.reviews.insight.status === 'ok' && a.reviews.insight.f.every((x) => x.test === 'pass'), [a.flow, a.reviews.insight]);
   await say(page, 'Show the workflow'); await sleep(250);
-  check('chat: "show the workflow" answers with a card of what differs from the standard', (await page.locator('.gcard').last().innerText()).replace(/\s+/g, ' ').includes('Asks you after Database') && /Security review after Backend/.test(await page.locator('.gcard').last().innerText()) && /2 attempts per station/.test(await page.locator('.gcard').last().innerText()), await page.locator('.gcard').last().innerText());
+  check('chat: "show the workflow" answers with a card of what differs from the standard', (await page.locator('.gcard').last().innerText()).replace(/\s+/g, ' ').includes('Asks you after Database') && /Access check after Backend/.test(await page.locator('.gcard').last().innerText()) && /2 attempts per station/.test(await page.locator('.gcard').last().innerText()), await page.locator('.gcard').last().innerText());
   await say(page, 'Ask me after the walkthrough'); await sleep(200); const n1 = (await appFull(page)).chat.slice(-1)[0].text;
   await say(page, 'Let the rules build the tables'); await sleep(200); const n2 = (await appFull(page)).chat.slice(-1)[0].text; a = await appFull(page);
   check('chat: what cannot be customised is refused with the reason', /last step/.test(n1) && /keeps its agent/.test(n2) && !a.flow.approve.walkthrough && !a.flow.by.database, [n1, n2]);
@@ -1488,7 +1502,7 @@ async function flowCustom(browser, url) {
   const nb = await newPage(browser, { init: NO_CANVAS }), np = nb.page; await enter(np, url); await buildTpl(np, 'leave'); await sleep(400);
   check('fallback: with React Flow blocked, the plain line has the Customize button', await np.locator('.react-flow').count() === 0 && await np.locator('.line-wrap [data-tour="customize"]').count() === 1);
   await np.locator('.line-wrap [data-tour="customize"]').click(); await np.waitForSelector('.dialog.wf'); await np.locator('.dialog.wf label.switch:has(#wf-review-backend)').click(); await np.getByRole('button', { name: 'Done' }).click(); a = await waitFree(np);
-  check('fallback: the settings work there too, and the review ran', a.flow.reviewers.join() === 'security' && a.reviews.security && a.reviews.security.status === 'ok' && /Security review after Backend/.test(await np.locator('.line-wrap').innerText()), [a.flow, a.reviews]);
+  check('fallback: the settings work there too, and the review ran', a.flow.reviewers.join() === 'security' && a.reviews.security && a.reviews.security.status === 'ok' && /Access check after Backend/.test(await np.locator('.line-wrap').innerText()), [a.flow, a.reviews]);
   await nb.ctx.close();
 
   // ----- H. on a phone -----
@@ -1518,7 +1532,7 @@ async function flowRound6(browser, url) {
   await page.waitForSelector('.react-flow .fl-gate'); await sleep(400);
   check('canvas: the Tests station reports the repair and its gate says ready to release', /1 repair sent back and applied/.test(await page.locator('.fl-node.station').nth(6).innerText()) && /Ready to release/.test(await page.locator('.fl-gate').nth(6).innerText()) && /Draft · not released yet/.test(await page.locator('.fl-ready').innerText()), [await page.locator('.fl-node.station').nth(6).innerText(), await page.locator('.fl-gate').nth(6).innerText()]);
   await page.locator('.fl-node.station').nth(6).click(); await sleep(300); const tp = await page.locator('.review-insp').innerText();
-  check('inspector: the Tester panel lists the cases, both runs and the deliberate slip', /6 test cases/.test(tp) && /Run 1[\s\S]*1 of \d+ failed[\s\S]*Backend repaired it[\s\S]*Run 2[\s\S]*all \d+ passed/.test(tp) && /keeps one slip on purpose/.test(tp) && await page.locator('.qa-case').count() === 6 && await page.locator('.qa-case.bad').count() === 0, tp.slice(0, 600)); await shot(page, 'r6-01-tester');
+  check('inspector: the Tester panel lists the cases, both runs and the deliberate slip', /6 test cases/.test(tp) && /Run 1[\s\S]*1 of \d+ failed[\s\S]*Rules builder repaired it[\s\S]*Run 2[\s\S]*all \d+ passed/.test(tp) && /keeps one slip on purpose/.test(tp) && await page.locator('.qa-case').count() === 6 && await page.locator('.qa-case.bad').count() === 0, tp.slice(0, 600)); await shot(page, 'r6-01-tester');
   await view(page, 'Tests'); await page.waitForSelector('.tests-view'); check('details: the test view lists the Tester\'s cases as a suite of their own', await page.locator('.subtabs .tab').count() === 4 && /Test cases/.test(await page.locator('.tests-view').innerText()) && await page.locator('.tests-view .suite').count() === 9, await page.locator('.tests-view .suite').count());
 
   // ----- the bid room: a view picked for what the agents produce -----
@@ -1544,7 +1558,7 @@ async function flowRound6(browser, url) {
 
   // ----- releases -----
   await view(page, 'Release'); await page.waitForSelector('.release');
-  check('release: a built app is a draft until it is released, and the notes are drafted for it', /Draft · not released yet/.test(await page.locator('#rel-state').innerText()) && /^First release: \d+ pages for 3 roles, with a team of 3 agents inside\./.test(await page.inputValue('#rel-notes')) && /Release version 1\.0/.test(await page.locator('#rel-go').innerText()) && await page.locator('#rel-share').isDisabled(), await page.inputValue('#rel-notes'));
+  check('release: a built app is a draft until it is released, and the notes are drafted for it', /Draft · not released yet/.test(await page.locator('#rel-state').innerText()) && /^First release: \d+ screens for 3 kinds of people, with a team of 3 agents inside\./.test(await page.inputValue('#rel-notes')) && /Release version 1\.0/.test(await page.locator('#rel-go').innerText()) && await page.locator('#rel-share').isDisabled(), await page.inputValue('#rel-notes'));
   const startTxt = (await page.locator('#rel-start').innerText()).replace(/\s+/g, ' ');
   check('before the first release the page asks what people start with: empty is the usual choice, beside demo data and the records as they are', /Before you release/.test(await page.locator('.rel-form').innerText()) && await page.locator('#rel-start .choice').count() === 3 && await page.locator('#rel-start .choice.on').getAttribute('data-start') === 'empty' && /Empty Usual choice No records\. Right for a real launch\./.test(startTxt) && /Demo data The \d+ made-up records/.test(startTxt) && /The records as they are now \d+ records/.test(startTxt) && /Nothing yet/.test(await page.locator('#rel-live').innerText()), startTxt);
   await page.locator('#rel-start .choice[data-start="demo"]').click(); await page.waitForSelector('#rel-start .choice.on[data-start="demo"]'); await shot(page, 'r6-03a-before-release');
@@ -1556,7 +1570,7 @@ async function flowRound6(browser, url) {
   const xtmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'tk-export-')), grab = async (id) => { const [d] = await Promise.all([page.waitForEvent('download'), page.locator(id).click()]); const p = path.join(xtmp, d.suggestedFilename()); await d.saveAs(p); return { name: d.suggestedFilename(), buf: fs.readFileSync(p) }; };
   await page.locator('#rel-export').scrollIntoViewIfNeeded(); await shot(page, 'r6-03b-export');
   const xmd = await grab('#exp-md'), md = xmd.buf.toString('utf8');
-  check('export: the document downloads as Markdown with the brief, tables, tests, who made what and the run timeline', /-deliverable\.md$/.test(xmd.name) && /^# .+ · deliverable/.test(md) && /## Brief/.test(md) && /CREATE TABLE "tenders"/.test(md) && /## Who made what/.test(md) && /\| Research \| Researcher \| Brief \|/.test(md) && /## Tests/.test(md) && /## Run timeline/.test(md) && /## Versions/.test(md), [xmd.name, md.slice(0, 160)]);
+  check('export: the document downloads as Markdown with the brief, tables, tests, who made what and the run timeline', /-deliverable\.md$/.test(xmd.name) && /^# .+ · deliverable/.test(md) && /## Brief/.test(md) && /CREATE TABLE "tenders"/.test(md) && /## Who made what/.test(md) && /\| Research \| Planner \| Brief \|/.test(md) && /## Tests/.test(md) && /## Run timeline/.test(md) && /## Versions/.test(md), [xmd.name, md.slice(0, 160)]);
   const xhtml = await grab('#exp-html'), html = xhtml.buf.toString('utf8');
   check('export: the printable page downloads as HTML with print styles and real tables', /-deliverable\.html$/.test(xhtml.name) && /^<!doctype html>/.test(html) && /@media print/.test(html) && /<h2 id="who-made-what">/.test(html) && /<table>/.test(html) && !/<script/i.test(html), xhtml.name);
   await page.locator('#exp-pdf').click(); await page.waitForFunction(() => { const f = document.getElementById('tk-print-frame'); return !!(f && f.contentDocument && /Who made what/.test(f.contentDocument.body.innerText)); }, null, { timeout: 5000 }).catch(() => {});
@@ -1667,10 +1681,27 @@ async function flowRound6(browser, url) {
   check('"Not now" drops the plan and changes nothing', impNow.edit === 'none' && impNow.plan.decided === 'later' && /Not done: nothing was changed/.test(await flatText('.gcard.cplan')) && /Nothing was changed\. Ask again whenever you want it\./.test(impNow.said.join(' ')), [impNow.edit, impNow.plan.decided, impNow.said]);
   // removing a field that holds values: one question, and the plan says plainly that something is removed
   await view(page, 'Release'); await page.waitForSelector('#improve-text'); await page.fill('#improve-text', 'Remove the weight field from score lines'); await page.locator('#improve-go').click(); await page.waitForSelector('.gcard.understand .opt:not([disabled])', { timeout: 15000 });
+  const logEnd = await page.waitForFunction(() => { const el = document.querySelector('.chat .msgs'); return el && el.scrollHeight - el.scrollTop - el.clientHeight < 4; }, null, { timeout: 3000 }).then(() => true, () => false);
+  check('the question a change asks is not left half hidden: the agents panel keeps its log at the end while the card fills in', logEnd, await st(page, () => { const el = document.querySelector('.chat .msgs'); return el && [el.scrollTop, el.scrollHeight, el.clientHeight]; }));
   const ask3 = await flatText('.gcard.understand');
   await page.locator('.gcard.understand').last().locator('.opt').first().click(); await page.waitForSelector('.gcard.cplan [data-act="go"]'); const planRem = await flatText('.gcard.cplan'); impNow = await imp(); await shot(page, 'r6-05d-removal-plan');
   check('removing a field with values asks what should happen to them, and the plan warns that something is removed and where it goes', /\d+ score lines have a value in Weight\. What should happen to them\? Put them away for 30 days Recommended Keep the field You decide/.test(ask3) && /Your records Removes something/.test(planRem) && /\d+ stored values leave the app\. They are put away for 30 days and come back if you add the field again\./.test(planRem) && /Put the values away and go ahead/.test(planRem) && impNow.plan.plan.team.map((w) => w.who).join() === 'List builder,Rules builder,View advisor,Screen designer,Tester' && impNow.weight, planRem);
   await page.locator('.gcard.cplan [data-act="later"]').click(); await page.waitForSelector('.gcard.cplan [data-act="later"]', { state: 'detached' });
+  // a fix can go out on its own while a new feature keeps waiting in the draft
+  await page.fill('#improve-text', 'Add a source field to risks'); await page.locator('#improve-go').click(); await page.waitForSelector('.gcard.cplan [data-act="go"], .gcard.understand .opt:not([disabled])', { timeout: 15000 });
+  for (let i = 0; i < 3 && !(await page.locator('.gcard.cplan [data-act="go"]').count()); i++) { await page.locator('.gcard.understand').last().locator('.opt:not([disabled])', { hasText: 'You decide' }).first().click(); await sleep(250); }
+  await page.locator('.gcard.cplan [data-act="go"]').click(); await page.waitForSelector('.gcard.tryit [data-act="works"]', { timeout: 30000 }); await waitIdle(page); await page.locator('.gcard.tryit [data-act="works"]').last().click(); await sleep(200);
+  await view(page, 'Release'); await page.waitForSelector('#rel-wait .rel-wait-item', { timeout: 15000 });
+  const waitTxt = await flatText('#rel-wait'), oneBefore = await appFull(page);
+  check('the release form lists what waits in the draft, change by change, and a fix can go out on its own as the next fix number', await page.locator('#rel-wait .rel-wait-item').count() === 2 && /Fix Bid managers cannot delete risks/.test(waitTxt) && /New feature Add a source field to risks/.test(waitTxt) && /Release on its own as 1\.2\.1/.test(waitTxt) && /Release version 1\.3$/.test((await page.locator('#rel-go').innerText()).trim()) && oneBefore.rel[0] === '1.2', [waitTxt, oneBefore.rel]); await shot(page, 'r6-05e-waiting');
+  await page.locator('#rel-wait .rel-wait-item').filter({ hasText: 'Bid managers cannot delete risks' }).locator('[data-act="alone"]').click(); await page.waitForSelector('#rel-alone-ask');
+  const aloneAsk = (await page.locator('#rel-alone-ask').innerText()).replace(/\s+/g, ' ');
+  check('it asks first, in plain words: what people get, and that the rest keeps waiting', /People get version 1\.2\.1 with only this fix\. The other change keeps waiting in the draft, and is checked again on top of 1\.2\.1\./.test(aloneAsk), aloneAsk);
+  await page.locator('#rel-wait [data-act="alone-go"]').click(); await page.waitForFunction(() => /Version 1\.2\.1 is out · draft has changes/.test((document.getElementById('rel-state') || {}).innerText || ''), null, { timeout: 20000 }); await sleep(200);
+  const one = await st(page, async () => { const F = window.__formwork, s = F.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), app = s.apps[t.app], r = app.releases[0], p = JSON.parse(await F.share.unsqueeze(r.pack)), risks = (d) => d.find((x) => x.name === 'risks').columns.map((c) => c.name); return { v: r.v, kind: r.kind, notes: r.notes, left: r.left, packDel: ((p.backend.access.risks || {}).bid_manager || {}).delete, packSource: risks(p.database.tables).includes('source'), draftDel: ((app.def.access.risks || {}).bid_manager || {}).delete, draftSource: risks(app.def.tables).includes('source'), copies: Object.values(s.apps).filter((x) => x.shared).length, said: app.chat.slice(-1).map((m) => m.text).join(' ') }; });
+  check('only the fix went out as 1.2.1: the new version lets bid managers delete risks and has no source field yet', one.v === '1.2.1' && one.kind === 'fix' && one.packDel === true && one.packSource === false && one.notes.join() === 'Now lets Bid manager delete risks' && one.left.join() === 'Add a source field to risks', one);
+  check('the draft keeps both changes, the new feature still waits for the next release, and the copy used to make it is gone', one.draftDel === true && one.draftSource && (await appFull(page)).dirty && one.copies === impNow.copies && /Release version 1\.3$/.test((await page.locator('#rel-go').innerText()).trim()) && /Added Source/.test(await page.inputValue('#rel-notes')) && !/delete risks/.test(await page.inputValue('#rel-notes')) && await page.locator('#rel-wait').count() === 0, [one, await page.inputValue('#rel-notes')]);
+  check('the owner is told what went out and that the waiting change was checked again on top of it', /Version 1\.2\.1 is released with only "Bid managers cannot delete risks"\. All \d+ tests passed first\. Add a source field to risks is still waiting in the draft\. It has been checked again on top of 1\.2\.1: all \d+ tests pass\./.test(one.said) && /On its own/.test(await page.locator('.rel-list .rel-item').first().innerText()) && /Left waiting in the draft: Add a source field to risks\./.test(await page.locator('.rel-list .rel-item').first().innerText()), one.said);
 
   // ----- the three quest rooms -----
   await page.locator('.brand').click(); await page.waitForSelector('.home'); await page.getByRole('button', { name: 'Build all three' }).click();
@@ -1708,8 +1739,9 @@ async function samplesChecks(browser, url) {
   check('home: the grant desk and purchase requests are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('.tpl').count() === 9);
   await page.fill('#home-prompt', 'a community foundation that reviews grant applications'); await page.locator('.prompt .btn.primary').click(); await page.waitForSelector('.iv-ask');
   check('Demo: a saved build with no question of its own asks only about demo data', (await ivNow(page)).n === 'Question 1 of 1' && (await ivNow(page)).card === 'demo_data' && /One quick question/.test(await page.locator('.iv-chat').innerText()) && (await ivNow(page)).name === 'GrantDesk', await ivNow(page));
-  await page.locator('.iv-usual').click(); await page.locator('.iv-act .iv-build').click(); await onApp(page); await waitReady(page); a = await appFull(page);
+  await page.locator('.iv-usual').click(); await page.locator('.iv-act .iv-build').click(); await onApp(page); const gd = await drive(page); a = gd.a;
   check('Demo: a sentence about grants is built from the grant desk\'s saved build', a.tpl === 'grants' && a.mode === 'demo', [a.tpl, a.mode]);
+  check('Demo: the replay brings in the team its plan named: the pause after the rules (there is money) and the Access checker', gd.seen.join() === 'backend' && a.flow.reviewers.join() === 'security' && a.reviews.security && a.reviews.security.status === 'ok', [gd.seen, a.flow, a.reviews]);
   check('grant desk: every station passed first time, with four tables and its own team of three agents', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'applications,score_lines,award_options,checks' && a.tests.failed === 0 && a.tests.fresh, [a.status, a.line, a.tests]);
   await view(page, 'App'); await page.locator('.persona-btn').first().click(); await land(page); await page.waitForSelector('.team.room');
   await page.locator('.team-start .chip', { hasText: 'Reading club for care homes' }).click(); await sleep(60); await page.locator('.team-start button[type=submit]').click(); await page.waitForSelector('.team-log .gcard.ask', { timeout: 20000 });
@@ -1985,7 +2017,7 @@ async function flowHistory(browser, url) {
 
   await page.getByRole('button', { name: 'Version history' }).click(); await page.waitForSelector('.dialog.history .hist-row');
   const rows = await page.locator('.hist-row').evaluateAll((l) => l.map((x) => [x.dataset.kind, x.classList.contains('now'), x.classList.contains('undone'), x.innerText.replace(/\s+/g, ' ')]));
-  check('version history lists every version newest first, with who made it, the current one and the undone one', rows.length === 3 && rows[2][0] === 'start' && rows[1][1] && rows[0][2] && /Database agent/.test(rows[1][3]) && /You/.test(rows[0][3]), rows);
+  check('version history lists every version newest first, with who made it, the current one and the undone one', rows.length === 3 && rows[2][0] === 'start' && rows[1][1] && rows[0][2] && /List builder/.test(rows[1][3]) && /You/.test(rows[0][3]), rows);
   await shot(page, 'history-dialog');
   await page.locator('.hist-row[data-kind="start"] .btn').click(); await sleep(300); await waitIdle(page);
   h = await hist(); a = await appState(page);

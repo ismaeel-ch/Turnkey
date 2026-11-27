@@ -43,8 +43,8 @@ describe('provenance', () => {
     recordTouches(a, before, 'database', 'change', 2, 'Add Phone');
     expect(a.touched?.['col:patients.phone']).toMatchObject({ by: 'database', via: 'change', what: 'Add Phone' });
     expect(a.touched?.['col:patients.full_name']?.via).toBe('build');
-    expect(touchText(a.touched?.['col:patients.phone'] ?? null)).toBe('Changed by the Database agent at your request');
-    expect(touchShort(a.touched?.['col:patients.phone'] ?? null)).toBe('Database agent, your request');
+    expect(touchText(a.touched?.['col:patients.phone'] ?? null)).toBe('Changed by the List builder at your request');
+    expect(touchShort(a.touched?.['col:patients.phone'] ?? null)).toBe('List builder, your request');
   });
 
   it('ignores by and run, and forgets items that are gone', () => {

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { COMPANY_EXPENSES, PERSONAL_EXPENSES, accessRows, previewPlan, slotValue, type PlanSpec, type QuestionCard } from '@/shared/plan';
-import { HOME_TEMPLATES, REC } from '@/workspace/builds';
+import '@/workspace/saved';
+import { HOME_TEMPLATES, QUESTS } from '@/workspace/catalog';
+import { REC } from '@/workspace/registry';
 import { U } from '@/workspace/core';
 import {
   MAX_WRITES,
@@ -22,7 +24,6 @@ import {
   skipCard,
   takeUsual,
 } from '@/workspace/interview';
-import { QUESTS } from '@/workspace/quests';
 
 const SAVED = [...HOME_TEMPLATES, ...QUESTS];
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -290,6 +291,20 @@ describe('the interview for a sentence the model builds from', () => {
     expect(planNow(iv)?.people.map((p) => p.id)).toEqual(['employee', 'manager']);
     expect(ask).toHaveBeenCalledTimes(1);
     expect(write).not.toHaveBeenCalled();
+  });
+
+  it('a rule that names people an answer took out is dropped from the plan so far', async () => {
+    plug();
+    const iv = beginInterview('an expense app', null);
+    await tick();
+    const draft = {
+      ...COMPANY_EXPENSES,
+      rules: ['Employees see only their own claims.', 'Managers approve claims.', 'Every claim needs an amount.'],
+    };
+    const cards = CARDS;
+    expect(previewPlan(draft, cards, { audience: { picked: ['just_me'], by: 'you' } }).rules).toEqual(['Every claim needs an amount.']);
+    expect(previewPlan(draft, cards, { audience: { picked: ['company'], by: 'you' } }).rules).toEqual(draft.rules);
+    expect(iv.cards).toHaveLength(3);
   });
 
   it('the Planner writes the plan from the answers the owner gave; skipped cards are left for it to fill', async () => {

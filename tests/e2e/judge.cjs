@@ -1,5 +1,7 @@
 // A judge's walk through the live site: the README's five-minute walk-through and the demo video's shot list
-// (docs/hackathon/demo-video.md), done the way a person would do it, by clicking what is on screen. Each step saves a
+// (docs/hackathon/demo-video.md), done the way a person would do it, by clicking what is on screen. Part 1 is the
+// guided build of the clinic (questions, plan, build, first use, demo data, release 1.0, a fix, release 1.1); part 2,
+// in a fresh browser, is Try a sample and the agents' teamwork. Each step saves a
 // screenshot, so the run doubles as a picture book of the demo path. Demo mode only: it calls no model.
 //
 //   TK_URL=https://turnkey-bay.vercel.app node tests/e2e/judge.cjs
@@ -79,19 +81,145 @@ async function openTab(page, name) {
   await sleep(400);
 }
 
+const CLINIC = 'A clinic books appointments for patients with its doctors';
+
+/** Part 1: the guided build, as the README's "See it in two minutes" tells it. Demo, so it calls no model. */
+async function guidedWalk(page) {
+  await step(page, 'Guided: Describe your own opens an empty workspace in Demo', async () => {
+    await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForSelector('.ob-card', { timeout: 45000 });
+    await page.getByRole('button', { name: 'Describe your own' }).click();
+    await page.waitForSelector('#home-prompt', { timeout: 30000 });
+    // with a model connected the workspace starts in Live; the walk-through switches it off to replay the saved build
+    const live = await page.locator('#sw-live').isChecked();
+    if (live) await page.locator('#sw-live').click();
+    await sleep(300);
+    expect(!(await page.locator('#sw-live').isChecked()), 'Live is still on');
+    return live ? 'Live was on; switched off for Demo' : 'Demo';
+  });
+  await step(page, 'Guided: the clinic sentence gets a question from the Planner', async () => {
+    await page.fill('#home-prompt', CLINIC);
+    await page.press('#home-prompt', 'Enter');
+    await page.waitForSelector('.iv-ask', { timeout: 30000 });
+    await sleep(500);
+    const q = clean(await page.locator('.iv-ask').first().innerText());
+    expect(/visit notes/i.test(q), 'question: ' + q.slice(0, 160));
+    return q.slice(0, 120);
+  });
+  await step(page, 'Guided: usual answers lead to the plan, nothing built yet', async () => {
+    for (let i = 0; i < 20 && !(await page.locator('.iv-act .iv-build').count()); i++) {
+      const next = page.locator('.iv-ask .iv-usual, .iv-done .iv-review').first();
+      if (await next.count()) await next.click();
+      await sleep(400);
+    }
+    const plan = clean(await page.locator('body').innerText());
+    expect(/Nothing is built until you press Build it/.test(plan), 'no "Nothing is built" line on the plan');
+    expect(/Who uses it/.test(plan) && /Who can see and do what/.test(plan), 'plan: ' + plan.slice(0, 160));
+    expect(!(await page.locator('.work-head').count()), 'an app was made before Build it');
+    return (plan.match(/\d+ lists?, \d+ kinds? of people[^.]*?agents/) || [''])[0];
+  });
+  await step(page, 'Guided: Build it, every step done and every check passes', async () => {
+    await page.locator('.iv-act .iv-build').click();
+    const a = await waitBuilt(page, 180000);
+    expect(a.status === 'ready' && a.tests && a.tests.failed === 0, 'status ' + a.status + ', tests ' + JSON.stringify(a.tests));
+    await page.waitForSelector('.steps-view', { timeout: 15000 });
+    const rows = await page.locator('.steps-list .step').evaluateAll((l) => l.map((x) => x.dataset.state));
+    expect(rows.length >= 5 && rows.every((x) => x === 'done'), 'steps: ' + rows.join(', '));
+    const first = clean(await page.locator('.steps-list .step').first().innerText());
+    expect(/Planner/.test(first), 'first step: ' + first.slice(0, 120));
+    return `${a.name}: ${rows.length} steps, ${a.tests.total} tests pass`;
+  });
+  await step(page, 'Guided: the app welcomes Sara, the receptionist', async () => {
+    await openTab(page, 'App');
+    await page.locator('.persona-btn', { hasText: 'Sara' }).first().click();
+    await page.waitForSelector('.fr-welcome', { timeout: 15000 });
+    const w = clean(await page.locator('.fr-welcome').innerText());
+    expect(/Welcome, Sara/.test(w) && /Receptionist/.test(w), 'welcome: ' + w.slice(0, 160));
+    return w.slice(0, 120);
+  });
+  await step(page, 'Guided: the app tour runs to the end', async () => {
+    await page.locator('.fr-welcome button', { hasText: 'Show me around' }).click();
+    let n = 0;
+    while ((await page.locator('.fr-pop').count()) && n < 12) {
+      n++;
+      await page.locator('.fr-pop .btn.primary').click();
+      await sleep(400);
+    }
+    expect(n >= 2 && !(await page.locator('.fr-pop').count()), `${n} stops, still open: ${await page.locator('.fr-pop').count()}`);
+    return `${n} stops`;
+  });
+  await step(page, 'Guided: demo data is removed in one step', async () => {
+    const bar = clean(await page.locator('.app .demo-bar').innerText());
+    expect(/demo data/i.test(bar), 'no demo data bar');
+    await page.locator('.app .demo-bar .btn', { hasText: 'Remove demo data' }).click();
+    await page.locator('.dialog .btn.danger', { hasText: 'Remove demo data' }).click();
+    await page.waitForSelector('.app .demo-bar:has-text("Demo data removed")', { timeout: 30000 });
+    return bar.slice(0, 120);
+  });
+  await step(page, 'Guided: release 1.0, then a change gets a plan before it is made', async () => {
+    await openTab(page, 'Release');
+    await page.waitForSelector('#rel-go', { timeout: 15000 });
+    await page.locator('#rel-go').click();
+    await page.waitForFunction(() => /Version 1\.0 · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''), null, {
+      timeout: 60000,
+    });
+    await page.fill('#improve-text', 'Add a notes field to patients');
+    await page.locator('#improve-go').click();
+    const go = page.locator('.gcard.cplan [data-act="go"]');
+    for (let i = 0; i < 100 && !(await go.count()); i++) {
+      const o = page.locator('.gcard.ask .opt:not([disabled])');
+      if (await o.count()) await o.first().click().catch(() => {});
+      await sleep(300);
+    }
+    expect(await go.count(), 'no plan card with Go ahead');
+    const plan = clean(await page.locator('.gcard.cplan').last().innerText());
+    await go.last().click();
+    await page.waitForSelector('.gcard.tryit', { timeout: 120000 });
+    const a = await waitBuilt(page, 120000);
+    expect(a.tests && a.tests.failed === 0, 'tests ' + JSON.stringify(a.tests));
+    return plan.slice(0, 120);
+  });
+  await step(page, 'Guided: try it, then release the change as 1.1', async () => {
+    await page.locator('.gcard.tryit [data-act="works"]').last().click();
+    await page.locator('.gcard.tryit [data-act="release"]').last().click({ timeout: 30000 });
+    await page.waitForSelector('#rel-go', { timeout: 15000 });
+    await page.locator('#rel-go').click();
+    await page.waitForFunction(() => /Version 1\.1 · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''), null, {
+      timeout: 60000,
+    });
+    await page.locator('.rel-hist').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await sleep(400);
+    const v = clean(await page.locator('.rel-hist').innerText());
+    expect(/1\.1/.test(v) && /1\.0/.test(v), 'versions: ' + v.slice(0, 160));
+    return v.slice(0, 120);
+  });
+}
+
 async function main() {
   const browser = await chromium.launch();
   const errors = [];
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const watch = (page) => {
+    page.on('pageerror', (e) => errors.push(firstLine(e)));
+    // a server error a judge would run into; short links answer 503 on purpose where they are not set up
+    page.on('response', (r) => {
+      const u = new URL(r.url());
+      if (r.status() >= 500 && !(r.status() === 503 && u.pathname.startsWith('/api/share'))) errors.push(`HTTP ${r.status()} on ${u.pathname}`);
+    });
+  };
+  const opts = { viewport: { width: 1440, height: 900 }, acceptDownloads: true };
+  const gctx = await browser.newContext(opts);
+  const gpage = await gctx.newPage();
+  watch(gpage);
+  const ctx = await browser.newContext(opts);
   const page = await ctx.newPage();
-  page.on('pageerror', (e) => errors.push(firstLine(e)));
-  // a server error a judge would run into; short links answer 503 on purpose where they are not set up
-  page.on('response', (r) => {
-    const u = new URL(r.url());
-    if (r.status() >= 500 && !(r.status() === 503 && u.pathname.startsWith('/api/share'))) errors.push(`HTTP ${r.status()} on ${u.pathname}`);
-  });
+  watch(page);
 
   try {
+    // ---- part 1: the guided build ----
+    await guidedWalk(gpage);
+    await gctx.close();
+
+    // ---- part 2: Try a sample and the agents' teamwork, in a fresh browser ----
     // ---- 1. the welcome screen (shot 1) ----
     await step(page, 'Welcome screen shows the headline and the stations', async () => {
       await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -103,9 +231,23 @@ async function main() {
       return text.slice(0, 120);
     });
 
-    // ---- 2. first run: Try a sample signs in with the demo account, keeps Demo and builds the Sales bidding desk (shot 2) ----
-    await step(page, 'Try a sample starts the Sales bidding desk build', async () => {
+    // ---- 2. first run: Try a sample signs in with the demo account, keeps Demo, asks its one question, shows the plan and builds the Sales bidding desk (shot 2) ----
+    await step(page, 'Try a sample asks one question with the usual choice marked', async () => {
       await page.getByRole('button', { name: 'Try a sample' }).click();
+      await page.waitForSelector('.iv-ask', { timeout: 30000 });
+      await sleep(600);
+      const card = clean(await page.locator('.iv-ask').innerText());
+      expect(/Usual choice/.test(card), 'no usual choice on the card: ' + card.slice(0, 160));
+      return card.slice(0, 100);
+    });
+    await step(page, 'Try a sample shows the plan before anything is built', async () => {
+      await page.getByRole('button', { name: 'Use the usual choices and show me the plan' }).click();
+      await page.waitForSelector('.iv-act .iv-build', { timeout: 10000 });
+      await sleep(600);
+      return clean(await page.locator('#iv-name').innerText()).slice(0, 80);
+    });
+    await step(page, 'Build it starts the Sales bidding desk build', async () => {
+      await page.locator('.iv-act .iv-build').click();
       await page.waitForSelector('.work-head', { timeout: 30000 });
       await page.waitForSelector('.tour-pop', { timeout: 10000 });
       return clean(await page.locator('.tour-pop').innerText()).slice(0, 80);
@@ -126,6 +268,14 @@ async function main() {
     });
 
     // ---- 3, 4. the build: stations, checks, the Tester's planted slip and the repair ----
+    // the plan has money and several kinds of people, so the build stops once for the owner to check the rules
+    await step(page, 'Build stops once for you to check the rules, and goes on when approved', async () => {
+      await openTab(page, 'Build');
+      await page.waitForSelector('.step-ask', { timeout: 120000 });
+      const ask = clean(await page.locator('.step-ask').innerText());
+      await page.locator('.step-ask .btn.primary').click();
+      return ask.slice(0, 100);
+    });
     await step(page, 'Build finishes with every test passing', async () => {
       await openTab(page, 'Build');
       const a = await waitBuilt(page, 180000);

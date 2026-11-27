@@ -1,4 +1,4 @@
-import { Suspense, lazy, useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AppTable, BackedDef, BriefedDef } from '@/shared/types/app';
 import type {
   ApiPanel,
@@ -53,15 +53,19 @@ import {
   roleName,
   tableOf,
 } from './engine';
-import { allConnectors, callConnector, connOn } from './builds';
+import { allConnectors, callConnector, connOn } from './connections';
 import { AGENTS, PENDING, RUNS, answerQuestion } from './line';
 import { DemoActions } from './demo-data-ui';
 import { editBlocked, editFromCanvas, handleChat, suggestChanges } from './changes';
-import { FlowCards, flowTips } from './custom';
+import { flowTips } from './custom';
 import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto, Select, Spinner, Switch, Tabs, Textarea } from './ui';
 import { isStatusCol, startWalk } from './runtime';
-import { ReleaseCard } from './release';
 import { latestTouchOfTable, touchOf, touchShort, touchText } from './provenance';
+import { later } from './later';
+
+// Loaded the first time they are drawn, to keep them out of the first page load.
+const ReleaseCard = later(() => import('./release-ui'), 'ReleaseCard');
+const FlowCards = later(() => import('./custom-ui'), 'FlowCards');
 
 // Improving an app after it is built (the plan card, its questions, try it) loads the first time one of its cards shows.
 const ChangePlanCard = lazy(() => import('./improve').then((m) => ({ default: m.ChangePlanCard })));
@@ -72,7 +76,7 @@ const TryItCard = lazy(() => import('./improve').then((m) => ({ default: m.TryIt
 function tableTouchText(app: AppRecord, table: string) {
   const made = touchOf(app, 'table:' + table),
     last = latestTouchOfTable(app, table),
-    first = touchText(made, 'Created by the Database agent from the definition');
+    first = touchText(made, 'Created by the List builder from the definition');
   return last && made && last.at > made.at && last !== made
     ? first + '. Last change: ' + touchText(last).replace(/^./, (c) => c.toLowerCase())
     : first;
@@ -361,7 +365,7 @@ function FieldEditor({ app, table }: { app: AppRecord & { def: BackedDef }; tabl
 }
 export function DataView({ app }: { app: AppRecord }) {
   if (!dbExists(app.id) || !app.def.tables.length)
-    return <Empty icon="database" title="No database yet" text="The Database agent creates the SQLite tables at the second station." />;
+    return <Empty icon="database" title="No database yet" text="The List builder creates the SQLite tables at the second station." />;
   const D = dataOf(app.id);
   const tables = dbTables(app.id),
     cur = tables.find((t) => t.name === D.table) || tables.find((t) => t.name !== 'users' && t.name !== 'activity') || tables[0],
@@ -579,7 +583,7 @@ export function ApiView({ app }: { app: AppRecord }) {
   const def = app.def;
   if (!def.process || !dbExists(app.id))
     return (
-      <Empty icon="server" title="No endpoints yet" text="The Backend agent writes the workflow and access rules at the third station." />
+      <Empty icon="server" title="No endpoints yet" text="The Rules builder writes the workflow and access rules at the third station." />
     );
   const A = apiOf(app.id);
   // the Backend agent writes the workflow only after the brief, so the definition has one here
@@ -1436,6 +1440,33 @@ export function ChatPanel({ app }: { app: AppRecord }) {
     const el = ref.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [n, app.id, answered, settled]);
+  // A card can grow after it is first drawn (a part that loads on first use, a list that fills in). While the log is
+  // at its end, keep it there, so a new question is not left half hidden under the suggestions.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let atEnd = true;
+    const onScroll = () => {
+      atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    };
+    const ro = new ResizeObserver(() => {
+      if (atEnd) el.scrollTop = el.scrollHeight;
+    });
+    const watch = () => {
+      ro.disconnect();
+      ro.observe(el);
+      for (const c of Array.from(el.children)) ro.observe(c);
+    };
+    const mo = new MutationObserver(watch);
+    mo.observe(el, { childList: true });
+    watch();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      el.removeEventListener('scroll', onScroll);
+    };
+  }, [app.id]);
   const send = (text?: string) => sendChat(app, text != null ? text : draft);
   const waiting = busy && (RUNS[app.id].answer || RUNS[app.id].gate),
     idle = !busy && !PENDING[app.id],

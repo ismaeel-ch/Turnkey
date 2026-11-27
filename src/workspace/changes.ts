@@ -31,6 +31,7 @@ import {
   str,
   toast,
   liveModelOn,
+  uid,
 } from './core';
 import { colSQL, createTableSQL, dbCount, dbRelease, dbRollback, dbSavepoint, dbTables, qi, sqlPeek, sqlRun } from './db';
 import {
@@ -99,7 +100,7 @@ import {
 import { FLOW_HELP, LEVELS, NOTE_FOR, agentThe, answerGate, flowChat, flowList, flowOf, parseFlow } from './custom';
 import { REVIEWERS } from './reviewers';
 import { logChange, relOf } from './release';
-import { changePlan, stationsFor } from './change-plan';
+import { changePlan, kindOf, stationsFor } from './change-plan';
 import type { StepFacts } from './change-plan';
 import { AWAY_DAYS, bringBackColumn, putAwayColumn } from './carry';
 import { recordTouches, snapshotDef } from './provenance';
@@ -547,6 +548,8 @@ export function renameEverywhere(app: AppRecord & { def: BackedDef }, t: AppTabl
 export interface PlannedStep extends StepFacts {
   sql?: string;
   run(ctx: { runN: number }): void;
+  /** the operation it was planned from, kept so the change can be made again on another version */
+  op?: Untrusted;
 }
 type BackedApp = AppRecord & { def: BackedDef };
 const need = <X>(x: X, msg: string): NonNullable<X> => {
@@ -1144,7 +1147,7 @@ export function planOps(app: BackedApp, ops: Untrusted) {
     .slice(0, 6)
     .forEach((o) => {
       try {
-        steps.push(planOne(app, o || {}));
+        steps.push({ ...planOne(app, o || {}), op: o || {} });
       } catch (e) {
         errors.push(errText(e));
       }
@@ -1244,6 +1247,24 @@ export const RECHECK: Dict<(app: BackedApp, ctx: ChangeCtx, steps: PlannedStep[]
     };
   },
 };
+/**
+ * Keeps a change that was just made as one `ChangeSet`: its operations, and its id on the notes and migrations it
+ * added (from migration `n0` on), so a release can take it on its own. Notes it with the release notes as well.
+ */
+export function keepChange(app: BackedApp, steps: PlannedStep[], n0: number, title: string, kind?: 'fix' | 'feature' | null, id?: string) {
+  const group = id || uid('chg'),
+    items = steps.map((s) => ({ text: s.text, station: s.station, ...(kind ? { kind } : {}) }));
+  steps.forEach((s) => logChange(app, s.text, s.station, kind, group));
+  app.def.migrations.slice(n0).forEach((m) => {
+    if (!m.group) m.group = group;
+  });
+  if (steps.some((s) => !s.op)) return group; // made some other way: it can still go out, but only with the whole draft
+  if (!app.changes) app.changes = [];
+  app.changes = app.changes.filter((c) => c.id !== group);
+  app.changes.push({ id: group, at: Date.now(), title: str(title).slice(0, 80), kind: kind || kindOf(items), ops: steps.map((s) => s.op) });
+  if (app.changes.length > 40) app.changes.splice(0, app.changes.length - 40);
+  return group;
+}
 export function applyChangeSync(app: BackedApp, steps: PlannedStep[], ctx: ChangeCtx) {
   // apply everything inside one savepoint, re-check the stations the change needs, roll back if any check fails
   const backup = JSON.stringify({
@@ -1317,8 +1338,9 @@ export function applyChangeSync(app: BackedApp, steps: PlannedStep[], ctx: Chang
     failed,
   };
 }
-export async function runChange(app: BackedApp, steps: PlannedStep[], title: string, kind?: 'fix' | 'feature' | null) {
-  const run = newRun(app, 'change', title, liveModelOn() ? 'live' : 'demo'),
+export async function runChange(app: BackedApp, steps: PlannedStep[], title: string, kind?: 'fix' | 'feature' | null, group?: string) {
+  const n0 = app.def.migrations.length,
+    run = newRun(app, 'change', title, liveModelOn() ? 'live' : 'demo'),
     ctl = (RUNS[app.id] = {
       stop: false,
       runId: run.id,
@@ -1435,7 +1457,7 @@ export async function runChange(app: BackedApp, steps: PlannedStep[], title: str
     STATIONS.forEach((st) => {
       app.line[st.id].status = 'ok';
     });
-    steps.forEach((s) => logChange(app, s.text, s.station, kind));
+    keepChange(app, steps, n0, title, kind, group);
     const ts = runTestsSync(app, undefined);
     run.status = 'ok';
     say(

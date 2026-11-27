@@ -198,8 +198,9 @@ function open(iv: Interview, got: { reflect: string; cards: QuestionCard[]; draf
 /**
  * Starts the interview for a sentence. `tpl` names the saved build that stands in when no model builds from it.
  * `skip`: "Skip the questions and use the usual choices", straight to the plan.
+ * `sample`: opened by "Try a sample", so the short tour follows "Build it".
  */
-export function beginInterview(request: string, tpl: string | null, skip?: boolean): Interview {
+export function beginInterview(request: string, tpl: string | null, skip?: boolean, sample?: boolean): Interview {
   const iv: Interview = {
     request,
     tpl,
@@ -214,6 +215,7 @@ export function beginInterview(request: string, tpl: string | null, skip?: boole
     written: 0,
     editing: null,
     ticks: null,
+    ...(sample ? { sample: true } : {}),
   };
   if (U.home.interview) stopCall(U.home.interview);
   U.home.interview = iv;
@@ -377,6 +379,8 @@ export function setDemoData(on: boolean) {
   }
   notify();
 }
+/** What runs once a build has started from "Build it". The shell puts the short tour here for "Try a sample". */
+export const AFTER_BUILD: { sample: (() => void) | null } = { sample: null };
 /** Start over: back to the sentence, which goes back into the box. */
 export function leaveInterview() {
   const iv = interviewNow();
@@ -394,6 +398,7 @@ export function buildIt() {
   if (app) {
     U.home.interview = null;
     notify();
+    if (iv.sample) AFTER_BUILD.sample?.();
   }
   return app;
 }

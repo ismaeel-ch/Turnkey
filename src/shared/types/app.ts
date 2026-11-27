@@ -324,6 +324,8 @@ export interface Migration {
   note: string;
   /** what the records must do to follow this change on another device */
   step?: RecordStep;
+  /** the change it belongs to (`ChangeSet.id` in the workspace) */
+  group?: string;
 }
 export interface AppDef {
   brief: Brief | null;

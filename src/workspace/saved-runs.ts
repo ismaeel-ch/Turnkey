@@ -1,6 +1,6 @@
 import type { AppTeam, Migration, RecordStep } from '@/shared/types/app';
 import type { AppRecord, Dict, Loose, SavedCase } from '@/shared/types/workspace';
-import { REC } from './builds';
+import { REC } from './registry';
 
 /* ===== Turnkey · saved runs that follow the app's field renames =====
    A saved build carries recorded runs of the app's own agents: the values a person typed and what each agent wrote.

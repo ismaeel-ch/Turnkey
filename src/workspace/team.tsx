@@ -41,7 +41,7 @@ import {
 } from './core';
 import { ACCENTS, accOf, apiCall, appUsers, chk, colOf, seedValue, tableOf } from './engine';
 import type { ApiResult } from './engine';
-import { allConnectors, callConnector, connOn } from './builds';
+import { allConnectors, callConnector, connOn } from './connections';
 import { savedCases } from './saved-runs';
 import { RUNS, SPEED, Stopped, fatal } from './line';
 import { TeamStreamError, jsonObject, splitToolName, streamTeam } from './team-stream';
