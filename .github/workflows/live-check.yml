@@ -22,6 +22,11 @@ on:
         required: false
         default: true
         type: boolean
+      guided:
+        description: After the Live build, walk the rest of the guided flow in that app (first use, demo data removal, release 1.0, one change, the next release). A few more model calls
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -49,4 +54,5 @@ jobs:
           TK_URL: ${{ inputs.url }}
           EXPECT_VERSION: ${{ inputs.version }}
           SMOKE_LIVE_BUILD: ${{ inputs.live_build && '1' || '0' }}
+          SMOKE_GUIDED: ${{ inputs.guided && '1' || '0' }}
         run: node tests/e2e/smoke.cjs
