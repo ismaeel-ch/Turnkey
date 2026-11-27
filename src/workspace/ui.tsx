@@ -578,6 +578,64 @@ export function scrollStop(el: HTMLElement | null) {
   fit();
   new ResizeObserver(fit).observe(el);
 }
+/* ---------- keeping the keyboard's place ----------
+   When the button someone pressed disappears (an answered question, a closed card, a bar that changes), the browser
+   drops focus to the top of the page, and a keyboard or screen reader user has to find their place again. These move
+   focus to what came in its place, but only when focus was lost: they never take it from a field in use elsewhere. */
+// a page that has just loaded has not lost anything: focus starts at the top, where the skip link is
+let used = false;
+if (typeof window !== 'undefined')
+  ['pointerdown', 'keydown'].forEach((t) =>
+    window.addEventListener(
+      t,
+      () => {
+        used = true;
+      },
+      { capture: true, once: true },
+    ),
+  );
+const focusLost = () => {
+  if (!used) return false;
+  const a = document.activeElement;
+  return !a || a === document.body || !a.isConnected;
+};
+const shown = (el: Element | null): el is HTMLElement => !!el && el instanceof HTMLElement && el.getClientRects().length > 0;
+/**
+ * Once the screen has changed, focuses the first of `targets` (selectors, in order of preference) that is on the
+ * page, if focus was lost. Tries for a short while, as the new part may draw a moment later (after a dialog closes).
+ * A target that cannot take focus by itself (a heading, a region) is made focusable from script only.
+ */
+export function refocus(targets: string[], within?: ParentNode | null) {
+  if (typeof document === 'undefined') return;
+  let n = 0;
+  const look = () => {
+    if (!focusLost()) return;
+    const root = within && (within as Node).isConnected ? within : document;
+    for (const sel of targets) {
+      const el = root.querySelector(sel);
+      if (shown(el)) {
+        if (el.tabIndex < 0 && !el.hasAttribute('tabindex')) el.tabIndex = -1;
+        el.focus();
+        return;
+      }
+    }
+    if (++n < 12) setTimeout(look, 50);
+  };
+  setTimeout(look, 0);
+}
+/**
+ * A ref for the heading of a part that replaces what was pressed (the next question, the plan, the build's steps):
+ * when it appears and focus was lost, focus moves to it, so the keyboard carries on from there and a screen reader
+ * reads it out.
+ */
+export function useFocusOnArrive<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el && focusLost()) el.focus();
+  }, []);
+  return ref;
+}
 export function Dialog({
   title,
   children,
