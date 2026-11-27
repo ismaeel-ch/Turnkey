@@ -883,3 +883,4 @@ html.tk-opening .boot-btn{cursor:progress}.boot-wait{align-self:center}
 .gt-item:active{filter:brightness(.94)}
 .pv-b:active{background:var(--colorSubtleBackgroundPressed)}
 .choice:disabled,.kpi.mini:disabled{color:var(--colorNeutralForegroundDisabled);cursor:not-allowed}
+.lg-todo-open:active{background:var(--colorSubtleBackgroundPressed)}
