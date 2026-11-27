@@ -6,7 +6,6 @@ import {
   emptyList,
   firstAction,
   guideFor,
-  hasExamples,
   isDone,
   roleLine,
   soleUser,
@@ -249,11 +248,5 @@ describe('apps with no sign-in screen', () => {
   it('a plan answered "Just me" opens straight away whoever is in it', () => {
     expect(soleUser(app('just_me'), [...people, { id: 3, role: 'manager' }])).toBe(people[0]);
     expect(soleUser(app('company'), [...people, { id: 3, role: 'manager' }])).toBeNull();
-  });
-});
-
-describe('demo data', () => {
-  it('is not marked yet, so the welcome does not claim it is', () => {
-    expect(hasExamples({ id: 'a1' } as AppRecord)).toBe(false);
   });
 });

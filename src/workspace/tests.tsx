@@ -5,6 +5,7 @@ import type { SqlRow, SqlValue } from '@/shared/types/sqljs';
 import type { AppRecord, Dict } from '@/shared/types/workspace';
 import { S, U, ago, arr, commit, cx, emit, errText, fmtMs, label, notify, sleep, str, toast, toolCall } from './core';
 import { dbRollback, dbSavepoint, qi, ql, sqlRun } from './db';
+import { tempDemoData, tempRecord } from './demo-data';
 import {
   VIEW_LABEL,
   accOf,
@@ -45,7 +46,9 @@ const labelOfState = (def: AppDef, t: AppTable, c: ColumnDef | null | undefined,
 /* ===== Turnkey prototype · the generated test suite =====
    Every app gets a suite of tests, generated from what the agents wrote: each table, link, access rule,
    workflow action, view, page, tour step and saved agent run becomes a test. Tests run against the real
-   SQLite file and the real endpoints. Anything that writes runs inside a savepoint and is rolled back. */
+   SQLite file and the real endpoints. Anything that writes runs inside a savepoint and is rolled back.
+   A test that needs records makes its own inside that savepoint: when the app holds no demo data, a temporary copy
+   of it goes in for the length of the test, so the suite passes on an empty app and never touches a real record. */
 /** The result of one test. */
 export interface TestResult {
   ok: boolean;
@@ -461,9 +464,12 @@ export function buildSuites(app: TestApp) {
           role = c.role as Role;
         dbSavepoint(app.id, 'wf');
         try {
+          tempDemoData(app);
+          // the record this acts on: the first one there is, or a temporary one when the table is empty
           const u = userOf(role.id) as AppUser,
-            row = sql('SELECT "id" FROM ' + qi(pt.name) + ' ORDER BY "id" LIMIT 1')[0];
-          if (!row) {
+            have = sql('SELECT "id" FROM ' + qi(pt.name) + ' ORDER BY "id" LIMIT 1')[0],
+            row = have || { id: tempRecord(app, pt) };
+          if (!row.id) {
             r[c.id] = tOk(true, 'no ' + pt.label.toLowerCase() + ' to try it on');
             return;
           }
@@ -513,6 +519,7 @@ export function buildSuites(app: TestApp) {
         cases.forEach((c, i) => {
           dbSavepoint(app.id, 'tm');
           try {
+            tempDemoData(app);
             const made = apiCall(app, runner, 'POST', '/api/' + it.name, tourValues(app, it, c.values), 'check');
             if (made.status !== 201) {
               r['team:case:' + i] = tOk(false, made.status + ' ' + made.error);
@@ -708,6 +715,7 @@ export function buildSuites(app: TestApp) {
         };
       dbSavepoint(app.id, 'acc');
       try {
+        tempDemoData(app);
         def.tour.forEach((s, i) => {
           const x = tourExec(app, st, s);
           r['acc:' + i] = tOk(x.ok, x.detail);
@@ -737,6 +745,7 @@ export function buildSuites(app: TestApp) {
         let bad = '';
         dbSavepoint(app.id, 'tcase');
         try {
+          tempDemoData(app);
           c.steps.every((s, k) => {
             const x = tourExec(app, st, s);
             if (!x.ok) bad = 'step ' + (k + 1) + ': ' + x.detail;

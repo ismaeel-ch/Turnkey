@@ -3,12 +3,12 @@ import type { AppTable, AppUser, Screen } from '@/shared/types/app';
 import type { AppRecord, Dict, Pane } from '@/shared/types/workspace';
 import { S, cx, notify, saveSoon } from './core';
 import { sqlPeek } from './db';
+import { hasDemoData } from './demo-data';
 import { Btn, Empty, Icon } from './ui';
 import {
   emptyDash,
   emptyList,
   guideFor,
-  hasExamples,
   isDone,
   type FirstAction,
   type Guide,
@@ -44,7 +44,7 @@ function setSeen(app: AppRecord, user: AppUser, patch: Partial<Seen>) {
 }
 /** The person looking at the app made it: it is one of their own apps, not a copy opened from a link. */
 const isOwner = (app: AppRecord) => !app.shared && !!S.session && app.owner === S.session;
-const guideOf = (app: AppRecord, user: AppUser): Guide => guideFor(app.def, user.role, { owner: isOwner(app), demo: hasExamples(app) });
+const guideOf = (app: AppRecord, user: AppUser): Guide => guideFor(app.def, user.role, { owner: isOwner(app), demo: hasDemoData(app) });
 /** "Dr. Ayesha Khan" is greeted as "Dr. Ayesha", "Hamza Qureshi" as "Hamza". */
 const firstName = (name: string) => {
   const p = name.trim().split(/\s+/);
@@ -114,7 +114,7 @@ function progressOf(app: AppRecord, user: AppUser, seen: Seen): Progress {
     opened: !!seen.opened,
     seen: seen.screens || {},
     did: new Set(rows.map((r) => String(r.table_name) + '|' + String(r.action))),
-    demo: hasExamples(app),
+    demo: hasDemoData(app),
   };
 }
 
@@ -194,7 +194,7 @@ function Welcome({
           Not now
         </Btn>
       </div>
-      {hasExamples(app) && <p className="t-cap muted">The records here are demo data. They are marked &quot;Demo&quot;.</p>}
+      {hasDemoData(app) && <p className="t-cap muted">The records here are demo data. They are marked &quot;Demo&quot;.</p>}
       {builder && !alone && isOwner(app) && (
         <p className="t-cap muted">
           Your people will see a welcome like this for their own job. Choose someone under &quot;Preview as&quot; to see theirs.

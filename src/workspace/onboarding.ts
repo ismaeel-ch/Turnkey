@@ -387,11 +387,3 @@ export function emptyDash(def: AppDef, t: AppTable, role: string): EmptyText {
     label: can ? 'New ' + low(t.one) : '',
   };
 }
-
-/**
- * Whether the app still holds demo data. The welcome's last line and the owner's "Remove the demo data" item show
- * only while it does. Marking demo records belongs to the demo data work (src/workspace/demo-data.ts); until that
- * is in, nothing is marked, so this answers no and both stay hidden.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the app is what the real check will read
-export const hasExamples = (app: AppRecord): boolean => false;
