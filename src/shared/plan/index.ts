@@ -4,3 +4,4 @@ export * from './team';
 export * from './norm';
 export * from './from-def';
 export * from './examples';
+export * from './preview';
