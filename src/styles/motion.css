@@ -86,7 +86,6 @@
   .ev {
     animation: tk-rise var(--durationNormal) var(--curveDecelerateMid) backwards;
   }
-  .app-dialog,
   .gcard,
   .iv-ask,
   .iv-done,

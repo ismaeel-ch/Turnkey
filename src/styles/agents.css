@@ -4,7 +4,7 @@
 /* agent avatars: a presence dot while the agent is working */
 .msg-av,.chat-av{position:relative;display:inline-flex;flex:none}
 .msg-av .av{width:28px;height:28px;border-radius:var(--borderRadiusLarge)}
-.msg-av.live::after,.chat-av.live::after{content:"";position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--colorPaletteLightGreenBackground3);border:2px solid var(--colorNeutralBackground2);animation:ag-pulse 1.6s ease-in-out infinite}
+.msg-av.live::after,.chat-av.live::after{content:"";position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--colorPaletteLightGreenBackground3);border:2px solid var(--colorNeutralBackground2);animation:ag-pulse 1.6s var(--curveEasyEase) infinite}
 .chat-head .chat-av.live::after{border-color:var(--colorNeutralBackground1)}
 .chat-avs{display:flex;align-items:center;gap:4px}
 .chat-av.live::after{width:8px;height:8px}
@@ -17,9 +17,9 @@
 .chat-now.n-ok .chat-now-top>.ic{color:var(--colorStatusSuccessForeground1)}.chat-now.n-bad .chat-now-top>.ic{color:var(--colorStatusDangerForeground1)}.chat-now.n-on .chat-now-top>.ic{color:var(--colorBrandForeground1)}
 .chat-now.n-ask .chat-now-t>span{color:var(--colorStatusWarningForeground1);font-weight:600}
 .chat-now-n{flex:none;font-variant-numeric:tabular-nums}
-.chat-now-bar{display:flex;gap:3px}.chat-now-bar i{flex:1;height:4px;border-radius:2px;background:var(--colorNeutralBackground5)}
+.chat-now-bar{display:flex;gap:4px}.chat-now-bar i{flex:1;height:4px;border-radius:2px;background:var(--colorNeutralBackground5)}
 .chat-now-bar .s-ok{background:var(--colorStatusSuccessForeground3)}
-.chat-now-bar .s-working,.chat-now-bar .s-checking{background:linear-gradient(90deg,var(--colorBrandStroke2),var(--colorBrandBackground),var(--colorBrandStroke2));background-size:200% 100%;animation:ag-slide 1.4s linear infinite}
+.chat-now-bar .s-working,.chat-now-bar .s-checking{background:linear-gradient(90deg,var(--colorBrandStroke2),var(--colorBrandBackground),var(--colorBrandStroke2));background-size:200% 100%;animation:ag-slide 1.4s var(--curveLinear) infinite}
 .chat-now-bar .s-waiting,.chat-now-bar .s-sentback{background:var(--colorStatusWarningForeground3)}
 .chat-now-bar .s-failed{background:var(--colorStatusDangerForeground1)}
 @keyframes ag-slide{to{background-position:-200% 0}}
@@ -32,7 +32,7 @@
 .msg-who>strong{font-size:14px;line-height:20px}
 .msg:not(.me) .msg-t{font-size:14px;line-height:20px;color:var(--colorNeutralForeground1)}
 .msg-typing{display:flex;align-items:center;gap:8px;color:var(--colorNeutralForeground2);min-height:28px}
-.typing{display:inline-flex;gap:3px}.typing i{width:6px;height:6px;border-radius:50%;background:var(--colorBrandForeground1);animation:ag-type 1.2s ease-in-out infinite}.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+.typing{display:inline-flex;gap:4px}.typing i{width:6px;height:6px;border-radius:50%;background:var(--colorBrandForeground1);animation:ag-type 1.2s var(--curveEasyEase) infinite}.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
 @keyframes ag-type{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
 
 /* the message box: one frame around the text and Send, Fluent's underline on focus */
@@ -51,7 +51,7 @@
 .meet .meet-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,320px);gap:16px;align-items:start}
 .meet-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin:0;padding:0}
 .meet-cell{display:flex;min-width:0}
-.meet-tile{flex:1;display:flex;align-items:flex-start;gap:12px;min-width:0;min-height:88px;padding:12px;text-align:left;font:inherit;color:inherit;border-radius:var(--borderRadiusXLarge);border:1px solid var(--colorNeutralStroke2);background:var(--colorNeutralBackground1);box-shadow:var(--shadow2);cursor:pointer;transition:box-shadow .15s,border-color .15s,background .15s}
+.meet-tile{flex:1;display:flex;align-items:flex-start;gap:12px;min-width:0;min-height:88px;padding:12px;text-align:left;font:inherit;color:inherit;border-radius:var(--borderRadiusXLarge);border:1px solid var(--colorNeutralStroke2);background:var(--colorNeutralBackground1);box-shadow:var(--shadow2);cursor:pointer;transition:box-shadow var(--durationFast) var(--curveEasyEase),border-color var(--durationFast) var(--curveEasyEase),background var(--durationFast) var(--curveEasyEase)}
 .meet-tile:disabled{cursor:default}
 .meet-tile:hover:not(:disabled){background:var(--colorNeutralBackground1Hover);box-shadow:var(--shadow4)}
 .meet-tile:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:2px}
@@ -61,8 +61,8 @@
 .meet-tile.m-flag{border-color:var(--colorStatusDangerBorder2)}
 .meet-tile.m-idle .av{filter:grayscale(1);opacity:.6}
 .meet-av{position:relative;display:inline-flex;flex:none}
-.meet-av.live::after{content:"";position:absolute;right:-3px;bottom:-3px;width:12px;height:12px;border-radius:50%;background:var(--colorPaletteLightGreenBackground3);border:2px solid var(--colorNeutralBackground1);animation:ag-pulse 1.6s ease-in-out infinite}
-.meet-hand{position:absolute;right:-6px;top:-6px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--colorStatusWarningBackground3);color:var(--colorNeutralForegroundOnBrand);border:2px solid var(--colorNeutralBackground1);animation:meet-wave 1.4s ease-in-out infinite}
+.meet-av.live::after{content:"";position:absolute;right:-3px;bottom:-3px;width:12px;height:12px;border-radius:50%;background:var(--colorPaletteLightGreenBackground3);border:2px solid var(--colorNeutralBackground1);animation:ag-pulse 1.6s var(--curveEasyEase) infinite}
+.meet-hand{position:absolute;right:-6px;top:-6px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--colorStatusWarningBackground3);color:var(--colorNeutralForegroundOnBrand);border:2px solid var(--colorNeutralBackground1);animation:meet-wave 1.4s var(--curveEasyEase) infinite}
 @keyframes meet-wave{50%{transform:rotate(-14deg)}}
 .meet-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .meet-head{display:flex;align-items:center;gap:8px;min-width:0}
@@ -70,7 +70,7 @@
 .meet-state{flex:none}
 .meet-cap{font-size:12px;line-height:16px;color:var(--colorNeutralForeground2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .meet-work{color:var(--colorNeutralForeground3);font-variant-numeric:tabular-nums}
-.meet-eq{width:6px;height:6px;border-radius:50%;background:currentColor;animation:ag-pulse 1s ease-in-out infinite}
+.meet-eq{width:6px;height:6px;border-radius:50%;background:currentColor;animation:ag-pulse 1s var(--curveEasyEase) infinite}
 .meet-screen{border:1px solid var(--colorNeutralStroke2);border-radius:var(--borderRadiusXLarge);background:var(--colorNeutralBackground2);padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
 .meet-screen-head{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;color:var(--colorNeutralForeground1);font-size:13px;line-height:18px}.meet-screen-head>.ic{margin-top:1px;color:var(--colorNeutralForeground3)}.meet-screen-head>.grow{flex:1 1 160px}
 .meet-board{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
