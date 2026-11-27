@@ -237,7 +237,7 @@ describe('apps with no sign-in screen', () => {
     { id: 1, role: 'owner' },
     { id: 2, role: 'owner' },
   ];
-  const app = (plan?: unknown) => ({ id: 'a1', plan }) as Pick<AppRecord, 'id'> & { plan?: unknown };
+  const app = (audience?: string) => ({ plan: audience ? { audience } : null }) as Pick<AppRecord, 'plan'>;
   it('one kind of person: the app opens as its first person', () => {
     expect(soleUser(app(), people)).toBe(people[0]);
     expect(soleUser(app(), [people[1]])).toBe(people[1]);
@@ -247,8 +247,8 @@ describe('apps with no sign-in screen', () => {
     expect(soleUser(app(), [])).toBeNull();
   });
   it('a plan answered "Just me" opens straight away whoever is in it', () => {
-    expect(soleUser(app({ audience: 'just_me' }), [...people, { id: 3, role: 'manager' }])).toBe(people[0]);
-    expect(soleUser(app({ audience: 'company' }), [...people, { id: 3, role: 'manager' }])).toBeNull();
+    expect(soleUser(app('just_me'), [...people, { id: 3, role: 'manager' }])).toBe(people[0]);
+    expect(soleUser(app('company'), [...people, { id: 3, role: 'manager' }])).toBeNull();
   });
 });
 

@@ -323,10 +323,9 @@ export function guideFor(def: AppDef, role: string, o: { owner?: boolean; demo?:
  * An app with one kind of person has no sign-in screen: it opens straight away as its first person. The plan says so
  * when the owner answered "Just me"; an app with no plan is read from its people.
  */
-export function soleUser<U extends { role: string }>(app: Pick<AppRecord, 'id'> & { plan?: unknown }, users: U[]): U | null {
+export function soleUser<U extends { role: string }>(app: Pick<AppRecord, 'plan'>, users: U[]): U | null {
   if (!users.length) return null;
-  const plan = app.plan as { audience?: unknown } | null | undefined;
-  return (plan && plan.audience === 'just_me') || new Set(users.map((u) => u.role)).size === 1 ? users[0] : null;
+  return (app.plan && app.plan.audience === 'just_me') || new Set(users.map((u) => u.role)).size === 1 ? users[0] : null;
 }
 
 /* ---------- empty screens ---------- */
