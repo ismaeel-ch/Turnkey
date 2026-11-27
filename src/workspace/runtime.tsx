@@ -1062,6 +1062,8 @@ export function StageView({ app }: { app: AppRecord }) {
 }
 /** Change how the app looks right here on the App page: accent, navigation and row density. Each pick is planned like
  *  a chat change, so only the UI agent's Screens station and the stations after it run again. */
+/** royalBlue → Royal blue */
+const accentName = (a: string) => label(a.replace(/([A-Z])/g, ' $1').toLowerCase());
 function LookMenu({ app }: { app: AppRecord }) {
   const th = app.def.theme;
   const blocked = editBlocked(app);
@@ -1070,23 +1072,45 @@ function LookMenu({ app }: { app: AppRecord }) {
       if (why) toast(why, 'warning');
     });
   };
-  const items: MenuEntry[] = [
+  // the current choice keeps its tick and stays readable; picking it again changes nothing
+  const keep = (now: boolean, patch: Record<string, string>) => () => {
+    if (!now) pick(patch);
+  };
+  const items: (MenuEntry | '-')[] = [
     { label: 'Navigation', head: true },
     ...(['side', 'top', 'rail'] as const).map((n) => ({
       label: n === 'rail' ? 'Icon rail' : n === 'side' ? 'Side' : 'Top',
       check: (th.nav || 'side') === n,
-      disabled: (th.nav || 'side') === n,
-      on: () => pick({ nav: n }),
+      on: keep((th.nav || 'side') === n, { nav: n }),
     })),
+    '-',
     { label: 'Rows', head: true },
     ...(['comfortable', 'compact'] as const).map((d) => ({
       label: label(d),
       check: (th.density || 'comfortable') === d,
-      disabled: (th.density || 'comfortable') === d,
-      on: () => pick({ density: d }),
+      on: keep((th.density || 'comfortable') === d, { density: d }),
     })),
-    { label: 'Accent colour', head: true },
-    ...ACCENTS.map((a) => ({ label: label(a), check: th.accent === a, disabled: th.accent === a, on: () => pick({ accent: a }) })),
+    '-',
+    {
+      // fourteen colours: a submenu keeps the menu short enough to show without scrolling
+      label: (
+        <>
+          <span className={'swatch acc-' + th.accent} aria-hidden="true" />
+          Accent colour
+        </>
+      ),
+      hint: accentName(th.accent),
+      sub: ACCENTS.map((a) => ({
+        label: (
+          <>
+            <span className={'swatch acc-' + a} aria-hidden="true" />
+            {accentName(a)}
+          </>
+        ),
+        check: th.accent === a,
+        on: keep(th.accent === a, { accent: a }),
+      })),
+    },
   ];
   return (
     <span title={blocked || 'Change the look. Only the Screens station and the ones after it run again.'}>

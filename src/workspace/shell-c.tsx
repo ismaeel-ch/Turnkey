@@ -205,12 +205,13 @@ export function Onboarding() {
         </p>
         <div className="ob-line" aria-hidden="true">
           {STATIONS.map((s, i) => (
+            // the arrow trails its station, so a wrapped line ends on an arrow instead of starting with one
             <span key={s.id} className="ob-pair">
-              {i > 0 && <Icon n="arrowRight" s="16" />}
               <span className="ob-st">
                 <AgentAv id={s.agent} size="sm" />
                 {s.name}
               </span>
+              {i < STATIONS.length - 1 && <Icon n="arrowRight" s="16" />}
             </span>
           ))}
         </div>
@@ -1362,7 +1363,7 @@ export function tourSteps() {
           U.bview[app.id] = 'line';
         },
         title: 'The workflow',
-        body: 'Your request, six agents, a gate after each one, and the finished app, drawn as a workflow you can pan, zoom and rearrange. Workflow, Timeline and Log show the same run three ways.',
+        body: 'Your request, six agents, a gate after each one, and the finished app, drawn as a workflow you can pan, zoom and rearrange. Workflow, Timeline, Log and Meeting show the same run four ways.',
       },
       {
         target: 'station',
@@ -1753,9 +1754,19 @@ function RootInner() {
     <Toasts key="toasts" />,
   ];
 }
+const DARK_MQ = '(prefers-color-scheme: dark)';
+function onSchemeChange(cb: () => void) {
+  if (!window.matchMedia) return () => {};
+  const mq = window.matchMedia(DARK_MQ);
+  mq.addEventListener('change', cb);
+  return () => mq.removeEventListener('change', cb);
+}
+const systemDark = () => !!window.matchMedia && window.matchMedia(DARK_MQ).matches;
+const serverDark = () => false;
 /** Everything in the workspace sits inside Fluent's provider; light or dark follows the app's own setting. */
 export function Root() {
   useStore(); // the theme follows the app's setting
+  useSyncExternalStore(onSchemeChange, systemDark, serverDark); // and, on "system", the device's theme when it changes
   return (
     <FluentProvider theme={isDark() ? webDarkTheme : webLightTheme} className="fl-provider">
       <RootInner />

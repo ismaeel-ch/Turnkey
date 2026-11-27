@@ -456,6 +456,45 @@ export interface MenuEntry {
   danger?: boolean;
   disabled?: boolean;
   on?: () => void;
+  /** A submenu that opens beside this item, for a long list of choices. */
+  sub?: (MenuEntry | '-')[];
+}
+/** One entry of a menu list: a divider, a group heading, an item, or an item that opens a submenu. */
+function menuEntry(it: MenuEntry | '-', i: number): ReactNode {
+  if (it === '-') return <MenuDivider key={i} className="msep" />;
+  if (it.head)
+    return (
+      <MenuGroupHeader key={i} className="mlabel">
+        {it.label}
+      </MenuGroupHeader>
+    );
+  const item = (
+    <MenuItem
+      key={i}
+      className={cx('mi', it.danger && 'danger')}
+      disabled={it.disabled}
+      icon={it.icon ? <Icon n={it.icon} /> : undefined}
+      secondaryContent={it.hint || undefined}
+      onClick={() => {
+        if (it.on) it.on();
+      }}
+    >
+      <span className="mi-row">
+        <span className="grow">{it.label}</span>
+        {it.check && <Icon n="check" s="16" />}
+      </span>
+    </MenuItem>
+  );
+  if (!it.sub) return item;
+  return (
+    // not inline: inside the parent's scrolling list, the submenu would be pushed back over the parent
+    <FluentMenu key={i} positioning={{ position: 'after', align: 'top', offset: 2 }}>
+      <MenuTrigger disableButtonEnhancement>{item}</MenuTrigger>
+      <MenuPopover className="menu sub">
+        <MenuList>{it.sub.map(menuEntry)}</MenuList>
+      </MenuPopover>
+    </FluentMenu>
+  );
 }
 export function Menu({
   btn,
@@ -484,33 +523,7 @@ export function Menu({
           </Btn>
         </MenuTrigger>
         <MenuPopover className={cx('menu', align === 'left' ? 'left' : 'right')}>
-          <MenuList>
-            {list.map((it, i) =>
-              it === '-' ? (
-                <MenuDivider key={i} className="msep" />
-              ) : it.head ? (
-                <MenuGroupHeader key={i} className="mlabel">
-                  {it.label}
-                </MenuGroupHeader>
-              ) : (
-                <MenuItem
-                  key={i}
-                  className={cx('mi', it.danger && 'danger')}
-                  disabled={it.disabled}
-                  icon={it.icon ? <Icon n={it.icon} /> : undefined}
-                  secondaryContent={it.hint || undefined}
-                  onClick={() => {
-                    if (it.on) it.on();
-                  }}
-                >
-                  <span className="mi-row">
-                    <span className="grow">{it.label}</span>
-                    {it.check && <Icon n="check" s="16" />}
-                  </span>
-                </MenuItem>
-              ),
-            )}
-          </MenuList>
+          <MenuList>{list.map(menuEntry)}</MenuList>
         </MenuPopover>
       </FluentMenu>
     </div>

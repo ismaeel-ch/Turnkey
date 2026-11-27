@@ -50,7 +50,8 @@ ul.dots{list-style:disc;padding-left:18px}
 .input.sm,.select.sm{min-height:24px;padding:1px 8px;font-size:12px;width:auto}.textarea{resize:vertical;display:block}.input.mono,.textarea.mono{font-family:var(--mono);font-size:12px}
 .input::placeholder,.textarea::placeholder{color:var(--colorNeutralForeground4)}
 /* Inside Fluent's Input/Select/Textarea (ui.tsx) Fluent draws the frame, so the native element drops its own. */
-.tk-field>.input,.tk-field>.select,.tk-field>.textarea{border:0;box-shadow:none;background:transparent;border-radius:0;outline:none}.tk-field.tk-input,.tk-field.tk-select,.tk-field.tk-textarea{width:100%;max-width:100%}.tk-field:has(>.sm){width:auto}
+.tk-field>.input,.tk-field>.textarea{border:0;box-shadow:none;background:transparent;border-radius:0;outline:none}
+/* Fluent's Select draws its frame on the native select itself, so it keeps the border the other fields hand to their wrapper */.tk-select>.select{padding-right:32px}.tk-select>.select.sm{padding-right:28px}.tk-field.tk-input,.tk-field.tk-select,.tk-field.tk-textarea{width:100%;max-width:100%}.tk-field:has(>.sm){width:auto}
 /* Native fields drawn to Fluent 2's Input/Select/Textarea spec (they stay native because module code reads their DOM values). */
 :not(.tk-field)>.input:hover:not(:disabled):not(:focus),:not(.tk-field)>.select:hover:not(:disabled):not(:focus),:not(.tk-field)>.textarea:hover:not(:disabled):not(:focus){border-color:var(--colorNeutralStroke1Hover);border-bottom-color:var(--colorNeutralStrokeAccessibleHover)}
 :not(.tk-field)>.input:disabled,:not(.tk-field)>.select:disabled,:not(.tk-field)>.textarea:disabled{border-color:var(--colorNeutralStrokeDisabled);background:var(--colorTransparentBackground);color:var(--colorNeutralForegroundDisabled);cursor:not-allowed}
@@ -79,7 +80,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .mbar{font-size:13px}.mbar>.fui-MessageBar__icon .ic{width:16px;height:16px}
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:40px 24px;text-align:center}.empty-ic{width:48px;height:48px;border-radius:50%;background:var(--colorNeutralBackground4);color:var(--colorNeutralForeground3);display:grid;place-items:center}.empty p{max-width:44ch}
 .menu-wrap{position:relative;display:inline-flex;flex:none}
-.menu{min-width:210px;max-width:320px;max-height:340px;overflow:auto;z-index:100;animation:none!important}.mi.danger{color:light-dark(var(--colorStatusDangerForeground1),#ee9fa2)}.mi-row{display:flex;align-items:center;gap:8px;min-width:0}
+.menu{min-width:210px;max-width:320px;max-height:min(440px,calc(100vh - 160px));overflow:auto;z-index:100;animation:none!important}.mi.danger{color:light-dark(var(--colorStatusDangerForeground1),#ee9fa2)}.mi-row{display:flex;align-items:center;gap:8px;min-width:0}
 .dialog{width:min(560px,calc(100% - 16px));max-width:none;max-height:calc(100% - 8px);padding:0;overflow:hidden;display:flex;flex-direction:column;outline:none}.dialog.wide{width:min(880px,calc(100% - 16px))}.dlg{display:flex;flex-direction:column;min-height:0;flex:1;gap:0;max-height:inherit;padding:0}
 .dhead{display:flex;align-items:center;gap:8px;padding:20px 24px 8px}.dhead h2{margin:0}.dbody{padding:8px 24px 16px;overflow:auto;display:flex;flex-direction:column;gap:12px;min-height:0;flex:1}.dfoot{display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 20px;flex-wrap:wrap}
 .tbl-wrap{overflow:auto;max-width:100%}.tbl{width:100%;border-collapse:collapse;font-size:14px}.tbl th{text-align:left;font-weight:400;color:var(--colorNeutralForeground3);font-size:12px;padding:8px 12px;border-bottom:1px solid var(--colorNeutralStroke1);white-space:nowrap;background:var(--colorNeutralBackground1);position:sticky;top:0;z-index:1}
@@ -616,7 +617,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 #boot{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center}
 .fl-provider{height:100%;background:transparent;color:inherit;font:inherit;line-height:inherit}
 /* the step palette above the workflow canvas: drag a step onto a gate */
-.flow-palette{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;margin-bottom:8px;padding-bottom:2px}
+.flow-palette{display:flex;align-items:center;gap:6px;flex-wrap:wrap;overflow-x:auto;scrollbar-width:thin;margin-bottom:8px;padding-bottom:2px}
 .flow-palette>*{flex:none}
 .fp-tile{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:2px 10px 2px 4px;border-radius:14px;border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground1);font:inherit;font-size:12px;line-height:16px;cursor:grab}
 .fp-tile:hover:not(:disabled){background:var(--colorNeutralBackground1Hover);border-color:var(--colorNeutralStroke1Hover)}
@@ -680,7 +681,9 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 /* 10: the wide canvas is sized to show node text at a readable size, so it can be taller than the window; its
    controls (zoom, Fit, Map, Reset layout) and legend sit above it, where they are in view without scrolling */
 .flow-wrap>.flow-foot{order:-1}
-.field-edit{display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--colorNeutralStroke2)}.field-edit .row>strong{min-width:110px}.field-edit .tk-input{min-width:180px}
+.field-edit{display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--colorNeutralStroke2)}.field-edit .row>strong{min-width:110px}.field-edit .tk-input{min-width:180px}.field-edit .tk-field{width:auto}
+@media (max-width:640px){.field-edit .row>strong{flex:1 0 100%;min-width:0}.field-edit .row>.tk-field{flex:1 1 0;min-width:0}.field-edit .row:first-child>strong+.tk-field,.field-edit .row+.row>strong+.tk-field{flex-basis:100%}}
+@media (max-width:640px){.flow-palette{flex-wrap:nowrap}}
 /* Meeting view of the agents (src/workspace/meeting.tsx): tiles like a Teams call, the speaker ringed, a raised hand for the owner */
 .meet .meet-stage{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:12px;align-items:start}
 .meet-screen{border:1px solid var(--colorNeutralStroke2);border-radius:var(--borderRadiusXLarge);background:var(--colorNeutralBackground2);padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
@@ -714,3 +717,6 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 .meet-line>.muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:900px){.meet .meet-stage{grid-template-columns:1fr}}
 @media (max-width:600px){.meet-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.meet-tile{min-height:112px}}
+@media (max-width:640px){.conn-detail .tbl th:nth-child(3),.conn-detail .tbl td:nth-child(3){display:none}}
+.team-cost{display:block;font-variant-numeric:tabular-nums}.team-a-cost{font-variant-numeric:tabular-nums}
+@media (max-width:820px){.build-bar>.fui-Button.btn{min-width:0}}
