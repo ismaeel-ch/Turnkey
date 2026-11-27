@@ -33,7 +33,6 @@ afterEach(() => {
   U.home.text = '';
   PLANNER.ask = null;
   PLANNER.write = null;
-  PLANNER.startEmpty = false;
 });
 
 describe('a saved build as a plan', () => {
@@ -118,12 +117,17 @@ describe('the interview for a saved build', () => {
     expect(currentCard(iv)?.id).toBe('q');
     expect(iv.plan).toBeNull();
     expect(planNow(iv)?.name).toBe('TimeOff');
-    expect(iv.reflect).toMatch(/^Got it\. .*One quick question/);
+    expect(iv.cards.map((c) => c.id)).toEqual(['q', 'demo_data']); // the build's own question, then the demo data choice
+    expect(iv.reflect).toMatch(/^Got it\. .*A few quick questions/);
   });
 
   it('an answer ends the questions, Review shows the plan with the answer kept as the owner’s', () => {
     const iv = beginInterview(REC.leave.sentence, 'leave');
     pickOption('q', '1');
+    expect(currentCard(iv)?.id).toBe('demo_data');
+    reviewPlan(); // not before the last card is answered
+    expect(iv.step).toBe('questions');
+    pickOption('demo_data', 'yes');
     expect(currentCard(iv)).toBeNull();
     expect(iv.step).toBe('questions');
     reviewPlan();
@@ -135,18 +139,24 @@ describe('the interview for a saved build', () => {
   it('Skip uses the usual choice and the plan says it was assumed', () => {
     const iv = beginInterview(REC.leave.sentence, 'leave');
     skipCard('q');
+    skipCard('demo_data');
     reviewPlan();
+    expect(iv.plan?.demoData).toBe(true);
     expect(iv.plan?.answers[0]).toMatchObject({ slot: 'q', value: iv.cards[0].usual[0], by: 'assumed' });
   });
 
-  it('"Skip the questions" and a build with no question go straight to the plan', () => {
+  it('"Skip the questions" goes straight to the plan with every usual choice', () => {
     const iv = beginInterview(REC.leave.sentence, 'leave', true);
     expect(iv.step).toBe('plan');
-    expect(iv.plan?.answers[0].by).toBe('assumed');
+    expect(iv.plan?.answers.map((a) => a.slot + ':' + a.by)).toEqual(['q:assumed', 'demo_data:assumed']);
+    expect(iv.plan?.demoData).toBe(true);
+  });
+
+  it('a saved build with no question of its own still asks about demo data', () => {
     const none = beginInterview(REC.grants.sentence, 'grants');
-    expect(none.cards).toEqual([]);
-    expect(none.step).toBe('plan');
-    expect(none.reflect).toMatch(/no questions for this one/);
+    expect(none.cards.map((c) => c.id)).toEqual(['demo_data']);
+    expect(none.step).toBe('questions');
+    expect(none.reflect).toMatch(/One quick question/);
   });
 
   it('Change reopens a card, and a new answer takes the approved plan away until it is reviewed again', () => {
@@ -172,14 +182,9 @@ describe('the interview for a saved build', () => {
     expect(iv.answers.q).toBeUndefined();
   });
 
-  it('offers the demo data choice only once a build can start empty, as a card and as a switch on the plan', () => {
-    let iv = beginInterview(REC.leave.sentence, 'leave');
-    expect(iv.cards.map((c) => c.id)).toEqual(['q']);
-    setDemoData(false);
+  it('asks about demo data last, as a card, and offers the same choice as a switch on the plan', () => {
+    const iv = beginInterview(REC.leave.sentence, 'leave');
     expect(planNow(iv)?.demoData).toBe(true);
-    PLANNER.startEmpty = true;
-    iv = beginInterview(REC.leave.sentence, 'leave');
-    expect(iv.cards.map((c) => c.id)).toEqual(['q', 'demo_data']);
     pickOption('q', '0');
     expect(currentCard(iv)?.id).toBe('demo_data');
     pickOption('demo_data', 'no');
@@ -264,7 +269,7 @@ describe('the interview for a sentence the model builds from', () => {
     await tick();
     expect(ask).toHaveBeenCalledTimes(1);
     expect(iv.busy).toBeNull();
-    expect(iv.cards.map((c) => c.id)).toEqual(['audience', 'people']); // no demo data card until a build can start empty
+    expect(iv.cards.map((c) => c.id)).toEqual(['audience', 'people', 'demo_data']);
     expect(planNow(iv)?.people).toHaveLength(3);
   });
 
@@ -274,7 +279,7 @@ describe('the interview for a sentence the model builds from', () => {
     await tick();
     pickOption('audience', 'just_me');
     expect(planNow(iv)?.people.map((p) => p.name)).toEqual(['You']);
-    expect(currentCard(iv)).toBeNull();
+    expect(currentCard(iv)?.id).toBe('demo_data'); // the people card is not asked of one person
     changeAnswer('audience');
     pickOption('audience', 'company');
     expect(currentCard(iv)?.id).toBe('people');
@@ -292,6 +297,7 @@ describe('the interview for a sentence the model builds from', () => {
     await tick();
     pickOption('audience', 'company');
     skipCard('people');
+    skipCard('demo_data');
     reviewPlan();
     expect(iv.busy).toBe('writing');
     await tick();
@@ -306,7 +312,7 @@ describe('the interview for a sentence the model builds from', () => {
     expect(request).toBe('an expense app');
     expect(answers.map((a) => a.slot + ':' + a.by)).toEqual(['audience:you']);
     expect(draft).toBe(COMPANY_EXPENSES);
-    expect(cards.map((c) => c.id)).toEqual(['audience', 'people']);
+    expect(cards.map((c) => c.id)).toEqual(['audience', 'people', 'demo_data']);
   });
 
   it('takes an answer in the owner’s own words and hands it to the Planner', async () => {
@@ -314,7 +320,8 @@ describe('the interview for a sentence the model builds from', () => {
     const iv = beginInterview('an expense app', null);
     await tick();
     answerInWords('audience', 'My football club');
-    expect(currentCard(iv)).toBeNull(); // the card that hangs on it is not asked
+    expect(currentCard(iv)?.id).toBe('demo_data'); // the card that hangs on it is not asked
+    skipCard('demo_data');
     reviewPlan();
     await tick();
     expect((write.mock.calls[0] as unknown as [string, { answer: string; value?: string }[]])[1][0]).toMatchObject({
