@@ -341,9 +341,15 @@ export function FilterBox({ app, user, t, st, set }: { app: AppRecord; user: App
     );
   return (
     <div className="menu-wrap" ref={ref}>
-      <Btn className={cx('btn sm', st.filters.length && 'on')} aria-expanded={open} onClick={() => setOpen(!open)}>
+      <Btn
+        className={cx('btn sm', st.filters.length && 'on')}
+        aria-expanded={open}
+        aria-label={st.filters.length ? 'Filter, ' + st.filters.length + ' on' : 'Filter'}
+        onClick={() => setOpen(!open)}
+      >
         <Icon n="filter" s="16" />
-        Filter{st.filters.length ? ' · ' + st.filters.length : ''}
+        <span className="hide-sm">Filter</span>
+        {st.filters.length > 0 && <span className="vx-count">{st.filters.length}</span>}
       </Btn>
       {open && (
         <form className="menu right fbox" onSubmit={add}>
@@ -388,7 +394,38 @@ export interface ViewProps {
   drill: (pairs: (DrillPair | null | undefined)[]) => void;
   canCreate: boolean;
 }
+/** Marks which ends of a sideways-scrolling strip have more behind them, for the CSS fade. */
+function fadeEdges(el: HTMLElement) {
+  const l = el.scrollLeft > 1,
+    r = el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
+    v = (l ? 'l' : '') + (r ? 'r' : '');
+  if ((el.dataset.fade || '') !== v) el.dataset.fade = v;
+}
 export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user: AppUser; pane: Pane; scr: Screen; test?: boolean }) {
+  const tabsRef = useRef<HTMLDivElement>(null),
+    shownTab = useRef(''),
+    watched = useRef<{ el: HTMLElement; ro: ResizeObserver } | null>(null);
+  // The tabs scroll sideways when they do not fit. Bring the chosen one into sight when it changes, without moving the
+  // page, and fade the edge that has more tabs behind it.
+  useEffect(() => {
+    const box = tabsRef.current;
+    if (!box) return;
+    if (typeof ResizeObserver !== 'undefined' && (!watched.current || watched.current.el !== box)) {
+      if (watched.current) watched.current.ro.disconnect();
+      const ro = new ResizeObserver(() => fadeEdges(box));
+      ro.observe(box);
+      watched.current = { el: box, ro };
+    }
+    const on = box.querySelector<HTMLElement>('.vs-b.on');
+    if (on && shownTab.current !== on.textContent) {
+      shownTab.current = on.textContent || '';
+      if (on.offsetLeft < box.scrollLeft) box.scrollLeft = on.offsetLeft;
+      else if (on.offsetLeft + on.offsetWidth > box.scrollLeft + box.clientWidth)
+        box.scrollLeft = on.offsetLeft + on.offsetWidth - box.clientWidth;
+    }
+    fadeEdges(box);
+  });
+  useEffect(() => () => watched.current?.ro.disconnect(), []);
   const def = app.def,
     t = tableOf(def, scr.table);
   if (!t)
@@ -588,7 +625,13 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
       </div>
       <div className="vx-bar">
         <div className="vswitch" data-tour="vswitch">
-          <div className="vs-tabs" role="tablist" aria-label="Ways to view this data">
+          <div
+            className="vs-tabs"
+            role="tablist"
+            aria-label="Ways to view this data"
+            ref={tabsRef}
+            onScroll={(e) => fadeEdges(e.currentTarget)}
+          >
             {rec
               .concat(
                 recT.includes(view)
@@ -623,7 +666,7 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
               align="left"
               title="Views the advisor did not recommend for this table"
               btn={{
-                cls: 'vs-b',
+                cls: 'btn subtle icon vs-b vs-more',
                 label: 'More views',
                 body: <Icon n="more" s="16" />,
               }}
@@ -650,12 +693,13 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
             />
           )}
         </div>
-        <span className="grow" />
-        <FilterBox app={app} user={user} t={t} st={st} set={set} />
-        <Btn className="btn sm" title="Copy the rows you see as CSV" onClick={csv}>
-          <Icon n="copy" s="16" />
-          <span className="hide-sm">CSV</span>
-        </Btn>
+        <div className="vx-acts">
+          <FilterBox app={app} user={user} t={t} st={st} set={set} />
+          <Btn className="btn sm" title="Copy the rows you see as CSV" aria-label="Copy as CSV" onClick={csv}>
+            <Icon n="copy" s="16" />
+            <span className="hide-sm">Copy CSV</span>
+          </Btn>
+        </div>
       </div>
       {st.filters.length > 0 && (
         <div className="chips">

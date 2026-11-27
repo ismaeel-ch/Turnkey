@@ -151,6 +151,9 @@ async function desktop(browser, s) {
   await snap(page, s + '-desktop-app-overview');
   await page.locator('.app-nav .nav-i').nth(1).click();
   await snap(page, s + '-desktop-app-page');
+  await page.locator('.app-nav .nav-i', { hasText: 'Schedule' }).first().click();
+  await page.waitForSelector('.vx-bar');
+  await snap(page, s + '-desktop-app-list');
   await view(page, 'Details');
   await page.waitForSelector('.subtabs');
   await page.locator('.subtabs').getByRole('tab', { name: 'Data', exact: true }).click();
@@ -175,6 +178,9 @@ async function phone(browser, s) {
   if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click();
   await page.waitForSelector('.app-tabs');
   await snap(page, s + '-phone-app');
+  await page.locator('.app-tabs .tab-i, .app-tabs button', { hasText: 'Schedule' }).first().click();
+  await page.waitForSelector('.vx-bar');
+  await snap(page, s + '-phone-app-list');
   await ctx.close();
 }
 

@@ -198,7 +198,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .app-nav.side .nav-i.on{background:var(--acc-tint);color:var(--acc-text);font-weight:600}
 .app-nav.top{display:flex;gap:2px;overflow-x:auto;flex:1;min-width:0;align-items:center;scrollbar-width:none}.app-nav.top .nav-i{color:var(--acc-on);padding:6px 10px}.app-nav.top .nav-i:hover{background:rgba(255,255,255,.16)}.app-nav.top .nav-i.on{background:rgba(255,255,255,.26);font-weight:600}
 .app-main{flex:1;min-width:0;overflow:auto;display:flex;flex-direction:column}.scr{padding:16px;display:flex;flex-direction:column;gap:12px;flex:1}
-.scr-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.search{display:flex;align-items:center;gap:6px;position:relative;width:200px;max-width:100%}.search .ic{position:absolute;left:8px;color:var(--colorNeutralForeground3)}.search .input{padding-left:28px}
+.scr-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.search{display:flex;align-items:center;gap:6px;position:relative;width:200px;max-width:100%}.search .ic{position:absolute;left:8px;z-index:1;pointer-events:none;color:var(--colorNeutralForeground3)}.search .input{padding-left:28px}
 .scr .tbl-wrap{background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke2);border-radius:8px}.scr .btn.primary{background:var(--acc);color:var(--acc-on)}.scr .btn.primary:hover{filter:brightness(.92)}
 .kb{display:flex;gap:12px;overflow-x:auto;align-items:flex-start;padding-bottom:8px;flex:1}.kb-col{flex:0 0 236px;background:var(--colorNeutralBackground4);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:8px}
 .kb-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px}.kb-list{display:flex;flex-direction:column;gap:8px}.kb-empty{font-size:12px;color:var(--colorNeutralForeground3);text-align:center;padding:12px 0}
@@ -266,10 +266,23 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important}}
 
 /* ---------- data explorer: one table, many views ---------- */
-.vx-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.vswitch{display:flex;gap:2px;padding:2px;border-radius:6px;background:var(--colorNeutralBackground4);flex-wrap:wrap}.vs-tabs{display:contents}
-.vs-b{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:0;border-radius:4px;background:none;color:var(--colorNeutralForeground2);font-size:13px;white-space:nowrap}
-.vs-b:hover{background:var(--colorSubtleBackgroundHover)}.vs-b.on{background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground1);font-weight:600;box-shadow:var(--shadow2)}.vs-b.on .ic{color:var(--acc-mark)}
+/* The view tabs and the list's actions share one row: the tabs scroll sideways when they do not fit, so More views,
+   Filter and Copy CSV always stay in sight and the row never wraps. */
+.vx-bar{display:flex;align-items:center;gap:8px;min-width:0;margin-top:-4px}
+.vswitch{display:flex;align-items:center;gap:2px;min-width:0;flex:0 1 auto}
+.vs-tabs{position:relative;display:flex;gap:2px;min-width:0;overflow-x:auto;scrollbar-width:none}.vs-tabs::-webkit-scrollbar{display:none}
+.vs-tabs[data-fade=r]{mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent)}.vs-tabs[data-fade=l]{mask-image:linear-gradient(to left,#000 calc(100% - 32px),transparent)}
+.vs-tabs[data-fade=lr]{mask-image:linear-gradient(to right,transparent,#000 32px,#000 calc(100% - 32px),transparent)}
+.vs-b{display:inline-flex;align-items:center;flex:none;gap:6px;height:32px;padding:0 10px;border:0;border-radius:var(--borderRadiusMedium);background:none;color:var(--colorNeutralForeground2);font-size:14px;white-space:nowrap;cursor:pointer}
+.vs-b .ic{color:var(--colorNeutralForeground3)}
+.vs-b:hover{background:var(--colorSubtleBackgroundHover);color:var(--colorNeutralForeground1)}.vs-b:active{background:var(--colorSubtleBackgroundPressed)}
+.vs-b:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:-2px}
+.vs-b.on{background:var(--colorSubtleBackgroundSelected);color:var(--colorNeutralForeground1);font-weight:600}.vs-b.on .ic{color:var(--acc-mark)}
+.vswitch .menu-wrap{flex:none}
+.vswitch .vs-more.fui-Button{min-width:32px;width:32px;height:32px;padding:0;border:0;border-radius:var(--borderRadiusMedium);color:var(--colorNeutralForeground2)}
+.vx-acts{display:flex;align-items:center;gap:6px;flex:none;margin-left:auto}
+.vx-acts .btn.fui-Button{height:32px;min-width:0}
+.vx-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--colorBrandBackground);color:var(--colorNeutralForegroundOnBrand);font-size:11px;font-weight:600;line-height:1}
 .vx-body{display:flex;flex-direction:column;gap:10px;flex:1;min-width:0}
 .vopts{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;min-height:30px}
 .pick{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--colorNeutralForeground3);white-space:nowrap}.pick .select{max-width:190px}
@@ -440,7 +453,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
   .app-head{min-height:52px;padding:env(safe-area-inset-top) 8px 0 12px}.app-name{font-size:17px;line-height:22px}.persona{padding:4px;border-radius:50%}
   .app-main{overscroll-behavior:contain}.scr{padding:12px 12px 92px;gap:10px}.scr-head{flex-wrap:wrap;gap:8px}.scr-head h2{display:none}.scr-head .search{flex:1 1 100%;order:3}.scr-head .search .input{width:100%}
   .fab{position:absolute;right:16px;bottom:16px;z-index:4;height:56px;min-width:56px;border-radius:28px;padding:0 20px;box-shadow:var(--shadow16);background:var(--acc);border-color:transparent;color:var(--acc-on);font-size:15px}.fab .ic{width:24px;height:24px}
-  .vx-bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -12px;padding:0 12px}.vx-bar::-webkit-scrollbar{display:none}.vswitch{flex-wrap:nowrap;flex:none}.vs-b{height:36px;padding:0 12px}.vx-bar>.grow{display:none}
+  .vx-bar{gap:6px;margin-top:0}.vs-b{height:36px;padding:0 12px}.vswitch .vs-more.fui-Button{width:36px;min-width:36px;height:36px}.vx-acts .btn.fui-Button{height:36px;min-width:36px;padding:0 8px}
   .vopts{gap:8px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -12px;padding:0 12px}.vopts::-webkit-scrollbar{display:none}.vopts>*{flex:none}.only-c{display:inline-flex}
   .btn{height:40px;padding:0 14px}.btn.sm{height:36px;padding:0 12px;font-size:13px}.btn.icon{width:40px}.btn.icon.sm{width:36px}.input,.select,.textarea{min-height:44px;font-size:16px}.input.sm,.select.sm{min-height:36px;font-size:14px}
   .tbl-wrap{overflow:visible}.tbl,.tbl tbody,.tbl tfoot{display:block}.tbl thead{display:none}
