@@ -94,6 +94,8 @@ describe('detectRole', () => {
   const head = (who: string) => `You are the ${who} agent on Turnkey, a line of agents that builds small record-keeping web apps.\n\n`;
   it('names the builder agents', () => {
     expect(detectRole(head('Researcher') + 'REQUEST: "x"')).toBe('research');
+    expect(detectRole(head('Planner') + 'REQUEST: "x"\n\nWrite the questions to ask the owner')).toBe('questions');
+    expect(detectRole(head('Planner') + 'REQUEST: "x"\n\nANSWERS: []\n\nWrite the final plan.\n- ...')).toBe('plan');
     expect(detectRole(head('Database') + 'BRIEF')).toBe('database');
     expect(detectRole(head('Backend') + 'BRIEF')).toBe('backend');
     expect(detectRole(head('View advisor') + 'TABLES')).toBe('views');

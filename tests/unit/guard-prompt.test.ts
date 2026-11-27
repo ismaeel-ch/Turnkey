@@ -61,7 +61,7 @@ describe('prompt policy against the workspace sources', () => {
   const HEAD = workspaceHead();
 
   it('accepts what HEAD() builds, for every builder, reviewer and added step name', () => {
-    const names = ['Researcher', 'Database', 'Backend', 'View advisor', 'UI', 'Tester', 'Orchestrator'];
+    const names = ['Planner', 'Researcher', 'Database', 'Backend', 'View advisor', 'UI', 'Tester', 'Orchestrator'];
     for (const f of ['custom.tsx', 'reviewers.ts']) for (const m of read(f).matchAll(/name: '([^']+)',\s*short:/g)) names.push(m[1]);
     expect(names.length).toBeGreaterThan(9);
     for (const n of names) expect(checkPrompt(HEAD(n) + 'BRIEF: {}'), n).toEqual({ ok: true, kind: 'line' });
@@ -76,6 +76,7 @@ describe('prompt policy against the workspace sources', () => {
         'changes.ts changePrompt(app, text)',
         'custom.tsx reviewPrompt(app, id)',
         "line.ts PROMPTS[st.id](app, feedback) + (note ? '\\n\\nSTANDING INSTRUCTION FROM THE OWNER OF THIS APP. Follow it wherever it does not break the format or the rules above:\\n' + note : '')",
+        'planner.ts prompt(feedback)',
         'tester.tsx testerPrompt(app)',
         'tester.tsx repairPrompt(app, fails, tried)',
       ].sort(),
@@ -89,7 +90,15 @@ describe('prompt policy against the workspace sources', () => {
     expect(callArgs(read('line.ts'), 'LIVE\\.fn').length).toBe(1);
   });
 
+  it('the Planner asks only with its two prompts', () => {
+    // planner.ts hands callModel `prompt(feedback)`; these are the only prompts it is ever given
+    const given = callArgs(read('planner.ts'), 'ask').map((args) => flat(args[0]));
+    expect(given.sort()).toEqual(['(f) => askPrompt(request, f)', '(f) => planPrompt(request, all, draft, f)']);
+  });
+
   it.each([
+    ['planner.ts', /export function askPrompt\([^)]*\) \{[\s\S]*?\n\}/],
+    ['planner.ts', /export function planPrompt\([^)]*\) \{[\s\S]*?\n\}/],
     ['changes.ts', /export function changePrompt\([^)]*\) \{[\s\S]*?\n\}/],
     ['custom.tsx', /export function reviewPrompt\([^)]*\) \{[\s\S]*?\n\}/],
     ['tester.tsx', /export const testerPrompt = \([^)]*\) =>\s*\S+/],
@@ -116,7 +125,7 @@ describe('prompt policy against the workspace sources', () => {
 
   it('only these files use HEAD(), so a new prompt builder cannot slip in unchecked', () => {
     const users = files.filter((f) => /\bHEAD\(/.test(read(f))).sort();
-    expect(users).toEqual(['changes.ts', 'custom.tsx', 'line.ts', 'tester.tsx']);
+    expect(users).toEqual(['changes.ts', 'custom.tsx', 'line.ts', 'planner.ts', 'tester.tsx']);
   });
 
   it('team.tsx asks no model itself: its agents run on /api/agent/team, which checks the team definition', () => {

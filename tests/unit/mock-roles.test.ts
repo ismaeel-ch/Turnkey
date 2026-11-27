@@ -14,6 +14,7 @@ const ask = async (prompt: string) => (await complete(mock, { messages: [{ role:
 describe('mock provider, role aware', () => {
   it('recognises the prompts of Turnkey agents and nothing else', () => {
     expect(roleOf('You are the Researcher agent on Turnkey, a line of agents that builds')).toBe('Researcher');
+    expect(roleOf('You are the Planner agent on Turnkey, a line of agents that builds')).toBe('Planner');
     expect(roleOf('You are Extractor, one of 3 agents inside the app "X". About')).toBe('team');
     expect(roleOf('Say hello')).toBeNull();
     expect(roleAnswer('Say hello')).toBeNull();
