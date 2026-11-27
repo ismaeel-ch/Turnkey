@@ -5,6 +5,17 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-11-27
+
+Changing a built app and putting out a new version is easy to find and always possible.
+
+### Fixed
+
+- The Release page always offers the next version. With nothing changed since the last release it says how to get
+  to the next one, and "Release again without changes" lets the owner release anyway once they say why. The box for
+  asking a change is there before version 1.0 too, the finished build has a "Change something" button that opens
+  it, and the Help guide no longer points at a button that was not there. ([#259](https://github.com/ismaeel-ch/Turnkey/pull/259))
+
 ## [0.5.2] - 2026-11-27
 
 A faster first visit on phones, the expense manager as a sample, fairer Live builds, a guided flow that keeps the

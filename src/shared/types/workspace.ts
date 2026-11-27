@@ -563,7 +563,13 @@ export interface ViewState {
   noteDraft: Dict<string>;
   /** release form, per app */
   /** the Release view's form, by app id */
-  rel: Dict<{ kind: string | null; text: string | null; busy: boolean; start?: StartWith | null }>;
+  rel: Dict<{
+    kind: string | null;
+    text: string | null;
+    busy: boolean;
+    start?: StartWith | null;
+    /** the owner asked to release although the draft has not changed */ again?: boolean;
+  }>;
   /** last Details tab, per app */
   detail: Dict<string>;
   /** the chat peek on narrow screens */

@@ -287,8 +287,8 @@ export const GUIDE: GuideEntry[] = [
     what: 'Building gives you a draft. Releasing turns it into a numbered version: every test runs once more, the notes say what changed, and a snapshot is kept. Later changes go into a new draft until you release again as a fix, new features or a big change. Any kept version can be opened on its own or made the draft again.',
     how: [
       'Open Release and press Release version 1.0.',
-      'Ask for a change in chat. The app now shows Draft, and the notes are written from what changed.',
-      'Release again, then look under Versions.',
+      'Say what to change in the box on Release, or in chat. The app now shows Draft, and the notes are written from what changed.',
+      'Release the draft as the next version, then look under Versions.',
     ],
     go: {
       label: 'Open Release',
