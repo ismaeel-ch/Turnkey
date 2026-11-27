@@ -181,3 +181,24 @@ describe('what the real builds taught', () => {
     expect(made.starts_at).not.toBe(taken.starts_at);
   });
 });
+
+describe('a move after a line was added', () => {
+  it('is a move of the order, not of the line the step before it made', () => {
+    const app = APPS.orders;
+    const st = { rows: {}, last: null };
+    const play = (step: Record<string, unknown>) => M.engine.tourExec(app, st, step as unknown as Parameters<typeof M.engine.tourExec>[2]);
+    expect(play({ role: 'requester', do: 'create', table: 'purchase_orders', values: { title: 'Pens', department: 1 } }).ok).toBe(true);
+    // the line names another order by its row number; it still joins the order this walk made
+    expect(
+      play({
+        role: 'requester',
+        do: 'create',
+        table: 'order_lines',
+        values: { item: 'Pens', purchase_order: 1, quantity: 2, unit_price: 3 },
+      }).ok,
+    ).toBe(true);
+    const moved = play({ role: 'requester', do: 'transition', transition: 'submit' });
+    expect(moved.ok).toBe(true);
+    expect(play({ role: 'requester', do: 'denied', action: 'approve' }).ok).toBe(true);
+  });
+});

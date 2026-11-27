@@ -1808,7 +1808,10 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
       ok: false,
       detail: 'No user with the role ' + step.role,
     };
-  const tn = step.table || (st.last && st.last.table) || mainTable(def)?.name,
+  // a move with no table named is a move of the list that has stages, even when the step before it added a line elsewhere
+  const P0 = def.process,
+    moves = P0 && P0.table && (step.do === 'transition' || (step.do === 'denied' && P0.transitions.some((x) => x.id === step.action)));
+  const tn = step.table || (moves ? P0.table : null) || (st.last && st.last.table) || mainTable(def)?.name,
     t = tableOf(def, tn);
   const scr = step.screen
     ? def.screens.find((s) => s.name.toLowerCase() === String(step.screen).toLowerCase() && s.roles.includes(u.role))
