@@ -1,5 +1,6 @@
 import { modelProblem } from '@/shared/api-error';
 import type { AppDef, AppTable, BackedDef, Brief, BriefedDef, Check, Untrusted } from '@/shared/types/app';
+import type { PlanSpec } from '@/shared/plan';
 import type {
   AppRecord,
   ChatCard,
@@ -217,7 +218,7 @@ export const blankDef = (): AppDef => ({
   actions: [],
   migrations: [],
 });
-export function newApp(o: { request: string; tpl?: string | null; mode: string }) {
+export function newApp(o: { request: string; tpl?: string | null; mode: string; plan?: PlanSpec | null }) {
   const rec = o.tpl ? REC[o.tpl] : null,
     id = uid('app');
   const app: AppRecord = {
@@ -233,6 +234,7 @@ export function newApp(o: { request: string; tpl?: string | null; mode: string }
     created: Date.now(),
     updated: Date.now(),
     def: blankDef(),
+    plan: o.plan ?? null,
     seed: null,
     line: {},
     runs: [],
@@ -1664,8 +1666,8 @@ export async function runBuild(app: BuildApp, from?: string) {
     commit();
   }
 }
-export function startBuild(o: { request: string; tpl?: string | null }) {
-  // o: { request, tpl } · no tpl means a live build from the sentence
+export function startBuild(o: { request: string; tpl?: string | null; plan?: PlanSpec | null }) {
+  // o: { request, tpl, plan } · no tpl means a live build from the sentence · plan is the plan the owner approved
   if (!o.tpl && !liveModelOn()) {
     const m = modeNow().id;
     toast(
@@ -1684,6 +1686,7 @@ export function startBuild(o: { request: string; tpl?: string | null }) {
     request: o.request,
     tpl: o.tpl,
     mode: o.tpl ? 'demo' : 'live',
+    plan: o.plan,
   });
   openTab(app.id);
   U.view[app.id] = 'build';
