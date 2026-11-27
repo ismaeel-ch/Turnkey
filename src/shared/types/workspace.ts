@@ -988,6 +988,8 @@ export interface PaneForm {
   err?: string;
   /** form screens: the id of the record just created */
   done?: number | null;
+  /** a long form shown as steps: the step the person is on */
+  step?: number;
 }
 
 /** One filter of a data view: a column, a condition (`is`, `has`, `range`, `between` ...) and its value. */

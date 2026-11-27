@@ -514,3 +514,109 @@ export function readsOf(node: Node, isList: (name: string) => boolean = () => tr
   walk(node, null);
   return out;
 }
+
+/* ---------- writing a formula back as text, and following a renamed field ---------- */
+
+const RANK: Record<string, number> = { or: 1, and: 2, '=': 4, '!=': 4, '<': 4, '<=': 4, '>': 4, '>=': 4, '+': 5, '-': 5, '*': 6, '/': 6 };
+const rankOf = (n: Node) => (n.k === 'bin' ? RANK[n.op] || 4 : n.k === 'not' ? 3 : n.k === 'neg' ? 7 : 9);
+
+/** The formula text of a tree. `parse(print(node))` gives the same tree back. */
+export function print(node: Node): string {
+  const inside = (n: Node, min: number) => (rankOf(n) < min ? '(' + print(n) + ')' : print(n));
+  switch (node.k) {
+    case 'num':
+      return String(node.v);
+    case 'str':
+      return node.v.includes("'") ? '"' + node.v + '"' : "'" + node.v + "'";
+    case 'lit':
+      return node.v === null ? 'empty' : String(node.v);
+    case 'name':
+      return node.name;
+    case 'path':
+      return node.head + '.' + node.field;
+    case 'neg':
+      return '-' + inside(node.x, 7);
+    case 'not':
+      return 'not ' + inside(node.x, 3);
+    case 'bin': {
+      const r = rankOf(node);
+      // a comparison does not chain, and "a - (b - c)" needs its brackets: the right side must bind tighter
+      return inside(node.a, r === 4 ? 5 : r) + ' ' + node.op + ' ' + inside(node.b, r + 1);
+    }
+    case 'call':
+      return node.fn + '(' + node.args.map(print).join(', ') + ')';
+  }
+}
+
+/** Which names of a formula a rename touches. Each answers with the new name, or null to leave it. */
+export interface Renamer {
+  /** a field of the record itself */
+  own(name: string): string | null;
+  /** `link.field`: the field of the record a link points to */
+  linked(link: string, field: string): string | null;
+  /** a field of the records of `list` that point here, inside sum() and the like (its field or its condition) */
+  listed(list: string, field: string): string | null;
+}
+
+/**
+ * The same formula with renamed fields. Text that cannot be read, and text the rename does not touch, comes back
+ * exactly as it was, so a rename never reformats a formula it has no business with.
+ */
+export function renameInFormula(text: string, isList: (name: string) => boolean, r: Renamer): string {
+  let node: Node;
+  try {
+    node = structuredClone(parsed(text));
+  } catch {
+    return text;
+  }
+  let changed = false;
+  const set = (v: string | null, put: (v: string) => void) => {
+    if (v && /^[A-Za-z_][A-Za-z0-9_]*$/.test(v)) {
+      put(v);
+      changed = true;
+    }
+  };
+  const walk = (n: Node, list: string | null) => {
+    switch (n.k) {
+      case 'name':
+        set(list ? r.listed(list, n.name) : r.own(n.name), (v) => (n.name = v));
+        return;
+      case 'path':
+        if (!list) {
+          const field = r.linked(n.head, n.field);
+          set(r.own(n.head), (v) => (n.head = v));
+          set(field, (v) => (n.field = v));
+        }
+        return;
+      case 'neg':
+      case 'not':
+        walk(n.x, list);
+        return;
+      case 'bin':
+        walk(n.a, list);
+        walk(n.b, list);
+        return;
+      case 'call': {
+        const first = n.args[0];
+        const rollup =
+          !list &&
+          ROLLUPS.includes(n.fn) &&
+          first &&
+          n.args.length <= 2 &&
+          ((first.k === 'path' && isList(first.head)) || (n.fn === 'count' && first.k === 'name' && isList(first.name)));
+        if (rollup) {
+          const of = first.k === 'path' ? first.head : (first as { name: string }).name;
+          if (first.k === 'path') set(r.listed(of, first.field), (v) => (first.field = v));
+          if (n.args[1]) walk(n.args[1], of);
+          return;
+        }
+        n.args.forEach((x) => walk(x, list));
+        return;
+      }
+      default:
+        return;
+    }
+  };
+  walk(node, null);
+  return changed ? print(node) : text;
+}

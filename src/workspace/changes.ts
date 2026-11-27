@@ -105,7 +105,8 @@ import { changePlan, kindOf, stationsFor } from './change-plan';
 import type { StepFacts } from './change-plan';
 import { AWAY_DAYS, bringBackColumn, putAwayColumn } from './carry';
 import { recordTouches, snapshotDef } from './provenance';
-import { usesOfField } from './logic';
+import { formulaRenamer, renameInLogic, usesOfField } from './logic';
+import { tablesOf } from '@/shared/plan';
 
 /* ===== Turnkey prototype · changes from chat: operations, migrations, partial re-runs, build pack ===== */
 export const COLOR_WORDS: Dict<string> = {
@@ -547,6 +548,31 @@ export function renameEverywhere(app: AppRecord & { def: BackedDef }, t: AppTabl
     }
   }
   arr<Row>(app.seed && app.seed.rows[t.name]).forEach((r) => mv(r));
+  // what the app works out: every formula, rule and condition that read the field reads it under its new name
+  renameInLogic(def, t.name, old, nn);
+  const plan = app.plan;
+  if (plan) {
+    const fix = formulaRenamer(tablesOf(plan.lists), t.name, old, nn);
+    const list = plan.lists.find((l) => l.name === t.name);
+    if (list) {
+      list.fields.forEach((f) => {
+        if (f.name === old) f.name = nn;
+      });
+      if (list.title === old) list.title = nn;
+      if (list.owner === old) list.owner = nn;
+    }
+    plan.lists.forEach((l) =>
+      l.fields.forEach((f) => {
+        if (f.formula) f.formula = fix(l.name, f.formula);
+      }),
+    );
+    (plan.checks || []).forEach((c) => (c.when = fix(c.list, c.when) as string));
+    if (plan.stages)
+      plan.stages.moves.forEach((m) => {
+        if (m.when) m.when = fix(plan.stages!.list, m.when);
+        if (plan.stages!.list === t.name && m.needs) m.needs = m.needs.map((f) => (f === old ? nn : f));
+      });
+  }
 }
 /** One step of a change: what the plan card needs to know about it (`StepFacts`), and how to make it. */
 export interface PlannedStep extends StepFacts {
@@ -755,14 +781,6 @@ export function planOne(app: BackedApp, o: Untrusted): PlannedStep {
         };
       if (colOf(t, nn) || ['id', 'created_at', 'created_by'].includes(nn))
         throw new Error(t.label + ' already has a field called ' + lab + '.');
-      const readBy = usesOfField(def, t.name, c.name);
-      if (readBy.length)
-        throw new Error(
-          c.label +
-            ' is used by ' +
-            readBy.slice(0, 2).join(' and ') +
-            ', which reads it by name. Ask for a new label instead, or change that first.',
-        );
       const sql = 'ALTER TABLE ' + qi(t.name) + ' RENAME COLUMN ' + qi(c.name) + ' TO ' + qi(nn);
       return {
         station: 'database',

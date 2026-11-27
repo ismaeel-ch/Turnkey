@@ -2044,6 +2044,30 @@ async function complexChecks(browser, url) {
     const lg = (await page.locator('.iv-logic').innerText()).replace(/\s+/g, ' ');
     check('plan: a section says in plain words what the app works out and checks', /What the app works out and checks/.test(lg) && /Still owed On visits: bill − paid/.test(lg) && /This vet already has a visit at that time/.test(lg) && /A closed visit is locked/.test(lg) && !/sum\(|_/.test(lg), lg.slice(0, 500));
     await ctx.close(); }
+  // a form with seven fields or more is filled in step by step, with a last step to check it
+  { const { ctx, page } = await newPage(browser); await enter(page, url); await buildTpl(page, 'helpdesk');
+    await view(page, 'App'); await page.waitForSelector('.persona-btn'); await page.locator('.persona-btn').first().click(); await page.waitForSelector('.app-nav .nav-i');
+    await page.selectOption('select[aria-label="Preview as"]', { label: 'Zainab Akhtar · Employee' }); await page.waitForFunction(() => /Raise a ticket/.test(document.querySelector('.app-nav').textContent)); await nav(page, 'Raise a ticket'); await page.waitForSelector('.form-page [data-wizard]');
+    const wz = () => page.locator('.form-page [data-wizard]'), at = () => wz().getAttribute('data-wizard'), labels = async () => (await page.locator('.form-page .form-grid label').allInnerTexts()).map((x) => x.replace(/\s*\*$/, '').trim()).join();
+    const tickets = () => st(page, () => { const F = window.__formwork, s = F.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return Number(F.dbCount(t.app, 'tickets')); });
+    const before = await tickets();
+    check('long form: seven fields become three short steps and a check, and the first asks only for what a ticket needs', await at() === 'basics' && (await page.locator('.wz-steps li').allInnerTexts()).map((x) => x.replace(/^\d+\s*/, '').trim()).join() === 'The basics,Who and what,More details,Check and create' && await labels() === 'Subject,Priority' && await page.locator('[data-step="back"]').count() === 0, [await at(), await page.locator('.wz-steps li').allInnerTexts(), await labels()]);
+    await page.locator('[data-step="next"]').click(); await page.waitForFunction(() => /Required/.test(document.querySelector('.form-page [data-wizard]').textContent));
+    check('long form: Next stays on the step while a required field is empty, and says which', await at() === 'basics' && /Required/.test(await wz().innerText()), await wz().innerText());
+    await page.locator('.form-page .form-grid input').first().fill('Laptop will not charge'); await page.locator('.form-page .form-grid select').first().selectOption({ index: 1 });
+    await page.locator('[data-step="next"]').click(); await page.waitForSelector('[data-wizard="links"]');
+    check('long form: the second step asks who and what, and Back is offered', await labels() === 'Assignee,Device' && await page.locator('[data-step="back"]').count() === 1 && await wz().getAttribute('data-step-n') === '2', await labels());
+    await page.locator('[data-step="back"]').click(); await page.waitForSelector('[data-wizard="basics"]');
+    check('long form: Back keeps what was typed', await page.locator('.form-page .form-grid input').first().inputValue() === 'Laptop will not charge');
+    await page.locator('[data-step="next"]').click(); await page.waitForSelector('[data-wizard="links"]'); await page.locator('[data-step="next"]').click(); await page.waitForSelector('[data-wizard="more"]'); await page.locator('[data-step="next"]').click(); await page.waitForSelector('[data-wizard="review"]');
+    const rv = (await page.locator('.wz-review').innerText()).replace(/\s+/g, ' ');
+    check('long form: the last step shows every answer by step, says what is empty, and nothing is saved before it', /Subject Laptop will not charge/.test(rv) && /Device Not filled in/.test(rv) && await page.locator('.wz-review [data-change]').count() === 3 && await page.locator('[data-step="save"]').count() === 1 && await tickets() === before, [rv, before, await tickets()]);
+    await page.locator('[data-change="more"]').click(); await page.waitForSelector('[data-wizard="more"]');
+    check('long form: Change on the check step goes back to that step', await labels() === 'Details,Category,Due on', await labels());
+    await page.locator('.wz-steps .wz-go').first().click(); await page.waitForSelector('[data-wizard="basics"]'); for (const id of ['links', 'more', 'review']) { await page.locator('[data-step="next"]').click(); await page.waitForSelector('[data-wizard="' + id + '"]'); }
+    await page.locator('[data-step="save"]').click(); await page.waitForFunction(() => /was created/.test(document.querySelector('.form-page').textContent));
+    check('long form: Create saves one ticket and the form starts again at its first step', await tickets() === before + 1 && await at() === 'basics', [before, await tickets(), await at()]);
+    await ctx.close(); }
 }
 /* ---------- What only React can get wrong: warnings, carets, handlers fired twice, focus, the other pages ---------- */
 // Counts how often a handler that was added straight to a form field for its `change` event runs. NativeField

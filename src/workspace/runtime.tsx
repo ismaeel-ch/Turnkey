@@ -3,6 +3,7 @@ import type { AppAction, AppDef, BackedDef, AppTable, AppUser, ColumnDef, Row, S
 import type { AppRecord, Dict, Pane, PaneForm, RecordRef, Stage, Walk } from '@/shared/types/workspace';
 import { BRAND, U, arr, confirmBox, cx, initials, label, needNet, notify, online, openDialog, toast } from './core';
 import { DBX, dbExists } from './db';
+import { formSteps, missingIn, stepWithError, type FormStep } from './form-steps';
 import { ACCENTS, accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec, type ApiResult } from './engine';
 import { editBlocked, editFromCanvas } from './changes';
 import { allConnectors, callConnector, connOn } from './connections';
@@ -618,18 +619,114 @@ export function saveForm(app: AppRecord, user: AppUser, t: AppTable, f: PaneForm
   f.err = (r.status === 400 || r.status === 409) && !r.fields ? String(r.error) : r.status + ' ' + r.error;
   return null;
 }
+/* ---------- a long form, step by step ---------- */
+
+/** Where a person is in a form that is filled in step by step. */
+interface FormWalk {
+  steps: FormStep[];
+  at: number;
+  last: boolean;
+}
+/** The steps of a form and the one the person is on. Null when the form is short enough for one page. */
+function stepsFor(t: AppTable, f: PaneForm, cols: ColumnDef[]): FormWalk | null {
+  const steps = formSteps(t, cols, !f.id);
+  if (!steps) return null;
+  const at = Math.max(0, Math.min(f.step || 0, steps.length - 1));
+  return { steps, at, last: at === steps.length - 1 };
+}
+/** Moves on to the next step, unless something this step needs is still empty. */
+function nextStep(f: PaneForm, wz: FormWalk) {
+  const missing = missingIn(wz.steps[wz.at], f.vals);
+  if (missing.length) patchForm(f, { errs: Object.fromEntries(missing.map((c) => [c.name, 'Required'])) });
+  else patchForm(f, { step: wz.at + 1, errs: {}, err: '' });
+}
+/** After a save was refused, opens the step that holds the first field with a problem. */
+function backToError(f: PaneForm, wz: FormWalk | null) {
+  const bad = wz ? stepWithError(wz.steps, f.errs) : -1;
+  if (bad >= 0) f.step = bad;
+}
+/** The step bar, the fields of the step the person is on, and on the last step everything they entered. */
+function StepsBody({ app, user, t, f, wz, idp }: { app: AppRecord; user: AppUser; t: AppTable; f: PaneForm; wz: FormWalk; idp: string }) {
+  const step = wz.steps[wz.at];
+  const shown = (c: ColumnDef) => {
+    const v = f.vals[c.name];
+    return v == null || v === '' ? '' : cellText(app, user, t, c, c.type === 'ref' || c.type === 'user' ? Number(v) : v, 0);
+  };
+  return (
+    <div className="wz" data-wizard={step.id} data-step-n={wz.at + 1}>
+      <ol className="wz-steps lg-path" aria-label={'Step ' + (wz.at + 1) + ' of ' + wz.steps.length + ': ' + step.title}>
+        {wz.steps.map((s, i) => (
+          <li
+            key={s.id}
+            className={cx('lg-step', i < wz.at && 'done', i === wz.at && 'on')}
+            aria-current={i === wz.at ? 'step' : undefined}
+          >
+            <span className="lg-dot">{i < wz.at ? <Icon n="check" s="12" /> : i + 1}</span>
+            {i < wz.at ? (
+              <button type="button" className="wz-go lg-step-l" onClick={() => patchForm(f, { step: i })}>
+                {s.title}
+              </button>
+            ) : (
+              <span className="lg-step-l">{s.title}</span>
+            )}
+          </li>
+        ))}
+      </ol>
+      <div className="col gap0">
+        <h3 className="t-sub2">{step.title}</h3>
+        <span className="t-cap muted">{step.hint}</span>
+      </div>
+      {step.id === 'review' ? (
+        <div className="wz-review">
+          {wz.steps
+            .filter((s) => s.id !== 'review')
+            .map((s, i) => (
+              <section key={s.id} className="wz-part">
+                <div className="row between gap8">
+                  <h4 className="t-strong">{s.title}</h4>
+                  <Btn type="button" className="btn subtle sm" data-change={s.id} onClick={() => patchForm(f, { step: i })}>
+                    Change
+                  </Btn>
+                </div>
+                <dl className="wz-facts">
+                  {s.cols.map((c) => (
+                    <div key={c.name} className={cx('wz-fact', c.type === 'longtext' && 'wide')}>
+                      <dt className="t-cap muted">{c.label}</dt>
+                      <dd>{shown(c) || <span className="muted">Not filled in</span>}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ))}
+        </div>
+      ) : (
+        <div className="form-grid">
+          {step.cols.map((c) => (
+            <FieldInput key={c.name} app={app} user={user} c={c} f={f} idp={idp} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUser; pane: Pane; f: PaneForm }) {
   const t = tableOf(app.def, f.table);
   if (!t) return null;
   const cols = formCols(app, user, t, !f.id),
-    close = () => patchPane(pane, { form: null });
+    close = () => patchPane(pane, { form: null }),
+    // a new record with many fields is filled in step by step; changing one keeps everything on one page
+    wz = stepsFor(t, f, f.id ? [] : cols);
   const save = (e: FormEvent) => {
     e.preventDefault();
+    if (wz && !wz.last) return nextStep(f, wz);
     const row = saveForm(app, user, t, f, cols);
     if (row) {
       toast(t.one + (f.id ? ' saved' : ' created'), 'success');
       patchPane(pane, { form: null, rec: { table: t.name, id: row.id } });
-    } else notify();
+    } else {
+      backToError(f, wz);
+      notify();
+    }
   };
   return (
     <div
@@ -652,19 +749,28 @@ export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUs
           </Btn>
         </div>
         <div className="dbody">
-          <div className="form-grid">
-            {cols.map((c) => (
-              <FieldInput key={c.name} app={app} user={user} c={c} f={f} idp={'f' + pane.n + '_'} />
-            ))}
-          </div>
+          {wz ? (
+            <StepsBody app={app} user={user} t={t} f={f} wz={wz} idp={'f' + pane.n + '_'} />
+          ) : (
+            <div className="form-grid">
+              {cols.map((c) => (
+                <FieldInput key={c.name} app={app} user={user} c={c} f={f} idp={'f' + pane.n + '_'} />
+              ))}
+            </div>
+          )}
           {f.err && <MBar tone="danger">{f.err}</MBar>}
         </div>
         <div className="dfoot">
           <Btn type="button" className="btn" onClick={close}>
             Cancel
           </Btn>
-          <Btn type="submit" className="btn primary">
-            {f.id ? 'Save' : 'Create'}
+          {wz && wz.at > 0 && (
+            <Btn type="button" className="btn" data-step="back" onClick={() => patchForm(f, { step: wz.at - 1 })}>
+              Back
+            </Btn>
+          )}
+          <Btn type="submit" className="btn primary" data-step={wz ? (wz.last ? 'save' : 'next') : undefined}>
+            {wz && !wz.last ? 'Next' : f.id ? 'Save' : 'Create'}
           </Btn>
         </div>
       </form>
@@ -675,14 +781,19 @@ export function FormScreen({ app, user, pane, scr }: ScreenProps) {
   const t = tableOf(app.def, scr.table);
   if (!t) return <Empty icon="warning" title="This page has no table" />;
   const f = draftOf(pane, scr.id, t.name),
-    cols = formCols(app, user, t, true);
+    cols = formCols(app, user, t, true),
+    wz = stepsFor(t, f, cols);
   const save = (e: FormEvent) => {
     e.preventDefault();
+    if (wz && !wz.last) return nextStep(f, wz);
     const row = saveForm(app, user, t, f, cols);
     if (row) {
       toast(t.one + ' created', 'success');
-      patchForm(f, { done: row.id, vals: {} });
-    } else notify();
+      patchForm(f, { done: row.id, vals: {}, step: 0 });
+    } else {
+      backToError(f, wz);
+      notify();
+    }
   };
   return (
     <div className="scr">
@@ -717,17 +828,25 @@ export function FormScreen({ app, user, pane, scr }: ScreenProps) {
             {' was created.'}
           </MBar>
         )}
-        <div className="form-grid">
-          {cols.map((c) => (
-            <FieldInput key={c.name} app={app} user={user} c={c} f={f} idp={'p' + pane.n + scr.id + '_'} />
-          ))}
-        </div>
+        {wz ? (
+          <StepsBody app={app} user={user} t={t} f={f} wz={wz} idp={'p' + pane.n + scr.id + '_'} />
+        ) : (
+          <div className="form-grid">
+            {cols.map((c) => (
+              <FieldInput key={c.name} app={app} user={user} c={c} f={f} idp={'p' + pane.n + scr.id + '_'} />
+            ))}
+          </div>
+        )}
         {f.err && <MBar tone="danger">{f.err}</MBar>}
-        <div className="row">
-          <Btn className="btn primary" type="submit">
-            {'Create '}
-            {t.one.toLowerCase()}
+        <div className="row gap8">
+          <Btn className="btn primary" type="submit" data-step={wz ? (wz.last ? 'save' : 'next') : undefined}>
+            {wz && !wz.last ? 'Next' : 'Create ' + t.one.toLowerCase()}
           </Btn>
+          {wz && wz.at > 0 && (
+            <Btn type="button" className="btn" data-step="back" onClick={() => patchForm(f, { step: wz.at - 1 })}>
+              Back
+            </Btn>
+          )}
         </div>
       </form>
     </div>
