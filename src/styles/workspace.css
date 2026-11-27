@@ -680,9 +680,7 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 /* 10: the wide canvas is sized to show node text at a readable size, so it can be taller than the window; its
    controls (zoom, Fit, Map, Reset layout) and legend sit above it, where they are in view without scrolling */
 .flow-wrap>.flow-foot{order:-1}
-<<<<<<< HEAD
 .field-edit{display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--colorNeutralStroke2)}.field-edit .row>strong{min-width:110px}.field-edit .tk-input{min-width:180px}
-=======
 /* Meeting view of the agents (src/workspace/meeting.tsx): tiles like a Teams call, the speaker ringed, a raised hand for the owner */
 .meet .meet-stage{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:12px;align-items:start}
 .meet-screen{border:1px solid var(--colorNeutralStroke2);border-radius:var(--borderRadiusXLarge);background:var(--colorNeutralBackground2);padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
@@ -716,4 +714,3 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 .meet-line>.muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:900px){.meet .meet-stage{grid-template-columns:1fr}}
 @media (max-width:600px){.meet-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.meet-tile{min-height:112px}}
->>>>>>> origin/main
