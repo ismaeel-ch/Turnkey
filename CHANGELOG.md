@@ -16,6 +16,33 @@ versions are semantic versions. Each release lists the pull requests merged into
   agent run, is kept with the app (so a share link, a release and an earlier version carry it), and is noted for the
   next release. The builder has a Settings button above the app that opens the page as someone who may.
 
+## [0.5.6] - 2026-11-27
+
+The workspace follows Fluent 2's type ramp, corner radii and control sizes.
+
+### Changed
+
+- Text sizes and corner radii across the welcome, Home, questions, plan, build steps, Release and Details screens
+  are steps of Fluent 2's ramps: captions are 12 px, body text is 14 px. The Home prompt has one frame, and main
+  actions such as "Build this app" and "Open the app" are standard size.
+  ([#286](https://github.com/ismaeel-ch/Turnkey/pull/286))
+
+### Fixed
+
+- In dark, the step markers on Release and a title bar tab under the pointer no longer turn pure black.
+  ([#286](https://github.com/ismaeel-ch/Turnkey/pull/286))
+
+## [0.5.5] - 2026-11-27
+
+A release now reaches every browser on its next visit, a built app can be changed and released from the agents chat,
+the agents at work are shown in a new way, and smaller fixes.
+
+### Added
+
+- The agents chat can change a built app and release it: say "release" and a card offers the version, the kind of
+  change, what new people start with and the notes. After a release, a change typed in chat gets questions and a plan
+  first. ([#275](https://github.com/ismaeel-ch/Turnkey/pull/275))
+
 ### Changed
 
 - The agents chat, the Meeting view, the Timeline and the Log are redesigned. Under the chat's title a strip says
@@ -23,6 +50,20 @@ versions are semantic versions. Each release lists the pull requests merged into
   handover, cards are white Fluent cards, and the message box is one framed field with a note that agents can make
   mistakes. The Meeting view shows a card per agent with its state, what it is doing and how long it worked, next
   to the build line as a rail. The Log is a feed down one rail instead of a table.
+  ([#284](https://github.com/ismaeel-ch/Turnkey/pull/284))
+- The welcome note no longer names the organiser, and the docs have a demo video script.
+  ([#271](https://github.com/ismaeel-ch/Turnkey/pull/271))
+
+### Fixed
+
+- A browser that visited before gets the new version on its next visit (the offline copy is used only when there is
+  no network), and a tab left open shows an Update button when a new version is out. Before, the first visit after a
+  release still showed the previous version. ([#277](https://github.com/ismaeel-ch/Turnkey/pull/277))
+- Views: the clinic's demo visit notes match their appointments, an empty calendar month points to the next record,
+  timeline labels stay readable over the Today line, and on phones the pivot's Total row and the timeline scroll
+  sideways instead of piling up. ([#273](https://github.com/ismaeel-ch/Turnkey/pull/273))
+- Guided build: no empty gap above the onboarding form on phones, the stage arrows in the plan end each wrapped line,
+  and a step's status badge stays on the right. ([#281](https://github.com/ismaeel-ch/Turnkey/pull/281))
 
 ## [0.5.4] - 2026-11-27
 

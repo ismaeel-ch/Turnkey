@@ -1078,9 +1078,20 @@ async function flowQuests(browser, url) {
   await ctx.close();
 }
 
+// Fluent 2's type ramp: text in the workspace is 10, 12, 14, 16, 20, 24, 28, 32 or 40 px and nothing in between. Returns the sizes that are not, by class.
+// The agents chat, the canvas and a built app's own screens are measured by their own checks.
+const offRamp = (page, root) => st(page, (sel) => { const ok = [10, 12, 14, 16, 20, 24, 28, 32, 40], bad = {}, r = document.querySelector(sel); if (!r) return { missing: sel };
+  const w = document.createTreeWalker(r, NodeFilter.SHOW_TEXT); let n;
+  while ((n = w.nextNode())) { if (!n.textContent.trim()) continue; const e = n.parentElement; if (e.closest('.chat, .msg, .gcard, svg, .react-flow, .stage, [hidden]') || !e.getClientRects().length) continue; const f = parseFloat(getComputedStyle(e).fontSize); if (!ok.includes(f)) { const k = f + 'px ' + (typeof e.className === 'string' && e.className ? '.' + e.className.split(' ').slice(0, 3).join('.') : e.tagName); bad[k] = (bad[k] || 0) + 1; } }
+  return bad; }, root);
+const onRamp = (o) => Object.keys(o).length === 0;
 async function plainSteps(browser, url) { // Build opens on a plain list of steps; the canvas and its views are behind "Show how it was built"
   const { ctx, page } = await newPage(browser);
   await enter(page, url, { plain: true }); await setSpeed(page, 'fast');
+  let ramp = await offRamp(page, '.shell');
+  check('Fluent type ramp: every text size on Home and in the title bar is a step of the ramp', onRamp(ramp), ramp);
+  const prompt = await st(page, () => { const f = document.querySelector('.prompt .fui-Textarea'), cs = getComputedStyle(f), b = document.querySelector('.tpl-build').getBoundingClientRect(); return { frame: cs.borderTopWidth, build: Math.round(b.height) }; });
+  check('Home: the prompt box has one frame, not a field inside a box, and a card\'s Build button is the standard 32 px', prompt.frame === '0px' && prompt.build === 32, prompt);
   const list = () => st(page, () => ({ rows: [...document.querySelectorAll('.steps-list .step')].map((x) => x.dataset.step + ':' + x.dataset.state), titles: [...document.querySelectorAll('.step-top strong')].map((x) => x.textContent), who: [...document.querySelectorAll('.step-top .t-cap')].map((x) => x.textContent), text: [...document.querySelectorAll('.step-text')].map((x) => x.textContent), head: (document.querySelector('.steps-head h2') || {}).textContent, sub: (document.querySelector('#steps-sub') || {}).textContent, how: document.querySelectorAll('.react-flow, .build-sum, .build-bar, .inspector').length, bar: (() => { const b = document.querySelector('.steps-view [role=progressbar]'); return b ? b.getAttribute('aria-valuenow') + '/' + b.getAttribute('aria-valuemax') : ''; })(), detail: window.__formwork.state().settings.buildDetail }));
   await page.locator('[data-tpl="leave"] .tpl-build').click();
   await page.waitForSelector('.step[data-step=research][data-state=ask]', { timeout: 30000 });
@@ -1128,6 +1139,7 @@ async function plainSteps(browser, url) { // Build opens on a plain list of step
   // a review the workflow holds is a step of its own, under its plain name
   await say(page, 'Add a security review'); a = await waitFree(page); v = await list();
   check('steps: a review added to the workflow appears after the step it reads, as "Check who can see what" by the Access checker', a.reviews.security && a.reviews.security.status === 'ok' && v.rows.indexOf('rv_security:done') === 3 && v.titles[3] === 'Check who can see what' && v.who[3] === 'Access checker', [v.rows, v.titles, v.who]);
+  for (const name of ['Release', 'Details']) { await page.locator('.views .tab', { hasText: name }).first().click(); await sleep(400); ramp = await offRamp(page, '.shell'); check('Fluent type ramp: every text size on ' + name + ' is a step of the ramp', onRamp(ramp), ramp); }
   await ctx.close();
   // on a phone the list fits the screen and the canvas is still one press away
   const ph = await newPage(browser, { viewport: { width: 390, height: 844 } }), pp = ph.page; await enter(pp, url, { plain: true }); await buildTpl(pp, 'leave'); await pp.waitForSelector('.steps-view'); await sleep(300);
