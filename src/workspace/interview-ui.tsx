@@ -607,7 +607,7 @@ function Steps({ iv }: { iv: Interview }) {
   const step = (n: number, text: string, state: 'done' | 'on' | '') => (
     <li className={cx('iv-st', state)} aria-current={state === 'on' ? 'step' : undefined}>
       <span className="iv-st-n">{state === 'done' ? <Icon n="check" s="12" /> : n}</span>
-      {text}
+      <span className="iv-st-l">{text}</span>
     </li>
   );
   return (
