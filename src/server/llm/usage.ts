@@ -17,12 +17,15 @@
  * still paid for, so it is counted from an estimate: about four characters to a token, for the prompt and for the
  * text that came back. So is a call whose provider finished without reporting usage at all.
  *
+ * A model missing from the price table is reported with no cost, but the daily cap still counts its calls, at the
+ * dearest listed price (FALLBACK_PRICE in features.ts).
+ *
  * The totals live in this server instance's memory: on Vercel each instance counts its own calls since it started.
  * `spentToday()` is what src/server/guard/limits.ts checks against LLM_DAILY_SPEND_USD.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { log as serverLog, noteModelCall } from '../log';
-import { costOf, effortFor } from './features';
+import { costOf, effortFor, fallbackCostOf } from './features';
 import type { ChatChunk, ChatRequest, Provider, Usage } from './types';
 
 type Env = Record<string, string | undefined>;
@@ -36,6 +39,8 @@ export type UsageTotals = {
   costUsd: number;
   /** Calls whose cost could not be worked out (a model missing from the price table). */
   unpriced: number;
+  /** What the unpriced calls count toward the daily dollar cap, at the fallback price. Not part of `costUsd`. */
+  unpricedUsd: number;
   budgetUsd: number;
   since: string;
 };
@@ -57,6 +62,7 @@ const fresh = () => ({
   cacheWrite: 0,
   costUsd: 0,
   unpriced: 0,
+  unpricedUsd: 0,
   since: new Date().toISOString(),
 });
 let totals = fresh();
@@ -85,6 +91,7 @@ export function usageTotals(env: Env = process.env): UsageTotals {
   return {
     ...totals,
     costUsd: Math.round(totals.costUsd * 1e6) / 1e6,
+    unpricedUsd: Math.round(totals.unpricedUsd * 1e6) / 1e6,
     budgetUsd: Number.isFinite(budget) && budget > 0 ? budget : 25,
   };
 }
@@ -159,13 +166,20 @@ export function recordUsage(r: UsageRecord, env: Env = process.env, log?: (line:
   totals.output += r.usage.output ?? 0;
   totals.cacheRead += r.usage.cacheRead ?? 0;
   totals.cacheWrite += r.usage.cacheWrite ?? 0;
-  if (r.usage.costUsd === undefined) totals.unpriced += 1;
-  else {
+  // A model missing from the price table still costs money: the daily cap counts it at the dearest listed price, so
+  // switching to a model nobody priced cannot turn the cap off. The reported cost stays unknown (null), not a guess.
+  let capUsd: number;
+  if (r.usage.costUsd === undefined) {
+    totals.unpriced += 1;
+    capUsd = fallbackCostOf(r.usage);
+    totals.unpricedUsd += capUsd;
+  } else {
     totals.costUsd += r.usage.costUsd;
-    const day = dayOf(Date.now());
-    if (today.day !== day) today = { day, costUsd: 0 };
-    today.costUsd += r.usage.costUsd;
+    capUsd = r.usage.costUsd;
   }
+  const day = dayOf(Date.now());
+  if (today.day !== day) today = { day, costUsd: 0 };
+  today.costUsd += capUsd;
   if (!shouldLog(env)) return;
   if (log) log(usageLine(r));
   else

@@ -20,6 +20,7 @@ import type { AppRecord, Dict, ExplorerState, Pane, PaneForm, ViewFilter } from 
 import { S, U, arr, brief, commit, cx, fmtDate, fmtMs, fmtNum, label, notify, online, snake, str, toast, liveModelOn } from './core';
 import { VIEW_ICON, accOf, apiCall, chk, colOf, roleName, tableOf, tourValues } from './engine';
 import { DATA_VIEWS } from './viewspec';
+import { usageLine } from '@/platform/agui/usage';
 import { REC, allConnectors, connOn } from './builds';
 import { TEAMS, type TeamRun, TeamAv, canRunTeam, runTeam, sameText, stopTeam, teamBlock, teamCase, teamJump } from './team';
 import { Avatar, Btn, Card, Empty, Icon, Input, MBar, Proto, Spinner } from './ui';
@@ -940,7 +941,8 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
         {team.agents.map((a, i) => {
           const st = T ? T.steps[i] : null,
             s = st ? st.status : 'idle',
-            wait = T && T.wait && team.pause?.before === a.id;
+            wait = T && T.wait && team.pause?.before === a.id,
+            used = T && T.agentUsage ? T.agentUsage[a.id] : undefined;
           return (
             <li key={a.id} className={cx('team-a', s === 'working' && 'on', s === 'ok' && 'done')}>
               <TeamAv a={a} />
@@ -958,6 +960,11 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
                   ) : null}
                 </span>
                 <span className="t-cap muted">{a.job}</span>
+                {used && used.calls > 0 && (
+                  <span className="t-cap muted mono team-a-cost" title="What this agent's model calls cost in the last run">
+                    {used.calls + (used.calls === 1 ? ' model call' : ' model calls') + ' · ' + usageLine(used)}
+                  </span>
+                )}
                 {a.tools.length > 0 && (
                   <span className="row gap4 wrap">
                     {a.tools
@@ -1105,6 +1112,11 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
                     {' #'}
                     {row.id}
                     {run ? ' · ' + (run.live ? 'live run' : 'saved run') : ''}
+                    {run && run.usage && run.usage.calls > 0 && (
+                      <span className="team-cost" title="Every model call of this run, as the server reported it">
+                        {' · ' + run.usage.calls + (run.usage.calls === 1 ? ' model call' : ' model calls') + ' · ' + usageLine(run.usage)}
+                      </span>
+                    )}
                   </span>
                   <h3 className="t-sub2 case-title">{rowTitle(app, user, it, row)}</h3>
                 </div>
