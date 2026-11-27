@@ -864,6 +864,8 @@ html.tk-opening .boot-btn{cursor:progress}.boot-wait{align-self:center}
 .set.narrow .set-person{flex-wrap:wrap}.set.narrow .set-person .tk-input{flex:1 1 140px}.set.narrow .set-person .tk-select{flex:1 1 140px}.set.narrow .set-person .grow{display:none}
 .set.narrow .set-add{flex-direction:column;align-items:stretch}.set.narrow .set-stage .tk-input{flex:1 1 120px}
 .set-foot{padding-top:12px;border-top:1px solid var(--colorNeutralStroke3)}
+.set-limit{align-items:flex-start}.set-limit .set-line-c{padding-top:2px}.set-limit .tk-input{width:140px}.set-limit-i{text-align:right;font-variant-numeric:tabular-nums}
+.set.narrow .set-limit .tk-input{flex:1;width:auto}.set.narrow .set-limit .set-line-c{flex-direction:row}
 /* ---- built apps: calculated fields, stage path, moves with conditions, line items, "Waiting for you" (record-extras.tsx) ---- */
 .lg-moves{display:inline-flex;flex-direction:column;gap:6px;min-width:0}.lg-held{display:flex;align-items:flex-start;gap:6px;color:var(--colorNeutralForeground3)}.lg-held .ic{flex:none;margin-top:1px}
 .lg-path{list-style:none;margin:0;padding:0;display:flex;align-items:flex-start;gap:0;overflow-x:auto;flex:none}

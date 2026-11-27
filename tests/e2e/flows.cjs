@@ -2476,6 +2476,18 @@ async function flowSettings(browser, url) {
   await page.reload(); await page.waitForSelector('.work-head', { timeout: 20000 }); await sleep(800); await view(page, 'App'); await page.waitForSelector('.app, .app-login');
   a = await app(); await as('Nida Hamid'); await nav(page, 'Approvals'); await page.waitForSelector('.kb-card, .board'); const again = await page.locator('.app-main').innerText();
   check('settings: every choice is still there after a reload', a.name === 'Buy Smart' && a.settings.formats.currency === 'PKR' && a.stages[0] === 'Awaiting sign-off' && a.theme.accent === 'teal' && /Rs\s180,000/.test(again) && again.includes('Awaiting sign-off'), { name: a.name, f: a.settings.formats });
+  // --- an app that works things out: the numbers in its rules are settings too
+  await page.locator('.brand').click(); await page.waitForSelector('.home'); await buildTpl(page, 'orders'); await view(page, 'App'); await page.waitForSelector('.app, .app-login');
+  const rules = () => st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), a = s.apps[t.app]; return { moves: a.def.process.transitions.filter((x) => x.when).map((x) => x.id + ': ' + x.when + ' / ' + x.unless), plan: a.plan && a.plan.stages ? a.plan.stages.moves.filter((x) => x.when).map((x) => x.when) : [], rev: a.rev, tested: a.tests ? a.tests.rev : null }; });
+  await page.locator('.stage-settings').click(); await page.waitForSelector('.set-card'); await sec('Limits');
+  const lims = await page.locator('.set-limit label').allInnerTexts(), total = page.locator('.set-limit', { hasText: 'Total' }).first();
+  check('settings, limits: the amount that sends an order to the director and the share that warns about a budget are listed', lims.some((x) => /^Total/.test(x)) && lims.some((x) => /^Yearly budget/.test(x)) && (await total.locator('input').inputValue()) === '5000' && /"Approve" is offered when total is at most 5,000/.test(await total.innerText()), lims);
+  await total.locator('input').fill('300'); await total.locator('input').press('Enter'); await page.waitForFunction(() => /at most 300/.test(document.querySelector('.set-limit').innerText));
+  const r = await rules();
+  check('settings, limits: a new number goes into both moves that split at it, and into the reasons people are shown', r.moves.includes('approve: total <= 300 / Orders over 300 need the director.') && r.moves.some((x) => /^approve_large_order: total > 300 \/ Orders up to 300 /.test(x)) && r.tested !== r.rev, r);
+  await shot(page, 'set-7-limits');
+  await total.locator('input').fill('lots'); await total.locator('input').press('Enter'); const notNum = await toastText();
+  check('settings, limits: something that is not a number above zero is refused and the box goes back', /A limit is a number above zero/.test(notNum) && (await total.locator('input').inputValue()) === '300', notNum);
   await ctx.close();
 }
 const FLOWS = { demo: flowDemo, live: flowLive, misc: flowMisc, views: flowViews, quests: flowQuests, new: flowNew, custom: flowCustom, round6: flowRound6, react: flowReact, sizes: flowSizes, history: flowHistory, settings: flowSettings };

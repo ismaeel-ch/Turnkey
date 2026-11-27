@@ -6,6 +6,8 @@ import { ACCENTS, appUsers, roleName } from './engine';
 import { appBusy } from './history';
 import { logChange } from './release';
 import { TESTS } from './tests';
+import { limitsOf, planLimit } from './limits';
+import { recalcAll } from './logic';
 import { DEFAULT_FORMATS, adminRoles, normSettings, roleIds, settingsOf, viewChoices } from './app-settings';
 
 /* ===== Turnkey · a built app's own settings: the writing side =====
@@ -158,6 +160,31 @@ export function renameStage(app: AppRecord, id: string, given: string): Outcome 
     const ps = app.plan?.stages?.stages.find((x) => x.id === id);
     if (ps) ps.label = name;
   });
+}
+
+/* ---------- limits in the app's rules ---------- */
+/**
+ * Changes one number in the app's rules, such as the amount above which an order needs the director. The formulas
+ * that share it, the sentences shown beside them and the approved plan all get the new number.
+ */
+export function setLimit(app: AppRecord, key: string, value: number): Outcome {
+  const L = limitsOf(app.def).find((x) => x.key === key),
+    c = planLimit(app, key, value);
+  if (c.why || !L) return no(c.why || 'That limit is no longer in the app.');
+  if (Math.round(value * 100) / 100 === L.value) return YES;
+  // the tests move records across these limits, so their last results no longer stand
+  return change(
+    app,
+    'the limit on ' + L.label.toLowerCase() + ' is now ' + value.toLocaleString('en-US') + (L.percent ? '%' : ''),
+    false,
+    () => {
+      c.apply();
+      if (c.recalc) {
+        recalcAll(app.id, app.def);
+        dbBump(app.id);
+      }
+    },
+  );
 }
 
 /* ---------- people ---------- */

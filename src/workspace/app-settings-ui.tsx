@@ -15,12 +15,14 @@ import {
   NUMBER_STYLES,
   SETTINGS_SCREEN,
   adminRoles,
+  fmtOf,
   formatSample,
   isListPage,
   roleIds,
   settingsOf,
   viewChoices,
 } from './app-settings';
+import { limitsOf } from './limits';
 import {
   addPerson,
   removePerson,
@@ -32,6 +34,7 @@ import {
   setFirstView,
   setFormats,
   setHome,
+  setLimit,
   setLook,
   setPersonRole,
   settingsBlocked,
@@ -55,6 +58,7 @@ export function settingsSections(app: AppRecord): Section[] {
     { id: 'general', label: 'General', icon: 'settings' },
     { id: 'people', label: 'People', icon: 'people' },
     ...(stages ? [{ id: 'stages', label: 'Stages', icon: 'flow' }] : []),
+    ...(limitsOf(app.def).length ? [{ id: 'limits', label: 'Limits', icon: 'scales' }] : []),
     { id: 'formats', label: 'Formats', icon: 'number' },
     { id: 'pages', label: 'Pages', icon: 'layout' },
     { id: 'data', label: 'Data', icon: 'database' },
@@ -120,6 +124,7 @@ function CommitInput({
   disabled,
   cls,
   max,
+  numeric,
 }: {
   value: string;
   onCommit: (v: string) => boolean;
@@ -128,6 +133,8 @@ function CommitInput({
   disabled?: boolean;
   cls?: string;
   max?: number;
+  /** a number: phones show the number keys */
+  numeric?: boolean;
 }) {
   // the key makes a fresh box whenever the value changes underneath, or a change is refused
   const [turn, setTurn] = useState(0);
@@ -144,6 +151,7 @@ function CommitInput({
       defaultValue={value}
       disabled={disabled}
       maxLength={max || 60}
+      inputMode={numeric ? 'decimal' : undefined}
       autoComplete="off"
       onBlur={(e) => done(e.currentTarget)}
       onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
@@ -370,6 +378,47 @@ function Stages({ app, off, idp }: PartProps) {
   );
 }
 
+function Limits({ app, off, idp }: PartProps) {
+  const F = fmtOf(app.def);
+  return (
+    <Block
+      title="Limits"
+      help="The numbers in the app's rules. A new number applies to the next record that is saved or moved; records already past a stage stay where they are."
+    >
+      {limitsOf(app.def).map((L, i) => {
+        const t = app.def.tables.find((x) => x.name === L.table);
+        return (
+          <div key={L.key} className="set-line set-limit">
+            <div className="col gap0 set-line-t">
+              <label className="t-strong" htmlFor={idp + 'lm' + i}>
+                {L.label + (t ? ' · ' + t.label : '')}
+              </label>
+              {L.uses.map((u, j) => (
+                <span key={j} className="muted t-cap">
+                  {u.says.replace(/\.$/, '') + '.'}
+                </span>
+              ))}
+            </div>
+            <div className="set-line-c">
+              {L.money && F.sign && <span className="muted">{F.sign}</span>}
+              <CommitInput
+                id={idp + 'lm' + i}
+                cls="set-limit-i"
+                value={String(L.value)}
+                max={14}
+                numeric
+                disabled={off}
+                onCommit={(v) => tell(setLimit(app, L.key, Number(v.replace(/[\s,]/g, ''))))}
+              />
+              {L.percent && <span className="muted">%</span>}
+            </div>
+          </div>
+        );
+      })}
+    </Block>
+  );
+}
+
 function Formats({ app, off, idp }: PartProps) {
   const f = settingsOf(app.def).formats;
   return (
@@ -572,6 +621,7 @@ const PARTS: Record<string, (p: PartProps) => ReactNode> = {
   general: General,
   people: People,
   stages: Stages,
+  limits: Limits,
   formats: Formats,
   pages: Pages,
   data: Data,
