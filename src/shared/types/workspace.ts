@@ -8,6 +8,7 @@
  * module that owns them is typed and can say what they hold.
  */
 import type { AppDef, Check, Row } from './app';
+import type { PlanSpec } from '@/shared/plan/types';
 
 /** A value whose shape is not described yet. Narrow it where you read it. */
 export type Loose = unknown;
@@ -83,6 +84,11 @@ export interface AppRecord {
   /** the short link this app was saved under, and the token that lets this browser update it */
   short?: { slug: string; token: string };
   def: AppDef;
+  /**
+   * The plan the owner approved before the build (src/shared/plan). It lives beside the definition, not in it, because
+   * a build starts from a blank definition. Null or missing on an app built before plans existed.
+   */
+  plan?: PlanSpec | null;
   /** the state of each station of the build line, by station id */
   line: Dict<StationLine>;
   /** the owner's build workflow for this app (src/workspace/custom.tsx) */
