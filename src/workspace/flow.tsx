@@ -1442,11 +1442,9 @@ export function flowKit(): FlowKit {
               // hidden (another view, a dialog over it, the page going away): d3's animated zoom divides by the
               // canvas size, and the background and the minimap would be drawn at NaN
               if (!inst.current || !p.shown()) return;
-              if (p.v)
-                void inst.current.setViewport(p.start, {
-                  duration: 200,
-                });
-              else void inst.current.fitView({ duration: d, ...p.fit });
+              // no animation: a view switch during an animated move hides the canvas mid-way, and d3 then draws at NaN
+              if (p.v) void inst.current.setViewport(p.start);
+              else void inst.current.fitView({ ...p.fit });
             },
             d ? 90 : 420,
           ),
@@ -1463,7 +1461,6 @@ export function flowKit(): FlowKit {
       if (n)
         void inst.current.setCenter(n.position.x + 110, n.position.y + 170, {
           zoom: p.start.zoom,
-          duration: 350,
         });
     }, [p.focus, p.v]);
     const onNodesChange = (chs: NodeChange<IslandNode>[]) => {
