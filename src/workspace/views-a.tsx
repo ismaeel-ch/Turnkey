@@ -24,6 +24,7 @@ import {
 import { VIEW_ICON, VIEW_LABEL, accOf, apiCall, appUsers, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isMeasure, isNum, isRate, viewCfg, viewFit, viewsOf } from './viewspec';
 import { Btn, Empty, FilterChip, Icon, Input, MBar, Menu, Seg, Select, type MenuEntry } from './ui';
+import { EmptyList } from './firstrun';
 import { Cell, cellText, fetchApi, isStatusCol, optLabel, patchPane, rowTitle, stateLabel, stateTone } from './runtime';
 import { VChart, VPivot, VTimeline } from './views-b';
 
@@ -527,6 +528,9 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
       rows.length + ' rows as CSV',
     );
   };
+  // A list with nothing in it explains itself (firstrun.tsx) in place of an empty table. A board, calendar, chart or
+  // timeline still draws when a filter leaves it empty, because its empty columns and days say where records would be.
+  const nothing = !rows.length && (!res.data.length || ['table', 'cards', 'tree', 'pivot'].includes(view));
   const more = DATA_VIEWS.filter((v) => !recT.includes(v)),
     V = (
       {
@@ -667,7 +671,24 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
         </div>
       )}
       <div className="vx-body">
-        <V {...P} />
+        {nothing ? (
+          <EmptyList
+            app={app}
+            user={user}
+            t={t}
+            total={res.data.length}
+            onAdd={() => openNew()}
+            onClear={() =>
+              set((s) => {
+                s.filters = [];
+                s.q = '';
+                s.page = 0;
+              })
+            }
+          />
+        ) : (
+          <V {...P} />
+        )}
       </div>
     </div>
   );
@@ -699,9 +720,6 @@ export const Pick = ({
       ))}
     </Select>
   </label>
-);
-export const NoRows = ({ t }: { t: AppTable }) => (
-  <Empty icon="search" title={'No ' + t.label.toLowerCase() + ' to show'} text="Nothing matches the search and filters." />
 );
 export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewProps) {
   const hidden = hiddenOf(st, t, scr);
@@ -887,64 +905,60 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
           </span>
         )}
       </div>
-      {list.length ? (
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                {cols.map((c) => (
-                  <th
-                    key={c.name}
-                    className={isNum(c) ? 'num' : ''}
-                    aria-sort={sort && sort.col === c.name ? (sort.dir > 0 ? 'ascending' : 'descending') : undefined}
+      <div className="tbl-wrap">
+        <table className="tbl">
+          <thead>
+            <tr>
+              {cols.map((c) => (
+                <th
+                  key={c.name}
+                  className={isNum(c) ? 'num' : ''}
+                  aria-sort={sort && sort.col === c.name ? (sort.dir > 0 ? 'ascending' : 'descending') : undefined}
+                >
+                  <button
+                    className="th-btn"
+                    onClick={() =>
+                      set((s) => {
+                        s.sort =
+                          sort && sort.col === c.name
+                            ? {
+                                col: c.name,
+                                dir: -sort.dir,
+                              }
+                            : {
+                                col: c.name,
+                                dir: 1,
+                              };
+                      })
+                    }
                   >
-                    <button
-                      className="th-btn"
-                      onClick={() =>
-                        set((s) => {
-                          s.sort =
-                            sort && sort.col === c.name
-                              ? {
-                                  col: c.name,
-                                  dir: -sort.dir,
-                                }
-                              : {
-                                  col: c.name,
-                                  dir: 1,
-                                };
-                        })
-                      }
-                    >
-                      {c.label}
-                      {sort && sort.col === c.name && <Icon n={sort.dir > 0 ? 'arrowUp' : 'arrowDown'} s="12" />}
-                    </button>
-                  </th>
+                    {c.label}
+                    {sort && sort.col === c.name && <Icon n={sort.dir > 0 ? 'arrowUp' : 'arrowDown'} s="12" />}
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>{body}</tbody>
+          {nums.length > 0 && (
+            <tfoot>
+              <tr>
+                {cols.map((c, i) => (
+                  <td key={c.name} className={isNum(c) ? 'num' : ''}>
+                    {isRate(c)
+                      ? 'Average ' + fmtNum(avg(c, list))
+                      : isMeasure(c)
+                        ? fmtNum(sum(c, list))
+                        : i === 0
+                          ? 'Total of ' + list.length
+                          : ''}
+                  </td>
                 ))}
               </tr>
-            </thead>
-            <tbody>{body}</tbody>
-            {nums.length > 0 && (
-              <tfoot>
-                <tr>
-                  {cols.map((c, i) => (
-                    <td key={c.name} className={isNum(c) ? 'num' : ''}>
-                      {isRate(c)
-                        ? 'Average ' + fmtNum(avg(c, list))
-                        : isMeasure(c)
-                          ? fmtNum(sum(c, list))
-                          : i === 0
-                            ? 'Total of ' + list.length
-                            : ''}
-                    </td>
-                  ))}
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      ) : (
-        <NoRows t={t} />
-      )}
+            </tfoot>
+          )}
+        </table>
+      </div>
     </>
   );
 }
@@ -1238,7 +1252,6 @@ export function VCards({ app, user, scr, t, rows, open }: ViewProps) {
       .filter((c): c is ColumnDef => !!c && c.name !== lab && !(P && c.name === P.column) && c.type !== 'longtext')
       .slice(0, 4),
     long = t.columns.find((c) => c.type === 'longtext');
-  if (!rows.length) return <NoRows t={t} />;
   return (
     <>
       <div className="cards">
@@ -1439,7 +1452,7 @@ export function VTree({ app, user, pane, scr, t, rows, st, cfg, setCfg, set, ope
           Reset
         </Btn>
       </div>
-      {rows.length ? <ul className="tree">{flatTree(body)}</ul> : <NoRows t={t} />}
+      <ul className="tree">{flatTree(body)}</ul>
     </>
   );
 }
