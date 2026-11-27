@@ -380,6 +380,28 @@ export function newRun(app: AppRecord, kind: string, name: string, mode: string)
 }
 
 /* ---------- a build that follows a plan the owner approved ---------- */
+/**
+ * The Planner's model calls for the interview in progress. They are made before the app exists, so the first build of
+ * the plan they led to takes them onto its own run: its count of model calls and its cost then include the planning.
+ */
+export const PLANNING: CallRun = { id: 'plan', calls: 0, tokIn: 0, tokOut: 0 };
+export function resetPlanning() {
+  PLANNING.calls = PLANNING.tokIn = PLANNING.tokOut = 0;
+  delete PLANNING.usage;
+  delete PLANNING.agentUsage;
+}
+const USAGE_KEYS = ['calls', 'input', 'output', 'cacheRead', 'cacheWrite', 'costUsd', 'unpriced', 'estimated'] as const;
+const sumUsage = (into: UsageSum, from: UsageSum) => USAGE_KEYS.forEach((k) => (into[k] += from[k]));
+/** Moves the Planner's calls onto the run of the build that follows its plan. */
+export function takePlanning(run: Run) {
+  if (!PLANNING.calls) return;
+  run.calls += PLANNING.calls;
+  run.tokIn += PLANNING.tokIn;
+  run.tokOut += PLANNING.tokOut;
+  if (PLANNING.usage) sumUsage((run.usage ??= emptyUsage()), PLANNING.usage);
+  for (const [agent, used] of Object.entries(PLANNING.agentUsage || {})) sumUsage(((run.agentUsage ??= {})[agent] ??= emptyUsage()), used);
+  resetPlanning();
+}
 /** Whether a build can follow this plan: it is whole and passes its checks. Looked at once per plan. */
 const FOLLOWED = new WeakMap<PlanSpec, boolean>();
 const followable = (plan: PlanSpec) => {
@@ -1661,13 +1683,16 @@ export async function runBuild(app: BuildApp, from?: string) {
     live = app.mode === 'live';
   // a planned build gets the team its plan calls for: steps done by code, the pause for the owner, the reviews
   // The plan sets the team once, on the first build. After that the workflow is the owner's to change.
-  if (!part && !app.runs.length) flowFromPlan(app);
+  const first = !part && !app.runs.length;
+  if (first) flowFromPlan(app);
   const flow = flowOf(app);
   const run = newRun(app, part ? 'rerun' : 'build', part ? 'From ' + STATIONS[i0].name : 'Build', String(app.mode)),
     ctl: RunCtl = (RUNS[app.id] = {
       stop: false,
       runId: run.id,
     });
+  // the calls that wrote the plan belong to the build that follows it
+  if (first && planOf(app)) takePlanning(run);
   // a run that keeps the database can be undone as a whole: if a check fails or it is stopped, the app goes back to what it was
   const keep =
     part && i0 > 1

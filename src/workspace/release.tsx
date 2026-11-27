@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react';
+import { Suspense, lazy, useState, useSyncExternalStore } from 'react';
 import type { BriefedDef, Logo, RecordStep, Theme, Untrusted } from '@/shared/types/app';
 import type { AppRecord, ChatMessage, Dict, Release, StartWith, ViewState } from '@/shared/types/workspace';
 import { ACC_HEX } from '@/styles/theme.generated';
@@ -38,13 +38,23 @@ import { Btn, Card, Dialog, Empty, Field, Icon, MBar, Proto, Seg, Spinner, Texta
 import { appFromPack, framed, openShare, openShared, packOf, readPack, settingsLists, squeeze, startWith, unsqueeze } from './share';
 import type { Pack } from './share';
 import { carryData } from './carry';
+import { kindOf } from './change-plan';
 import { appBusy, historyOf, record as keepDraft, restoreVersion } from './history';
-import { inverseSteps, verCmp, verParts } from './record-steps';
+import { inverseSteps, verCmp, verNext, verParts } from './record-steps';
 import type { VersionSteps } from './record-steps';
 import { currentVersion } from '@/shared/history';
 import { saveShortLink } from '@/platform/share-link';
-import { exportMarkdown, exportPage, exportPdf, exportSqlite, exportZip } from './export';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
+
+// The exports (document, PDF, page, database, zip) load the first time one is asked for.
+type ExportName = 'exportMarkdown' | 'exportPage' | 'exportPdf' | 'exportSqlite' | 'exportZip';
+const runExport = (app: AppRecord, name: ExportName) =>
+  void import('./export').then(
+    (m) => void m[name](app),
+    (e: unknown) => toast('The export could not be made: ' + errText(e), 'danger'),
+  );
+// The box for saying what is wrong or missing loads the first time the Release page of a released app shows.
+const ImproveBox = lazy(() => import('./improve').then((m) => ({ default: m.ImproveBox })));
 
 /* ===== Turnkey prototype · releases, the app's own icon, and installing the app on its own =====
    Building gives you a draft. Releasing turns the draft into a numbered version: the tests must pass, the notes say
@@ -347,15 +357,7 @@ export const isDirty = (app: AppRecord) => {
   const r = relOf(app);
   return !!r && r.sig !== appSig(app);
 };
-export { verCmp, verParts };
-export const verNext = (v: string, kind: string) => {
-  const p = verParts(v);
-  return kind === 'major'
-    ? p[0] + 1 + '.0'
-    : kind === 'fix'
-      ? p[0] + '.' + (p[1] || 0) + '.' + ((p[2] || 0) + 1)
-      : p[0] + '.' + ((p[1] || 0) + 1);
-};
+export { verCmp, verNext, verParts };
 export const REL_KIND: Dict<string> = {
   first: 'First release',
   fix: 'Fixes',
@@ -363,12 +365,14 @@ export const REL_KIND: Dict<string> = {
   major: 'Big change',
   rollback: 'Went back',
 };
-export function logChange(app: AppRecord, text: string, station?: string) {
+/** Notes a change for the next release. `kind` is the owner's own word on it (a fix or a new feature), when they gave one. */
+export function logChange(app: AppRecord, text: string, station?: string, kind?: 'fix' | 'feature' | null) {
   if (!app.log) app.log = [];
   app.log.push({
     at: Date.now(),
     text: str(text).slice(0, 160),
     station: station || '',
+    ...(kind ? { kind } : {}),
   });
   if (app.log.length > 80) app.log.splice(0, app.log.length - 80);
 }
@@ -414,13 +418,7 @@ export const pastTense = (t: string) => {
 };
 export function suggestKind(app: AppRecord) {
   const lg = draftLog(app);
-  return !relOf(app)
-    ? 'first'
-    : lg.some((x) => /^Rebuil/.test(x.text))
-      ? 'major'
-      : lg.some((x) => x.station === 'database' || /^Add /.test(x.text))
-        ? 'feature'
-        : 'fix';
+  return !relOf(app) ? 'first' : lg.some((x) => /^Rebuil/.test(x.text)) ? 'major' : kindOf(lg); // the same rule the plan of a change shows: a new field, list, page or view is a new feature
 }
 export function draftNotes(app: AppRecord) {
   const d = app.def as BriefedDef;
@@ -1217,6 +1215,13 @@ export function ReleaseView({ app }: { app: AppRecord }) {
             </span>
           </div>
         </Card>
+        {rel && (
+          <Suspense fallback={null}>
+            <Card className="card rel-improve">
+              <ImproveBox app={app} />
+            </Card>
+          </Suspense>
+        )}
         {(!rel || dirty) && (
           <Card className="card rel-form">
             <h3 className="widget-h">{rel ? 'Release the draft as version ' + v : 'Before you release'}</h3>
@@ -1472,23 +1477,23 @@ export function ReleaseView({ app }: { app: AppRecord }) {
             rules, screens, tests, which agent made what and the run timeline. Hand it to the team that builds the production version.
           </p>
           <div className="row wrap">
-            <Btn className="btn primary" id="exp-md" onClick={() => exportMarkdown(app)}>
+            <Btn className="btn primary" id="exp-md" onClick={() => runExport(app, 'exportMarkdown')}>
               <Icon n="download" s="16" />
               Document (.md)
             </Btn>
-            <Btn className="btn" id="exp-pdf" onClick={() => exportPdf(app)}>
+            <Btn className="btn" id="exp-pdf" onClick={() => runExport(app, 'exportPdf')}>
               <Icon n="download" s="16" />
               PDF (print)
             </Btn>
-            <Btn className="btn" id="exp-html" onClick={() => exportPage(app)}>
+            <Btn className="btn" id="exp-html" onClick={() => runExport(app, 'exportPage')}>
               <Icon n="download" s="16" />
               Page (.html)
             </Btn>
-            <Btn className="btn" id="exp-sqlite" onClick={() => exportSqlite(app)}>
+            <Btn className="btn" id="exp-sqlite" onClick={() => runExport(app, 'exportSqlite')}>
               <Icon n="download" s="16" />
               Database (.sqlite)
             </Btn>
-            <Btn className="btn" id="exp-zip" onClick={() => exportZip(app)}>
+            <Btn className="btn" id="exp-zip" onClick={() => runExport(app, 'exportZip')}>
               <Icon n="download" s="16" />
               Everything (.zip)
             </Btn>

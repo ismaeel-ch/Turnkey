@@ -27,7 +27,7 @@ import {
 } from '@/shared/plan';
 import type { Untrusted } from '@/shared/types/app';
 import { emit, str } from './core';
-import { HEAD, Stopped, callModel, fbText, type CallRun } from './line';
+import { HEAD, PLANNING, Stopped, callModel, fbText, resetPlanning } from './line';
 
 export { planFromDef } from '@/shared/plan';
 export type { PlannerAsk } from '@/shared/plan';
@@ -36,8 +36,7 @@ export type { PlannerAsk } from '@/shared/plan';
 const ATTEMPTS = 3;
 /** The app does not exist while it is planned; model calls and their cost are kept under this name until it does. */
 const PLAN_APP = { id: 'plan' };
-/** What the Planner's calls of this session used. */
-export const PLANNING: CallRun = { id: 'plan', calls: 0, tokIn: 0, tokOut: 0 };
+export { PLANNING };
 /** Lets the caller stop a Planner call: set `stop` and abort `ctrl`, as a build's run control does. */
 export type PlannerCtl = { stop: boolean; ctrl?: AbortController | null };
 
@@ -163,6 +162,7 @@ async function ask<T>(
 
 /** Reads the request and writes the question cards and the draft plan. */
 export function askPlanner(request: string, ctl?: PlannerCtl): Promise<PlannerAsk> {
+  resetPlanning(); // a new interview: what an earlier one cost is not this plan's
   return ask(
     (f) => askPrompt(request, f),
     (answer, repair) => {

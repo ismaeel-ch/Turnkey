@@ -44,8 +44,7 @@ import { DBX, createTableSQL, dbCount, dbTables } from './db';
 import { TYPE_LABEL, VIEW_ICON, VIEW_LABEL, accOf, colOf, deriveEndpoints, roleName, tableOf } from './engine';
 import { DATA_VIEWS, VIEW_WHAT, viewFit, viewsOf } from './viewspec';
 import { HOME_TEMPLATES, REC, matchTemplate } from './builds';
-import { beginInterview, interviewNow, plannerReady } from './interview';
-import { InterviewView } from './interview-ui';
+import { beginInterview, interviewNow } from './interview';
 import { QUESTS } from './quests';
 import { TEAMS, TeamAv } from './team';
 import { StationTests, TestsView, suiteOf, testable } from './tests';
@@ -91,6 +90,8 @@ import { HistoryButtons, openHistory } from './history-ui';
 const MeetingView = lazy(() => import('./meeting').then((m) => ({ default: m.MeetingView })));
 // the list of steps, its model and the plan's team are not needed before an app is open
 const StepsView = lazy(() => import('./steps-view').then((m) => ({ default: m.StepsView })));
+/** The questions and the plan are loaded when a sentence is first sent, so they stay out of the first page load. */
+const InterviewView = lazy(() => import('./interview-ui').then((m) => ({ default: m.InterviewView })));
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
 export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
@@ -308,9 +309,8 @@ export function Home() {
     mode = modeNow(),
     demo = !mode.live,
     hr = new Date().getHours();
-  // A typed sentence is followed by a few questions and a plan to approve. A saved build stands in when no model can be
-  // called; a live sentence gets the interview once the Planner is connected, and builds straight away until then.
-  const guided = demo || plannerReady();
+  // A typed sentence is followed by a few questions and a plan to approve; nothing is built before "Build it".
+  // The Planner asks when a model can be called. When none can, the closest saved build stands in.
   const go = (skip?: boolean) => {
     const text = str(h.text);
     if (!text) {
@@ -344,15 +344,7 @@ export function Home() {
           6500,
         );
       beginInterview(REC[tpl].sentence, tpl, skip);
-    } else if (guided) beginInterview(text, null, skip);
-    else if (
-      startBuild({
-        request: text,
-      })
-    ) {
-      h.text = '';
-      h.note = '';
-    }
+    } else beginInterview(text, null, skip);
   };
   const del = async (a: AppRecord) => {
     if (
@@ -541,7 +533,12 @@ export function Home() {
     </>
   );
   const mine = apps.length ? mine0 : null;
-  if (interviewNow()) return <InterviewView />;
+  if (interviewNow())
+    return (
+      <Suspense fallback={null}>
+        <InterviewView />
+      </Suspense>
+    );
   return (
     <div className="home scroll">
       <div className="home-in">
@@ -551,9 +548,7 @@ export function Home() {
           {(acct?.name || '').split(' ')[0]}. What do you want to build?
         </h1>
         <p className="lead muted">
-          {guided
-            ? 'Say it in one sentence. Turnkey asks a few short questions, shows you a plan in plain words, and builds only after you say yes.'
-            : 'Say what the work is in one sentence. A team of agents builds the whole app, tests it and hands it over ready to use.'}
+          Say it in one sentence. Turnkey asks a few short questions, shows you a plan in plain words, and builds only after you say yes.
         </p>
         <div className="prompt" data-tour="prompt">
           <Textarea
@@ -583,42 +578,23 @@ export function Home() {
               {mode.long}
             </span>
             <span className="grow" />
-            {guided && (
-              <Btn className="btn subtle" id="home-skip" onClick={() => go(true)}>
-                Skip the questions
-              </Btn>
-            )}
+            <Btn className="btn subtle" id="home-skip" onClick={() => go(true)}>
+              Skip the questions
+            </Btn>
             <Btn className="btn primary" id="home-go" onClick={() => go()}>
-              {guided ? (
-                <>
-                  Continue
-                  <Icon n="arrowRight" />
-                </>
-              ) : (
-                <>
-                  <Icon n="sparkle" />
-                  Build
-                </>
-              )}
+              Continue
+              <Icon n="arrowRight" />
             </Btn>
           </div>
         </div>
         {h.note && <MBar tone="warning">{h.note}</MBar>}
         <ol className="how" aria-label="What happens next">
-          {(guided
-            ? [
-                ['A few questions', 'Up to five, one at a time. Skip any and the usual choice is used'],
-                ['A plan you approve', 'Who uses it, what it keeps and who builds it. Nothing is built before you say yes'],
-                ['A team builds it', 'Only the agents this app needs, while you look on'],
-                ['Release, then improve', 'Share it by link. Later, ask for a fix or a new feature in plain words'],
-              ]
-            : [
-                ['Describe', 'One sentence about the work'],
-                ['Watch it being built', 'Agents build and test it while you look on'],
-                ['Use it', 'The working app, with sample data'],
-                ['Release and share', 'One link installs the app alone'],
-              ]
-          ).map(([title, text], i) => (
+          {[
+            ['A few questions', 'Up to five, one at a time. Skip any and the usual choice is used'],
+            ['A plan you approve', 'Who uses it, what it keeps and who builds it. Nothing is built before you say yes'],
+            ['A team builds it', 'Only the agents this app needs, while you look on'],
+            ['Release, then improve', 'Share it by link. Later, ask for a fix or a new feature in plain words'],
+          ].map(([title, text], i) => (
             <li key={title}>
               <span className="how-n">{i + 1}</span>
               <span>

@@ -263,6 +263,26 @@ erDiagram
   }
 ```
 
+### Records across versions
+
+A release, an update on a device and going back all change the app's definition while its records must stay. Three
+things make that work:
+
+- **Record steps** (`src/workspace/record-steps.ts`). Each change to a list and each `Release` keeps what it did to
+  the records: `rename_field`, `to_choice`, `add_field`, `remove_field`. A packed app carries the steps of every
+  version, so a device that updates from 1.0 to 1.2 replays the steps between the two (`stepsBetween`) before its
+  records are copied across (`carryData` in `src/workspace/carry.ts`). Going back replays them in reverse.
+- **The holding table** `tk_put_away`, inside each app's own SQLite file:
+  `(table_name, column_name, row_id, value, at)`. A value whose field the other version does not have is put here,
+  never deleted, and returns to its field if the field comes back within 30 days. Removing a field in the draft,
+  undo and redo, going back and "put the changes back" all use it.
+- **What a new person starts with** (`Release.start`): `empty` (no records except the lists the plan marks as
+  starter settings), `demo` (the made-up records) or `live` (the owner's records as they are). The copy kept with a
+  release always holds the demo data; the choice is applied when the link is made. People who already have the app
+  keep their own records whatever the choice.
+
+Before an installed app updates it keeps a safety copy of its database in local storage (`safe:<appId>`).
+
 ## 5. Storage adapter (`src/platform/storage`)
 
 `openStorage(options)` returns a `TurnkeyStorage` with the same behaviour as `LS`: `get`, `set`, `del`, `keys`,

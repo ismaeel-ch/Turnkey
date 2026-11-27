@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useLayoutEffect, useRef, useState } from 'react';
 import type { AppTable, BackedDef, BriefedDef } from '@/shared/types/app';
 import type {
   ApiPanel,
@@ -62,6 +62,11 @@ import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto,
 import { isStatusCol, startWalk } from './runtime';
 import { ReleaseCard } from './release';
 import { latestTouchOfTable, touchOf, touchShort, touchText } from './provenance';
+
+// Improving an app after it is built (the plan card, its questions, try it) loads the first time one of its cards shows.
+const ChangePlanCard = lazy(() => import('./improve').then((m) => ({ default: m.ChangePlanCard })));
+const UnderstandBox = lazy(() => import('./improve').then((m) => ({ default: m.UnderstandBox })));
+const TryItCard = lazy(() => import('./improve').then((m) => ({ default: m.TryItCard })));
 
 /** Who made a table, and who changed it last if that was later. Apps saved before this was recorded say the Database agent. */
 function tableTouchText(app: AppRecord, table: string) {
@@ -1287,6 +1292,12 @@ export function ChatCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
       );
     }
     case 'plan':
+      if (c.plan)
+        return (
+          <Suspense fallback={null}>
+            <ChangePlanCard app={app} c={c} />
+          </Suspense>
+        );
       return (
         <div className="gcard">
           <div className="gc-h">
@@ -1312,6 +1323,18 @@ export function ChatCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
             </div>
           )}
         </div>
+      );
+    case 'understand':
+      return (
+        <Suspense fallback={null}>
+          <UnderstandBox app={app} c={c} />
+        </Suspense>
+      );
+    case 'tryit':
+      return (
+        <Suspense fallback={null}>
+          <TryItCard app={app} c={c} />
+        </Suspense>
       );
     case 'sentback':
       return (

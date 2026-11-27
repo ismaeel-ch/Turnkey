@@ -13,7 +13,23 @@ import type {
   Transition,
 } from '@/shared/types/app';
 import type { AppRecord, Dict, Pane, PaneForm, RecordRef, Stage, Walk } from '@/shared/types/workspace';
-import { BRAND, U, arr, confirmBox, cx, fmtDate, fmtDateTime, fmtNum, initials, label, needNet, notify, online, toast } from './core';
+import {
+  BRAND,
+  U,
+  arr,
+  confirmBox,
+  cx,
+  fmtDate,
+  fmtDateTime,
+  fmtNum,
+  initials,
+  label,
+  needNet,
+  notify,
+  online,
+  openDialog,
+  toast,
+} from './core';
 import { DBX, dbExists } from './db';
 import { ACCENTS, accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec, type ApiResult } from './engine';
 import { editBlocked, editFromCanvas } from './changes';
@@ -191,7 +207,7 @@ export function AppPane({
   app: AppRecord;
   pane: Pane;
   solo?: (SoloItem | null | false | undefined)[] | null;
-  /** the builder is playing its walkthrough: nobody is greeted */
+  /** nobody is greeted: the builder is playing its walkthrough, or two versions are shown side by side */
   quiet?: boolean;
 }) {
   const solo = (given || []).filter((x): x is SoloItem => !!x);
@@ -1102,6 +1118,15 @@ export function StageView({ app }: { app: AppRecord }) {
           <span className="hide-sm">Replay first run</span>
         </Btn>
         <LookMenu app={app} />
+        <Btn
+          className="btn sm"
+          id="report-problem"
+          title="Say what is wrong here. You get a plan before anything changes."
+          onClick={() => openDialog('report', { app: app.id, here: true })}
+        >
+          <Icon n="flag" s="16" />
+          <span className="hide-sm">Report a problem</span>
+        </Btn>
         <span className="grow" />
         {saved && (
           <span className="hide-sm">

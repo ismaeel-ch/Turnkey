@@ -5,8 +5,9 @@ import { issuesOf } from '@/server/agents/schemas';
 import { roleAnswer } from '@/server/llm/providers/mock-roles';
 import { COMPANY_EXPENSES, PERSONAL_EXPENSES, checkPlan, planOk, teamFor, type PlanAnswer } from '@/shared/plan';
 import { deriveActivity, type RawAgentEvent } from '@/platform/agui/activity';
+import type { Run } from '@/shared/types/workspace';
 import { EV, U } from '@/workspace/core';
-import { LIVE } from '@/workspace/line';
+import { LIVE, takePlanning } from '@/workspace/line';
 import { PLANNING, askPlanner, askPrompt, planPrompt, writePlan } from '@/workspace/planner';
 
 const EXPENSES = 'I want to build an expense management app';
@@ -63,6 +64,43 @@ describe('askPlanner and writePlan', () => {
   it('refuses in plain words when no model is connected', async () => {
     LIVE.fn = null;
     await expect(askPlanner(EXPENSES)).rejects.toThrow('No model is connected');
+  });
+
+  it('hands its calls and their cost to the build that follows the plan, and starts counting again for a new interview', async () => {
+    const use = {
+      model: 'stand-in',
+      tier: 'default' as const,
+      input: 400,
+      output: 100,
+      cacheRead: 0,
+      cacheWrite: 0,
+      costUsd: 0.002,
+      ms: 5,
+      estimated: false,
+    };
+    LIVE.fn = async (prompt: string, opts: { onUsage?: (u: typeof use) => void }) => {
+      opts.onUsage?.(use);
+      return { text: roleAnswer(prompt) ?? '' };
+    };
+    const asked = await askPlanner(EXPENSES);
+    await writePlan(EXPENSES, [you('audience', 'just_me')], asked.draft, { cards: asked.cards });
+    expect(PLANNING.calls).toBe(2);
+    // only the fields the hand-over reads
+    const run = { calls: 3, tokIn: 10, tokOut: 5 } as Run;
+    takePlanning(run);
+    expect(run.calls).toBe(5);
+    expect(run.tokIn).toBe(810);
+    expect(run.tokOut).toBe(205);
+    expect(run.usage).toMatchObject({ calls: 2, input: 800, output: 200 });
+    expect(run.usage?.costUsd).toBeCloseTo(0.004);
+    expect(run.agentUsage?.researcher.calls).toBe(2);
+    expect(PLANNING).toEqual({ id: 'plan', calls: 0, tokIn: 0, tokOut: 0 });
+    // an interview the owner walked away from is not charged to the next plan
+    await askPlanner(EXPENSES);
+    await askPlanner(EXPENSES);
+    expect(PLANNING.calls).toBe(1);
+    takePlanning(run);
+    expect(run.calls).toBe(6);
   });
 
   it('shows the Planner as done when its turn ends, whether it answered or could not', async () => {
