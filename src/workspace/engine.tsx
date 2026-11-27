@@ -1814,6 +1814,11 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
     if (r.status === 200 && !r.data.length && stored)
       return pass('200 OK · ' + u.name + ' sees none of the ' + stored + ' ' + t.label.toLowerCase());
   }
+  if (!id && step.do === 'see') {
+    // nothing made in this case: "can see" then means the person sees the records already there, such as starter settings
+    const r = apiCall(app, u, 'GET', '/api/' + tn, {}, 'tour');
+    if (r.status === 200 && r.data.length) return pass('200 OK · ' + u.name + ' sees ' + r.data.length + ' ' + t.label.toLowerCase());
+  }
   if (!id) return fail('Nothing was created earlier in the tour for ' + tn);
   out.rec = {
     table: t.name,
@@ -1834,6 +1839,18 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
     return found
       ? pass('200 OK · ' + u.name + ' sees ' + t.one.toLowerCase() + ' #' + id)
       : fail(r.status === 200 ? t.one + ' #' + id + ' is not in the list for ' + u.name : r.status + ' ' + r.error);
+  }
+  if (step.do === 'update') {
+    const r = apiCall(app, u, 'PATCH', '/api/' + tn + '/' + id, tourValues(app, t, step.values), 'tour');
+    return r.status === 200
+      ? pass('200 OK · ' + u.name + ' changed ' + t.one.toLowerCase() + ' #' + id)
+      : fail(r.status + ' ' + r.error + (r.fields ? ' (' + Object.keys(r.fields).join(', ') + ')' : ''));
+  }
+  if (step.do === 'delete') {
+    // the record stays this case's record, so a later "hidden" step checks that it is gone
+    const r = apiCall(app, u, 'DELETE', '/api/' + tn + '/' + id, {}, 'tour');
+    out.rec = null;
+    return r.status === 200 ? pass('200 OK · ' + u.name + ' deleted ' + t.one.toLowerCase() + ' #' + id) : fail(r.status + ' ' + r.error);
   }
   if (step.do === 'transition') {
     const r = apiCall(app, u, 'POST', '/api/' + tn + '/' + id + '/' + step.transition, {}, 'tour');
