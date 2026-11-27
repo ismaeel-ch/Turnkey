@@ -5,6 +5,17 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+### Added
+
+- A form with seven fields or more is filled in step by step in a built app: what the record needs first, then who
+  and what it belongs to, then dates and amounts, then the rest, and a last step that shows every answer before
+  anything is saved. Next stays on a step while a required field is empty. Shorter forms and edits stay on one page.
+
+### Changed
+
+- Renaming a field that a formula reads is no longer refused. Every calculated field, rule and move condition that
+  reads it is rewritten to the new name, in the app and in its plan, and the worked-out values stay the same.
+
 ## [0.5.8] - 2026-11-28
 
 Built apps work things out: calculated fields, rules, moves with a condition, locked stages, and four new samples.

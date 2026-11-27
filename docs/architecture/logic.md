@@ -62,6 +62,9 @@ dropped on repair, so a plan never fails because of one.
 - The worked-out numbers as tiles, each with its formula in plain words.
 - Records that link to this one as a table of lines with totals, and a button to add a line.
 - "Waiting for you" on top of the overview: the records this person can take forward now.
+- A new record with seven fields or more is filled in step by step (`src/workspace/form-steps.ts`): what it needs,
+  who and what it belongs to, dates and amounts, the rest, then a step that shows every answer before it is saved.
+  Code sorts the fields into steps from their types; no model is asked.
 
 ## How to check it
 
@@ -69,9 +72,12 @@ dropped on repair, so a plan never fails because of one.
 - `tests/unit/plan-logic.test.ts`: the plan keeps, repairs and shows its logic.
 - `tests/unit/complex-samples.test.ts`: the four saved builds are built on a real SQLite database and used through
   their own endpoints (totals, refusals, held moves, locks).
-- `complexChecks` in `tests/e2e/flows.cjs` (part of the `round6` flow): the inbox, the record page and the plan screen.
+- `tests/unit/form-steps.test.ts`: which field goes on which step.
+- `complexChecks` in `tests/e2e/flows.cjs` (part of the `round6` flow): the inbox, the record page, the plan screen and the
+  step-by-step form.
 
 ## Limits
 
 At most 12 rules in an app and 8 checks in a plan. Renaming a field through the chat
-does not rewrite formulas that read it (planned).
+rewrites every formula, rule and move condition that reads it, in the app and in its plan (`renameInLogic`); removing
+such a field is refused with a sentence that says what reads it.
