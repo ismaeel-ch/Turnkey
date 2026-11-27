@@ -7,7 +7,8 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [0.5.2] - 2026-11-27
 
-A faster first visit on phones, the expense manager as a sample, fairer Live builds, and the Your apps cards fixed.
+A faster first visit on phones, the expense manager as a sample, fairer Live builds, a guided flow that keeps the
+keyboard's place, and the Your apps cards fixed.
 
 ### Added
 
@@ -25,6 +26,10 @@ A faster first visit on phones, the expense manager as a sample, fairer Live bui
 
 - Each card under Your apps is one line again: logo and name on the left, the share, duplicate and delete buttons
   side by side, and a long description cut short. The Pages list and the Release summary cards had the same fault. ([#256](https://github.com/ismaeel-ch/Turnkey/pull/256))
+- The guided build flow keeps the keyboard's place: each new part takes the focus, the first-use tour keeps Tab
+  inside its bubble, and the build's steps announce a pause and the finish. ([#246](https://github.com/ismaeel-ch/Turnkey/pull/246))
+- A one-person app's tour no longer expects someone to be refused, and the expense manager is proven on the real
+  model. ([#250](https://github.com/ismaeel-ch/Turnkey/pull/250))
 
 ## [0.5.1] - 2026-11-27
 
