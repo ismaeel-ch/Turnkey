@@ -86,7 +86,19 @@ import {
   runAcceptance,
   tableOf,
 } from './engine';
-import { checkScreensShape, checkViews, mendViews, normUI, normViews, renderViewsTest, suggestViews, viewsOf } from './viewspec';
+import {
+  DATA_VIEWS,
+  checkScreensShape,
+  checkViews,
+  fillThinViews,
+  mendViews,
+  normUI,
+  normViews,
+  renderViewsTest,
+  suggestViews,
+  viewFit,
+  viewsOf,
+} from './viewspec';
 import { CONNECTORS, allConnectors, callConnector, connOn } from './connections';
 import { REC } from './registry';
 import { TEAMS, checkTeam, stopTeam, teamNeeds } from './team';
@@ -485,8 +497,11 @@ export function flowFromPlan(app: AppRecord) {
 /* ---------- what each station does with an agent's output ---------- */
 export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: number) => StationResult> = {
   research(app, out, run) {
-    const b = normBrief(out),
-      checks = checkBrief(b);
+    const b = normBrief(out);
+    // a saved build recorded from a plan may be for one person with no stages, as a planned Live build may be; a
+    // model's own brief never gets this, so its checks stay as strict as before
+    if (app.mode !== 'live' && out && out.planned === true) b.planned = true;
+    const checks = checkBrief(b);
     if (checks.every((c) => c.ok)) {
       b.sources = arr(app.lookups);
       // answered in the interview before the build: the brief records the decision, and the line does not stop to ask
@@ -507,7 +522,11 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
     }
     return {
       checks,
-      facts: [b.roles.length + ' roles', b.entities.length + ' kinds of record', b.stories.length + ' user stories'],
+      facts: [
+        b.roles.length + (b.roles.length === 1 ? ' role' : ' roles'),
+        b.entities.length + ' kinds of record',
+        b.stories.length + ' user stories',
+      ],
     };
   },
   database(app, out, run, attempt = 1) {
@@ -588,7 +607,13 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
     };
   },
   views(app, out, run, attempt = 1) {
-    const vw = attempt >= 3 ? mendViews(out, app.def) : normViews(out, app.def),
+    // a saved build replays its recorded slips for the checks to catch, so only a Live answer is filled in
+    const vw =
+        attempt >= 3
+          ? mendViews(out, app.def)
+          : run.mode === 'live'
+            ? fillThinViews(normViews(out, app.def), app.def)
+            : normViews(out, app.def),
       checks = checkViews(app.def, vw),
       n = Object.keys(vw.views).reduce((k, t) => k + vw.views[t].length, 0);
     if (checks.every((c) => c.ok)) {
@@ -848,6 +873,9 @@ export const pBrief = (b: Brief) =>
     rules: b.rules,
     decision: b.decision,
   });
+/** For each table, the catalog views its columns can draw (a board needs a choice field, a calendar a date, and so on). */
+export const pFits = (def: AppDef) =>
+  def.tables.map((t) => t.name + ': ' + DATA_VIEWS.filter((v) => !viewFit(def, t, v)).join(', ')).join('\n');
 export const pTables = (def: AppDef) =>
   def.tables
     .map(
@@ -1043,6 +1071,8 @@ export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
     HEAD('View advisor') +
     'TABLES (name:type, * = required):\n' +
     pTables(app.def) +
+    '\n\nVIEWS THAT FIT EACH TABLE (recommend no other):\n' +
+    pFits(app.def) +
     '\n\nWORKFLOW:\n' +
     pFlow(app.def) +
     '\n\nRecommend how each table should be viewed, and design one dashboard.\n- Views come from this catalog only: table; board (needs a select column: set "by"); calendar (needs a date: set "date", optional "end"); timeline (needs a date: set "start", optional "end" and "lane"); chart (set "x" to a category or date column, optional "split" and "kind": bar, stack, line or area); pivot (needs two category columns: set "rows" and "cols"); tree (set "levels" to 1 to 3 category columns); cards.\n- Category columns are select, user, ref and bool. Recommend only views that fit the columns: 3 to 8 per table, each with a short "why". Always include table.\n- dashboard: "date" names the table and date column the date filter uses, or null. 5 to 9 widgets, at least two kpi and two charts: {"kind":"kpi","label":"","table":"","where":{"column":"value"},"measure":"count|sum:column|avg:column"}, {"kind":"bar","label":"","table":"","x":"category column"}, {"kind":"stack","label":"","table":"","x":"category column","split":"category column"}, {"kind":"line","label":"","table":"","x":"date column","bucket":"day|week|month"}, {"kind":"recent","label":"","table":""}.\n\nFORMAT: {"views":[{"table":"","use":[{"type":"","why":"","by":"","date":"","start":"","end":"","lane":"","x":"","split":"","rows":"","cols":"","levels":[]}]}],"dashboard":{"title":"","date":{"table":"","column":""},"widgets":[]}' +

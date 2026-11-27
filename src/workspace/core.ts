@@ -563,7 +563,10 @@ export async function checkReach(): Promise<boolean> {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 8000);
     try {
-      await fetch('/api/health', { cache: 'no-store', signal: ctl.signal }); // any answer, even a refusal, means the server was reached
+      // any answer, even a refusal, means the server was reached. The body is read so the request ends: an unread body
+      // keeps it open, and tools that wait for the network to go quiet (Lighthouse among them) then wait for ever.
+      const res = await fetch('/api/health', { cache: 'no-store', signal: ctl.signal });
+      await res.arrayBuffer().catch(() => undefined);
     } finally {
       clearTimeout(t);
     }

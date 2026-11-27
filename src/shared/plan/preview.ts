@@ -81,6 +81,10 @@ function together(patches: PlanPatch[]): PlanPatch {
     if (p.lists) out.lists = uniqueBy([...(out.lists ?? []), ...p.lists], (x) => x.name);
     if (p.rules) out.rules = uniqueBy([...(out.rules ?? []), ...p.rules], (x) => x);
     if (p.permissions) out.permissions = overPermissions(out.permissions ?? {}, p.permissions);
+    if (p.name !== undefined) out.name = p.name;
+    if (p.summary !== undefined) out.summary = p.summary;
+    if (p.stories) out.stories = p.stories;
+    if (p.notInThisVersion) out.notInThisVersion = p.notInThisVersion;
     if (p.audience !== undefined) out.audience = p.audience;
     if (p.stages !== undefined) out.stages = p.stages;
     if (p.demoData !== undefined) out.demoData = p.demoData;
@@ -135,6 +139,13 @@ export function previewPlan(draft: PlanSpec, cards: readonly QuestionCard[], ans
       : null;
     plan.stages = stages;
   }
+  // nor may who-can-do-what keep a list or a person that is gone
+  const lists = new Set(plan.lists.map((l) => l.name));
+  plan.permissions = Object.fromEntries(
+    Object.entries(plan.permissions)
+      .filter(([list]) => lists.has(list))
+      .map(([list, byPerson]) => [list, Object.fromEntries(Object.entries(byPerson).filter(([id]) => people.has(id)))]),
+  );
   plan.stories = plan.stories.filter((s) => people.has(s.role));
   // Rules are sentences, so they cannot be pruned by id. When an answer took people out and no option wrote new rules,
   // drop the rules that name someone who is gone ("Managers approve claims" once the app is just for you).

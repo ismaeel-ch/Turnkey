@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { BASE_OPEN_GRAPH } from '@/server/site';
 import WorkspaceLoader from './WorkspaceLoader';
+import { BootHint, BootScreen } from '@/platform/boot-screen';
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
@@ -10,7 +11,10 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <div id="root">
-      <WorkspaceLoader />
+      <BootHint />
+      <WorkspaceLoader>
+        <BootScreen />
+      </WorkspaceLoader>
     </div>
   );
 }

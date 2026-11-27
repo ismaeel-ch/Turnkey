@@ -102,6 +102,8 @@ import { historyHooks } from './history';
 import { Home, Titlebar, Workspace, lineApp } from './shell-a';
 import { installShortcuts, setSingleKeys } from './commands';
 import { later } from './later';
+import { bootScreenDone, noteWelcomed, takeBootIntent } from '@/platform/boot-intent';
+import { WELCOME_LEAD, WELCOME_NOTE, WELCOME_QUICK_NOTE, WELCOME_STEPS, WELCOME_TICKS, WELCOME_TITLE } from '@/shared/welcome';
 
 // Loaded the first time they are drawn, to keep them out of the first page load.
 const GoBackDialog = later(() => import('./release-ui'), 'GoBackDialog');
@@ -145,6 +147,7 @@ function finishOnboarding(o: OnboardingForm, shortTour = false) {
   const a = createAccount(o.name || 'Demo user', o.user || 'demo', o.pass || 'demo');
   S.session = a.id;
   S.onboarded = true;
+  noteWelcomed(true);
   S.settings.demo = o.demo;
   S.settings.debug = o.dev;
   commit();
@@ -171,10 +174,28 @@ function startSample(o: OnboardingForm) {
   AFTER_BUILD.sample = () => setTimeout(() => startTour(true), 900);
   void engineReady.then(() => beginInterview(CARDS.biddesk.sentence, 'biddesk', false, true));
 }
+/** "Describe your own" on the first screen: the demo account, then the home screen's prompt. */
+function describeOwn(o: OnboardingForm) {
+  finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: U.live !== 'ready', pick: '', tour: false });
+  void engineReady.then(() =>
+    setTimeout(() => {
+      const el = document.getElementById('home-prompt');
+      if (el) el.focus();
+    }, 300),
+  );
+}
+/** Once the welcome screen is up: start the engine, and do what a button on the server's welcome screen asked for. */
+function welcomeShown() {
+  startEngineAfterPaint();
+  const asked = takeBootIntent();
+  if (asked === 'sample') startSample(obForm());
+  else if (asked === 'own') describeOwn(obForm());
+  else if (asked === 'start') setOb({ err: '', step: 1 });
+}
 export function Onboarding() {
-  useLayoutEffect(startEngineAfterPaint, []);
+  useLayoutEffect(welcomeShown, []);
   const o = obForm(),
-    steps = ['Welcome', 'Your account', 'How to run', 'First app', 'Ready'],
+    steps = WELCOME_STEPS,
     liveOK = online();
   const next = () => {
     if (o.step === 1) {
@@ -194,37 +215,23 @@ export function Onboarding() {
   const finish = () => finishOnboarding(o);
   // the two quick ways in from the first screen: a sample to answer, plan and build in under a minute, or a sentence of one's own
   const trySample = () => startSample(o);
-  const describeOwn = () => {
-    finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: U.live !== 'ready', pick: '', tour: false });
-    void engineReady.then(() =>
-      setTimeout(() => {
-        const el = document.getElementById('home-prompt');
-        if (el) el.focus();
-      }, 300),
-    );
-  };
   const body = [
     () => (
       <>
-        <h1 className="t-title1">Say what the work is. Get the whole app, ready to use.</h1>
+        <h1 className="t-title1">{WELCOME_TITLE}</h1>
         <p className="lead">
           {BRAND.name}
-          {
-            ' turns one sentence into a working business app. Five builder agents and a Tester make its database, rules, screens and tests while you watch, and code checks every handoff.'
-          }
+          {WELCOME_LEAD}
         </p>
         <div className="ob-quick row">
           <Btn className="btn primary" id="ob-sample" onClick={trySample}>
             Try a sample
           </Btn>
-          <Btn className="btn" id="ob-own" onClick={describeOwn}>
+          <Btn className="btn" id="ob-own" onClick={() => describeOwn(o)}>
             Describe your own
           </Btn>
         </div>
-        <p className="t-cap muted ob-quick-note">
-          Both use a demo account in this browser. Try a sample asks one question about a sales bidding desk, shows you the plan, then
-          builds it in about 30 seconds with no model calls. Get started below sets up your own account first.
-        </p>
+        <p className="t-cap muted ob-quick-note">{WELCOME_QUICK_NOTE}</p>
         <div className="ob-line" aria-hidden="true">
           {STATIONS.map((s, i) => (
             // the arrow trails its station, so a wrapped line ends on an arrow instead of starting with one
@@ -238,27 +245,15 @@ export function Onboarding() {
           ))}
         </div>
         <ul className="plain ticks">
-          <li>
-            <Icon n="eye" s="16" />
-            <span>
-              <strong>Built in front of you.</strong>
-              {' Every agent step, tool call and check is visible.'}
-            </span>
-          </li>
-          <li>
-            <Icon n="shield" s="16" />
-            <span>
-              <strong>Checked at every handoff.</strong>
-              {' Agents write definitions. Code tests them and sends failures back.'}
-            </span>
-          </li>
-          <li>
-            <Icon n="storage" s="16" />
-            <span>
-              <strong>Yours, in this browser.</strong>
-              {' Apps and data stay here, work offline, and are still here when you sign in again.'}
-            </span>
-          </li>
+          {WELCOME_TICKS.map((t) => (
+            <li key={t.icon}>
+              <Icon n={t.icon} s="16" />
+              <span>
+                <strong>{t.lead}</strong>
+                {t.text}
+              </span>
+            </li>
+          ))}
         </ul>
       </>
     ),
@@ -477,7 +472,7 @@ export function Onboarding() {
               </li>
             ))}
           </ol>
-          <p className="t-cap muted">An entry for the SSI Agent-A-Thon 2026. People and records in it are made up.</p>
+          <p className="t-cap muted">{WELCOME_NOTE}</p>
         </aside>
         <main className="ob-main">
           <div className="ob-body" key={o.step}>
@@ -1785,6 +1780,12 @@ export function Shell() {
 }
 function RootInner() {
   useStore();
+  // until the saved state is read, keep the screen the server drew, so a first visit goes straight to the welcome
+  const drawn = U.boot !== 'loading' || stateLoaded;
+  useLayoutEffect(() => {
+    if (drawn) bootScreenDone();
+  }, [drawn]);
+  if (!drawn) return null;
   if (U.boot === 'loading' && !welcomeFirst())
     return (
       <div className="splash">
@@ -1896,6 +1897,8 @@ export function boot() {
   LS.probe();
   loadState();
   stateLoaded = true;
+  if (S.onboarded) takeBootIntent(); // a button on a welcome screen that should not have shown
+  noteWelcomed(!!S.onboarded);
   applyTheme();
   if (!S.shared) S.shared = {};
   Object.values(S.apps).forEach((a) => {
@@ -1938,7 +1941,10 @@ export function boot() {
   if (welcomeFirst()) {
     notify(); // draw the welcome screen now; it starts the engine once painted (the timer is only a fallback)
     setTimeout(startEngine, 3000);
-  } else setTimeout(startEngine, 40);
+  } else {
+    notify(); // swap the boot screen for the splash
+    setTimeout(startEngine, 40);
+  }
   probeClaude(0);
   const flush = () => {
     try {

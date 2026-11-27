@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ErrorScreen } from '@/platform/error-screen';
 import { flushOnHide, openWorkspaceStorage } from '@/platform/storage';
-import { U, attachStorage, notify } from './core';
+import { S, U, attachStorage, notify } from './core';
 import { listenForStorageProblems, noteStorageProblem } from './errors';
 import { setFlowAvailable } from './flow';
 import { boot, Root } from './shell-c';
@@ -19,6 +19,10 @@ let started = false;
 function start() {
   if (started) return;
   started = true;
+  // `window.__turnkeyOptions = { canvas: false }` (set before the page loads) shows the plain line of stations.
+  // React Flow (about 60 KB) is fetched once the first screen is up, not beside it; the plain line shows until then.
+  const noCanvas = (window as unknown as PageOptions).__turnkeyOptions?.canvas === false;
+  if (noCanvas) setFlowAvailable(false);
   listenForStorageProblems();
   void openWorkspaceStorage((p) => {
     console.warn('[storage]', p.message);
@@ -31,17 +35,35 @@ function start() {
       startHistory();
       // after boot(), so its own save on pagehide runs first and this one writes the result to IndexedDB
       if (storage) flushOnHide(storage);
-      preloadWhenIdle();
+      // On a first visit the welcome screen needs neither the canvas nor the orchestrator, and on a phone parsing them
+      // blocks taps on it for a few hundred milliseconds. Wait until the visitor does something (or a while passes).
+      const later = S.onboarded ? (fn: () => void) => fn() : afterFirstInput;
+      later(() => {
+        if (!noCanvas) whenIdle(() => setFlowAvailable(true), 1000);
+        preloadWhenIdle();
+      });
     })
     .catch((e: unknown) => {
       U.boot = 'error';
       U.bootErr = String((e as Error)?.message || e);
       notify();
     });
-  // `window.__turnkeyOptions = { canvas: false }` (set before the page loads) shows the plain line of stations.
-  // React Flow (about 60 KB) is fetched once the first screen is up, not beside it; the plain line shows until then.
-  if ((window as unknown as PageOptions).__turnkeyOptions?.canvas === false) setFlowAvailable(false);
-  else whenIdle(() => setFlowAvailable(true), 1000);
+}
+
+/** Runs `fn` on the visitor's first tap, click or key press, or after `FIRST_INPUT_WAIT`, whichever comes first. */
+const FIRST_INPUT_WAIT = 15000;
+function afterFirstInput(fn: () => void) {
+  const kinds = ['pointerdown', 'keydown'] as const;
+  let done = false;
+  const go = () => {
+    if (done) return;
+    done = true;
+    kinds.forEach((k) => window.removeEventListener(k, go, true));
+    clearTimeout(timer);
+    fn();
+  };
+  kinds.forEach((k) => window.addEventListener(k, go, { capture: true, passive: true }));
+  const timer = setTimeout(go, FIRST_INPUT_WAIT);
 }
 
 function whenIdle(fn: () => void, timeout: number) {

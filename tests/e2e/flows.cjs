@@ -11,7 +11,7 @@ const check = (name, ok, detail) => { results.push({ name, ok: !!ok }); console.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function newPage(browser, opts) {
-  const ctx = await browser.newContext({ viewport: (opts && opts.viewport) || { width: 1440, height: 900 }, colorScheme: (opts && opts.scheme) || 'light' });
+  const ctx = await browser.newContext({ viewport: (opts && opts.viewport) || { width: 1440, height: 900 }, colorScheme: (opts && opts.scheme) || 'light', serviceWorkers: opts && opts.noWorker ? 'block' : 'allow' });
   await ctx.route('https://**/*', (route) => route.abort()); // the app is self-contained: nothing outside its own origin is needed
   if (opts && opts.init) await ctx.addInitScript(opts.init);
   const page = await ctx.newPage();
@@ -49,13 +49,27 @@ const nav = (page, name) => page.locator('.app-nav .nav-i', { hasText: name }).f
 const vtab = async (page, name) => { await page.locator('.vswitch [role=tab]', { hasText: name }).click(); await sleep(90); };
 
 async function quickStarts(browser, url) { // the two ways in from the first screen, for a judge who opens the URL cold
-  { // the first screen does not wait for the SQLite engine; a quick start clicked before it is ready waits for it
+  for (const [intent, next] of [['sample', '.iv-ask'], ['start', '#ob-name']]) { // the welcome the server draws works before the workspace script has run
     const { ctx, page } = await newPage(browser);
+    await page.goto(url); await page.waitForSelector('#boot-welcome [data-boot="' + intent + '"]', { timeout: 20000 });
+    if (intent === 'sample') {
+      await sleep(800);
+      const w = await st(page, () => ({ workspace: !!window.__formwork, card: !!document.querySelector('.ob-card'), lines: document.querySelectorAll('#boot-welcome .ob-st').length, ticks: document.querySelectorAll('#boot-welcome .ticks li').length }));
+      check('first visit: the server draws the whole welcome, and the workspace script waits for the first tap', !w.workspace && !w.card && w.lines === 6 && w.ticks === 3, w);
+    }
+    await page.click('#boot-welcome [data-boot="' + intent + '"]'); await page.waitForSelector(next, { timeout: 20000 });
+    const g = await st(page, () => ({ boot: !!(document.getElementById('boot-welcome') || {}).offsetParent, onboarded: window.__formwork.state().onboarded }));
+    check('first visit: ' + (intent === 'sample' ? 'Try a sample' : 'Get started') + ' pressed on the server\'s welcome loads the workspace and does what was asked', !g.boot && g.onboarded === (intent === 'sample'), g);
+    await ctx.close();
+  }
+  { // the first screen does not wait for the SQLite engine; a quick start clicked before it is ready waits for it
+    // (no service worker: it keeps the engine as it installs, and the page would then get it from there, past the route below)
+    const { ctx, page } = await newPage(browser, { noWorker: true });
     let release; const held = new Promise((r) => { release = r; }); let asked = false;
     await page.route('**/vendor/sql-wasm.wasm*', async (route) => { asked = true; await held; await route.continue(); });
     await page.goto(url); await page.waitForSelector('#ob-sample', { timeout: 20000 });
     await page.waitForFunction(() => !!window.__formwork, null, { timeout: 10000 });
-    check('first visit: the welcome screen shows while the SQLite engine is still loading', !(await page.locator('.splash').count()) && await page.locator('.ob-body .lead').isVisible());
+    check('first visit: the welcome screen shows while the SQLite engine is still loading', !(await page.locator('.splash').count()) && await page.locator('.ob-card .ob-body .lead').isVisible());
     await page.click('#ob-sample'); await page.waitForSelector('.splash', { timeout: 5000 });
     for (let i = 0; i < 100 && !asked; i++) await sleep(50);
     release(); await page.waitForSelector('.iv-ask', { timeout: 15000 });
@@ -68,7 +82,7 @@ async function quickStarts(browser, url) { // the two ways in from the first scr
     const tag = vp ? 'phone: ' : '';
     const { ctx, page } = await newPage(browser, vp ? { viewport: vp } : undefined);
     await page.goto(url); await page.waitForSelector('#ob-sample', { timeout: 20000 });
-    check(tag + 'first screen says what Turnkey does in one line and offers both quick starts', /turns one sentence into a working business app/.test(await page.locator('.ob-body .lead').innerText()) && await page.locator('#ob-own').isVisible());
+    check(tag + 'first screen says what Turnkey does in one line and offers both quick starts', /turns one sentence into a working business app/.test(await page.locator('.ob-card .ob-body .lead').innerText()) && await page.locator('#ob-own').isVisible());
     await page.click('#ob-sample');
     await page.waitForSelector('.iv-ask', { timeout: 8000 });
     const q = await ivNow(page), sq = await st(page, () => { const F = window.__formwork, iv = F.view().home.interview; return { demo: F.state().settings.demo, tpl: iv && iv.tpl, sample: !!(iv && iv.sample), usual: [...document.querySelectorAll('.iv-ask .iv-opt')].filter((x) => /Usual choice/.test(x.innerText)).length, tour: !!document.querySelector('.tour-pop') }; });
@@ -97,7 +111,7 @@ async function flowDemo(browser, url) {
   await quickStarts(browser, url);
   const { ctx, page } = await newPage(browser);
   await page.goto(url); await page.waitForSelector('.ob-card', { timeout: 20000 });
-  check('onboarding shows on first run', await page.locator('.ob-steps li').count() === 5);
+  check('onboarding shows on first run', await page.locator('.ob-card .ob-steps li').count() === 5);
   await shot(page, '01-onboarding');
   await page.getByRole('button', { name: 'Get started' }).click();
   await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
@@ -203,6 +217,9 @@ async function flowDemo(browser, url) {
   check('a test case that jumps over workflow steps gets the missing steps, run by roles allowed to take them, and passes', gap.trs.join(',') === 'check_in:receptionist,start:doctor,complete:doctor' && gap.ok.every(Boolean), gap);
   const closed = await st(page, (aid) => { const F = window.__formwork; return { notes: F.tourStep(aid, { role: 'receptionist', do: 'hidden', table: 'visit_notes' }), patients: F.tourStep(aid, { role: 'doctor', do: 'hidden', table: 'patients' }) }; }, a.id);
   check('"cannot see" with nothing made in the case passes only when the whole table is closed to that person', closed.notes.ok === true && closed.patients.ok === false, closed);
+  const gone = await st(page, (aid) => { const F = window.__formwork, def = F.state().apps[aid].def, mk = def.tour.find((x) => x.do === 'create'), tn = mk.table || def.process.table, who = Object.keys(def.access[tn]).find((r) => def.access[tn][r].delete && def.access[tn][r].list !== 'none'); return { who, steps: F.tourStep(aid, [mk, { role: who, do: 'delete', table: tn }, { role: who, do: 'hidden', table: tn }]).map((r) => [r.ok, r.detail]), seen: F.tourStep(aid, { role: 'doctor', do: 'see', table: 'patients' }) }; }, a.id);
+  check('a test case can delete the record it made, and a later "cannot see" step finds it gone', !!gone.who && gone.steps.every((x) => x[0]) && /deleted/.test(gone.steps[1][1]), gone);
+  check('"can see" with nothing made in the case passes when the person sees the records already there', gone.seen.ok === true && /sees \d+ patients/.test(gone.seen.detail), gone.seen);
   await view(page, 'API'); await page.waitForSelector('.api-grid');
   await page.locator('.side-i', { hasText: '/visit_notes' }).nth(2).click(); await page.locator('.api-grid .btn.primary').click(); await sleep(100);
   check('receptionist is refused on POST /visit_notes', (await page.locator('.api-grid .badge').first().innerText()).trim() === '403', await page.locator('.api-grid .badge').first().innerText());
@@ -709,7 +726,7 @@ async function flowMisc(browser, url) {
   await page.goto(url); await page.waitForSelector('.ob-card'); await shot(page, '60-dark-onboarding');
   await page.getByRole('button', { name: 'Get started' }).click();
   await page.fill('#ob-name', 'Muhammad Ismaeel'); await page.fill('#ob-user', 'Ismaeel'); await page.fill('#ob-pass', 'abc'); await page.getByRole('button', { name: 'Continue' }).click(); await sleep(80);
-  check('short password is refused', (await page.locator('.ob-body').innerText()).includes('at least 4'));
+  check('short password is refused', (await page.locator('.ob-card .ob-body').innerText()).includes('at least 4'));
   await page.fill('#ob-pass', 'secret12'); await page.getByRole('button', { name: 'Continue' }).click(); await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click(); await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click();
   await page.waitForSelector('.home'); await setSpeed(page, 'instant'); await howBuilt(page);
@@ -864,7 +881,7 @@ async function canvasFieldEdits(browser, url) { // the owner edits fields on the
 async function flowViews(browser, url) {
   const { ctx, page } = await newPage(browser);
   await enter(page, url); await shot(page, '70-home-library');
-  check('home lists three quests and six business apps', await page.locator('.tpl').count() === 9 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
+  check('home lists three quests and seven business apps', await page.locator('.tpl').count() === 10 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
   await page.locator('[data-tpl="clinic"] .tpl-build').click(); await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').first().click(); await waitReady(page);
   let a = await appState(page);
   check('six stations, and the Views station passed', Object.keys(a.line).length === 6 && a.line.views === 'ok', a.line);
@@ -954,6 +971,8 @@ async function flowViews(browser, url) {
   check('the built app is in the library', await page.locator('.app-row').count() === 1 && await page.locator('[data-tpl="clinic"] .badge.b-success').count() === 1);
   await page.locator('.app-row .btn[aria-label^="Duplicate"]').click(); await sleep(200);
   check('duplicate adds a second saved app', await page.locator('.app-row').count() === 2 && (await page.locator('.app-row strong').first().innerText()).includes('copy'), await page.locator('.app-row strong').allInnerTexts());
+  for (const scheme of ['light', 'dark']) { await page.emulateMedia({ colorScheme: scheme }); await sleep(150); const rows = await appRowsLook(page); check('Your apps (' + scheme + '): each card is one line, logo and name on the left, the three buttons side by side, the description cut short', appRowsOk(rows), rows); }
+  await page.emulateMedia({ colorScheme: 'light' });
   await shot(page, '78-library'); await page.locator('.app-open').first().click(); await page.waitForSelector('.work-head'); await view(page, 'Data'); await page.waitForSelector('.split .side-i');
   check('the copy has its own SQLite file with the same rows', (await page.locator('.side-i', { hasText: 'patients' }).locator('.t-cap').innerText()).trim() === '14');
   await ctx.close();
@@ -1176,6 +1195,74 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   check('phone: the menu holds Live, Online, Debug, the guide and the account', ['Live', 'Online', 'Debug mode', 'Feature guide', 'Sign out'].every((x) => menu.includes(x)), menu); await shot(pp, '99c-phone-menu');
   await ph.ctx.close();
   await firstUse(browser, url);
+  await expenseSample(browser, url);
+}
+
+/* ---------- the expense manager: "who is this for?" decides which app is built, then demo data, first use and releases ---------- */
+async function expenseSample(browser, url) {
+  const SENTENCE = 'I want to build an expense management app';
+  const rows = (page, id, t) => st(page, ([x, n]) => window.__formwork.dbCount(x, n), [id, t]);
+  const release = async (page, v) => { await view(page, 'Release'); await page.waitForSelector('#rel-go'); await page.locator('#rel-go').click(); await page.waitForFunction((x) => new RegExp('Version ' + x.replace('.', '\\.') + ' · up to date').test((document.getElementById('rel-state') || {}).innerText || ''), v, { timeout: 60000 }); };
+  const removeDemo = async (page) => { await page.locator('.app .demo-bar .btn', { hasText: 'Remove demo data' }).click(); await page.locator('.dialog .btn.danger', { hasText: 'Remove demo data' }).click(); await page.waitForSelector('.app .demo-bar:has-text("Demo data removed")', { timeout: 30000 }); };
+  const welcome = (page) => page.locator('.fr-welcome').innerText();
+  // a change after the first release: its plan, Go ahead, "It works", then release 1.1
+  const improve = async (page, text) => {
+    await page.fill('#improve-text', text); await page.locator('#improve-go').click();
+    const go = page.locator('.gcard.cplan [data-act="go"]');
+    for (let i = 0; i < 150 && !(await go.count()); i++) { const o = page.locator('.gcard.ask .opt:not([disabled])'); if (await o.count()) await o.first().click().catch(() => {}); await sleep(200); }
+    await go.last().click(); await page.waitForSelector('.gcard.tryit', { timeout: 120000 }); await waitFree(page);
+    await page.locator('.gcard.tryit [data-act="works"]').last().click(); await page.locator('.gcard.tryit [data-act="release"]').last().click({ timeout: 30000 });
+    await release(page, '1.1');
+  };
+
+  // "Just me": one person, no stages, no sign-in
+  {
+    const { ctx, page } = await newPage(browser); await enter(page, url, { plain: true });
+    await page.fill('#home-prompt', SENTENCE); await page.locator('#home-go').click(); await page.waitForSelector('.iv-ask');
+    let q = await ivNow(page);
+    check('expenses: the sentence asks who the app is for, with the company as the usual choice and its plan drawn beside', q.card === 'q' && q.opts.length === 2 && /^Just me/.test(q.opts[0]) && /^A company or team.*Usual choice/.test(q.opts[1]) && q.name === 'Expense Desk' && q.people.length === 3 && q.apps === 0, q);
+    await answerCard(page, 0); q = await ivNow(page);
+    check('expenses: answering "Just me" redraws the plan as a personal app before anything is built', q.name === 'My Expenses' && q.people.join() === 'You' && q.card === 'demo_data' && q.apps === 0, q);
+    await page.locator('.iv-usual').click(); await page.waitForSelector('.iv-act .iv-build'); q = await ivNow(page);
+    const plan = (await page.locator('.iv').innerText()).replace(/\s+/g, ' ');
+    check('expenses, just me: the plan has one kind of person, no approval steps, categories as settings, demo data on', q.step === 'plan' && q.people.join() === 'You' && /No approval steps/.test(plan) && /2 lists/.test(plan) && /Categories ?Starter settings/.test(plan) && !/Note, Status/.test(plan) && q.demo === true && !q.agents.includes('access'), { q, plan: plan.slice(0, 400) });
+    await shot(page, 'ex-01-just-me-plan');
+    await page.locator('.iv-act .iv-build').click(); await onApp(page); const { a } = await drive(page);
+    check('expenses, just me: built from the saved build in Demo, every step passed and every check is green', a.tpl === 'expenses' && a.mode === 'demo' && a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok') && Object.keys(a.cols).join() === 'expenses,categories' && !a.cols.expenses.includes('status') && a.tests.failed === 0, [a.status, a.line, a.cols, a.tests]);
+    await view(page, 'App'); await page.waitForSelector('.fr-welcome');
+    const w = await welcome(page);
+    check('expenses, just me: the app opens with no sign-in and a welcome that does not talk about a job', await page.locator('.login-card').count() === 0 && /This is My Expenses\. Here you can:/.test(w) && /demo data/i.test(await page.locator('.app .demo-bar').innerText()), w.slice(0, 200));
+    await shot(page, 'ex-02-just-me-welcome');
+    await page.getByRole('button', { name: 'Not now' }).click(); await removeDemo(page);
+    check('expenses, just me: removing the demo data empties the expenses and keeps the categories', await rows(page, a.id, 'expenses') === 0 && await rows(page, a.id, 'categories') === 6);
+    await release(page, '1.0');
+    await improve(page, 'Add a shop field to expenses'); const b = await appFull(page);
+    check('expenses, just me: released as 1.0, then a new field and release 1.1, with the history keeping both', b.cols.expenses.includes('shop') && /1\.1/.test(await page.locator('.rel-hist').innerText()) && /1\.0/.test(await page.locator('.rel-hist').innerText()), b.cols.expenses);
+    await ctx.close();
+  }
+
+  // "A company or team": the usual choice, three kinds of people, five stages, a pause for the owner
+  {
+    const { ctx, page } = await newPage(browser); await enter(page, url, { plain: true });
+    await page.fill('#home-prompt', SENTENCE); await page.locator('#home-go').click(); await page.waitForSelector('.iv-ask');
+    await page.locator('.iv-usual').click(); await page.waitForSelector('.iv-act .iv-build'); const q = await ivNow(page);
+    const plan = (await page.locator('.iv').innerText()).replace(/\s+/g, ' ');
+    check('expenses, company: the plan has Employee, Manager and Finance, the claim stages, two settings lists and own-only claims for employees', q.name === 'Expense Desk' && q.people.join() === 'Employee,Manager,Finance' && /Draft Submitted Approved Paid/.test(plan) && (plan.match(/Starter settings/g) || []).length >= 2 && /^Own only/.test(q.access['See claims'] || '') && /one pause for you/.test(plan), { q, plan: plan.slice(0, 300) });
+    await shot(page, 'ex-03-company-plan');
+    await page.locator('.iv-act .iv-build').click(); await onApp(page); const { a, seen } = await drive(page);
+    check('expenses, company: built in Demo with the pause after the rules, every step passed and every check is green', a.tpl === 'expenses' && a.status === 'ready' && seen.join() === 'backend' && Object.keys(a.cols).join() === 'claims,categories,teams,payments' && a.tests.failed === 0 && a.tests.total > 100, [a.status, seen, a.cols, a.tests]);
+    await view(page, 'App'); await page.waitForSelector('.login-card');
+    const people = await page.locator('.persona-btn').count();
+    await page.locator('.persona-btn', { hasText: 'Ayesha' }).first().click(); await page.waitForSelector('.fr-welcome');
+    const w = await welcome(page);
+    check('expenses, company: six made-up people to sign in as, and Ayesha gets the employee\'s welcome', people === 6 && /Welcome, Ayesha/.test(w) && /Employee/.test(w), w.slice(0, 200));
+    await shot(page, 'ex-04-company-welcome');
+    await page.getByRole('button', { name: 'Not now' }).click(); await removeDemo(page);
+    check('expenses, company: removing the demo data empties claims and payments and keeps categories and teams', await rows(page, a.id, 'claims') === 0 && await rows(page, a.id, 'payments') === 0 && await rows(page, a.id, 'categories') === 5 && await rows(page, a.id, 'teams') === 3);
+    await release(page, '1.0'); await improve(page, 'Add a project code field to claims'); const b = await appFull(page);
+    check('expenses, company: released as 1.0, then a project code on claims and release 1.1', b.cols.claims.includes('project_code') && /1\.0/.test(await page.locator('.rel-hist').innerText()) && b.tests.failed === 0, [b.cols.claims, b.tests]);
+    await ctx.close();
+  }
 }
 
 /* ---------- first use of a built app: "Choose who you are", the welcome, the tour, the checklist, empty screens ---------- */
@@ -1522,7 +1609,7 @@ async function flowCustom(browser, url) {
 /* ---------- round 6: plain navigation, the Tester's repair loop, agent rooms, an agent step that changes the schema, releases, the app on its own ---------- */
 async function flowRound6(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
-  check('home: four plain steps, and six business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 9 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
+  check('home: four plain steps, and seven business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 10 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
   await buildTpl(page, 'biddesk'); a = await appFull(page);
   check('workspace: three plain steps and one Details tab', (await page.locator('.views .tab').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim().split(' ')[0]).join() === 'Build,App,Release,Details', await page.locator('.views .tab').allInnerTexts());
   check('bidding desk: every station passed first time, with four tables and its own team of agents', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'tenders,score_lines,price_options,risks', [a.status, a.line]);
@@ -1743,7 +1830,7 @@ async function flowRound6(browser, url) {
 /* ---------- The two more business apps on Home: a grant desk with its own agent team, and purchase requests ---------- */
 async function samplesChecks(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
-  check('home: the grant desk and purchase requests are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('.tpl').count() === 9);
+  check('home: the grant desk, purchase requests and the expense manager are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('[data-tpl="expenses"]').count() === 1 && await page.locator('.tpl').count() === 10);
   await page.fill('#home-prompt', 'a community foundation that reviews grant applications'); await page.locator('.prompt .btn.primary').click(); await page.waitForSelector('.iv-ask');
   check('Demo: a saved build with no question of its own asks only about demo data', (await ivNow(page)).n === 'Question 1 of 1' && (await ivNow(page)).card === 'demo_data' && /One quick question/.test(await page.locator('.iv-chat').innerText()) && (await ivNow(page)).name === 'GrantDesk', await ivNow(page));
   await page.locator('.iv-usual').click(); await page.locator('.iv-act .iv-build').click(); await onApp(page); const gd = await drive(page); a = gd.a;
@@ -1853,6 +1940,15 @@ const fitNow = (page) => st(page, () => {
   }
   return { scroll: document.documentElement.scrollWidth - W, out: out.slice(0, 6), small: small.slice(0, 6) };
 });
+/** How each card under Your apps is laid out: the logo and name start at the card's left edge, the share, duplicate and
+ *  delete buttons sit side by side on one line, the long description is cut short instead of running past the card,
+ *  and a card is no taller than two lines (one on a wide screen). */
+const appRowsLook = (page) => page.evaluate(() => [...document.querySelectorAll('.app-row')].map((r) => {
+  const c = r.getBoundingClientRect(), o = r.querySelector('.app-open').getBoundingClientRect(), d = r.querySelector('.app-open .t-cap');
+  const b = [...r.querySelectorAll('.btn.icon')].map((x) => x.getBoundingClientRect());
+  return { h: Math.round(c.height), left: Math.round(o.left - c.left), btnsInRow: b.length === 3 && b.every((x) => Math.abs(x.top - b[0].top) < 2) && b[0].right <= b[1].left && b[1].right <= b[2].left, inside: r.scrollWidth <= r.clientWidth + 1 && Math.round(o.right) <= Math.round(c.right) && (!d || d.getBoundingClientRect().right <= c.right + 1), wide: c.width >= 700 };
+}));
+const appRowsOk = (rows) => rows.length > 0 && rows.every((x) => x.left <= 12 && x.btnsInRow && x.inside && x.h <= (x.wide ? 72 : 120));
 const fitsOk = (f) => f.scroll <= 0 && !f.out.length && !f.small.length;
 /** Checks one screen in the light theme, then again in the dark one. */
 async function fitBoth(page, label) {
@@ -1898,7 +1994,12 @@ async function flowSizes(browser, url) {
     await page.waitForSelector('.dialog.share'); await page.locator('#sh-release').click(); await page.waitForFunction(() => /#app=1\./.test((document.getElementById('sh-link') || {}).value || '')); await sleep(200);
     await fitBoth(page, at + 'the share dialog');
     if (!link) { link = await page.inputValue('#sh-link'); await page.waitForFunction(() => /^https?:\/\/[^/]+\/[a-z0-9-]+$/.test((document.getElementById('sh-short') || {}).value || ''), null, { timeout: 15000 }).catch(() => {}); short = await page.inputValue('#sh-short').catch(() => ''); }
-    await shot(page, 'sz-' + w + '-share'); await ctx.close();
+    await shot(page, 'sz-' + w + '-share');
+    await page.locator('.dialog.share').getByRole('button', { name: 'Close' }).first().click(); await page.waitForSelector('.fui-DialogSurface__backdrop', { state: 'detached', timeout: 5000 }).catch(() => {});
+    await page.locator('.brand').first().click(); await page.waitForSelector('.home .app-row'); await sleep(200);
+    const rows = await appRowsLook(page);
+    check(at + 'Your apps: the card keeps its logo and name on the left, its three buttons side by side and its description inside', appRowsOk(rows), rows);
+    await fitBoth(page, at + 'Home with a saved app'); await ctx.close();
 
     // the app on its own: from a link, installed, and from a short link
     const g = await newPage(browser, { viewport: { width: w, height: h } }), gp = g.page;
