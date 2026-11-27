@@ -736,3 +736,4 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 .how-bar{display:flex;align-items:center;gap:8px;flex:none;margin:-4px 0 -4px -6px}
 @media (max-width:640px){.steps-head>.col{flex:1 1 100%}.steps-head .btn{flex:1 1 auto}.steps-card,.fui-Card.steps-card{padding:2px 12px}.step{gap:8px}}
 .steps-skipped{display:flex;flex-direction:column;gap:4px}.steps-skipped ul.plain{gap:2px}
+.rel-two{margin:0;display:grid;gap:4px}.rel-two>div{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px}.rel-two dt{font-weight:600}.rel-two dd{margin:0;color:var(--colorNeutralForeground2)}ul.ticks li.bad .ic{color:var(--colorStatusWarningForeground1)}
