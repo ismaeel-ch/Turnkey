@@ -485,8 +485,11 @@ export function flowFromPlan(app: AppRecord) {
 /* ---------- what each station does with an agent's output ---------- */
 export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: number) => StationResult> = {
   research(app, out, run) {
-    const b = normBrief(out),
-      checks = checkBrief(b);
+    const b = normBrief(out);
+    // a saved build recorded from a plan may be for one person with no stages, as a planned Live build may be; a
+    // model's own brief never gets this, so its checks stay as strict as before
+    if (app.mode !== 'live' && out && out.planned === true) b.planned = true;
+    const checks = checkBrief(b);
     if (checks.every((c) => c.ok)) {
       b.sources = arr(app.lookups);
       // answered in the interview before the build: the brief records the decision, and the line does not stop to ask
@@ -507,7 +510,11 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
     }
     return {
       checks,
-      facts: [b.roles.length + ' roles', b.entities.length + ' kinds of record', b.stories.length + ' user stories'],
+      facts: [
+        b.roles.length + (b.roles.length === 1 ? ' role' : ' roles'),
+        b.entities.length + ' kinds of record',
+        b.stories.length + ' user stories',
+      ],
     };
   },
   database(app, out, run, attempt = 1) {

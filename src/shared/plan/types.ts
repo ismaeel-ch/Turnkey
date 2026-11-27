@@ -173,7 +173,21 @@ export interface PlanSpec {
 
 /** Parts of a plan that an answer replaces. The plan beside the cards is redrawn from these with no model call. */
 export type PlanPatch = Partial<
-  Pick<PlanSpec, 'audience' | 'people' | 'lists' | 'stages' | 'permissions' | 'rules' | 'demoData' | 'overview'>
+  Pick<
+    PlanSpec,
+    | 'name'
+    | 'summary'
+    | 'audience'
+    | 'people'
+    | 'lists'
+    | 'stages'
+    | 'permissions'
+    | 'rules'
+    | 'stories'
+    | 'demoData'
+    | 'overview'
+    | 'notInThisVersion'
+  >
 >;
 
 export interface QuestionOption {

@@ -60,7 +60,10 @@ export function planFromSaved(tpl: string, q: number): PlanSpec {
   if (savedMemo[key]) return savedMemo[key];
   const rec = REC[tpl],
     ctx = { answer: q },
-    brief = normBrief(rec.research(ctx, 1) as Untrusted),
+    raw = rec.research(ctx, 1),
+    brief = normBrief(raw as Untrusted),
+    // lists the recording names as settings (categories, teams): demo data removal leaves them alone
+    settings = Array.isArray(raw.settings) ? raw.settings.map(String) : [],
     // a saved build may keep a slip in its first attempt for the checks to catch; the second attempt is what gets built
     sc = normSchema(rec.database(ctx, 2) as Untrusted, brief, true),
     be = normBackend(rec.backend(ctx, 1) as Untrusted, { brief, tables: sc.tables, users: sc.users } as Parameters<typeof normBackend>[1]),
@@ -72,7 +75,7 @@ export function planFromSaved(tpl: string, q: number): PlanSpec {
     what: brief.entities.find((e) => e.name === t.name)?.what || '',
     title: t.title,
     owner: t.owner || null,
-    settings: false,
+    settings: settings.includes(t.name),
     fields: t.columns.map((c) => ({
       name: c.name,
       label: c.label || label(c.name),
@@ -101,7 +104,7 @@ export function planFromSaved(tpl: string, q: number): PlanSpec {
     v: 1,
     name: brief.name,
     summary: brief.summary,
-    audience: 'company',
+    audience: brief.roles.length === 1 ? 'just_me' : 'company',
     people: brief.roles.map((r) => ({ id: r.id, name: r.name, can: r.can })),
     lists,
     stages,
@@ -112,12 +115,19 @@ export function planFromSaved(tpl: string, q: number): PlanSpec {
     overview: true,
     helpers: be.team ? be.team.agents.map((a) => a.name).join(', ') : null,
     answers: [],
-    notInThisVersion: [],
+    notInThisVersion: Array.isArray(raw.notInThisVersion)
+      ? (raw.notInThisVersion as { ask?: unknown; instead?: unknown }[]).map((n) => ({ ask: str(n.ask), instead: str(n.instead) }))
+      : [],
   });
 }
 
 /** The parts of a saved plan that its question can change. */
 const leadsOf = (plan: PlanSpec): PlanPatch => ({
+  name: plan.name,
+  summary: plan.summary,
+  audience: plan.audience,
+  stories: plan.stories,
+  notInThisVersion: plan.notInThisVersion,
   people: plan.people,
   lists: plan.lists,
   stages: plan.stages,
@@ -130,7 +140,8 @@ const leadsOf = (plan: PlanSpec): PlanPatch => ({
  * question leads to the plan the build replays for that answer.
  */
 export function savedInterview(tpl: string): { reflect: string; cards: QuestionCard[]; draft: PlanSpec } {
-  const brief = normBrief(REC[tpl].research({ answer: 0 }, 1) as Untrusted),
+  const raw = REC[tpl].research({ answer: 0 }, 1),
+    brief = normBrief(raw as Untrusted),
     q = brief.question,
     cards: QuestionCard[] = [];
   if (q)
@@ -142,7 +153,9 @@ export function savedInterview(tpl: string): { reflect: string; cards: QuestionC
       options: q.options.map((o, i) => ({ id: String(i), label: o, desc: '', leads: leadsOf(planFromSaved(tpl, i)) })),
       usual: [String(q.recommended)],
     });
-  return { reflect: brief.summary, cards, draft: planFromSaved(tpl, q ? q.recommended : 0) };
+  const draft = planFromSaved(tpl, q ? q.recommended : 0);
+  // said back before the question: what the request is about, before the answer turns it into one app or another
+  return { reflect: str(raw.reflect) || draft.summary, cards, draft };
 }
 
 /* ---------- the interview on the Home tab ---------- */

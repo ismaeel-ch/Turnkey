@@ -401,7 +401,8 @@ export function normSchema(o: Untrusted, brief: Brief, repair?: boolean, maxRows
   if (repair) {
     // last attempt: mend what code can mend instead of failing the build
     const names = tables.map((t) => t.name),
-      pt = tables.find((t) => t.name === brief.process.entity);
+      // an app with no stages (a planned one) has no status field to mend
+      pt = hasProcess(brief) ? tables.find((t) => t.name === brief.process.entity) : undefined;
     tables.forEach((t) => {
       t.columns = t.columns.filter((c) => !(c.type === 'ref' && !names.includes(c.ref as string)));
       t.columns.forEach((c) => {

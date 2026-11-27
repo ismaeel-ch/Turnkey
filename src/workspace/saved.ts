@@ -2,6 +2,7 @@
 import './builds';
 import './quests';
 import './samples';
+import './expenses';
 import { REC } from './registry';
 
 export const savedCount = () => Object.keys(REC).length;

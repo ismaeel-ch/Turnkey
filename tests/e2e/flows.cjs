@@ -1176,6 +1176,74 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   check('phone: the menu holds Live, Online, Debug, the guide and the account', ['Live', 'Online', 'Debug mode', 'Feature guide', 'Sign out'].every((x) => menu.includes(x)), menu); await shot(pp, '99c-phone-menu');
   await ph.ctx.close();
   await firstUse(browser, url);
+  await expenseSample(browser, url);
+}
+
+/* ---------- the expense manager: "who is this for?" decides which app is built, then demo data, first use and releases ---------- */
+async function expenseSample(browser, url) {
+  const SENTENCE = 'I want to build an expense management app';
+  const rows = (page, id, t) => st(page, ([x, n]) => window.__formwork.dbCount(x, n), [id, t]);
+  const release = async (page, v) => { await view(page, 'Release'); await page.waitForSelector('#rel-go'); await page.locator('#rel-go').click(); await page.waitForFunction((x) => new RegExp('Version ' + x.replace('.', '\\.') + ' · up to date').test((document.getElementById('rel-state') || {}).innerText || ''), v, { timeout: 60000 }); };
+  const removeDemo = async (page) => { await page.locator('.app .demo-bar .btn', { hasText: 'Remove demo data' }).click(); await page.locator('.dialog .btn.danger', { hasText: 'Remove demo data' }).click(); await page.waitForSelector('.app .demo-bar:has-text("Demo data removed")', { timeout: 30000 }); };
+  const welcome = (page) => page.locator('.fr-welcome').innerText();
+  // a change after the first release: its plan, Go ahead, "It works", then release 1.1
+  const improve = async (page, text) => {
+    await page.fill('#improve-text', text); await page.locator('#improve-go').click();
+    const go = page.locator('.gcard.cplan [data-act="go"]');
+    for (let i = 0; i < 150 && !(await go.count()); i++) { const o = page.locator('.gcard.ask .opt:not([disabled])'); if (await o.count()) await o.first().click().catch(() => {}); await sleep(200); }
+    await go.last().click(); await page.waitForSelector('.gcard.tryit', { timeout: 120000 }); await waitFree(page);
+    await page.locator('.gcard.tryit [data-act="works"]').last().click(); await page.locator('.gcard.tryit [data-act="release"]').last().click({ timeout: 30000 });
+    await release(page, '1.1');
+  };
+
+  // "Just me": one person, no stages, no sign-in
+  {
+    const { ctx, page } = await newPage(browser); await enter(page, url, { plain: true });
+    await page.fill('#home-prompt', SENTENCE); await page.locator('#home-go').click(); await page.waitForSelector('.iv-ask');
+    let q = await ivNow(page);
+    check('expenses: the sentence asks who the app is for, with the company as the usual choice and its plan drawn beside', q.card === 'q' && q.opts.length === 2 && /^Just me/.test(q.opts[0]) && /^A company or team.*Usual choice/.test(q.opts[1]) && q.name === 'Expense Desk' && q.people.length === 3 && q.apps === 0, q);
+    await answerCard(page, 0); q = await ivNow(page);
+    check('expenses: answering "Just me" redraws the plan as a personal app before anything is built', q.name === 'My Expenses' && q.people.join() === 'You' && q.card === 'demo_data' && q.apps === 0, q);
+    await page.locator('.iv-usual').click(); await page.waitForSelector('.iv-act .iv-build'); q = await ivNow(page);
+    const plan = (await page.locator('.iv').innerText()).replace(/\s+/g, ' ');
+    check('expenses, just me: the plan has one kind of person, no approval steps, categories as settings, demo data on', q.step === 'plan' && q.people.join() === 'You' && /No approval steps/.test(plan) && /2 lists/.test(plan) && /Categories ?Starter settings/.test(plan) && !/Note, Status/.test(plan) && q.demo === true && !q.agents.includes('access'), { q, plan: plan.slice(0, 400) });
+    await shot(page, 'ex-01-just-me-plan');
+    await page.locator('.iv-act .iv-build').click(); await onApp(page); const { a } = await drive(page);
+    check('expenses, just me: built from the saved build in Demo, every step passed and every check is green', a.tpl === 'expenses' && a.mode === 'demo' && a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok') && Object.keys(a.cols).join() === 'expenses,categories' && !a.cols.expenses.includes('status') && a.tests.failed === 0, [a.status, a.line, a.cols, a.tests]);
+    await view(page, 'App'); await page.waitForSelector('.fr-welcome');
+    const w = await welcome(page);
+    check('expenses, just me: the app opens with no sign-in and a welcome that does not talk about a job', await page.locator('.login-card').count() === 0 && /This is My Expenses\. Here you can:/.test(w) && /demo data/i.test(await page.locator('.app .demo-bar').innerText()), w.slice(0, 200));
+    await shot(page, 'ex-02-just-me-welcome');
+    await page.getByRole('button', { name: 'Not now' }).click(); await removeDemo(page);
+    check('expenses, just me: removing the demo data empties the expenses and keeps the categories', await rows(page, a.id, 'expenses') === 0 && await rows(page, a.id, 'categories') === 6);
+    await release(page, '1.0');
+    await improve(page, 'Add a shop field to expenses'); const b = await appFull(page);
+    check('expenses, just me: released as 1.0, then a new field and release 1.1, with the history keeping both', b.cols.expenses.includes('shop') && /1\.1/.test(await page.locator('.rel-hist').innerText()) && /1\.0/.test(await page.locator('.rel-hist').innerText()), b.cols.expenses);
+    await ctx.close();
+  }
+
+  // "A company or team": the usual choice, three kinds of people, five stages, a pause for the owner
+  {
+    const { ctx, page } = await newPage(browser); await enter(page, url, { plain: true });
+    await page.fill('#home-prompt', SENTENCE); await page.locator('#home-go').click(); await page.waitForSelector('.iv-ask');
+    await page.locator('.iv-usual').click(); await page.waitForSelector('.iv-act .iv-build'); const q = await ivNow(page);
+    const plan = (await page.locator('.iv').innerText()).replace(/\s+/g, ' ');
+    check('expenses, company: the plan has Employee, Manager and Finance, the claim stages, two settings lists and own-only claims for employees', q.name === 'Expense Desk' && q.people.join() === 'Employee,Manager,Finance' && /Draft Submitted Approved Paid/.test(plan) && (plan.match(/Starter settings/g) || []).length >= 2 && /^Own only/.test(q.access['See claims'] || '') && /one pause for you/.test(plan), { q, plan: plan.slice(0, 300) });
+    await shot(page, 'ex-03-company-plan');
+    await page.locator('.iv-act .iv-build').click(); await onApp(page); const { a, seen } = await drive(page);
+    check('expenses, company: built in Demo with the pause after the rules, every step passed and every check is green', a.tpl === 'expenses' && a.status === 'ready' && seen.join() === 'backend' && Object.keys(a.cols).join() === 'claims,categories,teams,payments' && a.tests.failed === 0 && a.tests.total > 100, [a.status, seen, a.cols, a.tests]);
+    await view(page, 'App'); await page.waitForSelector('.login-card');
+    const people = await page.locator('.persona-btn').count();
+    await page.locator('.persona-btn', { hasText: 'Ayesha' }).first().click(); await page.waitForSelector('.fr-welcome');
+    const w = await welcome(page);
+    check('expenses, company: six made-up people to sign in as, and Ayesha gets the employee\'s welcome', people === 6 && /Welcome, Ayesha/.test(w) && /Employee/.test(w), w.slice(0, 200));
+    await shot(page, 'ex-04-company-welcome');
+    await page.getByRole('button', { name: 'Not now' }).click(); await removeDemo(page);
+    check('expenses, company: removing the demo data empties claims and payments and keeps categories and teams', await rows(page, a.id, 'claims') === 0 && await rows(page, a.id, 'payments') === 0 && await rows(page, a.id, 'categories') === 5 && await rows(page, a.id, 'teams') === 3);
+    await release(page, '1.0'); await improve(page, 'Add a project code field to claims'); const b = await appFull(page);
+    check('expenses, company: released as 1.0, then a project code on claims and release 1.1', b.cols.claims.includes('project_code') && /1\.0/.test(await page.locator('.rel-hist').innerText()) && b.tests.failed === 0, [b.cols.claims, b.tests]);
+    await ctx.close();
+  }
 }
 
 /* ---------- first use of a built app: "Choose who you are", the welcome, the tour, the checklist, empty screens ---------- */
@@ -1736,7 +1804,7 @@ async function flowRound6(browser, url) {
 /* ---------- The two more business apps on Home: a grant desk with its own agent team, and purchase requests ---------- */
 async function samplesChecks(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
-  check('home: the grant desk and purchase requests are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('.tpl').count() === 9);
+  check('home: the grant desk, purchase requests and the expense manager are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('[data-tpl="expenses"]').count() === 1 && await page.locator('.tpl').count() === 10);
   await page.fill('#home-prompt', 'a community foundation that reviews grant applications'); await page.locator('.prompt .btn.primary').click(); await page.waitForSelector('.iv-ask');
   check('Demo: a saved build with no question of its own asks only about demo data', (await ivNow(page)).n === 'Question 1 of 1' && (await ivNow(page)).card === 'demo_data' && /One quick question/.test(await page.locator('.iv-chat').innerText()) && (await ivNow(page)).name === 'GrantDesk', await ivNow(page));
   await page.locator('.iv-usual').click(); await page.locator('.iv-act .iv-build').click(); await onApp(page); const gd = await drive(page); a = gd.a;
