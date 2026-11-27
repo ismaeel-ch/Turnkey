@@ -106,7 +106,6 @@ import {
   framed,
 } from './share';
 import { InstallAppDialog, isDirty, logoOf, relOf, releaseApp } from './release';
-import { GUIDE, GuideDialog } from './guide';
 import { HistoryDialog } from './history-ui';
 import { historyHooks } from './history';
 import { Home, Titlebar, Workspace, lineApp } from './shell-a';
@@ -116,6 +115,8 @@ import { installShortcuts, setSingleKeys } from './commands';
 // The command palette and the shortcuts dialog load the first time one opens (Ctrl/Cmd+K or "?").
 const PaletteDialog = lazy(() => import('./palette').then((m) => ({ default: m.PaletteDialog })));
 const ShortcutsDialog = lazy(() => import('./palette').then((m) => ({ default: m.ShortcutsDialog })));
+// The feature guide (Help > Feature guide) loads the first time it opens.
+const GuideDialog = lazy(() => import('./guide').then((m) => ({ default: m.GuideDialog })));
 
 /* ===== Turnkey prototype · shell: first-run onboarding, sign-in, dialogs, guided tour, boot ===== */
 /* The forms below keep their state in the view store (U), so it outlives a re-render. Components read it through a
@@ -143,15 +144,19 @@ function finishOnboarding(o: OnboardingForm, shortTour = false) {
   const pick = o.pick,
     tour = o.tour;
   setOb(null);
-  if (pick)
-    startBuild({
-      request: REC[pick].sentence,
-      tpl: pick,
-    });
-  if (tour) setTimeout(() => startTour(shortTour), 900);
   notify();
+  // The welcome screen can show before SQLite has started; the build and the tour wait for it.
+  void engineReady.then(() => {
+    if (pick)
+      startBuild({
+        request: REC[pick].sentence,
+        tpl: pick,
+      });
+    if (tour) setTimeout(() => startTour(shortTour), 900);
+  });
 }
 export function Onboarding() {
+  useLayoutEffect(startEngineAfterPaint, []);
   const o = obForm(),
     steps = ['Welcome', 'Your account', 'How to run', 'First app', 'Ready'],
     liveOK = online();
@@ -176,10 +181,12 @@ export function Onboarding() {
     finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: true, pick: 'biddesk', tour: true }, true);
   const describeOwn = () => {
     finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: U.live !== 'ready', pick: '', tour: false });
-    setTimeout(() => {
-      const el = document.getElementById('home-prompt');
-      if (el) el.focus();
-    }, 300);
+    void engineReady.then(() =>
+      setTimeout(() => {
+        const el = document.getElementById('home-prompt');
+        if (el) el.focus();
+      }, 300),
+    );
   };
   const body = [
     () => (
@@ -1279,7 +1286,11 @@ export function DialogHost() {
     case 'addstep':
       return <AddStepDialog p={p} />;
     case 'guide':
-      return <GuideDialog p={p} />;
+      return (
+        <Suspense fallback={null}>
+          <GuideDialog p={p} />
+        </Suspense>
+      );
     case 'palette':
       return (
         <Suspense fallback={null}>
@@ -1717,7 +1728,7 @@ export function Shell() {
 }
 function RootInner() {
   useStore();
-  if (U.boot === 'loading')
+  if (U.boot === 'loading' && !welcomeFirst())
     return (
       <div className="splash">
         <Logo size={44} />
@@ -1803,10 +1814,31 @@ export function probeClaude(tries: number) {
     notify();
   }
 }
+/* The SQLite engine (about 300 KB of WebAssembly) starts once. A first visit shows the welcome screen without it and
+   fetches the engine only after that screen has painted, so the two do not share the connection on a slow phone.
+   Every other screen waits for it behind the splash. */
+let markEngineReady: () => void = () => {};
+const engineReady = new Promise<void>((resolve) => {
+  markEngineReady = resolve;
+});
+let engineStart: (() => void) | null = null;
+let stateLoaded = false;
+function startEngine() {
+  const go = engineStart;
+  engineStart = null;
+  if (go) go();
+}
+/** True while the welcome screen may show before the engine is ready: a first visit with no app in the address. */
+const welcomeFirst = () => stateLoaded && !S.onboarded && !U.solo && !linkCode();
+/** Called by the welcome screen once it is on screen: start the engine after the next paint. */
+function startEngineAfterPaint() {
+  requestAnimationFrame(() => setTimeout(startEngine, 0));
+}
 export function boot() {
   installShortcuts();
   LS.probe();
   loadState();
+  stateLoaded = true;
   applyTheme();
   if (!S.shared) S.shared = {};
   Object.values(S.apps).forEach((a) => {
@@ -1828,26 +1860,28 @@ export function boot() {
   window.addEventListener('hashchange', () => {
     if (U.boot === 'ready') fromLink();
   });
-  setTimeout(
-    () =>
-      initSqlite()
-        .then(() => {
-          resumeInterrupted();
-          return fromLink();
-        })
-        .then(
-          () => {
-            U.boot = 'ready';
-            notify();
-          },
-          (e) => {
-            U.boot = 'error';
-            U.bootErr = String((e && e.message) || e);
-            notify();
-          },
-        ),
-    40,
-  );
+  engineStart = () =>
+    void initSqlite()
+      .then(() => {
+        resumeInterrupted();
+        return fromLink();
+      })
+      .then(
+        () => {
+          U.boot = 'ready';
+          markEngineReady();
+          notify();
+        },
+        (e) => {
+          U.boot = 'error';
+          U.bootErr = String((e && e.message) || e);
+          notify();
+        },
+      );
+  if (welcomeFirst()) {
+    notify(); // draw the welcome screen now; it starts the engine once painted (the timer is only a fallback)
+    setTimeout(startEngine, 3000);
+  } else setTimeout(startEngine, 40);
   probeClaude(0);
   const flush = () => {
     try {
@@ -1901,7 +1935,7 @@ export function boot() {
     flow: () => FLOW,
     dbCount,
     sql: (id: string, text: string, params?: SqlValue[]) => sqlRun(id, text, params || null, 'test'),
-    guide: () => GUIDE.length,
+    guide: () => import('./guide').then((m) => m.GUIDE.length),
     wf: {
       parse: parseFlow,
       parseChange,

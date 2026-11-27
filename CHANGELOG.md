@@ -5,6 +5,13 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+### Changed
+
+- The first page loads faster on a phone. The welcome screen shows without waiting for the SQLite engine, which is
+  fetched once that screen is up; the icon symbols ship once instead of twice; React Flow loads after the first
+  screen. Lighthouse on a simulated phone: largest paint 7.9 s to about 6.2 s, page JavaScript
+  592 KB to 563 KB gzip. The feature guide loads the first time it opens. ([#201](https://github.com/ismaeel-ch/Turnkey/pull/201))
+
 ## [0.4.6] - 2026-11-27
 
 Edit fields on the Data page, change an app's look on the App page, and visual regression tests.

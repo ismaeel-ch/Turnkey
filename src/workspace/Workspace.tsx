@@ -39,7 +39,14 @@ function start() {
       notify();
     });
   // `window.__turnkeyOptions = { canvas: false }` (set before the page loads) shows the plain line of stations.
-  setFlowAvailable((window as unknown as PageOptions).__turnkeyOptions?.canvas !== false);
+  // React Flow (about 60 KB) is fetched once the first screen is up, not beside it; the plain line shows until then.
+  if ((window as unknown as PageOptions).__turnkeyOptions?.canvas === false) setFlowAvailable(false);
+  else whenIdle(() => setFlowAvailable(true), 1000);
+}
+
+function whenIdle(fn: () => void, timeout: number) {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout });
+  else setTimeout(fn, 200);
 }
 
 /**
@@ -53,8 +60,7 @@ function preloadWhenIdle() {
     void import('@/shared/agent-contract').catch(() => undefined);
   };
   // a few seconds in, so parsing them does not hold up the first screen; then at the next idle moment
-  const idle = () => (typeof requestIdleCallback === 'function' ? requestIdleCallback(load, { timeout: 4000 }) : load());
-  setTimeout(idle, 5000);
+  setTimeout(() => whenIdle(load, 4000), 5000);
 }
 
 export default function Workspace() {

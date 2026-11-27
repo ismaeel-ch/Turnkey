@@ -41,6 +41,20 @@ const nav = (page, name) => page.locator('.app-nav .nav-i', { hasText: name }).f
 const vtab = async (page, name) => { await page.locator('.vswitch [role=tab]', { hasText: name }).click(); await sleep(90); };
 
 async function quickStarts(browser, url) { // the two ways in from the first screen, for a judge who opens the URL cold
+  { // the first screen does not wait for the SQLite engine; a quick start clicked before it is ready waits for it
+    const { ctx, page } = await newPage(browser);
+    let release; const held = new Promise((r) => { release = r; }); let asked = false;
+    await page.route('**/vendor/sql-wasm.wasm*', async (route) => { asked = true; await held; await route.continue(); });
+    await page.goto(url); await page.waitForSelector('#ob-sample', { timeout: 20000 });
+    await page.waitForFunction(() => !!window.__formwork, null, { timeout: 10000 });
+    check('first visit: the welcome screen shows while the SQLite engine is still loading', !(await page.locator('.splash').count()) && await page.locator('.ob-body .lead').isVisible());
+    await page.click('#ob-sample'); await page.waitForSelector('.splash', { timeout: 5000 });
+    for (let i = 0; i < 100 && !asked; i++) await sleep(50);
+    release(); await page.waitForSelector('.tour-pop', { timeout: 15000 });
+    const s = await st(page, () => { const S = window.__formwork.state(), t = (S.tabs[S.session] || []).find((x) => x.id === S.active[S.session]), a = t && t.app ? S.apps[t.app] : null; return { tpl: a && a.tpl, status: a && a.status }; });
+    check('first visit: Try a sample clicked before the engine is ready waits behind the splash, then builds', asked && s.tpl === 'biddesk' && ['building', 'ready'].includes(s.status), s);
+    await ctx.close();
+  }
   for (const vp of [null, { width: 390, height: 844 }]) {
     const tag = vp ? 'phone: ' : '';
     const { ctx, page } = await newPage(browser, vp ? { viewport: vp } : undefined);
