@@ -85,6 +85,7 @@ export function planFromSaved(tpl: string, q: number): PlanSpec {
       ...(c.options ? { options: c.options } : {}),
       ...(c.ref ? { ref: c.ref } : {}),
       ...(c.role ? { role: c.role } : {}),
+      ...(c.formula ? { formula: c.formula } : {}),
     })),
   }));
   const stages: PlanStages | null =
@@ -96,8 +97,15 @@ export function planFromSaved(tpl: string, q: number): PlanSpec {
           stages: p.states
             .slice()
             .sort((a, b) => Number(b.id === p.initial) - Number(a.id === p.initial))
-            .map((s) => ({ id: s.id, label: s.label || label(s.id) })),
-          moves: p.transitions.map((t) => ({ label: t.label || label(t.id), from: t.from, to: t.to, by: t.roles })),
+            .map((s) => ({ id: s.id, label: s.label || label(s.id), ...((p.locked || []).includes(s.id) ? { locked: true } : {}) })),
+          moves: p.transitions.map((t) => ({
+            label: t.label || label(t.id),
+            from: t.from,
+            to: t.to,
+            by: t.roles,
+            ...(t.when ? { when: t.when, ...(t.unless ? { unless: t.unless } : {}) } : {}),
+            ...(t.needs?.length ? { needs: t.needs } : {}),
+          })),
           note: brief.process.note,
         }
       : null;
@@ -119,6 +127,7 @@ export function planFromSaved(tpl: string, q: number): PlanSpec {
     notInThisVersion: Array.isArray(raw.notInThisVersion)
       ? (raw.notInThisVersion as { ask?: unknown; instead?: unknown }[]).map((n) => ({ ask: str(n.ask), instead: str(n.instead) }))
       : [],
+    ...(be.logic.rules.length ? { checks: be.logic.rules.map((r) => ({ list: r.table, when: r.when, message: r.message })) } : {}),
   });
 }
 
@@ -134,6 +143,7 @@ const leadsOf = (plan: PlanSpec): PlanPatch => ({
   stages: plan.stages,
   permissions: plan.permissions,
   rules: plan.rules,
+  ...(plan.checks ? { checks: plan.checks } : {}),
 });
 
 /**

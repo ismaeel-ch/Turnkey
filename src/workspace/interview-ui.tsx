@@ -5,6 +5,7 @@ import {
   accessRows,
   answerText,
   cardsToAsk,
+  logicLines,
   stagePath,
   teamFor,
   type PlanSpec,
@@ -240,6 +241,30 @@ function Rules({ plan }: { plan: PlanSpec }) {
           <li key={r} className="iv-rule">
             <Icon n="check" s="16" cls="iv-yes" />
             <span>{r}</span>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
+const LOGIC_ICON = { calc: 'calculator', check: 'shield', move: 'branch', lock: 'lock' } as const;
+const LOGIC_TAG = { calc: 'Calculated', check: 'Rule', move: 'Condition', lock: 'Locked' } as const;
+/** What the app works out and enforces on its own: calculated fields, rules, conditions on moves, locked stages. */
+function Logic({ plan }: { plan: PlanSpec }) {
+  const lines = logicLines(plan);
+  if (!lines.length) return null;
+  return (
+    <Section title="What the app works out and checks" badge={<span className="badge b-info">{lines.length}</span>} cls="iv-logic">
+      <ul className="iv-list">
+        {lines.map((l, i) => (
+          <li key={i} className="iv-rule" data-kind={l.kind}>
+            <Icon n={LOGIC_ICON[l.kind]} s="16" cls="iv-yes" />
+            <span className="col gap0 grow">
+              <span>{l.text}</span>
+              <span className="t-cap muted">{l.sub}</span>
+            </span>
+            <span className="badge b-outline">{LOGIC_TAG[l.kind]}</span>
           </li>
         ))}
       </ul>
@@ -683,6 +708,7 @@ function Questions({ iv, plan }: { iv: Interview; plan: PlanSpec | null }) {
             <Keeps plan={plan} />
             <Moves plan={plan} waiting={open('approval')} />
             <Rules plan={plan} />
+            <Logic plan={plan} />
             <Demo iv={iv} plan={plan} />
             <Team plan={plan} title="Who builds it" />
           </div>
@@ -738,6 +764,7 @@ function PlanScreen({ iv, plan }: { iv: Interview; plan: PlanSpec }) {
         </div>
         <Keeps plan={plan} full />
         <Access plan={plan} />
+        <Logic plan={plan} />
         <div className="iv-grid">
           <Extras plan={plan} />
           <Assumed iv={iv} plan={plan} />

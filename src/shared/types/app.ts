@@ -6,6 +6,7 @@
  * Tables and columns use the shared SQL types (`src/shared/sql/types.ts`), which the server validates against too.
  */
 import type { ColumnDef, ColumnType, TableDef } from '@/shared/sql/types';
+import type { AppLogic } from '@/shared/logic/types';
 import type { Dict, Loose } from './workspace';
 
 export type { ColumnDef, ColumnType, TableDef };
@@ -118,6 +119,12 @@ export interface Transition {
   roles: string[];
   /** columns the transition also sets; `:me`, `:today` and `:now` are filled in when it runs */
   set: Dict<Loose>;
+  /** a formula (src/shared/logic) that must hold for the record before the move is offered */
+  when?: string;
+  /** why not, in plain words: shown beside the move when `when` does not hold */
+  unless?: string;
+  /** fields that must be filled in before the move */
+  needs?: string[];
 }
 export interface Process {
   table: string;
@@ -125,6 +132,8 @@ export interface Process {
   states: ProcessState[];
   initial: string;
   transitions: Transition[];
+  /** stages in which a record's fields can no longer be changed (an approved claim, a paid invoice) */
+  locked?: string[];
 }
 /** Which records a role may see or change: all of them, the ones it owns, or none. */
 export type Scope = 'all' | 'own' | 'none';
@@ -344,6 +353,8 @@ export interface AppDef {
   cases?: TestCase[];
   /** the room layout of an app with a team (src/workspace/room.tsx) */
   board?: Board | null;
+  /** rules that refuse a save (src/shared/logic). Present on every app built since calculated fields and rules exist. */
+  logic?: AppLogic | null;
 }
 /** A definition past station 1: it has a brief. */
 export type BriefedDef = AppDef & { brief: Brief };

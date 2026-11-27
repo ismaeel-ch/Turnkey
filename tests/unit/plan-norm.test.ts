@@ -139,6 +139,10 @@ describe('normPlan', () => {
       { name: 'extra_one', label: 'Extra one', type: 'text' },
       { name: 'extra_two', label: 'Extra two', type: 'text' },
       { name: 'extra_three', label: 'Extra three', type: 'text' },
+      { name: 'extra_four', label: 'Extra four', type: 'text' },
+      { name: 'extra_five', label: 'Extra five', type: 'text' },
+      { name: 'extra_six', label: 'Extra six', type: 'text' },
+      { name: 'extra_seven', label: 'Extra seven', type: 'text' },
     );
     raw.stages!.moves.push({ label: 'Audit', from: ['paid'], to: 'audited', by: ['auditor'] });
     raw.stories.push({ role: 'intern', want: 'help', so: 'I learn' });
@@ -147,7 +151,7 @@ describe('normPlan', () => {
     expect(plan.people.map((p) => p.id)).toEqual(['employee', 'manager', 'finance', 'auditor']);
     expect(plan.permissions.teams.auditor).toEqual({ list: 'all', create: false, update: 'none', delete: false });
     expect(plan.permissions.categories.employee).toMatchObject({ list: 'all', update: 'all' });
-    expect(plan.lists[0].fields.length).toBe(10);
+    expect(plan.lists[0].fields.length).toBe(14);
     expect(plan.lists[0].fields.map((f) => f.name)).toEqual(expect.arrayContaining(['what_for', 'employee', 'status']));
     expect(plan.lists[1].fields.find((f) => f.name === 'parent')).toEqual({ name: 'parent', label: 'Parent', type: 'text' });
     expect(plan.lists[1].fields.find((f) => f.name === 'kind')?.type).toBe('text');
