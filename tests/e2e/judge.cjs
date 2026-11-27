@@ -134,6 +134,22 @@ async function main() {
       await sleep(800);
       return `${a.name}: ${a.tests.total} tests pass`;
     });
+    // the Build tab opens on a plain list of steps; the workflow canvas is one press away
+    await step(page, 'Build lists the steps in plain words, all done', async () => {
+      await page.waitForSelector('.steps-view', { timeout: 15000 });
+      const rows = await page.locator('.steps-list .step').evaluateAll((l) => l.map((x) => x.dataset.state));
+      const head = clean(await page.locator('.steps-head').innerText());
+      expect(rows.length >= 6 && rows.every((x) => x === 'done'), 'steps: ' + rows.join(', '));
+      expect(/is built/.test(head) && /Every check passes/.test(head), 'heading: ' + head.slice(0, 160));
+      expect(!(await page.locator('.react-flow').count()), 'the workflow canvas shows before it is asked for');
+      return `${rows.length} steps; ${head.slice(0, 80)}`;
+    });
+    await step(page, 'Show how it was built opens the workflow canvas', async () => {
+      await page.getByRole('button', { name: 'Show how it was built' }).click();
+      await page.waitForSelector('.react-flow .fl-node.station', { timeout: 15000 });
+      await sleep(600);
+      return `${await page.locator('.fl-node.station').count()} stations on the canvas`;
+    });
     await step(page, 'Tests station shows the repair and is ready to release', async () => {
       await page.waitForSelector('.react-flow .fl-node.station', { timeout: 15000 });
       const nodes = await page.locator('.fl-node.station').allInnerTexts();

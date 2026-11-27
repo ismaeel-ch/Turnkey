@@ -1375,6 +1375,24 @@ export function tourSteps() {
   if (app)
     s.push(
       {
+        target: 'steps',
+        prep: () => {
+          U.view[app.id] = 'build';
+          U.bview[app.id] = 'steps';
+        },
+        title: 'The build, step by step',
+        body: 'Each row is one job and the agent that does it, in plain words: what it made and whether it is done. When the agents need an answer from you, the row says so and the build waits.',
+      },
+      {
+        target: 'how',
+        prep: () => {
+          U.view[app.id] = 'build';
+          U.bview[app.id] = 'steps';
+        },
+        title: 'Show how it was built',
+        body: 'For the curious: the same build as a workflow of agents and check gates, a timeline, a log and a meeting. Nothing moves on until code has checked it, and failed work goes back to its agent.',
+      },
+      {
         target: 'line',
         prep: () => {
           U.view[app.id] = 'build';
@@ -1394,7 +1412,10 @@ export function tourSteps() {
       },
       {
         target: 'inspector',
-        prep: view('build'),
+        prep: () => {
+          U.view[app.id] = 'build';
+          U.bview[app.id] = 'line';
+        },
         title: 'Inspect any station',
         body: 'Select an agent or a gate on the canvas to read what was produced, which checks ran, the tests generated for that station, and every attempt.',
       },
@@ -1488,7 +1509,7 @@ export function tourSteps() {
   return s;
 }
 // the short tour after Try a sample: what the agents are doing and where the app is, nothing about settings
-const SHORT_TOUR = ['line', 'station', 'chat', 'views'];
+const SHORT_TOUR = ['steps', 'how', 'chat', 'views'];
 export function startTour(short = false) {
   if (!S.session) return;
   const all = tourSteps();
