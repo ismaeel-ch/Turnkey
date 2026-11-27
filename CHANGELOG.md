@@ -5,6 +5,27 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-27
+
+A faster first visit on phones, the expense manager as a sample, fairer Live builds, and the Your apps cards fixed.
+
+### Added
+
+- The expense manager is a guided Demo sample, with different plans for "Just me" and for a company. ([#247](https://github.com/ismaeel-ch/Turnkey/pull/247))
+
+### Changed
+
+- On a first visit the server draws the whole welcome screen, and the workspace loads on the first tap. Phone
+  Lighthouse goes from about 58 to 95-99. ([#249](https://github.com/ismaeel-ch/Turnkey/pull/249)) ([#254](https://github.com/ismaeel-ch/Turnkey/pull/254))
+- Each visitor gets a share of the daily model budget, so one person cannot pause Live for everyone. ([#244](https://github.com/ismaeel-ch/Turnkey/pull/244))
+- Guided Live builds waste fewer retries: the View advisor is told which views fit each table, and the Tester can
+  change and delete records and drops cases no change could fix. ([#252](https://github.com/ismaeel-ch/Turnkey/pull/252))
+
+### Fixed
+
+- Each card under Your apps is one line again: logo and name on the left, the share, duplicate and delete buttons
+  side by side, and a long description cut short. The Pages list and the Release summary cards had the same fault. ([#256](https://github.com/ismaeel-ch/Turnkey/pull/256))
+
 ## [0.5.1] - 2026-11-27
 
 Polish on the guided build: one name per agent, Demo builds that do what their plan says, a faster first load, and
