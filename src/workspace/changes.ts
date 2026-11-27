@@ -57,6 +57,7 @@ import {
   renderTest,
   roleName,
   runAcceptance,
+  mainTable,
   tableOf,
 } from './engine';
 import {
@@ -74,6 +75,7 @@ import {
   viewsOf,
 } from './viewspec';
 import { TEAMS, checkTeam } from './team';
+import { addDemoData, demoCounts, hasDemoData, removeDemoData } from './demo-data';
 import { runTestsSync } from './tests';
 import {
   HEAD,
@@ -199,7 +201,15 @@ export function parseChange(app: unknown, text: string): ParsedChange {
     .replace(/[.!?]+$/, '')
     .replace(/^please\s+/i, '');
   let m: RegExpExecArray | null;
-  if (/^(reset|restore) (the |all )?(demo |seed )?data$/i.test(s) || /^re-?seed/i.test(s))
+  if (/^(remove|delete|clear) (the |all (the )?)?(demo|sample|example|seed|made-up) (data|records|rows)$/i.test(s))
+    return {
+      special: 'demo_remove',
+    };
+  if (/^(add|restore|bring back|put back) (the )?(demo|sample|example) (data|records|rows)( again| back)?$/i.test(s))
+    return {
+      special: 'demo_add',
+    };
+  if (/^(reset|restore) (the |all )?(seed )?data$/i.test(s) || /^re-?seed/i.test(s) || /^start (it |the app )?over$/i.test(s))
     return {
       special: 'reseed',
     };
@@ -415,7 +425,7 @@ export function suggestChanges(app: AppRecord) {
   // example chips under the chat box, made from the app's own tables
   const def = app.def;
   if (!def.tables.length || !def.process) return [];
-  const pt = tableOf(def, def.process.table) as AppTable,
+  const pt = mainTable(def) as AppTable,
     out: string[] = [],
     other = def.tables.find((t) => t !== pt) || pt;
   out.push('Add a ' + (colOf(other, 'notes') ? 'reference code' : 'notes') + ' field to ' + other.label.toLowerCase());
@@ -1485,7 +1495,7 @@ export function changePrompt(app: BackedApp, text: string) {
   );
 }
 export const DEMO_HELP =
-  'In Demo mode I understand a fixed set of changes: add, rename or remove a field, turn a text field into a choice, add a page in any view (table, board, calendar, timeline, chart, pivot, tree, cards), add a chart to the dashboard, change who may see, create, edit or delete a table, change the colour, navigation or density, rename the app, and reset the data. Try one of the suggestions below, or switch to Live for anything else.';
+  'In Demo mode I understand a fixed set of changes: add, rename or remove a field, turn a text field into a choice, add a page in any view (table, board, calendar, timeline, chart, pivot, tree, cards), add a chart to the dashboard, change who may see, create, edit or delete a table, change the colour, navigation or density, rename the app, and remove or add the demo data. Try one of the suggestions below, or switch to Live for anything else.';
 export async function handleChat(app: BackedApp, text: string, opt?: { rules?: boolean }) {
   // opt.rules: read this message with the built-in rules whatever the mode (a reviewer's fix that was tried out that way)
   text = str(text);
@@ -1569,12 +1579,48 @@ export async function handleChat(app: BackedApp, text: string, opt?: { rules?: b
     delete RUNS[app.id];
     U.busy = null;
   }
+  if (plan.special === 'demo_remove') {
+    const x = removeDemoData(app);
+    return void say(
+      app,
+      'database',
+      !x
+        ? 'I could not remove the demo data just now, so nothing was changed.'
+        : !x.removed && !x.kept
+          ? 'There is no demo data in this app.'
+          : 'I removed ' +
+            x.removed +
+            ' made-up records. ' +
+            (x.kept ? x.kept + ' stayed because your own records point to them; they are no longer demo data. ' : '') +
+            'Nothing you added was deleted. Undo is on the App page until a record changes.',
+    );
+  }
+  if (plan.special === 'demo_add') {
+    if (hasDemoData(app)) return void say(app, 'database', 'The demo data is already here. Each made-up record carries a "Demo" tag.');
+    const n = addDemoData(app, { quiet: true });
+    return void say(
+      app,
+      'database',
+      n ? 'I added the ' + n + ' demo records again, next to the records you added.' : 'There is no demo data on record for this app.',
+    );
+  }
   if (plan.special === 'reseed') {
+    // starting over deletes records people added, so chat only does it when there are none to lose
+    const own = demoCounts(app).own;
+    if (own)
+      return void say(
+        app,
+        'database',
+        'That would delete the ' +
+          own +
+          (own === 1 ? ' record' : ' records') +
+          ' you added, so I did not do it. Say "remove demo data" to take out only the made-up records, or press Start over on the App page if you do want everything emptied.',
+      );
     const x = resetAppData(app);
     return void say(
       app,
       'database',
-      'I emptied every table and put the ' + x.rows + ' seed rows back. Users and the schema are unchanged.',
+      'I emptied every list and put the ' + x.rows + ' demo records back. People and the tables are unchanged.',
     );
   }
   const help =
@@ -1682,7 +1728,12 @@ export function buildPack(app: BackedApp) {
     def.migrations.forEach((m) => L.push('- `' + m.sql.replace(/\s+/g, ' ') + '`'));
     L.push('');
   }
-  L.push('## Workflow on ' + def.process.table, '', '| Action | From | To | Roles |', '|---|---|---|---|');
+  L.push(
+    def.process.states.length ? '## Workflow on ' + def.process.table : '## Workflow: none, records are just kept',
+    '',
+    '| Action | From | To | Roles |',
+    '|---|---|---|---|',
+  );
   def.process.transitions.forEach((x) =>
     L.push(
       '| ' +

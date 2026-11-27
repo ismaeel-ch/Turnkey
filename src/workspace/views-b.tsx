@@ -6,8 +6,9 @@ import { DOW, MON, cap, cx, fmtDate, fmtNum, fmtTime, isoDate, notify, parseISO,
 import { accOf, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isMeasure } from './viewspec';
 import { Btn, Card, Empty, FilterChip, Icon, Seg, Switch } from './ui';
-import { cellText, fetchApi, rowTitle, stateLabel, stateTone } from './runtime';
-import { NoRows, Pick, asText, choices, passes, vxState, type DrillPair, type ViewProps } from './views-a';
+import { cellText, fetchApi, patchPane, rowTitle, stateLabel, stateTone } from './runtime';
+import { EmptyDash } from './firstrun';
+import { Pick, asText, choices, passes, vxState, type DrillPair, type ViewProps } from './views-a';
 
 /* ===== Turnkey prototype · charts, pivot, timeline and the dashboard =====
    Chart rules followed here: colour follows the value, never its rank; one axis; a legend for two or more series;
@@ -921,88 +922,82 @@ export function VPivot({ app, user, pane, scr, t, rows, cfg, setCfg, set, drill 
           More
         </span>
       </div>
-      {rows.length ? (
-        <>
-          <div className="tbl-wrap">
-            <table className="tbl pivot">
-              <thead>
-                <tr>
-                  <th>
-                    {rc.label}
-                    {' / '}
-                    {cc.label}
-                  </th>
-                  {gc.map((b) => (
-                    <th key={b.key} className="num">
-                      {b.label}
-                    </th>
-                  ))}
-                  <th className="num">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grid.map((g) => (
-                  <tr key={g.a.key}>
-                    <th scope="row">{g.a.label}</th>
-                    {g.cells.map((x, j) => (
-                      <td key={j} className="num pv-c" style={toStyle(shade(x) || undefined)}>
-                        {x.n ? (
-                          <button
-                            className="pv-b"
-                            aria-label={g.a.label + ', ' + gc[j].label + ': ' + fmtNum(x.v)}
-                            onClick={() =>
-                              drill([
-                                {
-                                  col: rc.name,
-                                  val: g.a.val,
-                                },
-                                {
-                                  col: cc.name,
-                                  val: gc[j].val,
-                                },
-                              ])
-                            }
-                          >
-                            {fmtNum(x.v)}
-                          </button>
-                        ) : (
-                          <span className="muted" aria-label="none">
-                            ·
-                          </span>
-                        )}
-                      </td>
-                    ))}
-                    <td className="num t-strong">{fmtNum(aggOf(M, g.list))}</td>
-                  </tr>
+      <div className="tbl-wrap">
+        <table className="tbl pivot">
+          <thead>
+            <tr>
+              <th>
+                {rc.label}
+                {' / '}
+                {cc.label}
+              </th>
+              {gc.map((b) => (
+                <th key={b.key} className="num">
+                  {b.label}
+                </th>
+              ))}
+              <th className="num">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {grid.map((g) => (
+              <tr key={g.a.key}>
+                <th scope="row">{g.a.label}</th>
+                {g.cells.map((x, j) => (
+                  <td key={j} className="num pv-c" style={toStyle(shade(x) || undefined)}>
+                    {x.n ? (
+                      <button
+                        className="pv-b"
+                        aria-label={g.a.label + ', ' + gc[j].label + ': ' + fmtNum(x.v)}
+                        onClick={() =>
+                          drill([
+                            {
+                              col: rc.name,
+                              val: g.a.val,
+                            },
+                            {
+                              col: cc.name,
+                              val: gc[j].val,
+                            },
+                          ])
+                        }
+                      >
+                        {fmtNum(x.v)}
+                      </button>
+                    ) : (
+                      <span className="muted" aria-label="none">
+                        ·
+                      </span>
+                    )}
+                  </td>
                 ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <th scope="row">Total</th>
-                  {gc.map((b) => (
-                    <td key={b.key} className="num">
-                      {fmtNum(
-                        aggOf(
-                          M,
-                          rows.filter((r) => inGroup(b, r, cc)),
-                        ),
-                      )}
-                    </td>
-                  ))}
-                  <td className="num">{fmtNum(aggOf(M, rows))}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-          <p className="t-cap muted">
-            {M.label}
-            {' of '}
-            {t.label.toLowerCase()}. Select a cell to see the records behind it.
-          </p>
-        </>
-      ) : (
-        <NoRows t={t} />
-      )}
+                <td className="num t-strong">{fmtNum(aggOf(M, g.list))}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">Total</th>
+              {gc.map((b) => (
+                <td key={b.key} className="num">
+                  {fmtNum(
+                    aggOf(
+                      M,
+                      rows.filter((r) => inGroup(b, r, cc)),
+                    ),
+                  )}
+                </td>
+              ))}
+              <td className="num">{fmtNum(aggOf(M, rows))}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className="t-cap muted">
+        {M.label}
+        {' of '}
+        {t.label.toLowerCase()}. Select a cell to see the records behind it.
+      </p>
     </>
   );
 }
@@ -1436,6 +1431,14 @@ export function Dash({
   };
   const tiles = W.filter((x) => x.w.kind === 'kpi'),
     cards = W.filter((x) => x.w.kind !== 'kpi');
+  // before the first record there is nothing to count: say so, and offer the way to add one (firstrun.tsx)
+  const main = dt || (W[0] ? W[0].t : null),
+    bare =
+      W.length > 0 &&
+      W.every((x) => {
+        const r = fetchApi(app, user, '/api/' + x.t.name, null, src);
+        return r.status === 200 && !r.data.length;
+      });
   const chip = (f: { table: string; col: string; val: unknown }, i: number) => {
     const t = tableOf(def, f.table),
       c = colOf(t, f.col);
@@ -1601,7 +1604,14 @@ export function Dash({
           </Btn>
         )}
       </div>
-      {W.length ? (
+      {bare && main ? (
+        <EmptyDash
+          app={app}
+          user={user}
+          t={main}
+          onAdd={() => patchPane(pane, { form: { table: main.name, id: null, vals: {}, errs: {} } })}
+        />
+      ) : W.length ? (
         <>
           <div className="kpis">
             {tiles.map((x) => {

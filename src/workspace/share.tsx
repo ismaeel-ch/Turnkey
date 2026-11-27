@@ -2,14 +2,13 @@ import type { FormEvent } from 'react';
 import { useEffect } from 'react';
 import type { BriefedDef, Row, Untrusted } from '@/shared/types/app';
 import type { SqlRow } from '@/shared/types/sqljs';
-import type { AppRecord, Dict, ShareState, SharedInfo, SoloView } from '@/shared/types/workspace';
+import type { AppRecord, Dict, ShareState, SharedInfo, SoloView, StartWith } from '@/shared/types/workspace';
 import {
   S,
   U,
   arr,
   closeDialog,
   commit,
-  confirmBox,
   copyText,
   emit,
   errText,
@@ -31,7 +30,8 @@ import { b64, dbCount, dbDrop, dbExists, dbSave, qi, sqlRun } from './db';
 import { appUsers, deriveEndpoints, roleName } from './engine';
 import { REC } from './builds';
 import { runTestsSync, testStats } from './tests';
-import { APPLY, STATIONS, blankDef, blankLine, deleteApp, newRun, pushChat, resetAppData } from './line';
+import { APPLY, STATIONS, blankDef, blankLine, deleteApp, newRun, pushChat } from './line';
+import { demoMenuItems } from './demo-data-ui';
 import type { BuildApp, Station } from './line';
 import { normCases } from './tester';
 import { Btn, Dialog, Field, Icon, Input, MBar, Seg, Select, Spinner, Textarea } from './ui';
@@ -183,10 +183,64 @@ export const shareLink = (code: string) => {
 };
 /** A share link's contents, as read from untrusted text: every part goes through the station checks. */
 export type Pack = Untrusted;
+/** Reads what a copy starts with from anything: a link from before the choice existed starts with demo data. */
+export const startWith = (x: unknown): StartWith => (x === 'live' || x === 'empty' ? x : 'demo');
+/**
+ * The lists that keep their records when a copy starts empty: the starter settings the plan names (categories, teams,
+ * limits), which are real from day one. A settings list whose records must point at a list that starts empty cannot
+ * keep them, so it starts empty too. An app built before plans has none.
+ */
+export function settingsLists(
+  app: AppRecord,
+  tables: { name: string; columns: { type: string; ref?: string | null; required?: boolean }[] }[],
+): Set<string> {
+  const named = new Set(
+      arr<{ name: string; settings?: boolean }>(app.plan && app.plan.lists)
+        .filter((l) => l && l.settings)
+        .map((l) => l.name),
+    ),
+    keep = new Set(tables.filter((t) => named.has(t.name)).map((t) => t.name)),
+    gone = (c: { type: string; ref?: string | null }) => c.type === 'ref' && c.ref !== 'users' && !keep.has(String(c.ref));
+  for (let again = keep.size > 0; again;) {
+    again = false;
+    tables.forEach((t) => {
+      if (
+        keep.has(t.name) &&
+        arr<{ type: string; ref?: string | null; required?: boolean }>(t.columns).some((c) => c.required && gone(c))
+      ) {
+        keep.delete(t.name);
+        again = true;
+      }
+    });
+  }
+  return keep;
+}
+/** Takes the records out of a version that is already packed, all but the starter settings. */
+export function emptied(pack: Pack, app: AppRecord): Pack {
+  const tables = arr<Untrusted>(pack.database && pack.database.tables),
+    keep = settingsLists(
+      app,
+      tables.map((t) => ({ name: str(t && t.name), columns: arr(t && t.columns) })),
+    );
+  tables.forEach((t) => {
+    if (!t) return;
+    if (!keep.has(str(t.name))) t.rows = [];
+    else
+      arr<Untrusted>(t.rows).forEach((r) =>
+        arr<Untrusted>(t.columns).forEach((c) => {
+          if (r && c && c.type === 'ref' && c.ref !== 'users' && !keep.has(str(c.ref))) delete r[c.name]; // it pointed at a record that is not there
+        }),
+      );
+  });
+  pack.data = 'empty';
+  return pack;
+}
 export function packOf(app: AppRecord, o: { data: string; as?: string | null }): Pack {
   // everything a browser needs to rebuild the app: what each station wrote, and the rows to start with
   const def = app.def,
-    live = o.data === 'live',
+    start = startWith(o.data),
+    live = start !== 'demo', // the rows come from the database as it is, not from the made-up rows the app was built with
+    keep = start === 'empty' ? settingsLists(app, def.tables) : null,
     strip = (c: object) => {
       const x = { ...c } as Dict<unknown>;
       delete x.by;
@@ -204,7 +258,7 @@ export function packOf(app: AppRecord, o: { data: string; as?: string | null }):
       upos[String(u.id)] = i + 1;
     });
     def.tables.forEach((t) => {
-      raw[t.name] = rows('SELECT * FROM ' + qi(t.name) + ' ORDER BY "id" LIMIT ' + SHARE.maxRows);
+      raw[t.name] = keep && !keep.has(t.name) ? [] : rows('SELECT * FROM ' + qi(t.name) + ' ORDER BY "id" LIMIT ' + SHARE.maxRows);
       pos[t.name] = {};
       raw[t.name].forEach((r, i) => {
         pos[t.name][String(r.id)] = i + 1;
@@ -237,7 +291,7 @@ export function packOf(app: AppRecord, o: { data: string; as?: string | null }):
     name: app.name,
     request: app.request,
     tpl: app.tpl || null,
-    data: live ? 'live' : 'demo',
+    data: start,
     as: o.as || null,
     by: me()?.name || '',
     research: brief,
@@ -302,7 +356,7 @@ export function appFromPack(pack: Pack, key: string, preview?: boolean): AppReco
         by: str(pack.by).slice(0, 60),
         at: Date.now(),
         as: str(pack.as).slice(0, 40),
-        data: pack.data === 'live' ? 'live' : 'demo',
+        data: startWith(pack.data),
         preview: !!preview,
         ver: /^\d+(\.\d+){0,2}$/.test(str(pack.ver)) ? str(pack.ver) : '',
         uid: /^[A-Za-z0-9_-]{4,40}$/.test(str(pack.uid)) ? str(pack.uid) : '',
@@ -577,7 +631,7 @@ export const sharedApps = () =>
 export function openShare(app: AppRecord) {
   U.share = {
     app: app.id,
-    data: 'demo',
+    data: startWith(relOf(app)?.start), // what the owner chose for new people when they released
     as: '',
     code: null,
     busy: true,
@@ -614,6 +668,7 @@ export async function makeShare() {
       pack = readPack(await unsqueeze(rel.pack));
       pack.as = sh.as || null;
       pack.by = me()?.name || '';
+      if (sh.data === 'empty') emptied(pack, app);
     } else {
       pack = packOf(app, sh);
       pack.ver = rel.v;
@@ -677,7 +732,8 @@ export function ShareDialog({ p }: { p: { app: string } }) {
   const users = appUsers(app),
     link = sh.code ? shareLink(sh.code) : '',
     seedN = app.def.tables.reduce((n, t) => n + (((app.seed && app.seed.rows) || {})[t.name] || []).length, 0),
-    liveN = app.def.tables.reduce((n, t) => n + Number(dbCount(app.id, t.name)), 0);
+    liveN = app.def.tables.reduce((n, t) => n + Number(dbCount(app.id, t.name)), 0),
+    kept = app.def.tables.filter((t) => settingsLists(app, app.def.tables).has(t.name)).map((t) => t.label.toLowerCase());
   const preview = async () => {
     try {
       closeDialog();
@@ -786,14 +842,20 @@ export function ShareDialog({ p }: { p: { app: string } }) {
           id="sh-data"
           label="They start with"
           hint={
-            sh.data === 'live'
-              ? 'A copy of the ' + liveN + ' records as they are now. The activity history stays with you.'
-              : 'The ' + seedN + ' made-up rows the Database agent wrote, with dates that stay around today.'
+            sh.data === 'empty'
+              ? (kept.length ? 'No records, only your ' + kept.join(', ') + '.' : 'No records at all.') + ' Right for a real launch.'
+              : sh.data === 'live' && !dirty
+                ? 'A copy of the ' + liveN + ' records as they are now. The activity history stays with you.'
+                : 'The ' + seedN + ' made-up rows the Database agent wrote, with dates that stay around today.'
           }
         >
           <Seg
             label="Which data the link carries"
             items={[
+              {
+                id: 'empty',
+                label: 'Empty',
+              },
               {
                 id: 'demo',
                 label: 'Demo data',
@@ -803,7 +865,7 @@ export function ShareDialog({ p }: { p: { app: string } }) {
                 label: 'Current records',
               },
             ]}
-            value={dirty ? 'demo' : sh.data}
+            value={dirty && sh.data === 'live' ? 'demo' : sh.data}
             onChange={(v) =>
               dirty && v === 'live'
                 ? toast('Current records fit the draft, not version ' + rel.v + '. Release the draft to share them.', 'info')
@@ -1147,16 +1209,6 @@ export function SoloShell() {
     void checkForUpdate(app);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- asked once each time an app is opened on its own
   }, [app.id]);
-  const reset = async () => {
-    if (
-      await confirmBox({
-        title: 'Reset the data in ' + app.name + '?',
-        body: 'Every table is emptied and the rows the app started with are put back.',
-        yes: 'Reset data',
-      })
-    )
-      resetAppData(app);
-  };
   const extra: (SoloItem | null)[] = [
     {
       label: app.installed ? 'Installed on this device' : 'Install this app',
@@ -1174,11 +1226,7 @@ export function SoloShell() {
           app: app.id,
         }),
     },
-    {
-      label: 'Reset the data',
-      icon: 'reset',
-      on: reset,
-    },
+    ...demoMenuItems(app),
     signed && app.shared && !app.shared.preview
       ? {
           label: 'Save a copy to my library',

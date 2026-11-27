@@ -38,6 +38,12 @@ async function enter(page, url, o) { // first run, demo account, empty workspace
   await page.waitForSelector('.home'); await setSpeed(page, 'instant'); if (!(o && o.plain)) await howBuilt(page);
 }
 const buildTpl = async (page, id) => { await page.locator('[data-tpl="' + id + '"] .tpl-build').click(); for (let i = 0; i < 300; i++) { const a = await appState(page); if (a && (a.status === 'ready' || a.status === 'failed')) break; const o = page.locator('.gcard.ask .opt:not([disabled])'); if (await o.count()) await o.first().click().catch(() => {}); await sleep(120); } await waitReady(page); };
+const onApp = (page) => page.waitForFunction(() => { const s = window.__formwork.state(), t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]); return t && t.app; });
+// A typed sentence gets the question cards and a plan first. `pick` answers each card by the position of an option; without it the usual choices stand. Then "Build it".
+// Answers the card on screen by the position of an option, and waits for the next card or for "That's everything I need".
+const answerCard = async (page, n) => { const id = await page.locator('.iv-ask').getAttribute('data-card'); await page.locator('.iv-ask .iv-opt').nth(n).click(); await page.waitForFunction((was) => { const c = document.querySelector('.iv-ask'); return c ? c.dataset.card !== was : !!document.querySelector('.iv-done'); }, id); };
+const describeApp = async (page, text, pick) => { await page.fill('#home-prompt', text); await page.locator('#home-go').click(); await page.waitForSelector('.iv'); if (pick) { for (const n of pick) await answerCard(page, n); await page.locator('.iv-review').click(); } else if (await page.locator('.iv-usual').count()) await page.locator('.iv-usual').click(); await page.locator('.iv-act .iv-build').click(); await onApp(page); };
+const ivNow = (page) => st(page, () => { const iv = window.__formwork.view().home.interview, q = (s) => document.querySelector(s), all = (s) => [...document.querySelectorAll(s)].map((x) => x.innerText.replace(/\s+/g, ' ').trim()); return iv ? { step: iv.step, attr: q('.iv') && q('.iv').dataset.step, steps: all('.iv-st'), on: (q('.iv-st[aria-current=step]') || {}).innerText, name: (q('#iv-name') || {}).innerText, sum: (q('#iv-sum') || {}).innerText, people: all('.iv-person strong'), card: q('.iv-ask') ? q('.iv-ask').dataset.card : null, demo: q('#iv-demo') ? q('#iv-demo').checked : null, demoText: (q('#iv-demo-text') || {}).innerText, n: (q('.iv-ask .iv-n') || {}).innerText, opts: all('.iv-ask .iv-opt'), answered: all('.iv-answered li'), assumed: all('.iv-assumed li'), access: Object.fromEntries([...document.querySelectorAll('.iv-access tbody tr')].map((r) => [r.querySelector('th').innerText.trim(), [...r.querySelectorAll('td')].map((c) => c.innerText.trim()).join()])), agents: [...document.querySelectorAll('.iv-agent[data-agent]')].map((x) => x.dataset.agent), plan: !!iv.plan, apps: Object.keys(window.__formwork.state().apps).length } : null; });
 const land = async (page) => { await page.waitForSelector('.app-nav .nav-i'); await page.locator('.app-nav .nav-i').nth(1).click(); await sleep(80); }; // the Overview is first now, so the page that used to open first is the second one
 const nav = (page, name) => page.locator('.app-nav .nav-i', { hasText: name }).first().click();
 const vtab = async (page, name) => { await page.locator('.vswitch [role=tab]', { hasText: name }).click(); await sleep(90); };
@@ -254,7 +260,10 @@ async function flowDemo(browser, url) {
   check('walkthrough still passes after the changes', a.tour.every(Boolean), a.tour);
 
   // reset data, sign out and in, reload
-  await view(page, 'Data'); await page.locator('.side-foot .btn', { hasText: 'Reset data' }).click(); await page.locator('.dialog .btn.primary').click(); await sleep(400);
+  await view(page, 'Data'); await page.locator('.side-foot [data-demo-act="over"]').click(); await page.waitForSelector('.dialog');
+  const overText = await page.locator('.dialog').innerText();
+  check('Start over (the former Reset data) says how many added records it deletes before it does', /This deletes the \d+ records? you added/.test(overText) && await page.locator('.dialog .btn.danger', { hasText: 'Start over' }).count() === 1, overText);
+  await page.locator('.dialog .btn.danger').click(); await page.waitForFunction(() => { const el = [...document.querySelectorAll('.side-i')].find((x) => /patients/.test(x.textContent)); return el && el.querySelector('.t-cap').textContent.trim() === '14'; }, null, { timeout: 5000 }).catch(() => {});
   const cnt = await page.locator('.side-i', { hasText: 'patients' }).locator('.t-cap').innerText();
   check('reset data restores 14 patients', cnt.trim() === '14', cnt);
   await page.locator('.titlebar .acct').click(); await page.locator('.menu .mi', { hasText: 'Sign out' }).click(); await page.waitForSelector('.signin');
@@ -274,8 +283,43 @@ async function flowDemo(browser, url) {
   await page.locator('.newtab').click(); await page.waitForSelector('.home'); await shot(page, '32-home');
   await page.fill('#home-prompt', 'something about spaceships'); await page.locator('.prompt .btn.primary').click(); await sleep(100);
   check('demo mode explains an unmatched sentence', await page.locator('.home .mbar').count() === 1);
-  await page.fill('#home-prompt', 'employees request leave and managers approve'); await page.locator('.prompt .btn.primary').click();
-  await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').nth(1).click(); await waitReady(page); a = await appState(page);
+  // a typed sentence: the questions and the plan come first, and nothing is built before "Build it"
+  const apps0 = await st(page, () => Object.keys(window.__formwork.state().apps).length);
+  check('home: the button under the sentence says Continue, and the steps promise questions and a plan before the build', /Continue/.test(await page.locator('#home-go').innerText()) && /A few questions/.test(await page.locator('.how').innerText()) && /A plan you approve/.test(await page.locator('.how').innerText()), await page.locator('.how').innerText());
+  await page.fill('#home-prompt', 'employees request leave and managers approve'); await page.locator('.prompt .btn.primary').click(); await page.waitForSelector('.iv-ask');
+  let iv = await ivNow(page);
+  check('interview: Continue opens the questions, step 2 of 4, and no app exists yet', iv.attr === 'questions' && iv.steps.length === 4 && /Questions/.test(iv.on) && iv.apps === apps0 && !(await page.locator('.gcard').count()), [iv.attr, iv.steps, iv.on, iv.apps]);
+  check('interview: one card at a time, with a reason, a usual choice and a way to skip', iv.n === 'Question 1 of 2' && iv.card === 'q' && iv.opts.length === 2 && /Usual choice/.test(iv.opts[0]) && !/Usual choice/.test(iv.opts[1]) && /Why I\'m asking/.test(await page.locator('.iv-ask').innerText()) && await page.locator('.iv-skip').count() === 1 && await page.locator('.iv-usual').count() === 1, [iv.n, iv.opts]);
+  check('interview: the plan so far is beside the card: the app, its people, its lists and who builds it', iv.name === 'TimeOff' && iv.people.join() === 'Employee,Manager,HR officer' && /3 lists, 3 kinds of people, 4 stages, 7 agents/.test(iv.sum) && iv.agents.length === 7 && iv.agents[0] === 'researcher', [iv.name, iv.people, iv.sum, iv.agents]);
+  await shot(page, '33a-interview-question');
+  await page.locator('.iv-skip').click(); await page.waitForSelector('.iv-ask[data-card=demo_data]'); iv = await ivNow(page);
+  check('interview: a skipped card is answered with the usual choice, and says so', iv.answered.length === 1 && /Only HR/.test(iv.answered[0]) && /usual choice/.test(iv.answered[0]) && !iv.plan, iv.answered);
+  check('interview: the last card asks about demo data, with "Yes" as the usual choice, and the plan says it is still to be answered', iv.n === 'Question 2 of 2' && /demo data/.test(await page.locator('#iv-q').innerText()) && /Yes, add demo data/.test(iv.opts[0]) && /Usual choice/.test(iv.opts[0]) && /No, start empty/.test(iv.opts[1]) && /Asked last/.test(await page.locator('.iv-demodata').innerText()), [iv.n, iv.opts]);
+  await answerCard(page, 0); iv = await ivNow(page);
+  check('interview: after the last answer the Planner has everything and offers the plan', iv.card === null && await page.locator('.iv-review').count() === 1 && iv.answered.length === 2 && /Made-up records/.test(await page.locator('.iv-demodata').innerText()), iv.answered);
+  await page.locator('.iv-review').click(); await page.waitForSelector('.iv-act .iv-build'); iv = await ivNow(page);
+  check('plan: step 3, with the people, the lists and fields, the stages and who can see and do what', iv.attr === 'plan' && /Plan/.test(iv.on) && iv.plan && iv.apps === apps0 && await page.locator('.iv-keeps tbody tr').count() === 3 && await page.locator('.iv-moves .iv-stage').count() === 4 && iv.access['Approve, Reject'] === 'No,Yes,No', [iv.attr, iv.on, iv.access]);
+  check('plan: what was skipped is listed under "I assumed", and the usual answer is in the table: only HR cancels approved leave', iv.assumed.length === 1 && /who may cancel it\? Only HR/.test(iv.assumed[0]) && iv.access['Cancel approved leave'] === 'No,No,Yes', [iv.assumed, iv.access['Cancel approved leave']]);
+  check('plan: each agent that will work on the app is listed with its reason, and the one left out says why', await page.locator('.iv-team .iv-agent[data-agent]').count() === 7 && /Access checker/.test(await page.locator('.iv-team').innerText()) && /List checker: not needed/.test(await page.locator('.iv-team').innerText()), await page.locator('.iv-team').innerText());
+  await shot(page, '33b-interview-plan');
+  await page.locator('#iv-demo').click({ force: true }); iv = await ivNow(page); const offText = iv.demoText, offPlan = await st(page, () => { const p = window.__formwork.view().home.interview.plan; return [p.demoData, (p.answers.find((x) => x.slot === 'demo_data') || {}).value]; });
+  await page.locator('#iv-demo').click({ force: true }); iv = await ivNow(page);
+  check('plan: the demo data switch is the same choice as the card: off says the app starts empty, and on brings it back without leaving the plan', /^Off\. The app starts empty/.test(offText) && offPlan.join() === 'false,no' && iv.demo === true && /Made-up records/.test(iv.demoText) && iv.attr === 'plan', [offText, offPlan, iv.demo, iv.demoText]);
+  await page.locator('.iv-assumed .iv-link').click(); await page.waitForSelector('.iv-ask'); await page.locator('.iv-ask .iv-opt').nth(1).click(); await page.waitForSelector('.iv-done'); iv = await ivNow(page);
+  check('plan: Change reopens the card, and a new answer means the plan has to be read again', iv.attr === 'questions' && !iv.plan && /HR, or the employee who asked/.test(iv.answered[0]) && !/usual choice/.test(iv.answered[0]), [iv.attr, iv.plan, iv.answered]);
+  await page.locator('.iv-review').click(); await page.waitForSelector('.iv-act .iv-build'); iv = await ivNow(page);
+  check('plan: the plan follows the answer: the employee may now cancel approved leave, and nothing is assumed', iv.access['Cancel approved leave'] === 'Yes,No,Yes' && iv.assumed.length === 0, [iv.access['Cancel approved leave'], iv.assumed]);
+  await page.locator('.iv-change').first().click(); await page.waitForSelector('.iv-done'); iv = await ivNow(page);
+  check('plan: "Change something" goes back to the answers and keeps them', iv.attr === 'questions' && iv.plan && iv.answered.length === 2, [iv.attr, iv.answered]);
+  await page.locator('.iv-over').click(); await page.waitForSelector('#home-prompt');
+  check('interview: Start over returns to the sentence, which is back in the box, and nothing was built', (await page.inputValue('#home-prompt')) === 'Employees request leave, managers approve or reject it, and HR keeps balances and the team calendar.' && (await st(page, () => Object.keys(window.__formwork.state().apps).length)) === apps0, await page.inputValue('#home-prompt'));
+  await page.locator('#home-skip').click(); await page.waitForSelector('.iv-act .iv-build'); iv = await ivNow(page);
+  check('home: "Skip the questions" goes straight to the plan with the usual choices, and still waits for "Build it"', iv.attr === 'plan' && iv.assumed.length === 1 && iv.apps === apps0, [iv.attr, iv.assumed, iv.apps]);
+  await page.locator('.iv-assumed .iv-link').click(); await page.locator('.iv-ask .iv-opt').nth(1).click(); await page.locator('.iv-review').click(); await page.locator('.iv-ready .btn.primary').click(); await onApp(page);
+  const asked = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), A = s.apps[t.app]; return { q: A.answers.q, plan: !!A.plan, by: A.plan && A.plan.answers[0].by, chat: A.chat.slice(0, 3).map((m) => m.text) }; });
+  await waitReady(page); a = await appState(page);
+  check('"Build it" starts the build with the approved plan, and the answer is in the chat as the Planner\'s question and the owner\'s reply', asked.plan && asked.q === 1 && asked.by === 'you' && /who may cancel it/.test(asked.chat[1]) && asked.chat[2] === 'HR, or the employee who asked', asked);
+  check('the build does not stop to ask what the interview already answered', !(await page.locator('.gcard.ask').count()) && (await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return s.apps[t.app].chat.filter((m) => /who may cancel it/.test(m.text || '')).length; })) === 1);
   check('leave build ready, no send-backs, second answer applied', a.status === 'ready' && a.name === 'TimeOff' && a.retries[0] === 0 && a.tour.every(Boolean), [a.status, a.name, a.retries, a.tour, a.last]);
   await view(page, 'App'); await page.locator('.persona-btn').nth(4).click(); await land(page); await page.waitForSelector('.kb-col'); await shot(page, '33-leave-board');
   await page.locator('.app-nav .nav-i', { hasText: 'Team calendar' }).click(); await page.waitForSelector('.cal-grid'); await shot(page, '34-leave-calendar');
@@ -320,6 +364,78 @@ async function flowDemo(browser, url) {
   await page.locator('.titlebar .acct').click(); await page.locator('.menu .mi', { hasText: 'Reset data' }).click(); await page.locator('.dialog .btn.danger').click(); await page.waitForSelector('.ob-card');
   const keys = await st(page, () => window.__turnkeyStorage.keys().length + Object.keys(localStorage).filter((k) => k.indexOf('formwork:') === 0).length);
   check('erase everything clears storage and returns to onboarding', keys === 0, keys);
+  await ctx.close();
+  await demoData(browser, url);
+}
+
+async function demoData(browser, url) { // made-up records carry a tag and leave in one step; records someone added never do
+  const { ctx, page } = await newPage(browser); await enter(page, url); await buildTpl(page, 'clinic');
+  const id = (await appState(page)).id;
+  const counts = () => st(page, (id) => { const c = window.__formwork.demo.counts(id); return { demo: c.demo, own: c.own }; }, id);
+  const one = (text) => st(page, ([id, text]) => Number(Object.values(window.__formwork.sql(id, text)[0])[0]), [id, text]);
+  const settled = (demo, own) => page.waitForFunction(([id, demo, own]) => { const c = window.__formwork.demo.counts(id); return c.demo === demo && c.own === own; }, [id, demo, own], { timeout: 5000 }).catch(() => {});
+  const bar = () => page.locator('.app .demo-bar').innerText();
+  const people = await one('SELECT COUNT(*) FROM "users"');
+  await view(page, 'App'); await page.locator('.persona-btn').first().click(); await page.waitForSelector('.app .demo-bar');
+  let c = await counts(), text = await bar();
+  check('a built app says it holds demo data and how much', c.demo === 61 && c.own === 0 && text.includes("You're looking at demo data.") && /14 patients, 39 appointments and 8 visit notes are made up/.test(text) && /Remove demo data/.test(text), [c, text]);
+  check('the first welcome says the records are demo data', /The records here are demo data/.test(await page.locator('.fr-welcome').innerText()), await page.locator('.fr-welcome').innerText());
+  await nav(page, 'Patients'); await page.waitForSelector('.app .tbl tbody tr');
+  check('every made-up record carries a Demo tag', await page.locator('.app .tbl tbody tr').count() === 14 && await page.locator('.app .tbl tbody .b-demo').count() === 14, await page.locator('.app .tbl tbody .b-demo').count());
+  await shot(page, '90-demo-bar');
+  // a record of my own, made in the app
+  await page.locator('.scr-head .btn.primary').click(); await page.waitForSelector('.app-dialog');
+  await page.locator('.app-dialog input[type=text], .app-dialog input:not([type])').first().fill('Test Patient'); await page.locator('.app-dialog button[type=submit]').click(); await page.waitForSelector('.drawer strong.t-sub2');
+  c = await counts(); text = await bar();
+  check('a record I add is mine: no tag, no demo note, and the bar counts it as real', c.demo === 61 && c.own === 1 && await page.locator('.drawer .demo-note').count() === 0 && await page.locator('.app .tbl tbody tr').count() === 15 && await page.locator('.app .tbl tbody .b-demo').count() === 14 && /Your own 1 record is real/.test(text), [c, text]);
+  await page.locator('.drawer [aria-label="Close"]').click(); await page.waitForSelector('.drawer', { state: 'detached' });
+  // an appointment of my own for a made-up patient: that patient has to stay
+  await st(page, (id) => { const f = window.__formwork, cols = f.sql(id, 'PRAGMA table_info("appointments")').map((x) => x.name).filter((x) => x !== 'id' && x !== 'is_demo'), list = cols.map((x) => '"' + x + '"').join(','); f.sql(id, 'INSERT INTO "appointments" (' + list + ', "is_demo") SELECT ' + list + ', 0 FROM "appointments" WHERE "patient_id" = 1 LIMIT 1'); }, id);
+  await settled(61, 2);
+  await page.locator('.app .demo-bar .btn', { hasText: 'Remove demo data' }).click(); await page.waitForSelector('.dialog .demo-plan');
+  const goes = await page.locator('.dialog [data-demo="goes"]').innerText(), stays = await page.locator('.dialog [data-demo="stays"]').innerText(), kept = await page.locator('.dialog [data-demo="kept"]').innerText();
+  check('one confirmation says what goes, what stays and what is kept', /13 patients, 39 appointments and 8 visit notes, all made up/.test(goes) && /1 patient and 1 appointment you added/.test(stays) && /people who can sign in/.test(stays) && /1 demo record that your own records point to/.test(kept) && /stops being demo data/.test(kept), [goes, stays, kept]);
+  await shot(page, '91-demo-remove');
+  await page.locator('.dialog .btn.danger', { hasText: 'Remove demo data' }).click(); await settled(0, 3);
+  c = await counts(); text = await bar();
+  const left = { mine: await one('SELECT COUNT(*) FROM "patients" WHERE "full_name" = \'Test Patient\''), patients: await one('SELECT COUNT(*) FROM "patients"'), appts: await one('SELECT COUNT(*) FROM "appointments"'), notes: await one('SELECT COUNT(*) FROM "visit_notes"'), broken: await st(page, (id) => window.__formwork.sql(id, 'PRAGMA foreign_key_check').length, id), people: await one('SELECT COUNT(*) FROM "users"') };
+  check('removing the demo data deletes only made-up records', c.demo === 0 && c.own === 3 && left.mine === 1 && left.patients === 2 && left.appts === 1 && left.notes === 0 && left.broken === 0 && left.people === people, [c, left]);
+  check('afterwards the bar says so and offers Undo and Add demo data again', /Demo data removed\./.test(text) && /Your 3 records are untouched/.test(text) && /Undo/.test(text) && /Add demo data again/.test(text) && await page.locator('.app .tbl tbody .b-demo').count() === 0, text);
+  await shot(page, '92-demo-removed');
+  const run = await st(page, (id) => { const f = window.__formwork; f.runTests(f.state().apps[id]); const res = f.tests()[id].res, keys = Object.keys(res); return { total: keys.length, bad: keys.filter((k) => !res[k].ok).map((k) => k + ': ' + res[k].actual) }; }, id);
+  check('the generated tests still pass with the demo data gone: each makes its own records and takes them out', run.total > 100 && run.bad.length === 0 && (await counts()).demo === 0 && await one('SELECT COUNT(*) FROM "patients"') === 2, run);
+  await page.locator('.app .demo-bar .btn', { hasText: 'Undo' }).click(); await settled(61, 2);
+  c = await counts();
+  check('Undo puts the demo data back as it was', c.demo === 61 && c.own === 2 && await one('SELECT COUNT(*) FROM "patients"') === 15, c);
+  await page.locator('.app .demo-bar .btn', { hasText: 'Remove demo data' }).click(); await page.locator('.dialog .btn.danger').click(); await settled(0, 3);
+  await page.locator('.app .demo-bar .demo-link', { hasText: 'Add demo data again' }).click(); await settled(61, 3);
+  c = await counts();
+  check('Add demo data again brings the made-up records back next to mine, with every link in place', c.demo === 61 && c.own === 3 && await st(page, (id) => window.__formwork.sql(id, 'PRAGMA foreign_key_check').length, id) === 0 && await one('SELECT COUNT(*) FROM "appointments" a JOIN "patients" p ON p."id" = a."patient_id" WHERE a."is_demo" = 1 AND p."is_demo" = 1') === 39, c);
+  // a made-up record I want to keep
+  await page.locator('.app .tbl tbody tr', { has: page.locator('.b-demo') }).first().click(); await page.waitForSelector('.drawer .demo-note');
+  await page.locator('.drawer .demo-note .btn', { hasText: 'Keep this record' }).click(); await settled(60, 4);
+  c = await counts();
+  check('Keep this record turns a made-up record into one of mine', c.demo === 60 && c.own === 4 && await page.locator('.drawer .demo-note').count() === 0, c);
+  await page.locator('.drawer [aria-label="Close"]').click(); await page.waitForSelector('.drawer', { state: 'detached' });
+  // starting over is the only action that deletes added records, and it says so first
+  await say(page, 'Reset the data'); await sleep(300); let a = await appState(page);
+  check('asked in chat to reset the data, Turnkey refuses while records I added would be lost', /would delete the 4 records you added/.test(a.last.text) && (await counts()).own === 4, a.last.text);
+  await say(page, 'Remove the demo data'); await settled(0, 4); a = await appState(page);
+  check('asked in chat to remove the demo data, only the made-up records go', (await counts()).demo === 0 && (await counts()).own === 4 && await one('SELECT COUNT(*) FROM "patients" WHERE "full_name" = \'Test Patient\'') === 1, [await counts(), a.last.text]);
+  // an empty list offers the demo data back, next to the button that adds a first record
+  await page.locator('.app-head .persona').click(); await page.locator('.app-head .menu .mi', { hasText: 'Dr. Ayesha' }).click(); await page.waitForSelector('.fr-welcome');
+  const quiet = await page.locator('.fr-welcome').innerText();
+  await nav(page, 'Visit notes'); await page.waitForSelector('.app-main .empty');
+  const offers = await page.locator('.app-main .empty button').allInnerTexts();
+  check('with the demo data gone, a welcome no longer mentions it and an empty list offers to add it again', !/demo data/.test(quiet) && offers.map((x) => x.trim()).join() === 'New visit note,Add demo data again', [quiet, offers]);
+  await page.locator('.app-main .empty [data-demo-act="add"]').click(); await settled(61, 4);
+  check('Add demo data again on an empty list fills it', (await counts()).demo === 61 && await one('SELECT COUNT(*) FROM "visit_notes"') === 8, await counts());
+  await page.locator('.stage-bar [data-demo-act="over"]').click(); await page.waitForSelector('.dialog');
+  const over = await page.locator('.dialog').innerText(); c = await counts();
+  check('Start over names the number of added records it deletes', new RegExp('This deletes the ' + c.own + ' records you added').test(over) && /use Remove demo data instead/.test(over), over);
+  await page.locator('.dialog .btn.danger', { hasText: 'Start over' }).click(); await settled(61, 0);
+  c = await counts();
+  check('Start over empties the lists and puts the demo data back', c.demo === 61 && c.own === 0 && await one('SELECT COUNT(*) FROM "patients"') === 14, c);
   await ctx.close();
 }
 
@@ -464,6 +580,65 @@ async function flowLive(browser, url) {
   check('live: the failed run says plainly that no model is connected', JSON.stringify(c.last || '').includes('No model is connected'), c.last);
   await ctx.close();
   await liveOnStepAgent(browser, url);
+  await plannedBuild(browser, url);
+}
+// A build that starts from a plan the owner approved. The plan here is for one person and has no stages, the two things only a plan may ask for.
+const SOLO_PLAN = { v: 1, name: 'My Expenses', summary: 'Track what you spend by category.', audience: 'just_me', people: [{ id: 'owner', name: 'You', can: 'Add expenses and see where the money goes' }],
+  lists: [
+    { name: 'expenses', label: 'Expenses', one: 'expense', what: 'Everything you spend', title: 'what_for', owner: null, settings: false, fields: [{ name: 'what_for', label: 'What it was for', type: 'text', required: true }, { name: 'spent_on', label: 'Date', type: 'date', required: true }, { name: 'amount', label: 'Amount', type: 'money', required: true }, { name: 'category', label: 'Category', type: 'ref', ref: 'categories' }, { name: 'paid_with', label: 'Paid with', type: 'select', options: ['cash', 'card'] }] },
+    { name: 'categories', label: 'Categories', one: 'category', what: 'What you group your spending by', title: 'name', owner: null, settings: true, fields: [{ name: 'name', label: 'Name', type: 'text', required: true }, { name: 'monthly_budget', label: 'Monthly budget', type: 'money' }] }],
+  stages: null, permissions: { expenses: { owner: { list: 'all', create: true, update: 'all', delete: true } }, categories: { owner: { list: 'all', create: true, update: 'all', delete: true } } },
+  rules: ['Only you use the app.'], stories: [{ role: 'owner', want: 'add an expense in a few seconds', so: 'nothing is forgotten' }, { role: 'owner', want: 'see what I spent in each category', so: 'I know where the money goes' }],
+  demoData: true, overview: true, helpers: null, answers: [{ slot: 'audience', question: 'Who is this for?', answer: 'Just me', value: 'just_me', by: 'you' }], notInThisVersion: [] };
+const SOLO = {
+  db: (kept) => ({ tables: [
+    { name: 'expenses', label: 'Expenses', one: 'Expense', title: 'what_for', owner: null, columns: [{ name: 'what_for', label: 'What it was for', type: 'text', required: true }, { name: 'spent_on', label: 'Date', type: 'date', required: true }].concat(kept ? [{ name: 'amount', label: 'Amount', type: 'money', required: true }] : [], [{ name: 'category', label: 'Category', type: 'ref', ref: 'categories' }, { name: 'paid_with', label: 'Paid with', type: 'select', options: ['cash', 'card'] }]), rows: [{ what_for: 'Train ticket', spent_on: -3, amount: 12.5, category: 1, paid_with: 'card' }, { what_for: 'Lunch', spent_on: -1, amount: 8, category: 2, paid_with: 'cash' }] },
+    { name: 'categories', label: 'Categories', one: 'Category', title: 'name', owner: null, columns: [{ name: 'name', label: 'Name', type: 'text', required: true }, { name: 'monthly_budget', label: 'Monthly budget', type: 'money' }], rows: [{ name: 'Travel', monthly_budget: 120 }, { name: 'Food', monthly_budget: 300 }] }].concat(kept ? [] : [{ name: 'receipts', label: 'Receipts', one: 'Receipt', title: 'name', owner: null, columns: [{ name: 'name', label: 'Name', type: 'text', required: true }], rows: [{ name: 'A receipt' }] }]),
+  users: [{ name: 'Aisha Khan', role: 'owner' }] }),
+  views: { views: [{ table: 'expenses', use: [{ type: 'table', why: 'The full list.' }, { type: 'cards', why: 'One card each.' }, { type: 'calendar', date: 'spent_on', why: 'By day.' }, { type: 'chart', x: 'category', why: 'Spending per category.' }] }, { table: 'categories', use: [{ type: 'table', why: 'The full list.' }, { type: 'cards', why: 'One card each.' }] }],
+    dashboard: { title: 'Overview', date: { table: 'expenses', column: 'spent_on' }, widgets: [{ kind: 'kpi', label: 'Expenses', table: 'expenses', measure: 'count' }, { kind: 'kpi', label: 'Total spent', table: 'expenses', measure: 'sum:amount' }, { kind: 'bar', label: 'By category', table: 'expenses', x: 'category' }, { kind: 'line', label: 'Over time', table: 'expenses', x: 'spent_on', bucket: 'day' }, { kind: 'recent', label: 'Latest', table: 'expenses' }] } },
+  screens: { theme: { accent: 'teal', nav: 'side', icon: 'clipboard' }, screens: [{ name: 'Expenses', type: 'table', table: 'expenses', roles: ['owner'], columns: ['what_for', 'spent_on', 'amount', 'category'] }, { name: 'Categories', type: 'table', table: 'categories', roles: ['owner'], columns: ['name'] }, { name: 'New expense', type: 'form', table: 'expenses', roles: ['owner'] }],
+    tour: [{ role: 'owner', do: 'create', table: 'expenses', values: { what_for: 'Taxi', spent_on: 0, amount: 9.5, category: 1, paid_with: 'cash' }, say: 'Aisha adds an expense.' }, { role: 'owner', do: 'see', table: 'expenses', say: 'Aisha sees it in the list.' }, { role: 'owner', do: 'open', screen: 'Expenses', say: 'Aisha opens Expenses.' }] },
+  tester: { cases: [{ name: 'The first page opens', why: 'The owner needs a way in.', steps: [{ role: 'owner', do: 'open', screen: 'Expenses', say: 'Opens the page.' }] }, { name: 'An expense can be added and found', why: 'That is what the app is for.', steps: [{ role: 'owner', do: 'create', table: 'expenses', values: { what_for: 'Coffee', spent_on: 0, amount: 3 } }, { role: 'owner', do: 'see', table: 'expenses' }] }] },
+};
+async function plannedBuild(browser, url) {
+  const init = 'window.__SOLO = ' + JSON.stringify({ db1: SOLO.db(false), db2: SOLO.db(true), views: SOLO.views, screens: SOLO.screens, tester: SOLO.tester }) + `;
+    window.__calls = []; window.__dbPrompt = '';
+    window.claude = { use: async function (name) {
+      if (name !== 'sample') return null;
+      return async function (input) {
+        const who = /You are the ([\\w ]+?) agent/.exec(input)[1]; window.__calls.push(who); const G = window.__SOLO;
+        if (who === 'Database') window.__dbPrompt = input;
+        const out = who === 'Database' ? (window.__calls.filter((x) => x === 'Database').length === 1 ? G.db1 : G.db2) : who === 'View advisor' ? G.views : who === 'UI' ? G.screens : who === 'Tester' ? G.tester : { note: 'nobody should have asked ' + who };
+        await new Promise((r) => setTimeout(r, 40));
+        return { text: JSON.stringify(out), truncated: false };
+      };
+    } };`;
+  const { ctx, page } = await newPage(browser, { init });
+  await page.goto(url); await page.waitForSelector('.ob-card');
+  await page.getByRole('button', { name: 'Get started' }).click(); await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
+  await page.waitForFunction(() => !document.querySelectorAll('.choice')[1].disabled);
+  await page.locator('.choice').nth(1).click(); await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click(); await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click();
+  await page.waitForSelector('.home'); await setSpeed(page, 'instant');
+  const id = await st(page, (plan) => window.__formwork.plan.build('I want to build an expense management app', plan).id, SOLO_PLAN);
+  await waitReady(page); await page.waitForFunction((x) => { const t = window.__formwork.state().apps[x].tests; return t && t.total > 0; }, id, { timeout: 60000 }).catch(() => {});
+  const a = await st(page, (x) => { const F = window.__formwork, app = F.state().apps[x], d = app.def, run = app.runs[0], T = app.tests || {};
+    return { status: app.status, name: app.name, calls: window.__calls, dbPrompt: window.__dbPrompt, planned: d.brief && d.brief.planned, roles: d.brief ? d.brief.roles.length : 0, states: d.process ? d.process.states.length : -1, by: app.flow.by, attempts: Object.fromEntries(Object.keys(app.line).map((k) => [k, app.line[k].attempt])), line: Object.fromEntries(Object.keys(app.line).map((k) => [k, app.line[k].status])),
+      steps: run.steps.map((s) => s.station + ':' + s.label), tables: d.tables.map((t) => t.name + '(' + t.columns.map((c) => c.name).join(',') + ')'), access: d.access.expenses && d.access.expenses.owner, chat: app.chat.map((m) => String(m.text || '')).join(' | '), tests: [T.passed, T.failed, T.total], users: d.users.length }; }, id);
+  check('planned build: the first step reads the plan the owner approved and asks no model again', a.planned === true && a.line.research === 'ok' && !a.calls.includes('Researcher') && !a.calls.includes('Planner') && a.steps.includes('research:Plan you approved') && /You approved the plan/.test(a.chat) && a.name === 'My Expenses', [a.calls, a.steps.slice(0, 3), a.name]);
+  check('planned build: the Database agent is given the lists of the plan and sent back when it leaves them', /LISTS OF THE PLAN[^\n]*\nexpenses \(title: what_for, owner: none\): what_for:text\*, spent_on:date\*, amount:money\*/.test(a.dbPrompt) && a.attempts.database === 2 && /expenses needs the column .amount.|not in the plan: receipts/.test(a.dbPrompt) && a.tables.join(' ') === 'expenses(what_for,spent_on,amount,category,paid_with) categories(name,monthly_budget)', [a.attempts.database, a.tables, a.dbPrompt.slice(-300)]);
+  check('planned build: with one kind of person the rules are written by code from the plan, and no Backend agent is asked', a.by.backend === 'rules' && !a.calls.includes('Backend') && a.steps.includes('backend:Built-in rules') && a.access && a.access.list === 'all' && a.access.delete === true, [a.by, a.calls, a.access]);
+  check('planned build: an app for one person with no stages builds to ready, and its tests pass', a.status === 'ready' && a.roles === 1 && a.users === 1 && a.states === 0 && a.line.walkthrough === 'ok' && a.tests[2] > 20 && a.tests[0] === a.tests[2], [a.status, a.line, a.states, a.tests]);
+  await view(page, 'App'); await page.waitForSelector('.persona-btn, .app-nav .nav-i'); const asked = await page.locator('.persona-btn').count(); if (asked) await page.locator('.persona-btn').first().click(); await page.waitForSelector('.app-nav .nav-i');
+  const before = await st(page, (x) => window.__formwork.dbCount(x, 'expenses'), id);
+  await nav(page, 'New expense'); await page.waitForSelector('.form-page');
+  const inputs = page.locator('.form-page .form-grid input'); await inputs.nth(0).fill('Bus fare'); await inputs.nth(1).fill('2026-11-20'); await inputs.nth(2).fill('4.5');
+  await page.locator('.form-page button[type=submit]').click(); await page.waitForFunction(([x, n]) => window.__formwork.dbCount(x, 'expenses') > n, [id, before], { timeout: 10000 }).catch(() => {});
+  const after = await st(page, (x) => window.__formwork.dbCount(x, 'expenses'), id);
+  await nav(page, 'Expenses'); await page.waitForSelector('.scr'); await shot(page, 'p01-planned-solo-app');
+  check('planned build: the app opens for its one user, has no board of stages, and saves a new record', after === before + 1 && await page.locator('.app-nav .nav-i').count() === 4 && /Bus fare/.test(await page.locator('.scr').innerText()) && !(await page.locator('.kb-col').count()), [before, after, await page.locator('.app-nav .nav-i').allInnerTexts()]);
+  await ctx.close();
 }
 // Live without a stand-in on the page: every prompt goes to the server's step agent over AG-UI. The agent's stream is
 // scripted here (the test server has no model), so this proves the browser side: events in, answer out, steps on the timeline.
@@ -972,6 +1147,130 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   await pp.locator('.dialog .dhead .btn').click(); await sleep(200); await pp.locator('.titlebar .acct').click(); await pp.waitForSelector('.sheet'); const menu = await pp.locator('.sheet .sheet-l').allInnerTexts();
   check('phone: the menu holds Live, Online, Debug, the guide and the account', ['Live', 'Online', 'Debug mode', 'Feature guide', 'Sign out'].every((x) => menu.includes(x)), menu); await shot(pp, '99c-phone-menu');
   await ph.ctx.close();
+  await firstUse(browser, url);
+}
+
+/* ---------- first use of a built app: "Choose who you are", the welcome, the tour, the checklist, empty screens ---------- */
+async function firstUse(browser, url) {
+  const { ctx, page } = await newPage(browser); await enter(page, url); await buildTpl(page, 'clinic'); await waitIdle(page);
+  const aid = (await appState(page)).id;
+  const sql = async (text) => { await st(page, ([id, q]) => { window.__formwork.sql(id, q); }, [aid, text]); };
+  const welcome = () => st(page, () => { const w = document.querySelector('.fr-welcome'); return w ? { text: w.innerText, points: [...w.querySelectorAll('.fr-points li')].map((x) => x.innerText.trim()), btn: (w.querySelector('.btn.primary') || {}).innerText || '' } : null; });
+  const menuItem = async (name) => { await page.locator('.app-head .persona').click(); await page.locator('.app-head .menu .mi', { hasText: name }).click(); };
+  await view(page, 'App'); await page.waitForSelector('.login-card');
+  // sign-in: words for the people who use the app, not for its builder
+  const si = await st(page, () => ({ text: document.querySelector('.login-card').innerText, people: [...document.querySelectorAll('.persona-btn')].map((b) => [...b.querySelectorAll('.col > span')].map((x) => x.innerText.trim())), form: document.querySelectorAll('.login-form').length }));
+  check('sign-in asks "Choose who you are" and says nothing about seeding or agents', /Choose who you are/.test(si.text) && !/seeded|Database agent/i.test(si.text), si.text.slice(0, 120));
+  check('sign-in: each person has their name, their kind of person and one line on what it does', si.people.length === 6 && si.people.every((p) => p.length === 3 && p.every(Boolean)) && si.people[0].join('|') === 'Sara Malik|Receptionist|Registers patients, books and checks in appointments' && si.people[5][1] === 'Clinic manager', si.people);
+  check('sign-in: the username and password form is folded away until asked for', si.form === 0);
+  await page.locator('.login-more').click(); await page.waitForSelector('.login-form');
+  check('sign-in: unfolding the form shows it, with the password note', /Every password is demo/.test(await page.locator('.login-pw').innerText()) && (await page.locator('.login-more').getAttribute('aria-expanded')) === 'true');
+  await page.locator('.login-form .input').first().fill('nobody'); await page.locator('.login-form .input').nth(1).fill('wrong'); await page.locator('.login-form button[type=submit]').click(); await page.waitForSelector('.login-card .mbar');
+  check('sign-in: a wrong username or password is refused and the form stays open', await page.locator('.login-form').count() === 1 && await page.locator('.app-main').count() === 0);
+  await shot(page, 'fu-01-signin');
+
+  // the welcome: one card, once per person, different for each kind of person
+  await page.locator('.persona-btn').first().click(); await page.waitForSelector('.fr-welcome');
+  let w = await welcome();
+  check('first sign-in shows a welcome: who you are, three things you can do, one button for the first of them', /Welcome, Sara/.test(w.text) && /Receptionist/.test(w.text) && w.points.length === 3 && w.points[0] === 'Book an appointment for a patient with a doctor' && w.btn === 'Book your first appointment' && /Show me around/.test(w.text) && /Not now/.test(w.text), w);
+  check('the welcome is a card above the page, not a dialog: the app behind it can be used', await page.locator('.app-main .dash').count() === 1 && await page.locator('.app-main > .fr-welcome').count() === 1 && await page.locator('.dialog, .app-modal').count() === 0);
+  check('the owner is told that each kind of person gets their own welcome', /Your people will see a welcome like this/.test(w.text));
+  await shot(page, 'fu-02-welcome');
+  await page.locator('.app-nav .nav-i').nth(1).click(); await page.waitForSelector('.fr-welcome', { state: 'detached' });
+  await page.locator('.app-nav .nav-i').nth(0).click(); await page.waitForSelector('.app-main .dash');
+  await menuItem('Sign out'); await page.waitForSelector('.login-card'); await page.locator('.persona-btn').first().click(); await page.waitForSelector('.app-main .dash');
+  check('the welcome is shown once: moving to another screen closes it, and signing in again does not bring it back', await page.locator('.fr-welcome').count() === 0);
+  await menuItem('Dr. Ayesha'); await page.waitForSelector('.fr-welcome');
+  w = await welcome();
+  check('a different kind of person gets a different welcome and a different first thing to do', /Welcome, Dr\. Ayesha/.test(w.text) && /Doctor/.test(w.text) && w.points[0] === 'See only your own appointments' && w.btn === 'Open My day', w);
+
+  // the checklist comes with the main button and ticks itself
+  await page.locator('.fr-welcome .btn.primary').click(); await page.waitForSelector('.fr-list');
+  const list = () => st(page, () => ({ on: (document.querySelector('.app-nav .nav-i.on') || {}).innerText, count: (document.querySelector('.fr-list .badge') || {}).innerText, items: [...document.querySelectorAll('.fr-items li')].map((x) => (x.classList.contains('ok') ? '✓ ' : '○ ') + x.querySelector('.col > span').innerText.replace(/^(Done|To do):\s*/, '').trim()), doIt: document.querySelectorAll('.fr-items .btn').length }));
+  let l = await list();
+  check('the welcome\'s main button opens the right screen and brings the Getting started checklist', l.on.trim() === 'My day' && await page.locator('.fr-welcome').count() === 0 && l.items.length >= 3 && l.items.length <= 5 && l.items[0] === '○ Open an appointment and look around' && l.doIt === 1, l);
+  const before = l.count;
+  await page.locator('.app-nav .nav-i', { hasText: 'My schedule' }).click(); await page.waitForSelector('.cal-grid'); await page.locator('.cal-chip').first().click(); await page.waitForSelector('.drawer');
+  await page.waitForFunction(() => { const li = document.querySelector('.fr-items li'); return li && li.classList.contains('ok'); });
+  l = await list();
+  check('a checklist item ticks itself when the person does it', l.items[0] === '✓ Open an appointment and look around' && l.count !== before, [before, l]);
+  await page.locator('.drawer .drawer-head .btn').last().click(); await shot(page, 'fu-03-checklist');
+  await page.locator('.fr-toggle').click(); await page.waitForSelector('.fr-items', { state: 'detached' });
+  check('the checklist folds to its title', (await page.locator('.fr-toggle').getAttribute('aria-expanded')) === 'false' && await page.locator('.fr-list').count() === 1);
+  await page.getByRole('button', { name: 'Hide the checklist' }).click(); await page.waitForSelector('.fr-list', { state: 'detached' });
+  await menuItem('Getting started'); await page.waitForSelector('.fr-items');
+  check('a hidden checklist comes back from the person menu', await page.locator('.fr-items li').count() === l.items.length);
+
+  // the tour: offered, at most four stops, one bubble at a time, usable from the keyboard
+  await menuItem('Show me around'); await page.waitForSelector('.fr-pop');
+  const stops = [];
+  for (let i = 0; i < 6 && await page.locator('.fr-pop').count(); i++) {
+    await page.waitForFunction((n) => { const p = document.querySelector('.fr-pop'); return p && p.dataset.i === String(n) && document.activeElement === p; }, i);
+    stops.push(await st(page, () => { const p = document.querySelector('.fr-pop'), h = document.querySelector('.fr-hole'), a = document.querySelector('.fr-tour').getBoundingClientRect(), r = p.getBoundingClientRect(); return { text: p.innerText.replace(/\n+/g, ' | '), hole: !!h, inside: r.left >= a.left && r.right <= a.right + 1 && r.top >= a.top && r.bottom <= a.bottom + 1, bubbles: document.querySelectorAll('.fr-pop').length }; }));
+    if (i === 1) await shot(page, 'fu-04-tour');
+    await page.keyboard.press('ArrowRight'); await sleep(60);
+  }
+  check('Show me around: at most four stops, one bubble at a time, each inside the app and pointing at something', stops.length >= 2 && stops.length <= 4 && stops.every((s, i) => s.bubbles === 1 && s.inside && new RegExp('Stop ' + (i + 1) + ' of ' + stops.length).test(s.text)) && stops.filter((s) => s.hole).length >= stops.length - 1 && /Your screens/.test(stops[0].text), stops);
+  check('the tour ends after its last stop and leaves the app usable', await page.locator('.fr-tour').count() === 0 && await page.locator('.app-nav .nav-i.on').count() === 1);
+  await menuItem('Show me around'); await page.waitForSelector('.fr-pop'); await page.waitForFunction(() => document.activeElement === document.querySelector('.fr-pop')); await page.keyboard.press('Escape'); await page.waitForSelector('.fr-tour', { state: 'detached' });
+  check('Escape skips the tour', await page.locator('.fr-pop').count() === 0);
+
+  // the owner can see anyone's first run again
+  await page.getByRole('button', { name: 'Replay first run' }).click(); await page.waitForSelector('.fr-welcome');
+  check('Replay first run shows the previewed person their welcome again', /Welcome, Dr\. Ayesha/.test((await welcome()).text) && await page.locator('.fr-list').count() === 0);
+  await page.getByRole('button', { name: 'Close the welcome' }).click(); await page.waitForSelector('.fr-welcome', { state: 'detached' });
+  check('closing the welcome does not start the checklist or the tour: both are offered, never forced', await page.locator('.fr-list, .fr-tour').count() === 0);
+
+  // empty screens say why they are empty, by what this person may do
+  const empty = () => st(page, () => { const e = document.querySelector('.app-main .empty'); return e ? { title: e.querySelector('strong').innerText, text: (e.querySelector('p') || {}).innerText || '', btn: [...e.querySelectorAll('button')].map((b) => b.innerText.trim()) } : null; });
+  await page.locator('.app-nav .nav-i', { hasText: 'Patients' }).click(); await page.waitForSelector('.app .tbl'); await page.locator('.scr-head .search .input').fill('zzzz'); await page.waitForSelector('.app-main .empty');
+  let e = await empty();
+  check('a search with no matches says so and offers Clear filters', e.title === 'No patients match' && e.btn.join() === 'Clear filters', e);
+  await page.locator('.app-main .empty .btn').click(); await page.waitForSelector('.app .tbl tr.clickable');
+  check('Clear filters brings the records back', (await page.locator('.scr-head .search .input').inputValue()) === '');
+  await sql('DELETE FROM "visit_notes"'); await page.locator('.app-nav .nav-i', { hasText: 'Visit notes' }).click(); await page.waitForSelector('.app-main .empty');
+  e = await empty();
+  check('an empty list, for a person who may add: what will be here and a button to add the first one', e.title === 'You have no visit notes yet' && e.text === 'You see your own visit notes here.' && e.btn.join() === 'New visit note', e);
+  await page.locator('.app-main .empty .btn').click(); await page.waitForSelector('.app-dialog');
+  check('the empty list\'s button opens the form for a new record', /New visit note/i.test(await page.locator('.app-dialog h2').innerText()));
+  await page.locator('.app-dialog .dfoot .btn').first().click(); await shot(page, 'fu-05-empty');
+  await menuItem('Imran'); await page.locator('.app-nav .nav-i', { hasText: 'Visit notes' }).click(); await page.waitForSelector('.app-main .empty');
+  e = await empty();
+  check('an empty list, for a person who may not add: who adds them, and no button', e.title === 'No visit notes yet' && e.text === 'They appear here when someone signed in as Doctor adds one.' && e.btn.length === 0, e);
+  await sql('DELETE FROM "appointments"'); await sql('DELETE FROM "patients"');
+  await page.locator('.app-nav .nav-i', { hasText: 'Overview' }).click(); await page.waitForSelector('.app-main .dash .empty');
+  e = await empty();
+  check('a dashboard with nothing to count says so', e.title === 'Nothing to count yet' && /first appointment/.test(e.text), e);
+
+  // an app with one kind of person has no sign-in screen
+  await page.locator('#pv' + aid).selectOption(''); await page.waitForSelector('.login-card');
+  await sql('UPDATE "users" SET "role" = \'manager\''); await page.locator('.login-more').click(); await page.waitForSelector('.app-main');
+  const one = await st(page, (id) => ({ login: document.querySelectorAll('.login-card').length, who: (document.querySelector('.persona-t .t-strong') || {}).innerText, pick: [...document.querySelectorAll('#pv' + id + ' option')].map((o) => o.textContent) }), aid);
+  check('one kind of person: the app opens straight away as its first person, with no sign-in screen to preview', one.login === 0 && one.who === 'Sara Malik' && !one.pick.includes('Sign-in screen') && one.pick.length === 6, one);
+  await page.locator('.app-head .persona').click(); const mi = await page.locator('.app-head .menu .mi').allInnerTexts();
+  check('one kind of person: the person menu has no Sign out, and keeps the guide', !mi.some((x) => /Sign out/.test(x)) && mi.some((x) => /Getting started/.test(x)), mi);
+  await page.keyboard.press('Escape'); await page.getByRole('button', { name: 'Replay first run' }).click(); await page.waitForSelector('.fr-welcome');
+  check('one kind of person: the welcome does not talk about a job', /This is CareDesk\. Here you can:/.test((await welcome()).text));
+  await ctx.close();
+
+  // a phone: the welcome rises from the bottom, above the tabs, and the guide is in the account sheet
+  const ph = await newPage(browser, { viewport: { width: 390, height: 844 } }); const pp = ph.page;
+  await enter(pp, url); await buildTpl(pp, 'clinic'); await waitIdle(pp);
+  await pp.locator('.phone-nav .tab-i', { hasText: 'App' }).click(); await pp.getByRole('button', { name: 'Open the app' }).click(); await pp.waitForSelector('.solo .app-login');
+  const fits = await st(pp, () => document.documentElement.scrollWidth <= window.innerWidth + 1 && [...document.querySelectorAll('.persona-btn')].every((b) => b.getBoundingClientRect().right <= window.innerWidth));
+  check('phone: Choose who you are fits the screen', fits);
+  await pp.locator('.persona-btn').first().click(); await pp.waitForSelector('.fr-welcome.fr-sheet'); await sleep(250);
+  const sheet = await st(pp, () => { const w = document.querySelector('.fr-welcome').getBoundingClientRect(), t = document.querySelector('.app-tabs').getBoundingClientRect(); return { left: Math.round(w.left), right: Math.round(w.right), bottom: Math.round(w.bottom), tabs: Math.round(t.top), wide: window.innerWidth }; });
+  check('phone: the welcome is a sheet at the bottom, above the tabs, inside the screen', sheet.left >= 0 && sheet.right <= sheet.wide && sheet.bottom <= sheet.tabs && sheet.tabs - sheet.bottom < 24, sheet);
+  await shot(pp, 'fu-06-phone-welcome');
+  await pp.getByRole('button', { name: 'Not now' }).click(); await pp.waitForSelector('.fr-welcome', { state: 'detached' });
+  await pp.locator('.app-head .persona').click(); await pp.waitForSelector('.sheet'); const rows = await pp.locator('.sheet .sheet-l').allInnerTexts();
+  check('phone: Show me around and Getting started are in the account sheet', rows.includes('Show me around') && rows.includes('Getting started'), rows);
+  await pp.locator('.sheet-i', { hasText: 'Show me around' }).click(); await pp.waitForSelector('.fr-pop');
+  await pp.waitForFunction(() => !!document.querySelector('.fr-hole'));
+  const tp = await st(pp, () => { const p = document.querySelector('.fr-pop').getBoundingClientRect(); return { left: Math.round(p.left), right: Math.round(p.right), wide: window.innerWidth, sheet: document.querySelectorAll('.sheet').length }; });
+  check('phone: the tour bubble fits the screen and the sheet is out of its way', tp.left >= 0 && tp.right <= tp.wide && tp.sheet === 0, tp);
+  await ph.ctx.close();
 }
 
 /* ---------- Live follows the connection; the workflow is shared state the owner and the orchestrator both edit ---------- */
@@ -1034,7 +1333,7 @@ async function flowCustom(browser, url) {
   check('the home page says what Live will do here: no model connected, saved builds stand in', /no model connected to this copy/.test(await page.locator('#home-mode').innerText()), await page.locator('#home-mode').innerText());
   await page.fill('#home-prompt', 'something nobody ever saved'); await page.locator('.prompt .btn.primary').click(); await sleep(200);
   check('Live with no model: an unknown sentence gets a plain reason, not a refusal about where the page runs', /No model is connected to this copy/.test(await page.locator('.home .mbar').innerText()) && !/not available in this view/.test(await page.locator('.home').innerText()), await page.locator('.home .mbar').allInnerTexts());
-  await page.fill('#home-prompt', 'a clinic that books patient appointments'); await page.locator('.prompt .btn.primary').click(); let r = await drive(page), a = r.a;
+  await describeApp(page, 'a clinic that books patient appointments'); let r = await drive(page), a = r.a;
   check('Live with no model: a sentence a saved build covers is built from that saved build', a.status === 'ready' && a.tpl === 'clinic' && a.mode === 'demo', [a.status, a.tpl, a.mode]);
   await page.locator('.titlebar .net').click(); await sleep(200); await say(page, 'Add a notes field to patients'); a = await waitFree(page);
   check('offline with Live wanted: a change in chat is read by the built-in rules, and says so', a.cols.patients.includes('notes') && (await page.locator('.msgs').innerText()).includes('You are offline, so Live is paused. Until the connection is back I am reading changes with the built-in rules.'), a.chat);
@@ -1228,7 +1527,12 @@ async function flowRound6(browser, url) {
   // ----- releases -----
   await view(page, 'Release'); await page.waitForSelector('.release');
   check('release: a built app is a draft until it is released, and the notes are drafted for it', /Draft · not released yet/.test(await page.locator('#rel-state').innerText()) && /^First release: \d+ pages for 3 roles, with a team of 3 agents inside\./.test(await page.inputValue('#rel-notes')) && /Release version 1\.0/.test(await page.locator('#rel-go').innerText()) && await page.locator('#rel-share').isDisabled(), await page.inputValue('#rel-notes'));
+  const startTxt = (await page.locator('#rel-start').innerText()).replace(/\s+/g, ' ');
+  check('before the first release the page asks what people start with: empty is the usual choice, beside demo data and the records as they are', /Before you release/.test(await page.locator('.rel-form').innerText()) && await page.locator('#rel-start .choice').count() === 3 && await page.locator('#rel-start .choice.on').getAttribute('data-start') === 'empty' && /Empty Usual choice No records\. Right for a real launch\./.test(startTxt) && /Demo data The \d+ made-up records/.test(startTxt) && /The records as they are now \d+ records/.test(startTxt) && /Nothing yet/.test(await page.locator('#rel-live').innerText()), startTxt);
+  await page.locator('#rel-start .choice[data-start="demo"]').click(); await page.waitForSelector('#rel-start .choice.on[data-start="demo"]'); await shot(page, 'r6-03a-before-release');
   await page.locator('#rel-go').click(); await page.waitForFunction(() => /Version 1\.0 · up to date/.test((document.getElementById('rel-state') || {}).innerText || '')); a = await appFull(page);
+  const relStart = () => st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return s.apps[t.app].releases[0].start; });
+  check('the release remembers the choice, and the page says what is live and what the draft holds', await relStart() === 'demo' && /Version 1\.0, released .*This is what people with the link or the installed app have\./.test(await page.locator('#rel-live').innerText()) && /The same as the live version/.test(await page.locator('#rel-draft').innerText()), [await page.locator('#rel-live').innerText(), await page.locator('#rel-draft').innerText()]);
   check('release 1.0: every test ran first, the version is kept, and the app says so', a.rel.join() === '1.0' && !a.dirty && /Version 1\.0/.test(await page.locator('#app-state').innerText()) && a.chat.some((m) => m.card === 'released') && await page.locator('.rel-item').count() === 1, [a.rel, a.dirty]); await shot(page, 'r6-03-release');
   // ----- the deliverable: one document from the app's state, in each format -----
   const xtmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'tk-export-')), grab = async (id) => { const [d] = await Promise.all([page.waitForEvent('download'), page.locator(id).click()]); const p = path.join(xtmp, d.suggestedFilename()); await d.saveAs(p); return { name: d.suggestedFilename(), buf: fs.readFileSync(p) }; };
@@ -1245,7 +1549,14 @@ async function flowRound6(browser, url) {
   check('export: the zip holds the document, the page, the database and the definition', /-build-pack\.zip$/.test(xzip.name) && xzip.buf.subarray(0, 4).toString('hex') === '504b0304' && /\/deliverable\.md/.test(zs) && /\/deliverable\.html/.test(zs) && /\/app\.json/.test(zs) && /\/README\.txt/.test(zs) && zs.includes('SQLite format 3') && xzip.buf.subarray(-22, -18).toString('hex') === '504b0506', xzip.name);
   await page.locator('#rel-share').click(); await page.waitForSelector('.dialog.share'); await page.waitForFunction(() => /#app=1\./.test((document.getElementById('sh-link') || {}).value || '')); const link10 = await page.inputValue('#sh-link'); await page.waitForFunction(() => /^https?:\/\/[^/]+\/[a-z0-9-]+$/.test((document.getElementById('sh-short') || {}).value || ''), null, { timeout: 15000 }).catch(() => {}); const short10 = await page.inputValue('#sh-short').catch(() => '');
   check('Share also gives a short link named after the app', /\/biddesk$/.test(short10), short10);
-  check('share: the link carries version 1.0 and the dialog shows the app\'s own icon', /Version 1\.0/.test(await page.locator('#sh-ver').innerText()) && await page.locator('.dialog.share .applogo svg').count() === 1, await page.locator('#sh-ver').innerText()); await page.locator('.dialog .dhead .btn[aria-label="Close"]').click(); await sleep(150);
+  check('share: the link carries version 1.0 and the dialog shows the app\'s own icon', /Version 1\.0/.test(await page.locator('#sh-ver').innerText()) && await page.locator('.dialog.share .applogo svg').count() === 1, await page.locator('#sh-ver').innerText());
+  const shOn = async () => (await page.locator('.dialog.share .seg button.on').innerText()).trim(), shSeg = await shOn();
+  await page.locator('.dialog.share .seg button', { hasText: 'Empty' }).click(); await page.waitForFunction((l) => { const v = (document.getElementById('sh-link') || {}).value || ''; return /#app=1\./.test(v) && v !== l; }, link10); const linkEmpty = await page.inputValue('#sh-link'), emptyHint = await page.locator('.dialog.share').innerText();
+  const eg = await newPage(browser); await eg.page.goto(url + '#app=' + linkEmpty.split('#app=')[1]); await eg.page.waitForSelector('.solo .app', { timeout: 30000 });
+  const emptyCopy = await st(eg.page, () => { const s = window.__formwork.state(), x = Object.values(s.apps).find((y) => y.shared); return { data: x.shared.data, ver: x.shared.ver, rows: x.def.tables.reduce((n, t) => n + window.__formwork.sql(x.id, 'SELECT COUNT(*) AS n FROM "' + t.name + '"')[0].n, 0), people: window.__formwork.sql(x.id, 'SELECT COUNT(*) AS n FROM "users"')[0].n, pages: x.def.screens.length }; }); await eg.ctx.close();
+  check('share starts with what the release chose, and an empty link opens the app with its people and pages but no records', shSeg === 'Demo data' && await shOn() === 'Empty' && /No records at all\. Right for a real launch\./.test(emptyHint) && linkEmpty.length < link10.length && emptyCopy.data === 'empty' && emptyCopy.ver === '1.0' && emptyCopy.rows === 0 && emptyCopy.people > 0 && emptyCopy.pages > 0, [shSeg, linkEmpty.length, link10.length, emptyCopy]);
+  await page.locator('.dialog.share .seg button', { hasText: 'Demo data' }).click(); await page.waitForFunction((n) => ((document.getElementById('sh-link') || {}).value || '').length > n, linkEmpty.length); await page.waitForFunction(() => /^https?:\/\/[^/]+\/[a-z0-9-]+$/.test((document.getElementById('sh-short') || {}).value || ''), null, { timeout: 15000 }).catch(() => {});
+  await page.locator('.dialog .dhead .btn[aria-label="Close"]').click(); await sleep(150);
   await say(page, 'Add a notes field to tenders'); a = await waitFree(page);
   check('a change after a release goes into a draft; the released version stays what people get', a.dirty && a.rel.join() === '1.0' && /Draft · 1\.0 is out/.test(await page.locator('#app-state').innerText()) && a.cols.tenders.includes('notes'), [a.dirty, a.rel]);
   await view(page, 'Release'); await sleep(200); const notes = await page.inputValue('#rel-notes');
@@ -1255,6 +1566,7 @@ async function flowRound6(browser, url) {
   await page.locator('#rel-go').click(); await page.waitForFunction(() => /Version 1\.1 · up to date/.test((document.getElementById('rel-state') || {}).innerText || '')); a = await appFull(page);
   await page.locator('#rel-share').click(); await page.waitForSelector('.dialog.share'); await page.waitForFunction(() => /#app=1\./.test((document.getElementById('sh-link') || {}).value || '')); const link11 = await page.inputValue('#sh-link'); await page.locator('.dialog .dhead .btn[aria-label="Close"]').click(); await sleep(150);
   check('release 1.1: two versions in the history, newest first, each with its notes', a.rel.join() === '1.1,1.0' && !a.dirty && await page.locator('.rel-item').count() === 2 && /Added Notes/.test(await page.locator('.rel-item').first().innerText()) && link11 !== link10, a.rel);
+  check('the next version starts new people the way the one before it did', await relStart() === 'demo', await relStart());
   const lg0 = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return JSON.stringify(window.__formwork.wf.logo(s.apps[t.app])); });
   await page.locator('#rel-logo-next').click(); await sleep(200); a = await appFull(page); const lg1 = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return JSON.stringify(window.__formwork.wf.logo(s.apps[t.app])); });
   check('icon: designed as data by the UI agent (a shield with a spark here); another design changes it and makes a draft', /"glyph":"briefcase","shape":"shield","fill":"gradient","mark":"spark"/.test(lg0) && lg1 !== lg0 && a.dirty && /Your pick/.test(await page.locator('#rel-logo-text').innerText()) && /Fixes · 1\.1\.1/.test(await page.locator('.rel-form .seg button.on').innerText()), [lg0, lg1]);
@@ -1267,6 +1579,12 @@ async function flowRound6(browser, url) {
   const kept = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), app = s.apps[t.app]; return { client: window.__formwork.sql(t.app, 'SELECT "client" AS c FROM "tenders" WHERE "id" = 1')[0].c, away: window.__formwork.sql(t.app, 'SELECT "value" AS v FROM "tk_put_away" WHERE "table_name" = \'tenders\' AND "column_name" = \'notes\'').map((r) => r.v), taken: app.takenBack, kind: app.releases[0].kind, back: app.releases[0].back }; });
   check('going back to 1.0 is released at once as 1.1.1: the later field is gone, the tests pass, the history stays', !a.cols.tenders.includes('notes') && a.tests.failed === 0 && a.rel.join() === '1.1.1,1.1,1.0' && !a.dirty && a.status === 'ready' && kept.kind === 'rollback' && kept.back === '1.0' && /Same as 1\.0/.test(await page.locator('.rel-item').first().innerText()), [a.cols.tenders, a.tests, a.rel, kept.kind]);
   check('going back keeps every record, and puts away the values the older version has no field for', a.rows === rowsBefore && kept.client === 'Kept through going back' && kept.away.join() === 'Typed into the newer field' && kept.taken && kept.taken.to === '1.0' && kept.taken.why === 'Nobody used the notes' && kept.taken.items.some((x) => /Added Notes/.test(x)), [a.rows, rowsBefore, kept]);
+  // what was taken back is listed, and one press puts it in the draft again without releasing anything
+  const takenTxt = (await page.locator('#rel-taken').innerText()).replace(/\s+/g, ' ');
+  check('the Release page lists what going back took out and why', /You went back from version 1\.1 to 1\.0\./.test(takenTxt) && /Added Notes/.test(takenTxt) && /What went wrong: Nobody used the notes/.test(takenTxt) && await page.locator('#rel-bring-back').count() === 1, takenTxt); await shot(page, 'r6-03d-taken-back');
+  await page.locator('#rel-bring-back').click(); await page.waitForFunction(() => /Version 1\.1\.1 is out · draft has changes/.test((document.getElementById('rel-state') || {}).innerText || ''), null, { timeout: 20000 }); a = await appFull(page);
+  const again = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), app = s.apps[t.app]; return { notes: window.__formwork.sql(t.app, 'SELECT "notes" AS c FROM "tenders" WHERE "id" = 1')[0].c, client: window.__formwork.sql(t.app, 'SELECT "client" AS c FROM "tenders" WHERE "id" = 1')[0].c, taken: app.takenBack || null }; });
+  check('putting them back changes only the draft: the field and its put-away values return, every record stays, 1.1.1 stays live', a.cols.tenders.includes('notes') && again.notes === 'Typed into the newer field' && again.client === 'Kept through going back' && a.rows === rowsBefore && a.rel.join() === '1.1.1,1.1,1.0' && a.dirty && a.tests.failed === 0 && !again.taken && /Release version 1\.2$/.test((await page.locator('#rel-go').innerText()).trim()) && /New people start with: demo data/.test(await page.locator('#rel-start').innerText()), [a.cols.tenders, again, a.rel, await page.locator('#rel-go').innerText()]);
 
   // ----- the app on its own: link, install, update that keeps the records -----
   const g = await newPage(browser), gp = g.page; await gp.goto(url + '#app=' + link10.split('#app=')[1]); await gp.waitForSelector('.solo .app', { timeout: 30000 }); await sleep(300);
@@ -1327,7 +1645,9 @@ async function flowRound6(browser, url) {
 async function samplesChecks(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
   check('home: the grant desk and purchase requests are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('.tpl').count() === 9);
-  await page.fill('#home-prompt', 'a community foundation that reviews grant applications'); await page.locator('.prompt .btn.primary').click(); await page.waitForFunction(() => { const s = window.__formwork.state(), t = (s.tabs[s.session] || []).find((x) => x.id === s.active[s.session]); return t && t.app; }); await waitReady(page); a = await appFull(page);
+  await page.fill('#home-prompt', 'a community foundation that reviews grant applications'); await page.locator('.prompt .btn.primary').click(); await page.waitForSelector('.iv-ask');
+  check('Demo: a saved build with no question of its own asks only about demo data', (await ivNow(page)).n === 'Question 1 of 1' && (await ivNow(page)).card === 'demo_data' && /One quick question/.test(await page.locator('.iv-chat').innerText()) && (await ivNow(page)).name === 'GrantDesk', await ivNow(page));
+  await page.locator('.iv-usual').click(); await page.locator('.iv-act .iv-build').click(); await onApp(page); await waitReady(page); a = await appFull(page);
   check('Demo: a sentence about grants is built from the grant desk\'s saved build', a.tpl === 'grants' && a.mode === 'demo', [a.tpl, a.mode]);
   check('grant desk: every station passed first time, with four tables and its own team of three agents', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'applications,score_lines,award_options,checks' && a.tests.failed === 0 && a.tests.fresh, [a.status, a.line, a.tests]);
   await view(page, 'App'); await page.locator('.persona-btn').first().click(); await land(page); await page.waitForSelector('.team.room');
@@ -1344,6 +1664,10 @@ async function samplesChecks(browser, url) {
   const pr = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), d = s.apps[t.app].def; return { confirm: d.process.transitions.find((x) => x.id === 'confirm_delivery').roles.join(), approve: d.process.transitions.find((x) => x.id === 'approve').roles.join(), order: d.process.transitions.find((x) => x.id === 'place_order').roles.join(), mine: d.access.purchase_requests.requester.list, budgets: d.access.budgets.requester.list }; });
   check('purchase requests: every station passed first time, with three tables, and the tests pass', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'purchase_requests,suppliers,budgets' && a.tests.failed === 0 && a.tests.fresh, [a.status, a.line, a.tests]);
   check('purchase requests: only the budget holder approves, only the buyer orders, staff see only their own requests, and the answer let the person who asked confirm delivery', pr.approve === 'approver' && pr.order === 'buyer' && pr.mine === 'own' && pr.budgets === 'none' && pr.confirm === 'requester,buyer', pr);
+  // "No, start empty" on the demo data card: the build runs and is checked as usual, then the demo records are taken out
+  await page.locator('.brand').click(); await page.waitForSelector('.home'); await describeApp(page, 'employees raise IT support tickets', [0, 1]); await waitReady(page); a = await appFull(page);
+  const empty = await st(page, () => { const F = window.__formwork, s = F.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), A = s.apps[t.app]; return { tpl: A.tpl, want: A.plan.demoData, rows: A.def.tables.map((x) => x.name + ':' + F.sql(A.id, 'SELECT COUNT(*) AS n FROM ' + x.name)[0].n).join(), people: F.sql(A.id, 'SELECT COUNT(*) AS n FROM users')[0].n, chat: A.chat.map((m) => m.text || '') }; });
+  check('"No, start empty": the choice is in the chat, the build passes its checks, and the finished app has no demo records but keeps the people who sign in', a.status === 'ready' && a.tests.failed === 0 && empty.tpl === 'helpdesk' && empty.want === false && empty.rows === 'devices:0,tickets:0,work_notes:0' && empty.people > 0 && empty.chat.includes('No, start empty') && empty.chat.some((x) => /You asked to start empty, so I took out the \d+ demo records/.test(x)), [a.status, a.tests, empty]);
   await ctx.close();
 }
 /* ---------- What only React can get wrong: warnings, carets, handlers fired twice, focus, the other pages ---------- */
@@ -1448,6 +1772,10 @@ async function flowSizes(browser, url) {
     await page.goto(url); await page.waitForSelector('.ob-card', { timeout: 20000 }); await sleep(200);
     await fitBoth(page, at + 'onboarding');
     await enter(page, url); await fitBoth(page, at + 'home');
+    await page.fill('#home-prompt', 'a clinic that books patient appointments'); await page.locator('#home-go').click(); await page.waitForSelector('.iv-ask'); await fitBoth(page, at + 'the questions before a build');
+    if (phone) { const o = await st(page, () => { const r = (s) => document.querySelector(s).getBoundingClientRect(); return { ask: r('.iv-ask').top, plan: r('.iv-canvas').top }; }); check(at + 'the question card comes first and the plan so far is under it', o.ask < o.plan, o); }
+    await page.locator('.iv-usual').click(); await page.waitForSelector('.iv-act .iv-build'); await fitBoth(page, at + 'the plan to approve');
+    await page.locator('.iv-over').click(); await page.waitForSelector('#home-prompt'); await page.fill('#home-prompt', '');
     if (phone) {
       const b = await st(page, () => { const r = (s) => document.querySelector(s).getBoundingClientRect(), a = r('.act-launch'), ws = r('.ws-btn'), ac = r('.acct'), bar = r('.titlebar.phone'); const hit = (x, y) => x.left < y.right && y.left < x.right && x.top < y.bottom && y.top < x.bottom; return { inBar: a.top >= bar.top && a.bottom <= bar.bottom, overWs: hit(a, ws), overAcct: hit(a, ac), w: a.width, h: a.height }; });
       check(at + 'the Agents button sits in the title bar, 44px, and covers neither the workspace switcher nor the account', b.inBar && !b.overWs && !b.overAcct && b.w >= 44 && b.h >= 44, b);

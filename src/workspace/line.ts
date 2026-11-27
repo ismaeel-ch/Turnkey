@@ -1,6 +1,19 @@
 import { modelProblem } from '@/shared/api-error';
 import type { AppDef, AppTable, BackedDef, Brief, BriefedDef, Check, Untrusted } from '@/shared/types/app';
-import type { PlanSpec } from '@/shared/plan';
+import {
+  EXTRA_FIELDS,
+  backendFromPlan,
+  briefFromPlan,
+  checkPlan,
+  mendToPlan,
+  outlineOf,
+  outlineProblems,
+  planOk,
+  slotValue,
+  teamFor,
+  wantsDemoData,
+  type PlanSpec,
+} from '@/shared/plan';
 import type {
   AppRecord,
   ChatCard,
@@ -55,11 +68,13 @@ import {
   buildDatabase,
   checkBackendLive,
   checkBackendShape,
+  LIMITS,
   checkBrief,
   checkSchemaShape,
   chk,
   deriveEndpoints,
   fallbackBackend,
+  hasProcess,
   fallbackUI,
   issuesOf,
   normBackend,
@@ -74,8 +89,21 @@ import { checkScreensShape, checkViews, mendViews, normUI, normViews, renderView
 import { CONNECTORS, REC, allConnectors, callConnector, connOn } from './builds';
 import { TEAMS, checkTeam, stopTeam, teamNeeds } from './team';
 import { checkBoard, normBoard } from './room';
+import { removeDemoData } from './demo-data';
 import { SUITES, TESTS, runTestsSync } from './tests';
-import { applyAuto, flowDefault, flowList, flowOf, runReview, showGate, stepAfter, verifyFindings } from './custom';
+import {
+  APPROVE_AT,
+  CODE_AT,
+  STEP_MAX,
+  applyAuto,
+  flowDefault,
+  flowList,
+  flowOf,
+  runReview,
+  showGate,
+  stepAfter,
+  verifyFindings,
+} from './custom';
 import { REVIEWERS } from './reviewers';
 import { testerSteps } from './tester';
 // Not the orchestrator's index: that pulls in LangGraph (about 800 KB), which loads only when a build starts.
@@ -351,6 +379,65 @@ export function newRun(app: AppRecord, kind: string, name: string, mode: string)
   return run;
 }
 
+/* ---------- a build that follows a plan the owner approved ---------- */
+/** Whether a build can follow this plan: it is whole and passes its checks. Looked at once per plan. */
+const FOLLOWED = new WeakMap<PlanSpec, boolean>();
+const followable = (plan: PlanSpec) => {
+  let ok = FOLLOWED.get(plan);
+  if (ok === undefined) {
+    try {
+      ok = Array.isArray(plan.people) && Array.isArray(plan.lists) && !!plan.permissions && planOk(plan);
+    } catch {
+      ok = false; // a damaged plan from storage must not stop the build
+    }
+    FOLLOWED.set(plan, ok);
+  }
+  return ok;
+};
+/**
+ * The plan this build follows, or null. Only a Live build follows its plan: a saved build replays recorded work, and
+ * its plan (worked out from that recording) is there to be shown. A plan that is not whole or fails its checks is
+ * not followed either: that build asks its agents as it did before there were plans.
+ */
+export const planOf = (app: AppRecord): PlanSpec | null => (app.mode === 'live' && app.plan && followable(app.plan) ? app.plan : null);
+
+/** The first station of a planned build: the Planner already wrote the plan, so code reads the brief off it. No model call. */
+export function applyPlan(app: BuildApp, run: Run): StationResult {
+  const plan = planOf(app) as PlanSpec,
+    b = briefFromPlan(plan),
+    checks = [...checkPlan(plan), ...checkBrief(b)];
+  if (checks.every((c) => c.ok)) {
+    app.def.brief = b;
+    if (!app.renamed) app.name = b.name;
+    toolCall(ctxOf(app, run, 'researcher'), 'set_tab_title', { title: app.name }, () => ({ ok: true }), 'frontend');
+  }
+  const n = plan.stages ? plan.stages.stages.length : 0;
+  return {
+    checks,
+    facts: [
+      plan.people.length + (plan.people.length === 1 ? ' kind of person' : ' kinds of people'),
+      plan.lists.length + (plan.lists.length === 1 ? ' list' : ' lists'),
+      n ? n + ' stages' : 'No stages',
+    ],
+  };
+}
+
+/**
+ * Writes the team the plan calls for into the app's workflow, before a planned build starts: the steps code does,
+ * the pause for the owner, and the reviews. It only adds: whatever the owner already set by hand stays.
+ */
+export function flowFromPlan(app: AppRecord) {
+  const plan = planOf(app);
+  if (!plan) return;
+  const flow = flowOf(app),
+    team = teamFor(plan);
+  for (const step of team.steps) if (step.by === 'code' && CODE_AT.includes(step.id)) flow.by[step.id] = 'rules';
+  for (const pause of team.pauses) if (APPROVE_AT.includes(pause.after)) flow.approve[pause.after] = true;
+  for (const review of team.reviews)
+    if (REVIEWERS[review.id] && !flow.reviewers.includes(review.id) && flow.reviewers.length < STEP_MAX) flow.reviewers.push(review.id);
+  flow.reviewers.sort((a, b) => stationIdx(stepAfter(flow, a)) - stationIdx(stepAfter(flow, b)));
+}
+
 /* ---------- what each station does with an agent's output ---------- */
 export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: number) => StationResult> = {
   research(app, out, run) {
@@ -358,6 +445,8 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
       checks = checkBrief(b);
     if (checks.every((c) => c.ok)) {
       b.sources = arr(app.lookups);
+      // answered in the interview before the build: the brief records the decision, and the line does not stop to ask
+      if (b.question && app.answers.q != null) b.decision = { text: b.question.text, answer: b.question.options[app.answers.q] };
       app.def.brief = b;
       if (!app.renamed) app.name = b.name;
       toolCall(
@@ -379,7 +468,20 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
   },
   database(app, out, run, attempt = 1) {
     const sc = normSchema(out, app.def.brief, attempt >= 3, app.shared ? SHARE.maxRows : 0);
+    const plan = planOf(app);
+    // on the last attempt code brings the tables back to the plan instead of failing the build
+    if (plan && attempt >= 3) sc.tables = mendToPlan(plan, sc.tables);
     let checks = checkSchemaShape(sc, app.def.brief);
+    if (plan) {
+      const off = outlineProblems(plan, sc.tables);
+      checks.push(
+        chk(
+          'The tables are the lists of the plan you approved',
+          !off.length,
+          off.length ? off.join('. ') + '.' : plan.lists.length + ' lists, as planned',
+        ),
+      );
+    }
     if (checks.every((c) => c.ok)) {
       checks = checks.concat(buildDatabase(app, sc, ctxOf(app, run, 'database')));
       if (checks.every((c) => c.ok)) {
@@ -535,7 +637,8 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
   },
 };
 export const FALLBACK: Dict<(app: BuildApp, run: Run) => StationResult> = {
-  backend: (app, run) => APPLY.backend(app, fallbackBackend(app.def), run),
+  // with a plan the rules are the plan's own stages, moves and permissions; without one, safe defaults
+  backend: (app, run) => APPLY.backend(app, planOf(app) ? backendFromPlan(planOf(app) as PlanSpec) : fallbackBackend(app.def), run),
   views: (app, run) => APPLY.views(app, suggestViews(app.def), run),
   screens: (app, run) => APPLY.screens(app, fallbackUI(app.def), run),
   walkthrough: (app, run) =>
@@ -745,14 +848,16 @@ export const pAccess = (def: BriefedDef) =>
     )
     .join('\n');
 export const pFlow = (def: BackedDef) =>
-  'table ' +
-  def.process.table +
-  ', column ' +
-  def.process.column +
-  ', initial ' +
-  def.process.initial +
-  '\n' +
-  def.process.transitions.map((x) => x.id + ': ' + x.from.join('|') + ' -> ' + x.to + ' by ' + x.roles.join('|')).join('\n');
+  !def.process.states.length
+    ? 'none: records in this app do not move through stages, so there are no transitions'
+    : 'table ' +
+      def.process.table +
+      ', column ' +
+      def.process.column +
+      ', initial ' +
+      def.process.initial +
+      '\n' +
+      def.process.transitions.map((x) => x.id + ': ' + x.from.join('|') + ' -> ' + x.to + ' by ' + x.roles.join('|')).join('\n');
 export const pRoom = (def: AppDef) => {
   const tm = def.team;
   if (!tm) return '';
@@ -824,6 +929,27 @@ export const APP_ICONS = [
 export const TOUR_RULES =
   'tour: 4 to 7 steps that replay the user stories as an acceptance test, in order. Each step: {"role":"role id","do":"create|see|transition|denied|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list","screen":"screen name","say":"one present-tense sentence naming the person"}. create: "values" for the required columns (not status; leave out the owner column when the creating role owns the row). see: that role lists the table and must find the record created earlier. transition: runs a workflow transition on that record; it must be allowed for that role from the record\'s current state. denied: that role attempts "action" on "table" and must be refused by the access rules. open: opens "screen". ' +
   VALUE_RULES;
+/** For the Database agent of a planned build: the lists and fields the owner approved, which it must keep to. */
+const pPlanLists = (app: BuildApp) => {
+  const plan = planOf(app);
+  return plan
+    ? '\n\nLISTS OF THE PLAN (name:type, * = required):\n' +
+        outlineOf(plan) +
+        '\n\nThe owner approved these lists before the build. Build exactly these tables: the same names, every column with the same name and type, the same title and owner. Do not add or leave out a table. You may add at most ' +
+        EXTRA_FIELDS +
+        ' columns to a table, and only when the seed data or an "only their own records" rule needs them.' +
+        (plan.demoData ? '' : ' The owner starts with no demo data, so the rows you write are used for the tests only.')
+    : '';
+};
+/** For the Backend agent of a planned build: the stages, moves and permissions the owner approved. */
+const pPlanRules = (app: BuildApp) => {
+  const plan = planOf(app);
+  return plan
+    ? '\n\nRULES OF THE PLAN: ' +
+        JSON.stringify(backendFromPlan(plan)) +
+        '\n\nThe owner approved these rules before the build. Keep the states, who may make each transition, and the access of every role on every table as they are. You add the craft: a tone for each state, and "set" where a transition should stamp the acting user or the date.'
+    : '';
+};
 export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
   research: (app, f) =>
     HEAD('Researcher') +
@@ -835,11 +961,22 @@ export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
     HEAD('Database') +
     'BRIEF: ' +
     pBrief(app.def.brief) +
-    '\n\nDesign the SQLite tables and realistic made-up seed data.\n- One table per entity, with the same names. Every table gets id, created_by and created_at automatically: do not list them.\n- Column types: text, longtext, number, money, date, datetime, bool, select, ref, user. select needs "options" (snake_case). ref needs "ref" (a table name). user links to a person who signs in; add "role" to limit it to one role.\n- The table "' +
-    app.def.brief.process.entity +
-    '" needs a required select column named "status" with exactly these options: ' +
-    app.def.brief.process.states.join(', ') +
-    '.\n- "title" is the column shown as the record\'s name. "owner" is the user column that says whose record it is, or null. When the brief says people of a role see only their own records of a table (their own tickets, their own appointments), that table needs a user column for that person, limited to that role, and it is the owner.\n- At most 8 columns per table. No table named users.\n- "users": 5 to 7 people with realistic full names, at least one per role.\n- "rows": 6 to 10 rows per table. ' +
+    pPlanLists(app) +
+    '\n\nDesign the SQLite tables and realistic made-up seed data.\n- One table per entity, with the same names. Every table gets id, created_by and created_at automatically: do not list them.\n- Column types: text, longtext, number, money, date, datetime, bool, select, ref, user. select needs "options" (snake_case). ref needs "ref" (a table name). user links to a person who signs in; add "role" to limit it to one role.\n' +
+    (hasProcess(app.def.brief)
+      ? '- The table "' +
+        app.def.brief.process.entity +
+        '" needs a required select column named "status" with exactly these options: ' +
+        app.def.brief.process.states.join(', ') +
+        '.'
+      : '- Records in this app do not move through stages: no table needs a "status" column.') +
+    '\n- "title" is the column shown as the record\'s name. "owner" is the user column that says whose record it is, or null. When the brief says people of a role see only their own records of a table (their own tickets, their own appointments), that table needs a user column for that person, limited to that role, and it is the owner.\n- At most ' +
+    (planOf(app) ? LIMITS.cols : 8) +
+    ' columns per table. No table named users.\n- "users": ' +
+    (app.def.brief.roles.length === 1
+      ? '1 person with a realistic full name'
+      : '5 to 7 people with realistic full names, at least one per role') +
+    '.\n- "rows": 6 to 10 rows per table. ' +
     VALUE_RULES +
     '\n\nFORMAT: {"tables":[{"name":"","label":"Plural","one":"Singular","title":"column","owner":"column or null","columns":[{"name":"","label":"","type":"","required":true,"options":[],"ref":"","role":""}],"rows":[{"column":"value"}]}],"users":[{"name":"Full Name","role":"role id"}]}' +
     fbText(f),
@@ -849,9 +986,14 @@ export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
     pBrief(app.def.brief) +
     '\n\nTABLES (name:type, * = required):\n' +
     pTables(app.def) +
-    '\n\nWrite the workflow and the access rules.\n- "status": the workflow on table "' +
-    app.def.brief.process.entity +
-    '", column "status". Use exactly the states stored in that column. Give each a label and a tone (neutral, info, success, warning, danger). "initial" is the first state. Transitions: id (snake_case verb), label, from (list of states), to, roles (role ids). Every state must be reachable. Optional "set": {"column": ":me"} stamps the acting user on a user column.\n- "access": one entry for EVERY table and EVERY role. list: "all", "own" (only rows whose owner is the signed-in user) or "none". create: true or false. update: "all", "own" or "none". delete: true or false. Give each role only what its stories need; every role must be able to list something. Where the brief says people of a role see or edit only their own records, use "own" on that table (it works on tables that have an owner column).\n- Optional "team": only if the app\'s main job is done by AI agents (checking, researching, reviewing, debating), define 2 to 4 app agents that work one after another on one record of the workflow table. Otherwise leave "team" out. {"title":"","about":"one sentence","input":{"table":"workflow table","column":"the long text column the agents read"},"start":"transition id that opens a run","done":"transition id that closes it","agents":[{"id":"","name":"","job":"one sentence","writes":"table it adds rows to","updates":"table whose rows it edits","sets":["columns of the workflow table it fills in"]}]}. Every table an agent writes must link to the workflow table, and one role must be allowed to create and update all of it and to run both transitions.\n\nFORMAT: {"status":{"table":"","column":"status","states":[{"id":"","label":"","tone":""}],"initial":"","transitions":[{"id":"","label":"","from":[""],"to":"","roles":[""]}]},"access":[{"table":"","role":"","list":"","create":false,"update":"","delete":false}]}' +
+    pPlanRules(app) +
+    '\n\nWrite the workflow and the access rules.\n' +
+    (hasProcess(app.def.brief)
+      ? '- "status": the workflow on table "' +
+        app.def.brief.process.entity +
+        '", column "status". Use exactly the states stored in that column. Give each a label and a tone (neutral, info, success, warning, danger). "initial" is the first state. Transitions: id (snake_case verb), label, from (list of states), to, roles (role ids). Every state must be reachable. Optional "set": {"column": ":me"} stamps the acting user on a user column.'
+      : '- This app has no workflow: its records do not move through stages. Leave "status" out of your answer.') +
+    '\n- "access": one entry for EVERY table and EVERY role. list: "all", "own" (only rows whose owner is the signed-in user) or "none". create: true or false. update: "all", "own" or "none". delete: true or false. Give each role only what its stories need; every role must be able to list something. Where the brief says people of a role see or edit only their own records, use "own" on that table (it works on tables that have an owner column).\n- Optional "team": only if the app\'s main job is done by AI agents (checking, researching, reviewing, debating), define 2 to 4 app agents that work one after another on one record of the workflow table. Otherwise leave "team" out. {"title":"","about":"one sentence","input":{"table":"workflow table","column":"the long text column the agents read"},"start":"transition id that opens a run","done":"transition id that closes it","agents":[{"id":"","name":"","job":"one sentence","writes":"table it adds rows to","updates":"table whose rows it edits","sets":["columns of the workflow table it fills in"]}]}. Every table an agent writes must link to the workflow table, and one role must be allowed to create and update all of it and to run both transitions.\n\nFORMAT: {"status":{"table":"","column":"status","states":[{"id":"","label":"","tone":""}],"initial":"","transitions":[{"id":"","label":"","from":[""],"to":"","roles":[""]}]},"access":[{"table":"","role":"","list":"","create":false,"update":"","delete":false}]}' +
     fbText(f),
   views: (app, f) =>
     HEAD('View advisor') +
@@ -899,7 +1041,8 @@ export const PROMPTS: Dict<(app: BuildApp, f?: string[] | null) => string> = {
     LOGO_FILLS.join(', ') +
     '; mark is one of ' +
     LOGO_MARKS.join(', ') +
-    '. Pick what suits the kind of work, not the same every time.\n- 4 to 9 screens. type is one of the views recommended for that table (the default view of the page; people can switch to the table\'s other views), or "form" (a page that creates one record), or one "dashboard" page. A dashboard is added for every role automatically.\n- Each screen: name, type, table, roles, columns (3 to 6 column names), icon (same icon list), and optionally "label" (the column shown as the title of a card or calendar entry). A role may only get a screen for a table it may list (for a form: create). Every role needs at least one screen. Use a board for the workflow table.' +
+    '. Pick what suits the kind of work, not the same every time.\n- 4 to 9 screens. type is one of the views recommended for that table (the default view of the page; people can switch to the table\'s other views), or "form" (a page that creates one record), or one "dashboard" page. A dashboard is added for every role automatically.\n- Each screen: name, type, table, roles, columns (3 to 6 column names), icon (same icon list), and optionally "label" (the column shown as the title of a card or calendar entry). A role may only get a screen for a table it may list (for a form: create). Every role needs at least one screen.' +
+    (hasProcess(app.def.brief) ? ' Use a board for the workflow table.' : '') +
     (app.def.team
       ? ' This app has its own agent team: include one screen of type "agents" on table "' +
         app.def.team.input.table +
@@ -1195,6 +1338,23 @@ function linePorts(app: BuildApp, run: Run, ctl: RunCtl, o: LineOpts): Ports {
       }
       L.status = 'working';
       L.attempt = attempt;
+      if (st.id === 'research' && planOf(app)) {
+        // the owner approved a plan before the build: the Planner's work is done, so this step reads it. No model call.
+        commit();
+        if (attempt === 1) say(app, agent, 'You approved the plan, so I start from it: nothing is asked again.');
+        const s0 = stepStart(run, st.id, agent, 'Plan you approved', 'tool');
+        await pace(app, 500);
+        cur.res = applyPlan(app, run);
+        stepEnd(s0, true);
+        L.status = 'checking';
+        commit();
+        await pace(app, 420);
+        stepEnd(
+          stepStart(run, st.id, 'orchestrator', 'Checks', 'check'),
+          cur.res.checks.every((c) => c.ok),
+        );
+        return;
+      }
       if (byRules) {
         // the owner gave this step to code: no agent, no model call
         L.byRules = true;
@@ -1425,6 +1585,19 @@ function linePorts(app: BuildApp, run: Run, ctl: RunCtl, o: LineOpts): Ports {
               ' Nothing is changed until you apply one.',
           );
       }
+      // "No, start empty": the agents still wrote demo data, because the checks need records to act on. Now that the
+      // database is built and checked it is taken out; the rows stay on record so they can be added again.
+      if (!wantsDemoData(app.plan) && stationIdx(o.first.id) <= stationIdx('database')) {
+        const gone = removeDemoData(app, { quiet: true });
+        if (gone && gone.removed)
+          say(
+            app,
+            'orchestrator',
+            'You asked to start empty, so I took out the ' +
+              gone.removed +
+              ' demo records the checks used. "Add demo data again" on the App page brings them back.',
+          );
+      }
       say(
         app,
         'orchestrator',
@@ -1485,8 +1658,11 @@ export async function runBuild(app: BuildApp, from?: string) {
   if (RUNS[app.id]) return;
   const i0 = from ? Math.max(0, stationIdx(from)) : 0,
     part = i0 > 0,
-    live = app.mode === 'live',
-    flow = flowOf(app);
+    live = app.mode === 'live';
+  // a planned build gets the team its plan calls for: steps done by code, the pause for the owner, the reviews
+  // The plan sets the team once, on the first build. After that the workflow is the owner's to change.
+  if (!part && !app.runs.length) flowFromPlan(app);
+  const flow = flowOf(app);
   const run = newRun(app, part ? 'rerun' : 'build', part ? 'From ' + STATIONS[i0].name : 'Build', String(app.mode)),
     ctl: RunCtl = (RUNS[app.id] = {
       stop: false,
@@ -1516,6 +1692,8 @@ export async function runBuild(app: BuildApp, from?: string) {
   if (!part) {
     app.def = blankDef() as BackedDef; // the stations fill it in, in order
     app.answers = {};
+    const asked = app.tpl && app.plan ? slotValue(app.plan, 'q') : null;
+    if (asked != null) app.answers.q = Number(asked) || 0; // the owner answered the saved build's question before the build
     app.lookups = [];
     app.matrix = null;
     app.seed = null;
@@ -1536,6 +1714,13 @@ export async function runBuild(app: BuildApp, from?: string) {
   // what the orchestrator says before the first station; it runs inside the graph, so Stop works here too
   const open = async () => {
     if (!part) pushChat(app, 'user', String(app.request));
+    if (!part)
+      (app.plan?.answers || [])
+        .filter((x) => x.by === 'you')
+        .forEach((x) => {
+          pushChat(app, STATIONS[0].agent, x.question);
+          pushChat(app, 'user', x.answer);
+        });
     say(
       app,
       'orchestrator',
@@ -1558,7 +1743,7 @@ export async function runBuild(app: BuildApp, from?: string) {
       say(
         app,
         'orchestrator',
-        'This app has its own workflow: ' +
+        (planOf(app) ? 'For this app the build ' : 'This app has its own workflow: ') +
           custom.map((x) => x.text.charAt(0).toLowerCase() + x.text.slice(1)).join(', ') +
           '.' +
           (!live && Object.keys(flow.notes).length
@@ -1799,13 +1984,13 @@ export function resetAppData(app: AppRecord) {
     },
     'run_sql',
     {
-      purpose: 'reset data',
+      purpose: 'start over',
     },
     () => r,
     'backend',
   );
-  if (r.problems.length) toast('Reset finished with ' + r.problems.length + ' skipped rows.', 'warning');
-  else toast('Data reset. ' + r.rows + ' seed rows are back.', 'success');
+  if (r.problems.length) toast('Started over, with ' + r.problems.length + ' rows left out.', 'warning');
+  else toast('Started over. The ' + r.rows + ' demo records are back.', 'success');
   commit();
   return r;
 }

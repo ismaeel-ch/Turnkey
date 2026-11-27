@@ -44,6 +44,8 @@ import { DBX, createTableSQL, dbCount, dbTables } from './db';
 import { TYPE_LABEL, VIEW_ICON, VIEW_LABEL, accOf, colOf, deriveEndpoints, roleName, tableOf } from './engine';
 import { DATA_VIEWS, VIEW_WHAT, viewFit, viewsOf } from './viewspec';
 import { HOME_TEMPLATES, REC, matchTemplate } from './builds';
+import { beginInterview, interviewNow, plannerReady } from './interview';
+import { InterviewView } from './interview-ui';
 import { QUESTS } from './quests';
 import { TEAMS, TeamAv } from './team';
 import { StationTests, TestsView, suiteOf, testable } from './tests';
@@ -304,7 +306,10 @@ export function Home() {
     mode = modeNow(),
     demo = !mode.live,
     hr = new Date().getHours();
-  const go = () => {
+  // A typed sentence is followed by a few questions and a plan to approve. A saved build stands in when no model can be
+  // called; a live sentence gets the interview once the Planner is connected, and builds straight away until then.
+  const guided = demo || plannerReady();
+  const go = (skip?: boolean) => {
     const text = str(h.text);
     if (!text) {
       h.note = 'Describe the app in one sentence first.';
@@ -336,13 +341,9 @@ export function Home() {
           'info',
           6500,
         );
-      h.note = '';
-      h.text = '';
-      startBuild({
-        request: REC[tpl].sentence,
-        tpl,
-      });
-    } else if (
+      beginInterview(REC[tpl].sentence, tpl, skip);
+    } else if (guided) beginInterview(text, null, skip);
+    else if (
       startBuild({
         request: text,
       })
@@ -538,6 +539,7 @@ export function Home() {
     </>
   );
   const mine = apps.length ? mine0 : null;
+  if (interviewNow()) return <InterviewView />;
   return (
     <div className="home scroll">
       <div className="home-in">
@@ -547,7 +549,9 @@ export function Home() {
           {(acct?.name || '').split(' ')[0]}. What do you want to build?
         </h1>
         <p className="lead muted">
-          Say what the work is in one sentence. A team of agents builds the whole app, tests it and hands it over ready to use.
+          {guided
+            ? 'Say it in one sentence. Turnkey asks a few short questions, shows you a plan in plain words, and builds only after you say yes.'
+            : 'Say what the work is in one sentence. A team of agents builds the whole app, tests it and hands it over ready to use.'}
         </p>
         <div className="prompt" data-tour="prompt">
           <Textarea
@@ -577,42 +581,50 @@ export function Home() {
               {mode.long}
             </span>
             <span className="grow" />
-            <Btn className="btn primary" onClick={go}>
-              <Icon n="sparkle" />
-              Build
+            {guided && (
+              <Btn className="btn subtle" id="home-skip" onClick={() => go(true)}>
+                Skip the questions
+              </Btn>
+            )}
+            <Btn className="btn primary" id="home-go" onClick={() => go()}>
+              {guided ? (
+                <>
+                  Continue
+                  <Icon n="arrowRight" />
+                </>
+              ) : (
+                <>
+                  <Icon n="sparkle" />
+                  Build
+                </>
+              )}
             </Btn>
           </div>
         </div>
         {h.note && <MBar tone="warning">{h.note}</MBar>}
-        <ol className="how" aria-label="How it works">
-          <li>
-            <span className="how-n">1</span>
-            <span>
-              <strong>Describe</strong>
-              <span className="t-cap muted">One sentence about the work</span>
-            </span>
-          </li>
-          <li>
-            <span className="how-n">2</span>
-            <span>
-              <strong>Watch it being built</strong>
-              <span className="t-cap muted">Agents build and test it while you look on</span>
-            </span>
-          </li>
-          <li>
-            <span className="how-n">3</span>
-            <span>
-              <strong>Use it</strong>
-              <span className="t-cap muted">The working app, with sample data</span>
-            </span>
-          </li>
-          <li>
-            <span className="how-n">4</span>
-            <span>
-              <strong>Release and share</strong>
-              <span className="t-cap muted">One link installs the app alone</span>
-            </span>
-          </li>
+        <ol className="how" aria-label="What happens next">
+          {(guided
+            ? [
+                ['A few questions', 'Up to five, one at a time. Skip any and the usual choice is used'],
+                ['A plan you approve', 'Who uses it, what it keeps and who builds it. Nothing is built before you say yes'],
+                ['A team builds it', 'Only the agents this app needs, while you look on'],
+                ['Release, then improve', 'Share it by link. Later, ask for a fix or a new feature in plain words'],
+              ]
+            : [
+                ['Describe', 'One sentence about the work'],
+                ['Watch it being built', 'Agents build and test it while you look on'],
+                ['Use it', 'The working app, with sample data'],
+                ['Release and share', 'One link installs the app alone'],
+              ]
+          ).map(([title, text], i) => (
+            <li key={title}>
+              <span className="how-n">{i + 1}</span>
+              <span>
+                <strong>{title}</strong>
+                <span className="t-cap muted">{text}</span>
+              </span>
+            </li>
+          ))}
         </ol>
         {mine}
         <div className="row between sec" data-tour="quests">
@@ -1674,10 +1686,7 @@ export function StationOut({ app, st }: { app: AppRecord; st: Station }) {
           </ul>
         </div>
         <div className="out-c">
-          <h4>
-            {'Process on '}
-            {label(b.process.entity).toLowerCase()}
-          </h4>
+          <h4>{b.process.states.length ? 'Process on ' + label(b.process.entity).toLowerCase() : 'No stages: records are just kept'}</h4>
           <div className="flow">
             {b.process.states.map((s, i) => [
               i > 0 && <Icon key={'a' + i} n="arrowRight" s="12" />,

@@ -74,6 +74,7 @@ import {
   sqlRun,
 } from './db';
 import { appUsers, reseed, tourExec } from './engine';
+import { demoCounts, demoUndo, planDemoRemoval, tempDemoData } from './demo-data';
 import { DATA_VIEWS, migrateApp } from './viewspec';
 import { REC, TEMPLATES } from './builds';
 import { QUESTS } from './quests';
@@ -81,6 +82,9 @@ import { TEAMS } from './team';
 import { TESTS, runTestsSync, suiteOf } from './tests';
 import { FLOW, isDark } from './flow';
 import { LIVE, RUNS, STATIONS, deleteApp, resumeInterrupted, runBuild, startBuild, stopRun } from './line';
+import type { PlanSpec } from '@/shared/plan/types';
+/** The Planner is loaded on first use, so only its types are imported here. */
+type Planner = typeof import('./planner');
 import { cancelRerun, queuedRerun } from './rerun';
 import { buildPack, editFromCanvas, parseChange } from './changes';
 import { AddStepDialog, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
@@ -896,18 +900,21 @@ const noInstallOffer = () => false;
 export function ResetDialog() {
   const apps = S.session ? myApps() : [],
     out = !S.session;
+  const canStartOver = (a: AppRecord) => a.status === 'ready' && !RUNS[a.id] && dbExists(a.id);
+  // records people added themselves: starting over deletes them, so the row says how many
+  const own = apps.reduce((n, a) => n + (canStartOver(a) ? demoCounts(a).own : 0), 0);
   const act = (kind: string) => {
     if (kind === 'data') {
       let n = 0;
       apps.forEach((a) => {
-        if (a.status === 'ready' && !RUNS[a.id] && dbExists(a.id)) {
+        if (canStartOver(a)) {
           reseed(a);
           n++;
         }
       });
       commit();
       closeDialog();
-      return toast('Seed data restored in ' + n + ' app' + (n === 1 ? '' : 's') + '.', 'success');
+      return toast('Started over in ' + n + ' app' + (n === 1 ? '' : 's') + '. The demo data is back.', 'success');
     }
     if (kind === 'apps') {
       apps.forEach(deleteApp);
@@ -936,17 +943,19 @@ export function ResetDialog() {
         </SetRow>
         {!out && (
           <SetRow
-            title="Restore seed data"
+            title="Start every app over"
             text={
-              'Empties the tables of your ' +
+              'Empties the lists of your ' +
               apps.length +
               ' app' +
               (apps.length === 1 ? '' : 's') +
-              ' and puts the original rows back. Tables, screens and your changes stay.'
+              ' and puts the demo data back. ' +
+              (own ? 'This deletes the ' + own + (own === 1 ? ' record' : ' records') + ' you added. ' : '') +
+              'Lists, screens and your changes stay. To remove only the made-up records, open an app and use Remove demo data.'
             }
           >
-            <Btn className="btn" disabled={!apps.length} onClick={() => act('data')}>
-              Restore
+            <Btn className="btn" data-reset="data" disabled={!apps.length} onClick={() => act('data')}>
+              Start over
             </Btn>
           </SetRow>
         )}
@@ -1257,7 +1266,7 @@ export function DialogHost() {
             </>
           }
         >
-          <p>{c.body}</p>
+          {typeof c.body === 'string' ? <p>{c.body}</p> : c.body}
         </Dialog>
       );
     }
@@ -1948,6 +1957,12 @@ export function boot() {
     },
     state: () => S,
     view: () => U,
+    /** The guided start of a build: the Planner's two calls (loaded on first use), and a build that follows the plan they return. */
+    plan: {
+      ask: (...args: Parameters<Planner['askPlanner']>) => import('./planner').then((m) => m.askPlanner(...args)),
+      write: (...args: Parameters<Planner['writePlan']>) => import('./planner').then((m) => m.writePlan(...args)),
+      build: (request: string, plan: PlanSpec) => startBuild({ request, plan }),
+    },
     teams: () => TEAMS,
     tests: () => TESTS,
     share: {
@@ -1988,12 +2003,18 @@ export function boot() {
     },
     activity: (appId: string) => activityNow(appId),
     history: historyHooks,
+    demo: {
+      counts: (id: string) => demoCounts(S.apps[id]),
+      plan: (id: string) => planDemoRemoval(S.apps[id]),
+      canUndo: (id: string) => !!demoUndo(S.apps[id]),
+    },
     safety: safetyCopyOf,
     runTests: (app: AppRecord) => runTestsSync(app),
     /** Runs one walkthrough step against an app's data and undoes what it changed. */
     tourStep: (id: string, step: TourStep | TourStep[], rows?: Dict<number>) => {
       dbSavepoint(id, 'hook');
       try {
+        tempDemoData(S.apps[id]);
         const st = { rows: rows || {}, last: null };
         return Array.isArray(step) ? step.map((x) => tourExec(S.apps[id], st, x)) : tourExec(S.apps[id], st, step);
       } finally {

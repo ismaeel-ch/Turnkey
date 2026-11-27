@@ -30,11 +30,13 @@ import {
 } from './core';
 import { appUsers, roleName } from './engine';
 import { testStats } from './tests';
-import { AGENTS, PENDING, RUNS, STATIONS, deleteApp, resetAppData } from './line';
+import { AGENTS, PENDING, RUNS, STATIONS, deleteApp } from './line';
+import { demoMenuItems } from './demo-data-ui';
 import { flowOf } from './custom';
 import { REVIEWERS } from './reviewers';
 import { Btn, Avatar, Empty, Icon, Logo } from './ui';
 import { startWalk } from './runtime';
+import type { GuideEntry } from './firstrun';
 import { enterSolo, openShare } from './share';
 import { AppLogo, isDirty, relOf } from './release';
 import { Inspector, isDetail, rebuildAsk, viewOf } from './shell-a';
@@ -268,6 +270,8 @@ export function AppSheets({
   go,
   swap,
   solo,
+  guide,
+  noSignIn,
 }: {
   app: AppRecord;
   pane: PhonePane;
@@ -278,6 +282,10 @@ export function AppSheets({
   go: (id: string) => void;
   swap: (u: AppUser | null) => void;
   solo?: SoloItem[] | null;
+  /** the first-use guide's entries: "Show me around" and "Getting started" */
+  guide?: GuideEntry[];
+  /** an app with one kind of person has no sign-in screen to go back to */
+  noSignIn?: boolean;
 }) {
   const def = app.def,
     close = () => setPaneSheet(pane, null),
@@ -301,21 +309,36 @@ export function AppSheets({
     );
   return (
     <Sheet title={user.name} sub={roleName(def, user.role) + ' · ' + app.name} onClose={close}>
-      <div className="sheet-h">Switch person</div>
+      {users.length > 1 && (
+        <>
+          <div className="sheet-h">Switch person</div>
+          <div className="sheet-list">
+            {users.map((u) => (
+              <SheetRow
+                key={u.id}
+                av={<Avatar name={u.name} size="sm" />}
+                label={u.name}
+                hint={roleName(def, u.role)}
+                on={u.id === user.id}
+                check={u.id === user.id}
+                onClick={() => swap(u)}
+              />
+            ))}
+          </div>
+        </>
+      )}
       <div className="sheet-list">
-        {users.map((u) => (
+        {(guide || []).map((it, i) => (
           <SheetRow
-            key={u.id}
-            av={<Avatar name={u.name} size="sm" />}
-            label={u.name}
-            hint={roleName(def, u.role)}
-            on={u.id === user.id}
-            check={u.id === user.id}
-            onClick={() => swap(u)}
+            key={'g' + i}
+            icon={it.icon}
+            label={it.label}
+            onClick={() => {
+              close();
+              it.on();
+            }}
           />
         ))}
-      </div>
-      <div className="sheet-list">
         {arr<SoloItem>(solo).map((it, i) =>
           it === '-' ? null : (
             <SheetRow
@@ -329,7 +352,7 @@ export function AppSheets({
             />
           ),
         )}
-        <SheetRow icon="signOut" label="Sign out" onClick={() => swap(null)} />
+        {!noSignIn && <SheetRow icon="signOut" label="Sign out" onClick={() => swap(null)} />}
       </div>
     </Sheet>
   );
@@ -498,21 +521,9 @@ export function AppLauncher({ app }: { app: AppRecord }) {
           disabled={!def.tour.length}
           onClick={() => startWalk(app)}
         />
-        <SheetRow
-          icon="reset"
-          label="Reset the data"
-          hint="Put the seed rows back"
-          onClick={async () => {
-            if (
-              await confirmBox({
-                title: 'Reset the data in ' + app.name + '?',
-                body: 'Every table is emptied and the original seed rows are put back.',
-                yes: 'Reset data',
-              })
-            )
-              resetAppData(app);
-          }}
-        />
+        {demoMenuItems(app).map((it) => (
+          <SheetRow key={it.label} icon={it.icon} label={it.label} onClick={it.on} />
+        ))}
       </div>
     </div>
   );

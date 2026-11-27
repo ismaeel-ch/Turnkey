@@ -112,7 +112,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const words = (s: string) => s.split('_').filter(Boolean).join(' ');
 const label = (s: string) => cap(words(s));
 const singular = (s: string) =>
-  /ies$/.test(s) ? s.replace(/ies$/, 'y') : /ses$/.test(s) ? s.replace(/es$/, '') : /s$/.test(s) ? s.replace(/s$/, '') : s;
+  /ies$/.test(s) ? s.replace(/ies$/, 'y') : /(ss|sh|ch|x|z)es$/.test(s) ? s.replace(/es$/, '') : /s$/.test(s) ? s.replace(/s$/, '') : s;
 const plural = (s: string) => (/s$/.test(s) ? s : /y$/.test(s) ? s.replace(/y$/, 'ies') : s + 's');
 const json = (v: unknown) => JSON.stringify(v);
 
@@ -135,8 +135,8 @@ function parseBrief(prompt: string): Brief {
   }
 }
 
-function parseTables(prompt: string): Table[] {
-  const block = section(prompt, /TABLES(?: \(name:type, \* = required\))?:\n/);
+function parseTables(prompt: string, head = /TABLES(?: \(name:type, \* = required\))?:\n/): Table[] {
+  const block = section(prompt, head);
   const tables: Table[] = [];
   for (const line of block.split('\n')) {
     const m = /^(\w+) \(title: (\w+), owner: (\w+)\): (.*)$/.exec(line.trim());
@@ -237,8 +237,63 @@ function researcher(prompt: string) {
 }
 
 /* ---------- Database ---------- */
+/**
+ * For a build that follows a plan the owner approved: exactly the lists of the plan, as the prompt gives them, with a
+ * few made-up rows for each. A date is a number of days from today, as the prompt's value rules ask.
+ */
+function plannedDatabase(lists: Table[], roles: { id: string }[]) {
+  const users = roles.flatMap((r, i) =>
+    roles.length === 1
+      ? [{ name: PEOPLE[0], role: r.id }]
+      : [
+          { name: PEOPLE[(i * 2) % PEOPLE.length], role: r.id },
+          { name: PEOPLE[(i * 2 + 1) % PEOPLE.length], role: r.id },
+        ],
+  );
+  const userOf = (role: string, i: number) => {
+    const idx = users.map((u, n) => (!role || u.role === role ? n + 1 : 0)).filter(Boolean);
+    return idx[i % idx.length];
+  };
+  const ROWS = 6;
+  const tables = lists.map((t) => ({
+    name: t.name,
+    label: label(t.name),
+    one: label(singular(t.name)),
+    title: t.title,
+    owner: t.owner,
+    columns: t.columns.map((c) => ({
+      name: c.name,
+      label: c.name === 'status' ? 'Stage' : label(c.name),
+      type: c.type,
+      required: c.required,
+      ...(c.type === 'select' ? { options: c.options } : {}),
+      ...(c.type === 'ref' ? { ref: c.ref } : {}),
+      ...(c.type === 'user' && c.role ? { role: c.role } : {}),
+    })),
+    rows: Array.from({ length: ROWS }, (_, i) => {
+      const row: Record<string, unknown> = {};
+      for (const c of t.columns) {
+        if (c.type === 'ref') row[c.name] = (i % ROWS) + 1;
+        else if (c.type === 'user') row[c.name] = userOf(c.role, i);
+        else if (c.type === 'select') row[c.name] = c.options[i % c.options.length];
+        else if (c.type === 'money') row[c.name] = 12.5 + i * 7.25;
+        else if (c.type === 'number') row[c.name] = i + 1;
+        else if (c.type === 'date') row[c.name] = i * 2 - 8;
+        else if (c.type === 'datetime') row[c.name] = i - 3 + ' 09:00';
+        else if (c.type === 'bool') row[c.name] = i % 2 === 0;
+        else if (c.type === 'longtext') row[c.name] = SENTENCES[i % SENTENCES.length];
+        else row[c.name] = c.name === t.title ? TITLES[i % TITLES.length] : 'Sample ' + words(c.name) + ' ' + (i + 1);
+      }
+      return row;
+    }),
+  }));
+  return { tables, users };
+}
+
 function database(prompt: string) {
   const brief = parseBrief(prompt);
+  const planned = parseTables(prompt, /LISTS OF THE PLAN \(name:type, \* = required\):\n/);
+  if (planned.length) return plannedDatabase(planned, brief.roles?.length ? brief.roles : [{ id: 'owner' }]);
   const roles = brief.roles?.length ? brief.roles : [{ id: 'manager', name: 'Manager' }];
   const entities = brief.entities?.length ? brief.entities : [{ name: 'records' }];
   const proc = brief.process || { entity: entities[entities.length - 1].name, states: ['new', 'in_progress', 'done'] };
@@ -317,6 +372,16 @@ function valuesFor(table: Table, users: { name: string; role: string }[], skip: 
 
 /* ---------- Backend ---------- */
 function backend(prompt: string) {
+  // a build that follows a plan: the plan's own stages, moves and permissions, as the prompt gives them
+  const fixed = /\n\nRULES OF THE PLAN: (.*)/.exec(prompt)?.[1];
+  if (fixed) {
+    try {
+      const rules = JSON.parse(fixed) as { status: unknown; access: unknown };
+      return rules.status ? rules : { access: rules.access };
+    } catch {
+      // not readable: answer as for a build with no plan
+    }
+  }
   const brief = parseBrief(prompt);
   const tables = parseTables(prompt);
   const roles = brief.roles?.map((r) => r.id) || ['manager'];
@@ -369,11 +434,22 @@ function views(prompt: string) {
     if (cat) use.push({ type: 'chart', x: cat.name, kind: 'bar', why: 'How many per ' + words(cat.name) + '.' });
     return { table: t.name, use };
   });
-  const main = tables.find((t) => t.name === flow?.table) || tables[tables.length - 1];
+  // With no workflow (a planned app whose records are just kept) the first table is the main one.
+  const main = flow ? tables.find((t) => t.name === flow.table) || tables[tables.length - 1] : tables[0];
   const widgets: Record<string, unknown>[] = [];
   if (main) {
     widgets.push({ kind: 'kpi', label: label(main.name), table: main.name, measure: 'count' });
-    const sel = main.columns.find((c) => c.name === (flow?.column || 'status')) || main.columns.find((c) => c.type === 'select');
+    const sel = flow
+      ? main.columns.find((c) => c.name === (flow.column || 'status')) || main.columns.find((c) => c.type === 'select')
+      : undefined;
+    if (!flow) {
+      const amount = main.columns.find((c) => c.type === 'money' || c.type === 'number');
+      const cat = catOf(main);
+      const date = dateOf(main);
+      if (amount) widgets.push({ kind: 'kpi', label: 'Total ' + words(amount.name), table: main.name, measure: 'sum:' + amount.name });
+      if (cat) widgets.push({ kind: 'bar', label: 'By ' + words(cat.name), table: main.name, x: cat.name });
+      if (date) widgets.push({ kind: 'line', label: 'Over time', table: main.name, x: date.name, bucket: 'month' });
+    }
     if (sel) {
       widgets.push({ kind: 'kpi', label: 'Open', table: main.name, where: { [sel.name]: sel.options[0] }, measure: 'count' });
       widgets.push({ kind: 'bar', label: 'By ' + words(sel.name), table: main.name, x: sel.name });
@@ -411,7 +487,7 @@ function screensAndTour(prompt: string, withTheme: boolean) {
       .filter((c) => c.name !== 'notes')
       .slice(0, 5)
       .map((c) => c.name);
-    if (t === main && sel)
+    if (t === main && sel && flow)
       screens.push({ name: label(t.name) + ' board', type: 'board', table: t.name, roles: rs, columns: cols.slice(0, 4), label: t.title });
     screens.push({ name: label(t.name), type: 'table', table: t.name, roles: rs, columns: cols, label: t.title });
   }

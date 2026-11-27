@@ -44,7 +44,7 @@ export interface Brief {
   summary: string;
   roles: Role[];
   entities: Entity[];
-  /** the one record that moves through states */
+  /** the one record that moves through states; an app with no stages has no entity and no states */
   process: { entity: string; states: string[]; note: string };
   stories: Story[];
   rules: string[];
@@ -52,6 +52,11 @@ export interface Brief {
   /** the owner's answer to the brief's question */
   decision: { text: string; answer: string } | null;
   sources: BriefSource[];
+  /**
+   * Written by code from a plan the owner approved (`briefFromPlan`), not by the Researcher. Such a brief may have one
+   * role and no process, because the plan allows a one-person app with no stages.
+   */
+  planned?: boolean;
 }
 /** A connector lookup the Researcher made for the brief, with the titles it found. */
 export interface BriefSource {
@@ -94,6 +99,8 @@ export interface AppUser {
   name: string;
   username: string;
   role: string;
+  /** a made-up person who came with the demo data; the sign-in screen says so */
+  example?: boolean;
 }
 
 /* ---------- station 3: workflow, access, team ---------- */

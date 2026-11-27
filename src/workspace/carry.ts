@@ -15,7 +15,7 @@ import { choiceValue, columnPlan } from './record-steps';
 
 /** The holding table. `column_name` is '*' for a whole record of a list the version does not have. */
 export const AWAY = 'tk_put_away';
-const AWAY_SQL =
+export const AWAY_SQL =
   'CREATE TABLE IF NOT EXISTS ' +
   qi(AWAY) +
   ' ("table_name" TEXT NOT NULL, "column_name" TEXT NOT NULL, "row_id" INTEGER NOT NULL, "value", "at" TEXT NOT NULL, PRIMARY KEY ("table_name", "column_name", "row_id"))';

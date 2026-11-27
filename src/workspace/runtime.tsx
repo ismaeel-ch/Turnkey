@@ -19,13 +19,16 @@ import { ACCENTS, accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec, 
 import { editBlocked, editFromCanvas } from './changes';
 import { REC, allConnectors, callConnector, connOn } from './builds';
 import { TeamConsole } from './room';
-import { resetAppData } from './line';
+import { DemoActions, DemoBar, DemoNote } from './demo-data-ui';
+import { setDemoMark } from './demo-data';
 import { Avatar, Btn, Empty, Field, Icon, Input, MBar, Menu, Proto, Select, Switch, Textarea, type MenuEntry } from './ui';
 import { AppSheets, AppTabs, isCompact, useElWidth, type SoloItem } from './mobile';
 import { Explorer } from './views-a';
 import { Dash } from './views-b';
 import { AppLogo } from './release';
 import { isYear } from './viewspec';
+import { FirstRun, FirstTour, guideMenu, replayFirstRun } from './firstrun';
+import { roleLine, soleUser } from './onboarding';
 
 /* ===== Turnkey prototype · runtime: draws a built app from its definition =====
    Nothing here is specific to one app. Tables, columns, roles, workflow, screens and layout all come from
@@ -121,7 +124,8 @@ export function patchPane(pane: Pane, patch: Partial<Pane>) {
   notify();
 }
 /** Opens one page of the app as another person, or the sign-in screen (`uid` null), with nothing open. */
-export const signInAs = (pane: Pane, uid: number | null) => patchPane(pane, { uid, screen: null, rec: null, form: null, sheet: null });
+export const signInAs = (pane: Pane, uid: number | null) =>
+  patchPane(pane, { uid, screen: null, rec: null, form: null, sheet: null, guide: null });
 /** Opens a record in the drawer. */
 export const openRecord = (pane: Pane, table: string, id: number) => patchPane(pane, { rec: { table, id }, conn: null });
 /** Fills in one field of a record form, clears that field's error and redraws. */
@@ -137,7 +141,7 @@ export function patchForm(f: PaneForm, patch: Partial<PaneForm>) {
 }
 /** The sign-in form of a pane, kept with the pane so typing survives a redraw. */
 export function loginOf(pane: Pane) {
-  return pane.login || (pane.login = { u: '', p: '', err: '' });
+  return pane.login || (pane.login = { u: '', p: '', err: '', open: false });
 }
 /** A form screen's draft, kept with the pane per screen. */
 export function draftOf(pane: Pane, key: string, table: string): PaneForm {
@@ -175,13 +179,29 @@ export function stageOf(app: AppRecord): Stage {
     })
   );
 }
-export function AppPane({ app, pane, solo: given }: { app: AppRecord; pane: Pane; solo?: (SoloItem | null | false | undefined)[] | null }) {
+/** A menu without a divider at either end or two in a row. */
+const tidyMenu = <T,>(items: (T | '-')[]) =>
+  items.filter((x, i) => x !== '-' || (i > 0 && items[i - 1] !== '-' && items.slice(i + 1).some((y) => y !== '-')));
+export function AppPane({
+  app,
+  pane,
+  solo: given,
+  quiet,
+}: {
+  app: AppRecord;
+  pane: Pane;
+  solo?: (SoloItem | null | false | undefined)[] | null;
+  /** the builder is playing its walkthrough: nobody is greeted */
+  quiet?: boolean;
+}) {
   const solo = (given || []).filter((x): x is SoloItem => !!x);
   const box = useElWidth(),
     compact = !pane.test && isCompact(box[1]);
   const def = app.def,
     users = appUsers(app),
-    user = users.find((u) => u.id === pane.uid);
+    // an app with one kind of person has no sign-in screen: it opens as its first person
+    only = soleUser(app, users),
+    user = users.find((u) => u.id === pane.uid) || only || undefined;
   if (!def.screens.length || !users.length)
     return (
       <div className="app-empty">
@@ -211,25 +231,40 @@ export function AppPane({ app, pane, solo: given }: { app: AppRecord; pane: Pane
       ))}
     </nav>
   );
-  const items: (MenuEntry | '-')[] = [
-    {
-      head: true,
-      label: 'Switch user',
-    },
-    ...users.map((u) => ({
-      label: u.name,
-      hint: roleName(def, u.role),
-      check: u.id === user.id,
-      on: () => swap(u),
-    })),
+  // the first-use guide stays in the person menu for good; a check's pane has none
+  const guide = pane.test ? [] : guideMenu(app, user, pane);
+  const items: (MenuEntry | '-')[] = tidyMenu<MenuEntry>([
+    ...(users.length > 1
+      ? [
+          {
+            head: true,
+            label: 'Switch user',
+          },
+          ...users.map((u) => ({
+            label: u.name,
+            hint: roleName(def, u.role),
+            check: u.id === user.id,
+            on: () => swap(u),
+          })),
+        ]
+      : []),
     '-',
-    {
-      label: 'Sign out',
-      icon: 'signOut',
-      on: () => swap(null),
-    },
-    ...(solo && solo.length ? (['-'] as SoloItems).concat(solo) : []),
-  ];
+    ...guide,
+    '-',
+    // with no sign-in screen there is nothing to sign out to
+    ...(only ? [] : [{ label: 'Sign out', icon: 'signOut', on: () => swap(null) }]),
+    '-',
+    ...solo,
+  ]);
+  const who = (
+    <>
+      <Avatar name={user.name} size="sm" />
+      <span className="col gap0 persona-t">
+        <span className="t-strong ellipsis">{user.name}</span>
+        <span className="t-cap muted">{roleName(def, user.role)}</span>
+      </span>
+    </>
+  );
   return (
     <div
       className={cx('app', 'acc-' + th.accent, 'nav-' + navKind, th.density === 'compact' && 'dense', compact && 'compact')}
@@ -250,30 +285,32 @@ export function AppPane({ app, pane, solo: given }: { app: AppRecord; pane: Pane
           >
             <Avatar name={user.name} size="sm" />
           </button>
-        ) : (
+        ) : items.length ? (
           <Menu
             align="right"
-            title="Switch user or sign out"
+            title={only ? 'Your menu' : 'Switch user or sign out'}
             btn={{
               cls: 'persona',
               body: (
                 <>
-                  <Avatar name={user.name} size="sm" />
-                  <span className="col gap0 persona-t">
-                    <span className="t-strong ellipsis">{user.name}</span>
-                    <span className="t-cap muted">{roleName(def, user.role)}</span>
-                  </span>
+                  {who}
                   <Icon n="chevDown" s="16" />
                 </>
               ),
             }}
             items={items}
           />
+        ) : (
+          <span className="persona">{who}</span>
         )}
       </header>
+      {!pane.test && <DemoBar app={app} />}
       <div className="app-body">
         {!compact && navKind !== 'top' && nav(navKind)}
         <main className="app-main">
+          {!pane.test && (
+            <FirstRun app={app} user={user} pane={pane} scr={scr} compact={compact} builder={!given} alone={!!only} quiet={!!quiet} />
+          )}
           {scr ? (
             <Screen key={scr.id + ':' + user.id} app={app} user={user} pane={pane} scr={scr} />
           ) : (
@@ -285,14 +322,33 @@ export function AppPane({ app, pane, solo: given }: { app: AppRecord; pane: Pane
       {compact && <AppTabs screens={screens} scr={scr} pane={pane} go={go} />}
       {pane.form && <RecordForm app={app} user={user} pane={pane} f={pane.form} />}
       {compact && pane.sheet && (
-        <AppSheets app={app} pane={pane} user={user} users={users} screens={screens} scr={scr} go={go} swap={swap} solo={solo} />
+        <AppSheets
+          app={app}
+          pane={pane}
+          user={user}
+          users={users}
+          screens={screens}
+          scr={scr}
+          go={go}
+          swap={swap}
+          solo={solo}
+          guide={guide}
+          noSignIn={!!only}
+        />
       )}
+      {!pane.test && <FirstTour app={app} user={user} pane={pane} />}
     </div>
   );
 }
+/** Whether a pane's username and password form is unfolded. */
+function setLoginOpen(pane: Pane, open: boolean) {
+  patchPane(pane, { login: { ...loginOf(pane), open } });
+}
+/** "Choose who you are": every person of the app with what their kind of person does. Picking one signs in. */
 export function AppLogin({ app, pane, users, solo }: { app: AppRecord; pane: Pane; users: AppUser[]; solo?: SoloItems }) {
   const def = app.def,
-    f = loginOf(pane);
+    f = loginOf(pane),
+    fid = 'lf' + app.id + pane.n;
   const login = (u: string, p: string) => {
     const r = apiCall(
       app,
@@ -306,67 +362,79 @@ export function AppLogin({ app, pane, users, solo }: { app: AppRecord; pane: Pan
       'app',
     );
     if (r.status === 200) patchPane(pane, { uid: r.data.id, screen: null, login: null });
-    else patchPane(pane, { login: { ...f, err: r.error || '' } });
+    else patchPane(pane, { login: { ...f, open: true, err: r.error || '' } });
   };
   return (
     <div className={cx('app app-login', 'acc-' + def.theme.accent)}>
       <div className="login-card">
         <AppLogo app={app} size={64} />
-        <h2 className="t-sub1">
-          {'Sign in to '}
-          {app.name}
-        </h2>
-        <p className="muted">
-          {'These users were seeded by the Database agent. Every password is '}
-          <code>demo</code>.
-        </p>
-        <div className="persona-grid">
-          {users.map((u) => (
-            <button key={u.id} className="persona-btn" onClick={() => login(u.username, 'demo')}>
-              <Avatar name={u.name} />
-              <span className="col gap0">
-                <span className="t-strong">{u.name}</span>
-                <span className="t-cap muted">
-                  {roleName(def, u.role)}
-                  {' · '}
-                  {u.username}
-                </span>
-              </span>
-            </button>
-          ))}
+        <div className="col gap0">
+          <h2 className="t-sub1">{app.name}</h2>
+          <p className="muted">Choose who you are</p>
         </div>
-        <form
-          className="login-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            login(f.u, f.p);
-          }}
-        >
-          <Input
-            native
-            className="input"
-            id={'lu' + app.id + pane.n}
-            aria-label="Username"
-            placeholder="Username"
-            autoComplete="off"
-            value={f.u}
-            onInput={(e: FormEvent<HTMLInputElement>) => patchPane(pane, { login: { ...f, u: e.currentTarget.value } })}
-          />
-          <Input
-            native
-            className="input"
-            id={'lp' + app.id + pane.n}
-            aria-label="Password"
-            type="password"
-            placeholder="Password"
-            autoComplete="off"
-            value={f.p}
-            onInput={(e: FormEvent<HTMLInputElement>) => patchPane(pane, { login: { ...f, p: e.currentTarget.value } })}
-          />
-          <Btn className="btn primary" type="submit">
-            Sign in
-          </Btn>
-        </form>
+        <div className="persona-grid">
+          {users.map((u) => {
+            const line = roleLine(def, u.role);
+            return (
+              <button key={u.id} className="persona-btn" onClick={() => login(u.username, 'demo')}>
+                <Avatar name={u.name} />
+                <span className="col gap0">
+                  <span className="t-strong">{u.name}</span>
+                  <span className="t-cap">
+                    {roleName(def, u.role)}
+                    {u.example ? ' · Demo person' : ''}
+                  </span>
+                  {line && <span className="t-cap muted">{line}</span>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <button className="login-more" aria-expanded={!!f.open} aria-controls={fid} onClick={() => setLoginOpen(pane, !f.open)}>
+          <Icon n={f.open ? 'chevDown' : 'chevRight'} s="16" />
+          Sign in with a username and password
+        </button>
+        {f.open && (
+          <div className="col gap8 login-pw" id={fid}>
+            <form
+              className="login-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                login(f.u, f.p);
+              }}
+            >
+              <Input
+                native
+                className="input"
+                id={'lu' + app.id + pane.n}
+                aria-label="Username"
+                placeholder="Username"
+                autoComplete="off"
+                value={f.u}
+                onInput={(e: FormEvent<HTMLInputElement>) => patchPane(pane, { login: { ...f, u: e.currentTarget.value } })}
+              />
+              <Input
+                native
+                className="input"
+                id={'lp' + app.id + pane.n}
+                aria-label="Password"
+                type="password"
+                placeholder="Password"
+                autoComplete="off"
+                value={f.p}
+                onInput={(e: FormEvent<HTMLInputElement>) => patchPane(pane, { login: { ...f, p: e.currentTarget.value } })}
+              />
+              <Btn className="btn primary" type="submit">
+                Sign in
+              </Btn>
+            </form>
+            <p className="t-cap muted">
+              {'Every password is '}
+              <code>demo</code>
+              {'. Signing in is kept in this browser only.'}
+            </p>
+          </div>
+        )}
         {f.err && <MBar tone="danger">{f.err}</MBar>}
         {solo && solo.length > 0 && (
           <div className="login-foot">
@@ -708,7 +776,7 @@ export function RecordDrawer({
     if (
       !(await confirmBox({
         title: 'Delete this ' + t.one.toLowerCase() + '?',
-        body: 'It is removed from the database. Reset data brings the seed rows back.',
+        body: 'It is removed from the database for good.',
         yes: 'Delete',
         danger: true,
       }))
@@ -763,6 +831,7 @@ export function RecordDrawer({
         {shut}
       </div>
       <div className="drawer-body">
+        <DemoNote app={app} table={t.name} row={row} />
         {P && (
           <div className="row wrap">
             <span className={'badge b-' + stateTone(def, t, sc, row[P.column])}>{stateLabel(def, t, sc, row[P.column])}</span>
@@ -985,19 +1054,12 @@ export function StageView({ app }: { app: AppRecord }) {
     );
   const users = appUsers(app),
     p0 = st.panes[0],
+    only = soleUser(app, users),
+    // who the first pane shows: the person picked, or the only kind of person there is
+    shown = users.find((u) => u.id === p0.uid) || only,
     saved = app.tpl ? REC[app.tpl] : undefined;
-  const setUser = (pane: Pane, id: number | null) => patchPane(pane, { uid: id, screen: null, rec: null, form: null });
+  const setUser = (pane: Pane, id: number | null) => patchPane(pane, { uid: id, screen: null, rec: null, form: null, guide: null });
   const split = () => toggleSplit(st, users);
-  const reset = async () => {
-    if (
-      await confirmBox({
-        title: 'Reset the data in ' + app.name + '?',
-        body: 'Every table is emptied and the original seed rows are put back. Tables, users and screens stay as they are.',
-        yes: 'Reset data',
-      })
-    )
-      resetAppData(app);
-  };
   return (
     <div className="stage" data-tour="stage">
       <div className="stage-bar">
@@ -1009,10 +1071,10 @@ export function StageView({ app }: { app: AppRecord }) {
           className="select sm"
           id={'pv' + app.id}
           aria-label="Preview as"
-          value={p0.uid == null ? '' : String(p0.uid)}
+          value={shown ? String(shown.id) : ''}
           onChange={(e) => setUser(p0, e.target.value ? +e.target.value : null)}
         >
-          <option value="">Sign-in screen</option>
+          {!only && <option value="">Sign-in screen</option>}
           {users.map((u) => (
             <option key={u.id} value={String(u.id)}>
               {u.name}
@@ -1030,6 +1092,15 @@ export function StageView({ app }: { app: AppRecord }) {
           <Icon n="split" s="16" />
           <span className="hide-sm">Two users</span>
         </Btn>
+        <Btn
+          className="btn sm"
+          disabled={!shown}
+          title={shown ? 'Show ' + shown.name + ' the welcome again, as on their first visit' : 'Choose a person under Preview as first'}
+          onClick={() => shown && replayFirstRun(app, shown, p0)}
+        >
+          <Icon n="handRight" s="16" />
+          <span className="hide-sm">Replay first run</span>
+        </Btn>
         <LookMenu app={app} />
         <span className="grow" />
         {saved && (
@@ -1041,18 +1112,15 @@ export function StageView({ app }: { app: AppRecord }) {
           <Icon n="playOutline" s="16" />
           <span className="hide-sm">Play walkthrough</span>
         </Btn>
-        <Btn className="btn sm" onClick={reset}>
-          <Icon n="reset" s="16" />
-          <span className="hide-sm">Reset data</span>
-        </Btn>
+        <DemoActions app={app} />
       </div>
       <div className={cx('devices', st.split && 'two')}>
         <div className="device">
-          <AppPane app={app} pane={p0} />
+          <AppPane app={app} pane={p0} quiet={!!st.tour} />
         </div>
         {st.split && (
           <div className="device">
-            <AppPane app={app} pane={st.panes[1]} />
+            <AppPane app={app} pane={st.panes[1]} quiet={!!st.tour} />
           </div>
         )}
       </div>
@@ -1156,6 +1224,8 @@ function walkExec(app: AppRecord, st: Stage, T: Walk, i: number) {
     p.form = null;
   }
   if (x.screen) p.screen = x.screen;
+  // what the walkthrough makes is made up too: it carries the Demo tag and leaves with the demo data
+  if (x.ok && x.rec && app.def.tour[i].do === 'create') setDemoMark(app, x.rec.table, x.rec.id, true);
   p.rec = x.rec || null;
   p.vs = {};
 }
@@ -1207,7 +1277,7 @@ export function WalkPlayer({ app, st, T }: { app: AppRecord; st: Stage; T: Walk 
               {' steps passed.'}
             </strong>
             {
-              ' These are the steps the Walkthrough station ran as the acceptance test. Here they made real records, so use Reset data to clear them.'
+              ' These are the steps the Walkthrough station ran as the acceptance test. The records they made here are marked "Demo". Remove demo data clears them.'
             }
           </p>
           <div className="row">

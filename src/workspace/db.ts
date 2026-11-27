@@ -11,6 +11,7 @@ import {
   restoreBackup,
   workspaceStorage,
 } from '@/platform/storage';
+import { DEMO_COLUMN } from '@/shared/sql/types';
 import type { SqlDatabase, SqlJsStatic, SqlParams, SqlRow, SqlValue } from '@/shared/types/sqljs';
 import type { AppRecord } from '@/shared/types/workspace';
 import {
@@ -279,6 +280,20 @@ export function dbRelease(appId: string, name: string) {
   dbBump(appId);
   dbSave(appId);
 }
+/** Puts a saved copy of the SQLite file back as the app's database (undo of a change to the records). */
+export function dbReplace(appId: string, bytes: Uint8Array) {
+  if (!DBX.SQL) throw new Error('The SQLite engine is not loaded yet.');
+  const next = new DBX.SQL.Database(bytes);
+  next.run('PRAGMA foreign_keys = ON');
+  clearTimeout(DBX.timers[appId] ?? undefined);
+  DBX.timers[appId] = null;
+  try {
+    DBX.open[appId]?.close();
+  } catch {}
+  DBX.open[appId] = next;
+  dbBump(appId);
+  dbFlush(appId);
+}
 export const dbExists = (appId: string) => !!DBX.open[appId] || !!LS.get('db:' + appId);
 export function dbTables(appId: string): { name: string; sql: string }[] {
   return dbExists(appId)
@@ -338,10 +353,13 @@ export function colSQL(c: SqlColumn, forAlter?: boolean) {
   if (c.type === 'user') s += ' REFERENCES "users"("id")';
   return s;
 }
+/** The hidden column every app table has: 1 marks a made-up row (demo data), 0 a record someone added. */
+export const DEMO_COL = DEMO_COLUMN;
+export const demoColSQL = qi(DEMO_COL) + ' INTEGER NOT NULL DEFAULT 0';
 export function createTableSQL(t: SqlTable) {
   const lines = ['"id" INTEGER PRIMARY KEY AUTOINCREMENT'].concat(
     t.columns.map((c) => colSQL(c)),
-    ['"created_by" INTEGER REFERENCES "users"("id")', '"created_at" TEXT'],
+    ['"created_by" INTEGER REFERENCES "users"("id")', '"created_at" TEXT', demoColSQL],
   );
   return 'CREATE TABLE ' + qi(t.name) + ' (\n  ' + lines.join(',\n  ') + '\n)';
 }

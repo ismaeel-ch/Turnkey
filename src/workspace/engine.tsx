@@ -25,6 +25,7 @@ import type { SqlValue } from '@/shared/types/sqljs';
 import type { AppRecord, Dict, ToolContext } from '@/shared/types/workspace';
 import { APILOG, arr, errText, dayOffset, label, nowStamp, pad2, ring, singular, snake, str, toolCall } from './core';
 import {
+  DEMO_COL,
   SYS_SQL,
   createTableSQL,
   dbDrop,
@@ -39,6 +40,7 @@ import {
   sqlRun,
   topoOrder,
 } from './db';
+import { demoReady, isSettingsTable, tempDemoData } from './demo-data';
 import { canRunTeam, normTeam } from './team';
 import { AppPane, newPane } from './runtime';
 
@@ -268,16 +270,37 @@ export function normBrief(o: Untrusted): Brief {
     sources: [],
   };
 }
+/** True when records of the app move through stages. A planned app may have none (`briefFromPlan`). */
+export const hasProcess = (b: Brief) => b.process.states.length > 0;
+/**
+ * The list an app is mainly about: the one whose records move through stages. An app with no stages has a workflow
+ * with no table, no states and no transitions; its main list is the one its brief names, else its first.
+ */
+export const mainTable = (def: Pick<AppDef, 'tables' | 'process' | 'brief'>): AppTable | undefined =>
+  tableOf(def, def.process ? def.process.table : '') || tableOf(def, def.brief ? def.brief.process.entity : '') || def.tables[0];
 export function checkBrief(b: Brief) {
   const ids = b.roles.map((r) => r.id);
   const bad = b.stories.filter((s) => !ids.includes(s.role));
+  // a brief written from a plan the owner approved may be for one person, hold one list and have no process
+  const least = b.planned ? 1 : 2;
+  const process = b.process.states.length >= 3 && b.process.states.length <= 7 && b.entities.some((e) => e.name === b.process.entity);
   return [
-    chk('2 to 4 roles', b.roles.length >= 2 && b.roles.length <= 4, b.roles.length + ' roles: ' + b.roles.map((r) => r.name).join(', ')),
-    chk('2 to 6 kinds of record', b.entities.length >= 2 && b.entities.length <= 6, b.entities.map((e) => e.name).join(', ')),
     chk(
-      'One process with 3 to 7 states',
-      b.process.states.length >= 3 && b.process.states.length <= 7 && b.entities.some((e) => e.name === b.process.entity),
-      b.process.entity ? b.process.entity + ': ' + b.process.states.join(' → ') : 'no process named',
+      least + ' to 4 roles',
+      b.roles.length >= least && b.roles.length <= 4,
+      b.roles.length + (b.roles.length === 1 ? ' role: ' : ' roles: ') + b.roles.map((r) => r.name).join(', '),
+    ),
+    chk(least + ' to 6 kinds of record', b.entities.length >= least && b.entities.length <= 6, b.entities.map((e) => e.name).join(', ')),
+    chk(
+      b.planned ? 'No process, or one with 3 to 7 states' : 'One process with 3 to 7 states',
+      process || (!!b.planned && !hasProcess(b)),
+      hasProcess(b)
+        ? b.process.entity + ': ' + b.process.states.join(' → ')
+        : b.planned
+          ? 'no stages: records are just kept'
+          : b.process.entity
+            ? b.process.entity + ': no states'
+            : 'no process named',
     ),
     chk(
       'Every user story belongs to a known role',
@@ -334,7 +357,7 @@ export function normSchema(o: Untrusted, brief: Brief, repair?: boolean, maxRows
           if (col.type === 'user') col.role = roleIds.includes(snake(c.role)) ? snake(c.role) : null;
           return col;
         })
-        .filter((c) => c.name && !['id', 'created_by', 'created_at'].includes(c.name) && !used[c.name] && (used[c.name] = 1))
+        .filter((c) => c.name && !['id', 'created_by', 'created_at', DEMO_COL].includes(c.name) && !used[c.name] && (used[c.name] = 1))
         .slice(0, LIMITS.cols);
       let title = snake(t.title);
       if (!columns.some((c) => c.name === title)) {
@@ -454,13 +477,15 @@ export function checkSchemaShape(sc: SchemaDraft, brief: Brief) {
     stOptions.length === brief.process.states.length &&
     brief.process.states.every((s) => stOptions.includes(s));
   out.push(
-    chk(
-      'The status column matches the process in the brief',
-      !!same,
-      same
-        ? brief.process.entity + '.status: ' + stOptions.join(', ')
-        : brief.process.entity + '.status must be a choice with exactly: ' + brief.process.states.join(', '),
-    ),
+    hasProcess(brief)
+      ? chk(
+          'The status column matches the process in the brief',
+          !!same,
+          same
+            ? brief.process.entity + '.status: ' + stOptions.join(', ')
+            : brief.process.entity + '.status must be a choice with exactly: ' + brief.process.states.join(', '),
+        )
+      : chk('The status column matches the process in the brief', true, 'no process, so no status column is needed'),
   );
   const noUser = brief.roles.filter((r) => !sc.users.some((u) => u.role === r.id)).map((r) => r.name);
   out.push(
@@ -527,6 +552,23 @@ export function seedValue(c: ColumnDef, v: unknown, look?: SeedLookup | null): [
       return [String(v), null];
   }
 }
+/** How seed rows go in. */
+export interface SeedOptions {
+  /** the app is a copy of someone's real records: a row is demo data only when it says so (`_demo: 1`) */
+  live?: boolean;
+  /** leave out the rows that are not demo data */
+  onlyDemo?: boolean;
+}
+/** Whether a seed row is demo data. Rows the agents wrote are; rows carried from someone's real records are not. */
+export const seedIsDemo = (row: Row | null | undefined, live?: boolean) => {
+  const v = row ? row._demo : null;
+  return v == null ? !live : v === true || Number(v) === 1;
+};
+/**
+ * Inserts seed rows, parents first, and marks each as demo data or not. Rows point at each other and at people by
+ * position (1, 2, 3): a position is turned into the id that row really got, so this also works on tables that already
+ * hold records. A link to a table that is not part of this call is taken as an id.
+ */
 export function insertSeed(
   appId: string,
   tables: TableDef[],
@@ -535,7 +577,9 @@ export function insertSeed(
   by: string,
   users: unknown,
   lenient?: boolean,
+  opts?: SeedOptions,
 ) {
+  demoReady(appId);
   let total = 0;
   const same = (a: unknown, b: unknown) =>
     String(a == null ? '' : a)
@@ -548,74 +592,119 @@ export function insertSeed(
       return t ? arr<Row>(rowsOf[tn]).findIndex((r) => r && same(r[t.title], text)) + 1 : 0;
     },
   };
+  const num = (text: string, params?: SqlValue[]) => {
+    const r = sqlPeek(appId, text, params)[0];
+    return r ? Number(Object.values(r)[0]) || 0 : 0;
+  };
+  // people keep their place: the first person in the list is the first person stored
+  const uids = sqlPeek(appId, 'SELECT "id" FROM "users" ORDER BY "id"').map((r) => Number(r.id));
+  const personId = (pos: number) => uids[pos - 1] || pos;
+  // which rows of each table go in, and the highest id each table has handed out so far
+  const plan: Dict<number[]> = {},
+    base: Dict<number> = {},
+    ids: Dict<Dict<number>> = {};
+  tables.forEach((t) => {
+    plan[t.name] = arr<Row | null>(rowsOf[t.name])
+      .map((row, i) => (opts && opts.onlyDemo && !seedIsDemo(row, opts.live) ? 0 : i + 1))
+      .filter(Boolean);
+    base[t.name] = Math.max(
+      num('SELECT "seq" FROM sqlite_sequence WHERE "name" = ?', [t.name]),
+      num('SELECT MAX("id") FROM ' + qi(t.name)),
+    );
+  });
+  // a row this call leaves out (a starter setting, or a real record, while only demo rows go in) is already stored:
+  // it has the id of its place unless the list was rebuilt since, and then it is found by its name
+  const stored = (tn: string, pos: number) => {
+    if (num('SELECT COUNT(*) FROM ' + qi(tn) + ' WHERE "id" = ?', [pos])) return pos;
+    const t = tables.find((x) => x.name === tn),
+      row = arr<Row | null>(rowsOf[tn])[pos - 1],
+      name = t && row ? row[t.title] : null;
+    return typeof name === 'string' && name
+      ? num('SELECT "id" FROM ' + qi(tn) + ' WHERE ' + qi(t ? t.title : 'id') + ' = ? LIMIT 1', [name])
+      : 0;
+  };
+  const rowId = (tn: string, pos: number) => {
+    if (!plan[tn]) return pos; // a table outside this call: the number is an id
+    const k = plan[tn].indexOf(pos);
+    if (k < 0) return stored(tn, pos);
+    if (ids[tn]) return ids[tn][pos] || 0;
+    return base[tn] + k + 1; // not inserted yet (a row pointing at its own table): the id it is about to get
+  };
   for (const t of topoOrder(tables)) {
     const cols = t.columns,
       rows = arr<Row | null>(rowsOf[t.name]),
-      list: SqlValue[][] = [];
-    rows.forEach((row, i) => {
+      list: SqlValue[][] = [],
+      at: number[] = [];
+    plan[t.name].forEach((pos) => {
+      const i = pos - 1,
+        row = rows[i];
       let bad = false;
       const vals = cols.map((c) => {
         const r = seedValue(c, row ? row[c.name] : null, look);
-        if (r[1]) {
-          bad = true;
-          problems.push(t.name + ' row ' + (i + 1) + ': ' + c.name + ' ' + r[1]);
+        let v = r[0],
+          why = r[1];
+        if (!why && v != null && c.type === 'user') v = personId(Number(v));
+        if (!why && v != null && c.type === 'ref') {
+          const id = rowId(String(c.ref), Number(v));
+          if (!id) why = c.required || !lenient ? 'points to row ' + v + ' of ' + c.ref + ', which is not there' : null;
+          v = id || null;
         }
-        return r[0];
+        if (why) {
+          bad = true;
+          problems.push(t.name + ' row ' + pos + ': ' + c.name + ' ' + why);
+        }
+        return v;
       });
       const own = t.owner
         ? vals[cols.findIndex((c) => c.name === t.owner)]
         : row && Number(row._by) > 0 && Number(row._by) <= arr(users).length
-          ? Math.round(Number(row._by))
+          ? personId(Math.round(Number(row._by)))
           : null;
-      if (!(lenient && bad)) list.push(vals.concat([own, dayOffset(-((rows.length - i) % 9)) + 'T09:00']));
+      if (!(lenient && bad)) {
+        list.push(vals.concat([own, dayOffset(-((rows.length - i) % 9)) + 'T09:00', seedIsDemo(row, opts && opts.live) ? 1 : 0]));
+        at.push(pos);
+      }
     });
+    ids[t.name] = {};
     if (!list.length) continue;
-    if (lenient) {
-      const text =
+    const sys = ['created_by', 'created_at', DEMO_COL],
+      text =
         'INSERT INTO ' +
         qi(t.name) +
         ' (' +
         cols
-          .map((c) => qi(c.name))
-          .concat(['"created_by"', '"created_at"'])
+          .map((c) => c.name)
+          .concat(sys)
+          .map(qi)
           .join(', ') +
         ') VALUES (' +
         cols
           .map(() => '?')
-          .concat(['?', '?'])
+          .concat(sys.map(() => '?'))
           .join(', ') +
         ')';
-      list.forEach((p) => {
+    const done: number[] = [];
+    if (lenient)
+      list.forEach((p, k) => {
         try {
           total += sqlMany(appId, text, [p], by);
+          done.push(at[k]);
         } catch (e) {
           problems.push(t.name + ' ' + (e as Error).message);
         }
       });
-      continue;
-    }
-    try {
-      total += sqlMany(
-        appId,
-        'INSERT INTO ' +
-          qi(t.name) +
-          ' (' +
-          cols
-            .map((c) => qi(c.name))
-            .concat(['"created_by"', '"created_at"'])
-            .join(', ') +
-          ') VALUES (' +
-          cols
-            .map(() => '?')
-            .concat(['?', '?'])
-            .join(', ') +
-          ')',
-        list,
-        by,
-      );
-    } catch (e) {
-      problems.push(t.name + ' ' + (e as Error).message);
-    }
+    else
+      try {
+        total += sqlMany(appId, text, list, by);
+        done.push(...at);
+      } catch (e) {
+        problems.push(t.name + ' ' + (e as Error).message);
+      }
+    // the ids these rows really got, in the order they went in
+    const got = sqlPeek(appId, 'SELECT "id" FROM ' + qi(t.name) + ' WHERE "id" > ? ORDER BY "id"', [base[t.name]]);
+    done.forEach((pos, k) => {
+      if (got[k]) ids[t.name][pos] = Number(got[k].id);
+    });
   }
   return total;
 }
@@ -644,6 +733,8 @@ export function buildDatabase(app: AppRecord, sc: SchemaDraft, ctx: ToolContext)
   let total = 0;
   const rowsOf: Dict<Row[]> = {};
   sc.tables.forEach((t) => {
+    // starter settings (categories, limits) are real from day one: their rows are never marked as demo data
+    if (isSettingsTable(app, t.name)) t.rows = t.rows.map((r) => (r && typeof r === 'object' ? { ...r, _demo: 0 } : r));
     rowsOf[t.name] = t.rows;
   });
   const r2 = toolCall(
@@ -662,7 +753,7 @@ export function buildDatabase(app: AppRecord, sc: SchemaDraft, ctx: ToolContext)
         sc.users.map((u) => [u.name, u.username, u.password, u.role]),
         'database',
       );
-      total = insertSeed(id, sc.tables, rowsOf, problems, 'database', sc.users, sc.repaired);
+      total = insertSeed(id, sc.tables, rowsOf, problems, 'database', sc.users, sc.repaired, { live: seedIsLive(app) });
       if (problems.length && !sc.repaired) throw new Error(problems.slice(0, 5).join('; '));
       return {
         users: sc.users.length,
@@ -709,8 +800,10 @@ export function checkLinks(app: AppRecord, ctx: ToolContext) {
   );
   return chk('Links between rows are consistent', r.ok, r.ok ? 'foreign_key_check and integrity_check passed' : r.result.error);
 }
+/** A copy opened from a link that carried "the records as they are now": its starting rows are someone's real records. */
+export const seedIsLive = (app: Pick<AppRecord, 'shared'>) => !!app.shared && app.shared.data === 'live';
 export function reseed(app: AppRecord) {
-  // "Reset data": empty every table and put the original seed rows back
+  // "Start over": empty every table and put the original rows back. This deletes records people added.
   const def = app.def,
     id = app.id;
   const order = topoOrder(def.tables).reverse();
@@ -718,7 +811,7 @@ export function reseed(app: AppRecord) {
   sqlRun(id, 'DELETE FROM "activity"', null, 'reset');
   order.forEach((t) => sqlRun(id, 'DELETE FROM ' + qi(t.name), null, 'reset'));
   sqlRun(id, 'DELETE FROM sqlite_sequence WHERE name <> ?', ['users'], 'reset');
-  const n = insertSeed(id, def.tables, (app.seed && app.seed.rows) || {}, problems, 'reset', def.users);
+  const n = insertSeed(id, def.tables, (app.seed && app.seed.rows) || {}, problems, 'reset', def.users, false, { live: seedIsLive(app) });
   return {
     rows: n,
     problems,
@@ -737,10 +830,11 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
   const b = def.brief,
     roleIds = b.roles.map((r) => r.id),
     st = o.status || o.workflow || o.process || {};
-  const table = tableOf(def, snake(st.table)) ? snake(st.table) : b.process.entity;
+  const none = !hasProcess(b);
+  const table = none ? '' : tableOf(def, snake(st.table)) ? snake(st.table) : b.process.entity;
   const t = tableOf(def, table);
-  const column = t && colOf(t, snake(st.column)) ? snake(st.column) : 'status';
-  const states: ProcessState[] = arr(st.states)
+  const column = none ? '' : t && colOf(t, snake(st.column)) ? snake(st.column) : 'status';
+  const states: ProcessState[] = arr(none ? [] : st.states)
     .map((s: Untrusted): { id: string; label?: string; tone?: Tone } =>
       typeof s === 'string'
         ? {
@@ -760,7 +854,7 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
     }));
   const list1 = (v: unknown): unknown[] => (v == null ? [] : Array.isArray(v) ? v : [v]),
     yes = (v: unknown) => v === true || v === 'true' || v === 'yes';
-  const transitions: Transition[] = arr(st.transitions)
+  const transitions: Transition[] = arr(none ? [] : st.transitions)
     .map((x: Untrusted) => {
       x = x || {};
       const set: Dict<unknown> = {};
@@ -830,7 +924,7 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
     table,
     column,
     states,
-    initial: snake(st.initial) || (states[0] ? states[0].id : ''),
+    initial: none ? '' : snake(st.initial) || (states[0] ? states[0].id : ''),
     transitions,
   };
   return {
@@ -847,14 +941,22 @@ export function checkBackendShape(def: BriefedDef, be: Pick<BackendDraft, 'proce
     out: Check[] = [];
   const colOptions = (col && col.options) || [];
   const same = col && col.type === 'select' && ids.length === colOptions.length && colOptions.every((o) => ids.includes(o));
+  // a planned app with no stages has no workflow to check: its records are just kept
+  const none = !hasProcess(def.brief);
   out.push(
-    chk(
-      'The workflow uses the states stored in the table',
-      !!same && ids.includes(P.initial),
-      same
-        ? P.table + '.' + P.column + ' starts at ' + P.initial
-        : 'states must be exactly: ' + (col && col.options ? col.options.join(', ') : 'the status options'),
-    ),
+    none
+      ? chk(
+          'The workflow uses the states stored in the table',
+          !ids.length,
+          ids.length ? 'this app has no stages' : 'no stages, so no workflow',
+        )
+      : chk(
+          'The workflow uses the states stored in the table',
+          !!same && ids.includes(P.initial),
+          same
+            ? P.table + '.' + P.column + ' starts at ' + P.initial
+            : 'states must be exactly: ' + (col && col.options ? col.options.join(', ') : 'the status options'),
+        ),
   );
   const badT = P.transitions
     .filter((x) => !x.from.length || x.from.some((f) => !ids.includes(f)) || !ids.includes(x.to) || !x.roles.length)
@@ -862,7 +964,7 @@ export function checkBackendShape(def: BriefedDef, be: Pick<BackendDraft, 'proce
   out.push(
     chk(
       'Every transition moves between known states for a known role',
-      P.transitions.length > 0 && !badT.length,
+      (none || P.transitions.length > 0) && !badT.length,
       badT.length ? 'fix: ' + badT.join(', ') : P.transitions.length + ' transitions',
     ),
   );
@@ -1384,6 +1486,9 @@ export function apiRoute(app: AppRecord, user: AppUser | null | undefined, metho
   }
   throw httpErr(405, 'Method not allowed');
 }
+/** The lowest id a table holds, or 1 when it is empty: the record a check names when it has not made one itself. */
+export const firstId = (appId: string, table: string) =>
+  Number((sqlPeek(appId, 'SELECT MIN("id") AS id FROM ' + qi(table))[0] || {}).id) || 1;
 /** One call of the permission matrix: an endpoint called as a role, and whether it behaved as declared. */
 export interface MatrixCall {
   ep: string;
@@ -1400,12 +1505,18 @@ export function testMatrix(app: AppRecord & { def: BriefedDef }) {
     out: MatrixCall[] = [];
   dbSavepoint(app.id, 'mx');
   try {
+    tempDemoData(app);
+    // each call that names a record names the first one the table holds
+    const first: Dict<string> = {};
+    def.tables.forEach((t) => {
+      first[t.name] = String(firstId(app.id, t.name));
+    });
     eps.forEach((ep) =>
       def.brief.roles.forEach((role) => {
         const u = users.find((x) => x.role === role.id);
         if (!u) return;
         const allowed = !!ep.roles[role.id],
-          res = apiCall(app, u, ep.method, ep.path.replace(':id', '1'), {}, 'check');
+          res = apiCall(app, u, ep.method, ep.path.replace(':id', first[String(ep.table)] || '1'), {}, 'check');
         const ok = allowed ? ![401, 403, 405, 500].includes(res.status) : res.status === 403;
         out.push({
           ep: ep.id,
@@ -1548,9 +1659,20 @@ export function tourValues(app: AppRecord, t: AppTable, values: Dict<unknown> | 
         : 0;
     },
   };
+  // a link written as a number names a row the app started with, by its place in the list. That row keeps its id
+  // for as long as it lives; if it is gone, the same row is found by its name, and failing that the first row there is.
+  const byPlace = (c: ColumnDef, v: unknown): unknown => {
+    const rt = c.type === 'ref' ? tableOf(app.def, c.ref) : null,
+      pos = typeof v === 'number' || /^\d+$/.test(String(v).trim()) ? parseInt(String(v), 10) : 0;
+    if (!rt || !(pos > 0)) return v;
+    if (sqlPeek(app.id, 'SELECT 1 AS ok FROM ' + qi(rt.name) + ' WHERE "id" = ?', [pos]).length) return pos;
+    const first = arr<Row | null>(app.seed && app.seed.rows[rt.name])[pos - 1],
+      name = first ? first[rt.title] : null;
+    return (typeof name === 'string' && name && look.ref(rt.name, name)) || firstId(app.id, rt.name);
+  };
   t.columns.forEach((c) => {
     if (values && values[c.name] !== undefined) {
-      const r = seedValue(c, values[c.name], look);
+      const r = seedValue(c, byPlace(c, values[c.name]), look);
       if (r[0] != null) out[c.name] = r[0];
     }
   });
@@ -1584,7 +1706,7 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
       ok: false,
       detail: 'No user with the role ' + step.role,
     };
-  const tn = step.table || (st.last && st.last.table) || (def.process && def.process.table),
+  const tn = step.table || (st.last && st.last.table) || mainTable(def)?.name,
     t = tableOf(def, tn);
   const scr = step.screen
     ? def.screens.find((s) => s.name.toLowerCase() === String(step.screen).toLowerCase() && s.roles.includes(u.role))
@@ -1644,7 +1766,7 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
   }
   if (step.do === 'denied') {
     const act = step.action || 'create',
-      rid = id || 1;
+      rid = id || firstId(app.id, String(tn));
     const call =
       act === 'create'
         ? ['POST', '/api/' + tn]
@@ -1735,6 +1857,7 @@ export function runAcceptance(app: AppRecord, ctx: ToolContext) {
     () => {
       dbSavepoint(app.id, 'acc');
       try {
+        tempDemoData(app);
         results = app.def.tour.map((step) => {
           const x = tourExec(app, st, step);
           return {
@@ -1761,11 +1884,13 @@ export function runAcceptance(app: AppRecord, ctx: ToolContext) {
       },
     ];
   const roles = new Set(app.def.tour.map((s) => s.role));
+  // An app for one person has one role, so its tour cannot show two.
+  const alone = !!app.def.brief && app.def.brief.roles.length < 2;
   const checks = [
     chk(
-      'The tour has at least 3 steps and 2 roles',
-      app.def.tour.length >= 3 && roles.size >= 2,
-      app.def.tour.length + ' steps, ' + roles.size + ' roles',
+      alone ? 'The tour has at least 3 steps' : 'The tour has at least 3 steps and 2 roles',
+      app.def.tour.length >= 3 && (alone || roles.size >= 2),
+      app.def.tour.length + ' steps, ' + roles.size + (roles.size === 1 ? ' role' : ' roles'),
     ),
   ];
   app.def.tour.forEach((s, i) =>
@@ -1785,7 +1910,7 @@ export function fallbackBackend(def: BriefedDef) {
     roles = b.roles.map((r) => r.id),
     states = b.process.states;
   return {
-    status: {
+    status: hasProcess(b) && {
       table: b.process.entity,
       column: 'status',
       states: states.map((s) => ({
