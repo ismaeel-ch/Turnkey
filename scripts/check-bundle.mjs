@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { gzipSync } from 'node:zlib';
 
-const BUDGET_KB = 600; // gzip; 559 KB on 27 Nov 2026 (about 1,070 KB before LangGraph, AG-UI and React Flow loaded on first use)
+const BUDGET_KB = 600; // gzip; 495 KB on 27 Nov 2026 after the saved builds and on-demand screens moved out, 559 KB earlier that day (about 1,070 KB before LangGraph, AG-UI and React Flow loaded on first use)
 const NEXT = '.next';
 const PAGE = join(NEXT, 'server/app/(workspace)');
 

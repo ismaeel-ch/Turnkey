@@ -58,6 +58,18 @@ function preloadWhenIdle() {
     void import('@/platform/orchestrator/run').catch(() => undefined);
     void import('@/platform/agui/client').catch(() => undefined);
     void import('@/shared/agent-contract').catch(() => undefined);
+    // the screens drawn through later(): fetched now so the first click on one does not wait for the network
+    for (const ui of [
+      () => import('./release-ui'),
+      () => import('./tests-ui'),
+      () => import('./tester-ui'),
+      () => import('./share-ui'),
+      () => import('./room-ui'),
+      () => import('./flow-ui'),
+      () => import('./activity-ui'),
+      () => import('./custom-ui'),
+    ])
+      void ui().catch(() => undefined);
   };
   // a few seconds in, so parsing them does not hold up the first screen; then at the next idle moment
   setTimeout(() => whenIdle(load, 4000), 5000);

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { S, closeTab, createAccount, errText, freshState, label, openTab, setS, snake, tabsNow } from '@/workspace/core';
 import { colSQL, createTableSQL, ql, qi, topoOrder } from '@/workspace/db';
-import { REC, TEMPLATES, matchTemplate } from '@/workspace/builds';
-import { QUESTS, everyone } from '@/workspace/quests';
+import '@/workspace/saved';
+import { CARDS, QUESTS, TEMPLATES, HOME_TEMPLATES, matchTemplate } from '@/workspace/catalog';
+import { everyone } from '@/workspace/quests';
+import { REC } from '@/workspace/registry';
 
 describe('workspace core helpers', () => {
   it('reads the message of anything thrown', () => {
@@ -68,6 +70,13 @@ describe('saved builds', () => {
         expect(rec[st]({ answer: 0 }, 1)).toBeTypeOf('object');
       }
     }
+  });
+
+  it('lists every saved build in the catalog, with the same card fields as its recording', () => {
+    const ids = [...HOME_TEMPLATES, ...QUESTS];
+    expect(Object.keys(CARDS).sort()).toEqual([...ids].sort());
+    expect(Object.keys(REC).sort()).toEqual([...ids].sort());
+    for (const id of ids) for (const [k, v] of Object.entries(CARDS[id])) expect(REC[id][k]).toEqual(v);
   });
 
   it('picks a template from the words in a sentence', () => {

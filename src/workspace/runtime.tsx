@@ -33,8 +33,8 @@ import {
 import { DBX, dbExists } from './db';
 import { ACCENTS, accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec, type ApiResult } from './engine';
 import { editBlocked, editFromCanvas } from './changes';
-import { REC, allConnectors, callConnector, connOn } from './builds';
-import { TeamConsole } from './room';
+import { allConnectors, callConnector, connOn } from './connections';
+import { REC } from './registry';
 import { DemoActions, DemoBar, DemoNote } from './demo-data-ui';
 import { setDemoMark } from './demo-data';
 import { Avatar, Btn, Empty, Field, Icon, Input, MBar, Menu, Proto, Select, Switch, Textarea, type MenuEntry } from './ui';
@@ -45,6 +45,10 @@ import { AppLogo } from './release';
 import { isYear } from './viewspec';
 import { FirstRun, FirstTour, guideMenu, replayFirstRun } from './firstrun';
 import { roleLine, soleUser } from './onboarding';
+import { later } from './later';
+
+// Loaded the first time they are drawn, to keep them out of the first page load.
+const TeamConsole = later(() => import('./room-ui'), 'TeamConsole');
 
 /* ===== Turnkey prototype · runtime: draws a built app from its definition =====
    Nothing here is specific to one app. Tables, columns, roles, workflow, screens and layout all come from
