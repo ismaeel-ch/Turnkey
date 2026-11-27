@@ -83,6 +83,12 @@ async function flowDemo(browser, url) {
   await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 40000 });
   await shot(page, '05-question');
   check('line pauses for the owner (needs you)', (await appState(page)).line.research === 'waiting');
+  // the meeting view: the Researcher raises a hand while it waits on the owner's answer
+  await page.getByRole('button', { name: 'Meeting', exact: true }).click(); await page.waitForSelector('.meet-tile[data-agent=researcher]');
+  const meetWait = await st(page, () => ({ hand: [...document.querySelectorAll('.meet-tile.m-hand')].map((x) => x.dataset.agent), note: (document.querySelector('.meet-note') || {}).textContent || '' }));
+  check('meeting view: the Researcher has a hand raised while the line waits for the owner', meetWait.hand.join(',') === 'researcher' && /Researcher has a hand raised/.test(meetWait.note), meetWait);
+  await shot(page, '05b-meeting-hand');
+  await page.getByRole('button', { name: 'Workflow', exact: true }).click(); await page.waitForSelector('.flow-canvas');
   await page.locator('.gcard.ask .opt').first().click();
   await sleep(2500); await shot(page, '06-building');
   await waitReady(page);
@@ -112,6 +118,12 @@ async function flowDemo(browser, url) {
   await page.locator('.station').nth(1).click(); await page.getByRole('tab', { name: /^Attempts/ }).click(); await sleep(150); await shot(page, '08-attempts');
   await page.getByRole('button', { name: 'Timeline' }).click(); await sleep(150); await shot(page, '09-timeline');
   check('the timeline says a saved build replayed with no model calls and nothing spent', /no model calls, nothing spent/.test(await page.locator('.tl-usage').innerText()));
+  await page.getByRole('button', { name: 'Meeting', exact: true }).click(); await page.waitForSelector('.meet-tile');
+  const meet = await st(page, () => ({ tiles: [...document.querySelectorAll('.meet-tile')].map((x) => x.dataset.agent + ':' + [...x.classList].find((c) => c.indexOf('m-') === 0)), hands: document.querySelectorAll('.meet-hand').length, screen: (document.querySelector('.meet-screen-head') || {}).textContent || '' }));
+  check('meeting view: a tile for the orchestrator and every builder, all done, no hands raised, the line on the shared screen', meet.tiles.slice(0, 6).join(',') === 'orchestrator:m-done,researcher:m-done,database:m-done,backend:m-done,views:m-done,ui:m-done' && meet.tiles.every((t) => /m-done$/.test(t)) && meet.hands === 0 && /sharing the build line/.test(meet.screen) && /6 of 6 stations checked/.test(meet.screen), meet);
+  await page.locator('.meet-tile[data-agent=database]').click(); await page.waitForSelector('.meet-tile[data-agent=database].sel');
+  check('meeting view: pressing a tile opens what that agent made', (await page.locator('section.inspector').first().getAttribute('aria-label')) === 'Database inspector', await page.locator('section.inspector').first().getAttribute('aria-label'));
+  await shot(page, '09b-meeting');
   await page.getByRole('button', { name: 'Workflow', exact: true }).click();
 
   // the built app

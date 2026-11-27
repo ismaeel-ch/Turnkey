@@ -680,3 +680,36 @@ body>.fui-FluentProvider.fl-provider{height:auto}
 /* 10: the wide canvas is sized to show node text at a readable size, so it can be taller than the window; its
    controls (zoom, Fit, Map, Reset layout) and legend sit above it, where they are in view without scrolling */
 .flow-wrap>.flow-foot{order:-1}
+/* Meeting view of the agents (src/workspace/meeting.tsx): tiles like a Teams call, the speaker ringed, a raised hand for the owner */
+.meet .meet-stage{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:12px;align-items:start}
+.meet-screen{border:1px solid var(--colorNeutralStroke2);border-radius:var(--borderRadiusXLarge);background:var(--colorNeutralBackground2);padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.meet-screen-head{display:flex;align-items:center;gap:8px;color:var(--colorNeutralForeground1)}
+.meet-board{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.meet-step{display:flex;align-items:center;gap:8px;min-height:32px;padding:4px 8px;border-radius:var(--borderRadiusMedium);background:var(--colorNeutralBackground1)}
+.meet-step.on{box-shadow:inset 3px 0 0 var(--colorBrandStroke1)}
+.meet-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:0;padding:0}
+.meet-cell{display:flex;min-width:0}
+.meet-tile{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:132px;padding:12px 8px;border-radius:var(--borderRadiusXLarge);border:2px solid transparent;background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground1);font:inherit;text-align:center;cursor:pointer}
+.meet-tile:disabled{cursor:default}
+.meet-tile:hover:not(:disabled){background:var(--colorNeutralBackground3Hover)}
+.meet-tile:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:2px}
+.meet-tile.sel{border-color:var(--colorNeutralStroke1Selected)}
+.meet-tile.m-talking{border-color:var(--colorBrandStroke1);box-shadow:0 0 0 2px var(--colorBrandStroke2)}
+.meet-tile.m-hand{border-color:var(--colorStatusWarningBorderActive)}
+.meet-tile.m-idle .av{opacity:.55}
+.meet-name{font-size:14px;line-height:20px}
+.meet-cap{color:var(--colorNeutralForeground2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.meet-state{display:inline-flex;align-items:center;gap:6px;color:var(--colorNeutralForeground3)}
+.m-talking .meet-state{color:var(--colorBrandForeground1)}
+.m-hand .meet-state{color:var(--colorStatusWarningForeground1)}
+.m-flag .meet-state{color:var(--colorStatusDangerForeground1)}
+.meet-hand{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--colorStatusWarningBackground1);color:var(--colorStatusWarningForeground1);animation:meet-wave 1.4s ease-in-out infinite}
+@keyframes meet-wave{50%{transform:rotate(-14deg)}}
+.meet-eq{width:10px;height:10px;border-radius:50%;background:var(--colorBrandBackground);animation:meet-pulse 1s ease-in-out infinite}
+@keyframes meet-pulse{50%{transform:scale(.55);opacity:.6}}
+.meet-note{display:flex;align-items:center;gap:6px;margin:10px 0 0;color:var(--colorStatusWarningForeground1)}
+.meet-captions{margin-top:10px;padding:8px 12px;border-radius:var(--borderRadiusLarge);background:var(--colorNeutralBackground2);display:flex;flex-direction:column;gap:2px}
+.meet-line{display:flex;gap:8px;font-size:12px;line-height:16px;min-width:0}
+.meet-line>.muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:900px){.meet .meet-stage{grid-template-columns:1fr}}
+@media (max-width:600px){.meet-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.meet-tile{min-height:112px}}
