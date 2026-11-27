@@ -79,17 +79,32 @@ describe.each(COMPLEX_TEMPLATES)('the %s saved build', (id) => {
 });
 
 describe('changing an app that works things out', () => {
-  it('refuses to rename or remove a field a formula reads, and says what reads it', async () => {
+  it('a renamed field is followed by every formula that reads it; a removal is refused and says what reads it', async () => {
     const changes = await import('@/workspace/changes');
     const app = APPS.dispatch;
     const say = (text: string) => changes.handleChat(app as Parameters<typeof changes.handleChat>[0], text, { rules: true });
+    const col = (t: string, c: string) => app.def.tables.find((x) => x.name === t)?.columns.find((x) => x.name === c);
+    const job = () => M.db.sqlRows(app.id, 'SELECT parts_cost, total FROM jobs WHERE parts_cost > 0 ORDER BY id LIMIT 1', null)[0];
+    const before = job();
+    await say('Rename the line_total field in parts_used to amount');
+    expect(col('parts_used', 'amount')?.formula).toBe('quantity * unit_price');
+    expect(col('jobs', 'parts_cost')?.formula).toBe('sum(parts_used.amount)');
     await say('Rename the quantity field in parts_used to how_many');
-    expect(app.def.tables.find((t) => t.name === 'parts_used')?.columns.map((c) => c.name)).toContain('quantity');
-    expect(app.chat.map((m) => m.text || '').join(' ')).toMatch(/Quantity is used by the calculated field Amount in Parts used/);
-    await say('Remove the quantity field from parts_used');
-    expect(app.def.tables.find((t) => t.name === 'parts_used')?.columns.map((c) => c.name)).toContain('quantity');
+    expect(col('parts_used', 'amount')?.formula).toBe('how_many * unit_price');
+    expect(app.def.logic?.rules.find((r) => r.table === 'parts_used')?.when).toBe('how_many > 0');
+    await say('Rename the hourly_rate field in customers to rate_per_hour');
+    expect(col('jobs', 'labour_cost')?.formula).toBe('labour_hours * customer.rate_per_hour');
+    // the numbers are the same, and a new part still adds up
+    expect(job()).toEqual(before);
+    const { logicIssues } = await import('@/workspace/logic');
+    expect(logicIssues(app.def)).toEqual([]);
+    M.tests.runTestsSync(app);
+    expect(failedTests(app)).toEqual([]);
+    await say('Remove the how_many field from parts_used');
+    expect(col('parts_used', 'how_many')).toBeDefined();
+    expect(app.chat.map((m) => m.text || '').join(' ')).toMatch(/How many is used by the calculated field Amount in Parts used/);
     // the changes it offers never include one it would refuse
-    for (const tip of changes.suggestChanges(app)) expect(tip).not.toMatch(/Remove the (quantity|amount|price each)/i);
+    for (const tip of changes.suggestChanges(app)) expect(tip).not.toMatch(/Remove the (how many|amount|price each)/i);
   });
 });
 
