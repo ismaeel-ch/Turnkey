@@ -5,6 +5,26 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-11-27
+
+A release now reaches every browser on its next visit, a built app can be changed and released from the agents chat,
+and smaller view fixes.
+
+### Added
+
+- The agents chat can change a built app and release it: say "release" and a card offers the version, the kind of
+  change, what new people start with and the notes. After a release, a change typed in chat gets questions and a plan
+  first. ([#275](https://github.com/ismaeel-ch/Turnkey/pull/275))
+
+### Fixed
+
+- A browser that visited before gets the new version on its next visit (the offline copy is used only when there is
+  no network), and a tab left open shows an Update button when a new version is out. Before, the first visit after a
+  release still showed the previous version. ([#277](https://github.com/ismaeel-ch/Turnkey/pull/277))
+- Views: the clinic's demo visit notes match their appointments, an empty calendar month points to the next record,
+  timeline labels stay readable over the Today line, and on phones the pivot's Total row and the timeline scroll
+  sideways instead of piling up. ([#273](https://github.com/ismaeel-ch/Turnkey/pull/273))
+
 ## [0.5.4] - 2026-11-27
 
 A tidier row of view tabs on every list page of a built app, fixes found by ten more real builds on new sentences,
