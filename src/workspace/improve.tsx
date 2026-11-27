@@ -228,6 +228,31 @@ const lastCard = <C,>(app: AppRecord, type: string, flow: string): C | null => {
   return m ? (m.card as unknown as C) : null;
 };
 const live = (ops: Op[]) => ops.filter((o) => o.op !== 'keep');
+/** What the owner said that started an improvement: the last thing they wrote before its first card. */
+const saidFor = (app: AppRecord, flow: string): string => {
+  const at = app.chat.findIndex((x) => !!x.card && 'flow' in x.card && x.card.flow === flow);
+  for (let i = at - 1; i >= 0; i--) if (app.chat[i].from === 'user') return app.chat[i].text;
+  return '';
+};
+/** A request left half-way (the page was reloaded or closed) can be picked up again from the same words. */
+function AskAgain({ app, flow }: { app: AppRecord; flow: string }) {
+  const said = saidFor(app, flow),
+    other = !!IMPROVE[app.id];
+  return (
+    <div className="row wrap gap8 improve-stale">
+      <span className="t-cap muted grow">
+        {said && !other ? 'This request stopped when the page was closed. Nothing was changed.' : 'No longer waiting for an answer.'}
+      </span>
+      {said && !other && (
+        <Btn className="btn sm" data-act="again" disabled={!!editBlocked(app)} onClick={() => void startImprove(app, said)}>
+          <Icon n="undo" s="16" />
+          Ask again
+        </Btn>
+      )}
+    </div>
+  );
+}
+
 const titleOf = (text: string) => (text.length > 46 ? text.slice(0, 44) + '…' : text);
 
 /**
@@ -648,9 +673,10 @@ export function ChangePlanCard({ app, c }: { app: AppRecord; c: PlanCard }) {
           </div>
         ) : (
           <span className={c.decided === 'go' ? 'badge b-success' : 't-cap muted'}>
-            {c.decided === 'go' ? 'You said go ahead' : c.decided ? 'Not done: nothing was changed' : 'No longer waiting for an answer.'}
+            {c.decided === 'go' ? 'You said go ahead' : c.decided ? 'Not done: nothing was changed' : ''}
           </span>
         ))}
+      {c.flow && !flow && c.decided == null && <AskAgain app={app} flow={c.flow} />}
     </div>
   );
 }
@@ -688,7 +714,7 @@ export function UnderstandBox({ app, c }: { app: AppRecord; c: UnderstandCard })
           ))}
         </div>
       ))}
-      {!flow && c.questions.some((q) => q.answered == null) && <span className="t-cap muted">No longer waiting for an answer.</span>}
+      {!flow && !plan && c.questions.some((q) => q.answered == null) && <AskAgain app={app} flow={c.flow} />}
     </div>
   );
 }
@@ -856,7 +882,22 @@ export function ImproveBox({ app }: { app: AppRecord }) {
   const [text, setText] = useState('');
   const blocked = editBlocked(app),
     ideas = suggestChanges(app).slice(0, 3),
-    rel = relOf(app);
+    rel = relOf(app),
+    // the questions, the plan and the "try it" card come in the chat; say so here, where the owner asked
+    pending = IMPROVE[app.id] || null,
+    plan = pending && lastCard<PlanCard>(app, 'plan', pending.id),
+    tried = pending && lastCard<TryCard>(app, 'tryit', pending.id),
+    pendingWhat = !pending
+      ? ''
+      : tried
+        ? 'try it, then say whether it works'
+        : plan
+          ? plan.decided === 'go'
+            ? 'the change is being built'
+            : 'a plan to approve'
+          : pending.questions.some((q) => q.answered == null)
+            ? 'a question first'
+            : 'the plan is on its way';
   const send = (x: string) => {
     setText('');
     void startImprove(app, x);
@@ -895,6 +936,15 @@ export function ImproveBox({ app }: { app: AppRecord }) {
           </button>
         ))}
       </div>
+      {pending && (
+        <p className="row wrap gap8 improve-pending" id="improve-pending" role="status">
+          <Icon n="questionChat" s="16" />
+          <span className="grow">{'“' + titleOf(pending.text) + '” is waiting for you in the chat: ' + pendingWhat + '.'}</span>
+          <Btn className="btn sm" onClick={() => setChat(true)}>
+            Show it
+          </Btn>
+        </p>
+      )}
     </div>
   );
 }

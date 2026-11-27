@@ -28,6 +28,7 @@ import { testStats } from './tests';
 import { demoMenuItems } from './demo-data-ui';
 import { Btn, Dialog, Field, Icon, Input, MBar, Seg, Select, Spinner, Textarea } from './ui';
 import { AppPane } from './runtime';
+import { soleUser } from './onboarding';
 import type { SoloItem } from './mobile';
 import {
   AppLogo,
@@ -196,24 +197,27 @@ export function ShareDialog({ p }: { p: { app: string } }) {
             }
           />
         </Field>
-        <Field id="sh-as" label="They open it as" hint="A person skips the sign-in screen. They can still switch.">
-          <Select
-            native
-            className="select"
-            id="sh-as"
-            value={sh.as}
-            onChange={(e) => setShare({ as: (e.target as HTMLSelectElement).value })}
-          >
-            <option value="">The sign-in screen</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.username}>
-                {u.name}
-                {' · '}
-                {roleName(app.def, u.role)}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {/* an app for one person has no sign-in screen, so there is nobody to choose */}
+        {!soleUser(app, users) && (
+          <Field id="sh-as" label="They open it as" hint="A person skips the sign-in screen. They can still switch.">
+            <Select
+              native
+              className="select"
+              id="sh-as"
+              value={sh.as}
+              onChange={(e) => setShare({ as: (e.target as HTMLSelectElement).value })}
+            >
+              <option value="">The sign-in screen</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.username}>
+                  {u.name}
+                  {' · '}
+                  {roleName(app.def, u.role)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
       </div>
       {(sh.short || sh.shortBusy) && (
         <Field id="sh-short" label="Short link" hint="Opens the newest version you share. Anyone with it can open the app.">
@@ -278,8 +282,8 @@ export function ShareDialog({ p }: { p: { app: string } }) {
         <li>
           <Icon n="shield" s="16" />
           <span>
-            Either link opens the app on its own. It is checked again, station by station, in the browser that opens it, and nothing in it
-            runs as code.
+            Either link opens the app on its own. It is checked again in the browser that opens it, with the checks every agent&apos;s work
+            must pass, and nothing in it runs as code.
           </span>
         </li>
         <li>

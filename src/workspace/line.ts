@@ -1680,13 +1680,11 @@ function linePorts(app: BuildApp, run: Run, ctl: RunCtl, o: LineOpts): Ports {
           : app.name +
               ' is ready. ' +
               app.def.tables.length +
-              ' tables, ' +
-              deriveEndpoints(app.def).length +
-              ' endpoints, ' +
+              (app.def.tables.length === 1 ? ' list, ' : ' lists, ') +
               Object.keys(app.def.views).reduce((k, t) => k + app.def.views[t].length, 0) +
               ' views, ' +
               app.def.screens.length +
-              ' pages' +
+              (app.def.screens.length === 1 ? ' screen' : ' screens') +
               (app.def.team ? ', a team of ' + app.def.team.agents.length + ' agents' : '') +
               (run.retries ? ', ' + run.retries + ' send-back' + (run.retries > 1 ? 's' : '') : '') +
               '.',
@@ -1820,7 +1818,7 @@ export async function runBuild(app: BuildApp, from?: string) {
       say(
         app,
         'orchestrator',
-        (teamPlanOf(app) ? 'For this app the build ' : 'This app has its own workflow: ') +
+        (teamPlanOf(app) ? 'For this app: ' : 'This app has its own workflow: ') +
           custom.map((x) => x.text.charAt(0).toLowerCase() + x.text.slice(1)).join(', ') +
           '.' +
           (!live && Object.keys(flow.notes).length

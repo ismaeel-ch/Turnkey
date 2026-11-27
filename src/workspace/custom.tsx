@@ -209,7 +209,7 @@ export function flowList(f: AppFlow) {
     if (f.by[s] === 'rules')
       out.push({
         icon: 'code',
-        text: stName(s) + ' built by rules',
+        text: stName(s) + ' is written by code, with no model call',
       });
   });
   NOTE_FOR.forEach((a) => {
@@ -502,7 +502,13 @@ export const FLOW_TOOLS: Dict<(app: AppRecord, a: Untrusted) => FlowResult> = {
       f = flowOf(app),
       t = str(a.text).replace(/\s+/g, ' ').slice(0, NOTE_MAX);
     if (!NOTE_FOR.includes(ag))
-      throw new Error('I can keep an instruction for the ' + NOTE_FOR.map((id) => AGENTS[id].name).join(', ').replace(/, ([^,]+)$/, ' and $1') + '.');
+      throw new Error(
+        'I can keep an instruction for the ' +
+          NOTE_FOR.map((id) => AGENTS[id].name)
+            .join(', ')
+            .replace(/, ([^,]+)$/, ' and $1') +
+          '.',
+      );
     if ((f.notes[ag] || '') === t)
       return {
         same: true,

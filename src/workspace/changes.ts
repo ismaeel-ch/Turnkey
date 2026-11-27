@@ -1463,9 +1463,10 @@ export async function runChange(app: BackedApp, steps: PlannedStep[], title: str
     say(
       app,
       'orchestrator',
-      'Done. Only the stations this change touches ran again' +
+      'Done. Only the steps this change touches ran again' +
         (ts
-          ? ', and I regenerated the tests: ' + (ts.failed ? ts.failed + ' of ' + ts.total + ' fail.' : 'all ' + ts.total + ' pass.')
+          ? ', and the Tester ran every check again: ' +
+            (ts.failed ? ts.failed + ' of ' + ts.total + ' fail.' : 'all ' + ts.total + ' pass.')
           : '.'),
       {
         type: 'changed',

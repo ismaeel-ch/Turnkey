@@ -1103,15 +1103,18 @@ export function StageView({ app }: { app: AppRecord }) {
             </option>
           ))}
         </Select>
-        <Btn
-          className={cx('btn sm', st.split && 'on')}
-          aria-pressed={st.split}
-          title="Open the app twice, as two different users, to see the access rules side by side"
-          onClick={split}
-        >
-          <Icon n="split" s="16" />
-          <span className="hide-sm">Two users</span>
-        </Btn>
+        {/* one kind of person: there is nobody else to compare with */}
+        {(!only || st.split) && (
+          <Btn
+            className={cx('btn sm', st.split && 'on')}
+            aria-pressed={st.split}
+            title="Open the app twice, as two different users, to see the access rules side by side"
+            onClick={split}
+          >
+            <Icon n="split" s="16" />
+            <span className="hide-sm">Two users</span>
+          </Btn>
+        )}
         <Btn
           className="btn sm"
           disabled={!shown}
