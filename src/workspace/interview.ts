@@ -1,6 +1,7 @@
 import {
   PLAN_LIMITS,
   cardsToAsk,
+  demoDataCard,
   nextCard,
   planAnswers,
   previewPlan,
@@ -33,36 +34,17 @@ import { REC } from './registry';
      interview, as it always has.
    Either way the plan beside the cards is `previewPlan`: the draft with the answers laid over it, no model call. */
 
-/** The Planner's two calls, and what else other modules plug in. Each is off until its module provides it. */
+/** The Planner's two calls. Each is off until its module provides it. */
 export const PLANNER: {
   /** One model call: what was understood, the cards to ask, and the plan for the usual choices. */
   ask: ((request: string) => Promise<{ reflect: string; cards: QuestionCard[]; draft: PlanSpec }>) | null;
   /** One model call: the plan to approve, from the answers the owner gave (skipped cards are left out), the draft and the cards. */
   write: ((request: string, answers: PlanAnswer[], draft: PlanSpec, cards: QuestionCard[]) => Promise<PlanSpec>) | null;
-  /** True once a build can start with no demo data. Until then the choice is not offered, so it is never a promise nothing keeps. */
-  startEmpty: boolean;
-} = { ask: null, write: null, startEmpty: false };
+} = { ask: null, write: null };
 /** A sentence the model builds from gets an interview once the Planner can be asked. */
 export const plannerReady = () => !!(PLANNER.ask && PLANNER.write);
 /** The Planner writes the plan for one interview at most this many times; after that the plan is put together from the answers by rule. */
 export const MAX_WRITES = 3;
-
-export const DEMO_CARD: QuestionCard = {
-  id: 'demo_data',
-  title: 'Would you like demo data to try the app?',
-  why: 'an empty app is hard to judge. Demo data is made up, clearly marked, and you can remove it in one click.',
-  kind: 'one',
-  options: [
-    {
-      id: 'yes',
-      label: 'Yes, add demo data',
-      desc: 'Made-up records and people, so every screen has something to show',
-      leads: { demoData: true },
-    },
-    { id: 'no', label: 'No, start empty', desc: 'Only the sign-ins and the starter settings', leads: { demoData: false } },
-  ],
-  usual: ['yes'],
-};
 
 /* ---------- a saved build as a plan ---------- */
 
@@ -166,21 +148,19 @@ export function savedInterview(tpl: string): { reflect: string; cards: QuestionC
 export const interviewNow = (): Interview | null => U.home.interview || null;
 const mine = (iv: Interview) => U.home.interview === iv;
 
-/** The cards as asked: at most five and the demo data card, which is offered only when a build can start empty. */
+/** The cards as asked: at most five, then the demo data card, which every interview ends with. */
 function askable(cards: QuestionCard[]): QuestionCard[] {
   const own = cards.filter((c) => c.id !== 'demo_data' && c.options.length >= 2).slice(0, PLAN_LIMITS.questions);
-  return PLANNER.startEmpty ? own.concat(cards.find((c) => c.id === 'demo_data') || DEMO_CARD) : own;
+  return own.concat(cards.find((c) => c.id === 'demo_data') || demoDataCard());
 }
 const opening = (reflect: string, n: number) =>
   'Got it. ' +
   str(reflect).replace(/([^.!?])$/, '$1.') +
   ' ' +
-  (n === 0
-    ? 'I have no questions for this one, so here is the plan.'
-    : (n === 1 ? 'One quick question' : 'A few quick questions') +
-      ' so I build the right one. Skip ' +
-      (n === 1 ? 'it' : 'any of them') +
-      " and I'll use the usual choice.");
+  (n === 1 ? 'One quick question' : 'A few quick questions') +
+  ' so I build the right one. Skip ' +
+  (n === 1 ? 'it' : 'any of them') +
+  " and I'll use the usual choice.";
 
 function open(iv: Interview, got: { reflect: string; cards: QuestionCard[]; draft: PlanSpec }, skip?: boolean) {
   iv.cards = askable(got.cards);
@@ -188,7 +168,7 @@ function open(iv: Interview, got: { reflect: string; cards: QuestionCard[]; draf
   iv.reflect = opening(got.reflect, iv.cards.length);
   iv.busy = null;
   iv.error = '';
-  if (skip || !iv.cards.length) takeUsual();
+  if (skip) takeUsual();
   else notify();
 }
 
@@ -362,12 +342,10 @@ export function reviewPlan() {
     },
   );
 }
-/** Whether the demo data choice is the owner's to make for this interview. */
-export const demoChoice = (iv: Interview) => iv.cards.some((c) => c.id === 'demo_data');
 /** The demo data switch on the plan: the same answer as the card, changed by hand with no model call. */
 export function setDemoData(on: boolean) {
   const iv = interviewNow();
-  if (!iv || iv.busy || !demoChoice(iv)) return;
+  if (!iv || iv.busy) return;
   iv.answers.demo_data = { picked: [on ? 'yes' : 'no'], by: 'you' };
   if (iv.plan) {
     const mark = planAnswers(iv.cards, iv.answers).find((a) => a.slot === 'demo_data');

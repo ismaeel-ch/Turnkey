@@ -14,14 +14,12 @@ import type { Interview } from '@/shared/types/interview';
 import { AGENTS } from './agents';
 import { cx } from './core';
 import {
-  PLANNER,
   answerInWords,
   backToQuestions,
   buildIt,
   changeAnswer,
   confirmTicks,
   currentCard,
-  demoChoice,
   interviewNow,
   leaveInterview,
   pickOption,
@@ -249,13 +247,12 @@ function Rules({ plan }: { plan: PlanSpec }) {
 
 const demoText = (on: boolean) =>
   on
-    ? 'Made-up records and people, marked as demo data, so every screen has something to show.' +
-      (PLANNER.startEmpty ? ' Remove them in one click.' : '')
-    : 'Off. The app starts empty, with only the sign-ins and the starter settings.';
+    ? 'Made-up records and people, marked as demo data, so every screen has something to show. You remove them in one step when you are done.'
+    : 'Off. The app starts empty: only the people who sign in and the starter settings are there.';
 
 /** Demo data beside the questions: what was chosen, or that it is asked last. */
 function Demo({ iv, plan }: { iv: Interview; plan: PlanSpec }) {
-  const open = demoChoice(iv) && !iv.answers.demo_data;
+  const open = !iv.answers.demo_data;
   return (
     <Section title="Demo data" badge={<span className="badge iv-demo">Demo</span>} cls="iv-demodata">
       {open ? (
@@ -268,14 +265,10 @@ function Demo({ iv, plan }: { iv: Interview; plan: PlanSpec }) {
 }
 
 /** The plan's switches: demo data is the owner's to flip; the overview and helpers are stated. */
-function Extras({ iv, plan }: { iv: Interview; plan: PlanSpec }) {
+function Extras({ plan }: { plan: PlanSpec }) {
   return (
     <Section title="Extras" cls="iv-extras">
-      {demoChoice(iv) ? (
-        <Switch id="iv-demo" on={plan.demoData} onChange={setDemoData} text={<strong>Demo data</strong>} />
-      ) : (
-        <strong>Demo data</strong>
-      )}
+      <Switch id="iv-demo" on={plan.demoData} onChange={setDemoData} text={<strong>Demo data</strong>} />
       <p className="t-cap muted" id="iv-demo-text">
         {demoText(plan.demoData)}
       </p>
@@ -564,7 +557,7 @@ function Chat({ iv, plan }: { iv: Interview; plan: PlanSpec | null }) {
         <>
           <div className="iv-bubble">
             {'Here is the plan. Read it once. '}
-            {demoChoice(iv) ? 'You can flip the demo data switch yourself, or change any answer.' : 'You can change any answer.'}
+            You can flip the demo data switch yourself, or change any answer.
           </div>
           {plan.notInThisVersion.length > 0 && (
             <div className="iv-bubble">
@@ -714,7 +707,7 @@ function PlanScreen({ iv, plan }: { iv: Interview; plan: PlanSpec }) {
         <Keeps plan={plan} full />
         <Access plan={plan} />
         <div className="iv-grid">
-          <Extras iv={iv} plan={plan} />
+          <Extras plan={plan} />
           <Assumed iv={iv} plan={plan} />
         </div>
         <Team plan={plan} title="Who works on it" />

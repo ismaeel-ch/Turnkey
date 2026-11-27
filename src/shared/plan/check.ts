@@ -6,7 +6,7 @@
  */
 import { COLUMN_TYPES, SYSTEM_COLUMNS, SYSTEM_TABLES } from '@/shared/sql/types';
 import type { Check } from '@/shared/types/app';
-import { AUDIENCES, PLAN_LIMITS, type PlanList, type PlanSpec } from './types';
+import { AUDIENCES, PLAN_LIMITS, STAGE_FIELD, type PlanList, type PlanSpec } from './types';
 
 const SNAKE = /^[a-z][a-z0-9_]*$/;
 const within = (n: number, r: { min: number; max: number }) => n >= r.min && n <= r.max;
@@ -57,6 +57,7 @@ function stageProblems(plan: PlanSpec): string[] {
   if (list.settings) out.push('the stages are on ' + list.label + ', which holds starter settings');
   if (!within(ids.length, PLAN_LIMITS.stages)) out.push('there are ' + ids.length + ' stages, needs ' + range(PLAN_LIMITS.stages));
   if (dupes(ids).length) out.push('stages named twice: ' + quote(dupes(ids)));
+  if (st.field !== STAGE_FIELD) out.push('the stage field must be named "' + STAGE_FIELD + '", not "' + st.field + '"');
   const field = list.fields.find((f) => f.name === st.field);
   if (!field || field.type !== 'select') out.push('the stage field "' + st.field + '" must be a choice field of ' + list.label);
   else if (ids.some((id) => !(field.options || []).includes(id)) || (field.options || []).some((o) => !ids.includes(o)))

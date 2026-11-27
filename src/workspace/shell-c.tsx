@@ -82,6 +82,9 @@ import { TEAMS } from './team';
 import { TESTS, runTestsSync, suiteOf } from './tests';
 import { FLOW, isDark } from './flow';
 import { LIVE, RUNS, STATIONS, deleteApp, resumeInterrupted, runBuild, startBuild, stopRun } from './line';
+import type { PlanSpec } from '@/shared/plan/types';
+/** The Planner is loaded on first use, so only its types are imported here. */
+type Planner = typeof import('./planner');
 import { cancelRerun, queuedRerun } from './rerun';
 import { buildPack, editFromCanvas, parseChange } from './changes';
 import { AddStepDialog, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
@@ -1969,6 +1972,12 @@ export function boot() {
     },
     state: () => S,
     view: () => U,
+    /** The guided start of a build: the Planner's two calls (loaded on first use), and a build that follows the plan they return. */
+    plan: {
+      ask: (...args: Parameters<Planner['askPlanner']>) => import('./planner').then((m) => m.askPlanner(...args)),
+      write: (...args: Parameters<Planner['writePlan']>) => import('./planner').then((m) => m.writePlan(...args)),
+      build: (request: string, plan: PlanSpec) => startBuild({ request, plan }),
+    },
     teams: () => TEAMS,
     tests: () => TESTS,
     share: {

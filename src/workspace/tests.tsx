@@ -15,6 +15,7 @@ import {
   colOf,
   deriveEndpoints,
   roleName,
+  mainTable,
   tableOf,
   testMatrix,
   tourExec,
@@ -273,7 +274,7 @@ export function buildSuites(app: TestApp) {
       };
     }
   });
-  if (P) {
+  if (P && P.states.length) {
     const id = 'db:states';
     dbT.push({
       id,
@@ -405,16 +406,20 @@ export function buildSuites(app: TestApp) {
       return r;
     },
   );
-  // workflow: each action really moves a record, and is refused for a role that may not take it
-  const pt = tableOf(def, P.table) as AppTable,
+  // workflow: each action really moves a record, and is refused for a role that may not take it.
+  // An app with no stages has no workflow, so it gets no workflow tests: its records are just kept.
+  const staged = P.states.length > 0,
+    pt = (staged ? tableOf(def, P.table) : mainTable(def)) as AppTable,
     own = pt.owner || 'created_by',
-    wfT: (TestDef & { x?: Transition; role?: Role; allow?: boolean })[] = [
-      {
-        id: 'wf:reach',
-        name: 'Every status can be reached from ' + labelOfState(def, pt, colOf(pt, P.column), P.initial),
-        expect: P.states.length + ' statuses reachable',
-      },
-    ];
+    wfT: (TestDef & { x?: Transition; role?: Role; allow?: boolean })[] = staged
+      ? [
+          {
+            id: 'wf:reach',
+            name: 'Every status can be reached from ' + labelOfState(def, pt, colOf(pt, P.column), P.initial),
+            expect: P.states.length + ' statuses reachable',
+          },
+        ]
+      : [];
   P.transitions.forEach((x) => {
     const yes = roles.find((r) => x.roles.includes(r.id) && userOf(r.id)),
       no = roles.find((r) => !x.roles.includes(r.id) && userOf(r.id));

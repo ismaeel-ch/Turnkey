@@ -88,15 +88,15 @@ describe('normPlan', () => {
 
   it('keeps the stage field in step with the stages', () => {
     const raw = structuredClone(COMPANY_EXPENSES) as PlanSpec;
-    raw.lists[0].fields = raw.lists[0].fields.filter((f) => f.name !== 'stage');
-    expect(normPlan(raw).lists[0].fields.find((f) => f.name === 'stage')).toEqual({
-      name: 'stage',
+    raw.lists[0].fields = raw.lists[0].fields.filter((f) => f.name !== 'status');
+    expect(normPlan(raw).lists[0].fields.find((f) => f.name === 'status')).toEqual({
+      name: 'status',
       label: 'Stage',
       type: 'select',
       options: ['draft', 'submitted', 'approved', 'paid', 'rejected'],
     });
     const stale = structuredClone(COMPANY_EXPENSES) as PlanSpec;
-    stale.lists[0].fields.find((f) => f.name === 'stage')!.options = ['open', 'closed'];
+    stale.lists[0].fields.find((f) => f.name === 'status')!.options = ['open', 'closed'];
     expect(failed(normPlan(stale, { answers: stale.answers }))).toEqual([]);
   });
 
@@ -148,7 +148,7 @@ describe('normPlan', () => {
     expect(plan.permissions.teams.auditor).toEqual({ list: 'all', create: false, update: 'none', delete: false });
     expect(plan.permissions.categories.employee).toMatchObject({ list: 'all', update: 'all' });
     expect(plan.lists[0].fields.length).toBe(10);
-    expect(plan.lists[0].fields.map((f) => f.name)).toEqual(expect.arrayContaining(['what_for', 'employee', 'stage']));
+    expect(plan.lists[0].fields.map((f) => f.name)).toEqual(expect.arrayContaining(['what_for', 'employee', 'status']));
     expect(plan.lists[1].fields.find((f) => f.name === 'parent')).toEqual({ name: 'parent', label: 'Parent', type: 'text' });
     expect(plan.lists[1].fields.find((f) => f.name === 'kind')?.type).toBe('text');
     expect(plan.lists[2].fields[1].role).toBeUndefined();
@@ -161,7 +161,7 @@ describe('normPlan', () => {
     const answers = COMPANY_EXPENSES.answers.map((a) => (a.slot === 'approval' ? { ...a, answer: 'No approval', value: 'none' } : a));
     const plan = normPlan(structuredClone(COMPANY_EXPENSES), { answers, repair: true });
     expect(plan.stages).toBeNull();
-    expect(plan.lists[0].fields.some((f) => f.name === 'stage')).toBe(false);
+    expect(plan.lists[0].fields.some((f) => f.name === 'status')).toBe(false);
     expect(failed(plan)).toEqual([]);
   });
 
@@ -264,7 +264,7 @@ describe('normCards', () => {
     const lead = (card: number, option: string) => cards[card].options.find((o) => o.id === option)?.leads;
     const solo = lead(0, 'just_me');
     expect(solo).toMatchObject({ audience: 'just_me', people: [{ id: 'owner' }], stages: null });
-    expect(solo?.lists?.[0].fields.some((f) => f.name === 'stage')).toBe(false);
+    expect(solo?.lists?.[0].fields.some((f) => f.name === 'status')).toBe(false);
     expect(Object.keys(solo?.permissions?.claims || {})).toEqual(['owner']);
     expect(lead(0, 'company')).toEqual({ audience: 'company' });
 
@@ -272,7 +272,7 @@ describe('normCards', () => {
     expect(one?.stages?.stages.map((s) => s.id)).toEqual(['draft', 'submitted', 'approved', 'rejected']);
     // a move the draft already has keeps its words and who does it
     expect(one?.stages?.moves[0]).toEqual({ label: 'Submit', from: ['draft'], to: 'submitted', by: ['employee'] });
-    expect(one?.lists?.[0].fields.find((f) => f.name === 'stage')?.options).toEqual(['draft', 'submitted', 'approved', 'rejected']);
+    expect(one?.lists?.[0].fields.find((f) => f.name === 'status')?.options).toEqual(['draft', 'submitted', 'approved', 'rejected']);
     expect(lead(2, 'none')).toMatchObject({ stages: null });
     expect(lead(2, 'two')).toBeUndefined();
 
@@ -280,7 +280,7 @@ describe('normCards', () => {
     expect(lead(3, 'own')?.permissions?.claims.employee).toMatchObject({ list: 'own', update: 'own' });
     expect(lead(3, 'own')?.permissions?.claims.manager.list).toBe('all');
     // leads never change the draft they were worked out from
-    expect(COMPANY_EXPENSES.lists[0].fields.some((f) => f.name === 'stage')).toBe(true);
+    expect(COMPANY_EXPENSES.lists[0].fields.some((f) => f.name === 'status')).toBe(true);
   });
 
   it('gives every preview a plan the team can be picked from', () => {

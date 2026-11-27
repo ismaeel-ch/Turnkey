@@ -96,6 +96,9 @@ async function scheme(browser, s) {
   await screen(page, s + ': the questions before a build');
   await page.locator('.iv-ask .iv-opt').first().focus();
   await page.keyboard.press('Enter');
+  await page.waitForSelector('.iv-ask[data-card=demo_data]');
+  await page.locator('.iv-ask .iv-opt').first().focus();
+  await page.keyboard.press('Enter');
   await page.waitForSelector('.iv-done');
   await page.locator('.iv-review').click();
   await page.waitForSelector('.iv-act .iv-build');

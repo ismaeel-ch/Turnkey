@@ -1,7 +1,7 @@
 import type { AppTable, BackedDef, BriefedDef, Role, TestCase, TourStep, Untrusted } from '@/shared/types/app';
 import type { AppRecord, Dict, QaState, Run } from '@/shared/types/workspace';
 import { U, arr, commit, cx, emit, errText, snake, str, toolCall, liveModelOn } from './core';
-import { accOf, appUsers, roleName, tableOf } from './engine';
+import { accOf, appUsers, mainTable, roleName, tableOf } from './engine';
 import { REC } from './builds';
 import { TESTS, runTests, runTestsSync, suiteOf, testStats, testable } from './tests';
 import {
@@ -267,8 +267,9 @@ export function suggestCases(app: BackedApp): CaseDraft[] {
       ],
     }),
   );
-  if (P) {
-    const t = tableOf(def, P.table) as AppTable,
+  const main = mainTable(def);
+  if (P && main) {
+    const t = main,
       maker = roles.find((r) => accOf(def, r.id, t.name).create);
     if (maker && t.columns.some((c) => c.required && c.name !== P.column && c.name !== t.owner))
       out.push({
@@ -314,10 +315,11 @@ export function suggestCases(app: BackedApp): CaseDraft[] {
         users.filter((u) => u.role === r.id).length > 1,
     ),
     mk =
-      own && def.tour.find((s) => s.do === 'create' && s.role === own.id && accOf(def, own.id, s.table || (P && P.table)).list === 'own');
+      own &&
+      def.tour.find((s) => s.do === 'create' && s.role === own.id && accOf(def, own.id, s.table || (main ? main.name : '')).list === 'own');
   if (own && mk) {
     const us = appUsers(app).filter((u) => u.role === own.id),
-      t = tableOf(def, mk.table || (P && P.table)) as AppTable;
+      t = tableOf(def, mk.table || main?.name) as AppTable;
     out.push({
       name: 'One ' + lc(own.name) + " does not see another's " + lc(t.label),
       why: ruleFor(['own']) || 'The access rules give this role its own ' + lc(t.label) + ' only.',

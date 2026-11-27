@@ -99,7 +99,7 @@ export const COMPANY_EXPENSES: PlanSpec = {
         { name: 'category', label: 'Category', type: 'ref', ref: 'categories' },
         { name: 'team', label: 'Team', type: 'ref', ref: 'teams' },
         { name: 'receipt_link', label: 'Receipt link', type: 'text' },
-        { name: 'stage', label: 'Stage', type: 'select', options: ['draft', 'submitted', 'approved', 'paid', 'rejected'] },
+        { name: 'status', label: 'Stage', type: 'select', options: ['draft', 'submitted', 'approved', 'paid', 'rejected'] },
         { name: 'sent_back_reason', label: 'Reason if sent back', type: 'longtext' },
         { name: 'approved_by', label: 'Approved by', type: 'user', role: 'manager' },
       ],
@@ -150,7 +150,7 @@ export const COMPANY_EXPENSES: PlanSpec = {
   ],
   stages: {
     list: 'claims',
-    field: 'stage',
+    field: 'status',
     stages: [
       { id: 'draft', label: 'Draft' },
       { id: 'submitted', label: 'Submitted' },

@@ -270,16 +270,37 @@ export function normBrief(o: Untrusted): Brief {
     sources: [],
   };
 }
+/** True when records of the app move through stages. A planned app may have none (`briefFromPlan`). */
+export const hasProcess = (b: Brief) => b.process.states.length > 0;
+/**
+ * The list an app is mainly about: the one whose records move through stages. An app with no stages has a workflow
+ * with no table, no states and no transitions; its main list is the one its brief names, else its first.
+ */
+export const mainTable = (def: Pick<AppDef, 'tables' | 'process' | 'brief'>): AppTable | undefined =>
+  tableOf(def, def.process ? def.process.table : '') || tableOf(def, def.brief ? def.brief.process.entity : '') || def.tables[0];
 export function checkBrief(b: Brief) {
   const ids = b.roles.map((r) => r.id);
   const bad = b.stories.filter((s) => !ids.includes(s.role));
+  // a brief written from a plan the owner approved may be for one person, hold one list and have no process
+  const least = b.planned ? 1 : 2;
+  const process = b.process.states.length >= 3 && b.process.states.length <= 7 && b.entities.some((e) => e.name === b.process.entity);
   return [
-    chk('2 to 4 roles', b.roles.length >= 2 && b.roles.length <= 4, b.roles.length + ' roles: ' + b.roles.map((r) => r.name).join(', ')),
-    chk('2 to 6 kinds of record', b.entities.length >= 2 && b.entities.length <= 6, b.entities.map((e) => e.name).join(', ')),
     chk(
-      'One process with 3 to 7 states',
-      b.process.states.length >= 3 && b.process.states.length <= 7 && b.entities.some((e) => e.name === b.process.entity),
-      b.process.entity ? b.process.entity + ': ' + b.process.states.join(' → ') : 'no process named',
+      least + ' to 4 roles',
+      b.roles.length >= least && b.roles.length <= 4,
+      b.roles.length + (b.roles.length === 1 ? ' role: ' : ' roles: ') + b.roles.map((r) => r.name).join(', '),
+    ),
+    chk(least + ' to 6 kinds of record', b.entities.length >= least && b.entities.length <= 6, b.entities.map((e) => e.name).join(', ')),
+    chk(
+      b.planned ? 'No process, or one with 3 to 7 states' : 'One process with 3 to 7 states',
+      process || (!!b.planned && !hasProcess(b)),
+      hasProcess(b)
+        ? b.process.entity + ': ' + b.process.states.join(' → ')
+        : b.planned
+          ? 'no stages: records are just kept'
+          : b.process.entity
+            ? b.process.entity + ': no states'
+            : 'no process named',
     ),
     chk(
       'Every user story belongs to a known role',
@@ -456,13 +477,15 @@ export function checkSchemaShape(sc: SchemaDraft, brief: Brief) {
     stOptions.length === brief.process.states.length &&
     brief.process.states.every((s) => stOptions.includes(s));
   out.push(
-    chk(
-      'The status column matches the process in the brief',
-      !!same,
-      same
-        ? brief.process.entity + '.status: ' + stOptions.join(', ')
-        : brief.process.entity + '.status must be a choice with exactly: ' + brief.process.states.join(', '),
-    ),
+    hasProcess(brief)
+      ? chk(
+          'The status column matches the process in the brief',
+          !!same,
+          same
+            ? brief.process.entity + '.status: ' + stOptions.join(', ')
+            : brief.process.entity + '.status must be a choice with exactly: ' + brief.process.states.join(', '),
+        )
+      : chk('The status column matches the process in the brief', true, 'no process, so no status column is needed'),
   );
   const noUser = brief.roles.filter((r) => !sc.users.some((u) => u.role === r.id)).map((r) => r.name);
   out.push(
@@ -807,10 +830,11 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
   const b = def.brief,
     roleIds = b.roles.map((r) => r.id),
     st = o.status || o.workflow || o.process || {};
-  const table = tableOf(def, snake(st.table)) ? snake(st.table) : b.process.entity;
+  const none = !hasProcess(b);
+  const table = none ? '' : tableOf(def, snake(st.table)) ? snake(st.table) : b.process.entity;
   const t = tableOf(def, table);
-  const column = t && colOf(t, snake(st.column)) ? snake(st.column) : 'status';
-  const states: ProcessState[] = arr(st.states)
+  const column = none ? '' : t && colOf(t, snake(st.column)) ? snake(st.column) : 'status';
+  const states: ProcessState[] = arr(none ? [] : st.states)
     .map((s: Untrusted): { id: string; label?: string; tone?: Tone } =>
       typeof s === 'string'
         ? {
@@ -830,7 +854,7 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
     }));
   const list1 = (v: unknown): unknown[] => (v == null ? [] : Array.isArray(v) ? v : [v]),
     yes = (v: unknown) => v === true || v === 'true' || v === 'yes';
-  const transitions: Transition[] = arr(st.transitions)
+  const transitions: Transition[] = arr(none ? [] : st.transitions)
     .map((x: Untrusted) => {
       x = x || {};
       const set: Dict<unknown> = {};
@@ -900,7 +924,7 @@ export function normBackend(o: Untrusted, def: BriefedDef): BackendDraft {
     table,
     column,
     states,
-    initial: snake(st.initial) || (states[0] ? states[0].id : ''),
+    initial: none ? '' : snake(st.initial) || (states[0] ? states[0].id : ''),
     transitions,
   };
   return {
@@ -917,14 +941,22 @@ export function checkBackendShape(def: BriefedDef, be: Pick<BackendDraft, 'proce
     out: Check[] = [];
   const colOptions = (col && col.options) || [];
   const same = col && col.type === 'select' && ids.length === colOptions.length && colOptions.every((o) => ids.includes(o));
+  // a planned app with no stages has no workflow to check: its records are just kept
+  const none = !hasProcess(def.brief);
   out.push(
-    chk(
-      'The workflow uses the states stored in the table',
-      !!same && ids.includes(P.initial),
-      same
-        ? P.table + '.' + P.column + ' starts at ' + P.initial
-        : 'states must be exactly: ' + (col && col.options ? col.options.join(', ') : 'the status options'),
-    ),
+    none
+      ? chk(
+          'The workflow uses the states stored in the table',
+          !ids.length,
+          ids.length ? 'this app has no stages' : 'no stages, so no workflow',
+        )
+      : chk(
+          'The workflow uses the states stored in the table',
+          !!same && ids.includes(P.initial),
+          same
+            ? P.table + '.' + P.column + ' starts at ' + P.initial
+            : 'states must be exactly: ' + (col && col.options ? col.options.join(', ') : 'the status options'),
+        ),
   );
   const badT = P.transitions
     .filter((x) => !x.from.length || x.from.some((f) => !ids.includes(f)) || !ids.includes(x.to) || !x.roles.length)
@@ -932,7 +964,7 @@ export function checkBackendShape(def: BriefedDef, be: Pick<BackendDraft, 'proce
   out.push(
     chk(
       'Every transition moves between known states for a known role',
-      P.transitions.length > 0 && !badT.length,
+      (none || P.transitions.length > 0) && !badT.length,
       badT.length ? 'fix: ' + badT.join(', ') : P.transitions.length + ' transitions',
     ),
   );
@@ -1674,7 +1706,7 @@ export function tourExec(app: AppRecord, st: TourState, step: TourStep): TourRes
       ok: false,
       detail: 'No user with the role ' + step.role,
     };
-  const tn = step.table || (st.last && st.last.table) || (def.process && def.process.table),
+  const tn = step.table || (st.last && st.last.table) || mainTable(def)?.name,
     t = tableOf(def, tn);
   const scr = step.screen
     ? def.screens.find((s) => s.name.toLowerCase() === String(step.screen).toLowerCase() && s.roles.includes(u.role))
@@ -1852,11 +1884,13 @@ export function runAcceptance(app: AppRecord, ctx: ToolContext) {
       },
     ];
   const roles = new Set(app.def.tour.map((s) => s.role));
+  // An app for one person has one role, so its tour cannot show two.
+  const alone = !!app.def.brief && app.def.brief.roles.length < 2;
   const checks = [
     chk(
-      'The tour has at least 3 steps and 2 roles',
-      app.def.tour.length >= 3 && roles.size >= 2,
-      app.def.tour.length + ' steps, ' + roles.size + ' roles',
+      alone ? 'The tour has at least 3 steps' : 'The tour has at least 3 steps and 2 roles',
+      app.def.tour.length >= 3 && (alone || roles.size >= 2),
+      app.def.tour.length + ' steps, ' + roles.size + (roles.size === 1 ? ' role' : ' roles'),
     ),
   ];
   app.def.tour.forEach((s, i) =>
@@ -1876,7 +1910,7 @@ export function fallbackBackend(def: BriefedDef) {
     roles = b.roles.map((r) => r.id),
     states = b.process.states;
   return {
-    status: {
+    status: hasProcess(b) && {
       table: b.process.entity,
       column: 'status',
       states: states.map((s) => ({
