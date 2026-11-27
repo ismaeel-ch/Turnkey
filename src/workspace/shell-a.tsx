@@ -428,15 +428,15 @@ export function Home() {
         <span className="row tpl-acts">
           {has ? (
             <>
-              <Btn className="btn primary sm" onClick={() => openTab(has.id)}>
+              <Btn className="btn primary" onClick={() => openTab(has.id)}>
                 Open
               </Btn>
-              <Btn className="btn sm tpl-build" onClick={() => build(id)}>
+              <Btn className="btn tpl-build" onClick={() => build(id)}>
                 Build another
               </Btn>
             </>
           ) : (
-            <Btn className="btn primary sm tpl-build" onClick={() => build(id)}>
+            <Btn className="btn primary tpl-build" onClick={() => build(id)}>
               <Icon n="sparkle" s="16" />
               Build this app
             </Btn>
