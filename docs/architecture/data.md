@@ -407,13 +407,13 @@ Used before a definition is stored, on the server (to validate an agent's output
 the browser. No dependencies, no Node or DOM APIs.
 
 - `normalizeTables(input, { roleIds })` mirrors `normSchema` in `engine.js`: `snake()` names, type words mapped
-  (`TYPE_ALIAS`), `ref` to `users` becomes `user`, system columns and duplicate columns dropped, 12 columns kept,
+  (`TYPE_ALIAS`), `ref` to `users` becomes `user`, system columns and duplicate columns dropped, 16 columns kept,
   `title` and `owner` repaired. It never throws.
 - `validateTables(tables, { roleIds, process })` checks a definition and does not change it. Errors (must fix):
   names that are not `^[a-z][a-z0-9_]{0,31}$`, reserved tables (`users`, `activity`, `sqlite_*`) and columns
   (`id`, `created_by`, `created_at`), unknown column types, `select` without snake_case options, `ref` without a
   target or to a table that does not exist (or to `users`), missing or wrong `title` and `owner`, more than 8
-  tables or 12 columns in a table, duplicates, a `role` the brief does not have, and a process entity whose `status`
+  tables or 16 columns in a table, duplicates, a `role` the brief does not have, and a process entity whose `status`
   is not a choice with exactly the process states. Warnings: links in a circle (seed rows cannot be added in order),
   stray `options` or `ref`, more seed rows than the 40 kept.
 - `issueLines(result)` turns errors into lines for a repair prompt, for example `appointments.room_id: "room_id" points to "rooms", which is not one of the tables (…)`.
@@ -426,4 +426,4 @@ themselves, validate with their own roles and process, and that `schemaSql` crea
 
 Differences from `checkSchemaShape`: the workspace check "A seeded user for every role" is about `users`, not tables,
 and is not part of this validator. The prompt in `line.js` asks for "at most 8 columns per table", but `LIMITS.cols` is
-12 and `normSchema` keeps 12; the validator uses 12, as the design says.
+16 and `normSchema` keeps 16; the validator uses 16.

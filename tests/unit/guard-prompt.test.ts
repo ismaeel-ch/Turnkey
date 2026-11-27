@@ -78,7 +78,7 @@ describe('prompt policy against the workspace sources', () => {
         "line.ts PROMPTS[st.id](app, feedback) + (note ? '\\n\\nSTANDING INSTRUCTION FROM THE OWNER OF THIS APP. Follow it wherever it does not break the format or the rules above:\\n' + note : '')",
         'planner.ts prompt(feedback)',
         'tester.tsx testerPrompt(app)',
-        'tester.tsx repairPrompt(app, fails, tried)',
+        'tester.tsx repairPrompt(app, open, tried)',
       ].sort(),
     );
   });

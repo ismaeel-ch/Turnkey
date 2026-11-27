@@ -6,6 +6,7 @@
  */
 import { COLUMN_TYPES, SYSTEM_COLUMNS, SYSTEM_TABLES } from '@/shared/sql/types';
 import type { Check } from '@/shared/types/app';
+import { logicProblems } from '@/shared/logic/check';
 import { AUDIENCES, PLAN_LIMITS, STAGE_FIELD, type PlanList, type PlanSpec } from './types';
 
 const SNAKE = /^[a-z][a-z0-9_]*$/;
@@ -132,6 +133,26 @@ function answerProblems(plan: PlanSpec): string[] {
   return out;
 }
 
+/** Calculated fields, rules and the conditions of moves: every formula must read real fields of the plan. */
+function logicCheckProblems(plan: PlanSpec): string[] {
+  const tables = plan.lists.map((l) => ({ name: l.name, columns: l.fields }));
+  const lists = plan.lists.map((l) => l.name);
+  const checks = plan.checks || [];
+  const out = checks.filter((c) => !lists.includes(c.list)).map((c) => 'a rule is on "' + c.list + '", which is not a list in the plan');
+  out.push(
+    ...logicProblems(
+      tables,
+      checks.filter((c) => lists.includes(c.list)).map((c, i) => ({ id: 'r' + i, table: c.list, when: c.when, message: c.message })),
+      plan.stages && lists.includes(plan.stages.list)
+        ? { table: plan.stages.list, column: plan.stages.field, moves: plan.stages.moves }
+        : null,
+    ),
+  );
+  const title = plan.lists.filter((l) => l.fields.some((f) => f.name === l.title && f.formula)).map((l) => l.label);
+  if (title.length) out.push('the title of ' + title.join(', ') + ' is a calculated field; use a field people type');
+  return out;
+}
+
 const check = (label: string, problems: string[], good: string): Check => ({
   label,
   ok: problems.length === 0,
@@ -173,8 +194,23 @@ export function checkPlan(plan: PlanSpec): Check[] {
     check('Stages', stageProblems(plan), plan.stages ? plan.stages.stages.map((s) => s.label).join(', ') + '.' : 'No approval steps.'),
     check('Who can see and do what', permissionProblems(plan), 'Every kind of person can see at least one list.'),
     check('The plan agrees with the answers', answerProblems(plan), plan.answers.length + ' answers, all followed.'),
+    // only a plan that has such logic gets this line, so a plan from before it existed checks as it always did
+    ...(hasLogic(plan) ? [check('Calculated fields and rules', logicCheckProblems(plan), logicCount(plan))] : []),
   ];
 }
+
+/** True when the plan calculates a field, enforces a rule, or puts a condition on a move. */
+export const hasLogic = (plan: PlanSpec) =>
+  (plan.checks || []).length > 0 ||
+  plan.lists.some((l) => l.fields.some((f) => f.formula)) ||
+  !!plan.stages?.moves.some((m) => m.when || m.needs?.length) ||
+  !!plan.stages?.stages.some((s) => s.locked);
+
+const logicCount = (plan: PlanSpec) => {
+  const calcs = plan.lists.reduce((n, l) => n + l.fields.filter((f) => f.formula).length, 0);
+  const conds = plan.stages ? plan.stages.moves.filter((m) => m.when || m.needs?.length).length : 0;
+  return calcs + ' calculated, ' + (plan.checks || []).length + ' rules, ' + conds + ' moves with a condition.';
+};
 
 /** True when every check passes. */
 export const planOk = (plan: PlanSpec) => checkPlan(plan).every((c) => c.ok);

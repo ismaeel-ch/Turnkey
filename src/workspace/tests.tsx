@@ -5,6 +5,7 @@ import type { SqlRow, SqlValue } from '@/shared/types/sqljs';
 import type { AppRecord, Dict } from '@/shared/types/workspace';
 import { S, arr, commit, emit, errText, label, notify, sleep, toast, toolCall } from './core';
 import { dbRollback, dbSavepoint, qi, ql, sqlRun } from './db';
+import { moveBlock } from './logic';
 import { tempDemoData, tempRecord } from './demo-data';
 import {
   VIEW_LABEL,
@@ -469,8 +470,12 @@ export function buildSuites(app: TestApp) {
         try {
           tempDemoData(app);
           // the record this acts on: the first one there is, or a temporary one when the table is empty
+          // A move with a condition is tried on a record that meets it; when none does, the refusal is what is checked.
           const u = userOf(role.id) as AppUser,
-            have = sql('SELECT "id" FROM ' + qi(pt.name) + ' ORDER BY "id" LIMIT 1')[0],
+            held = (x.when || (x.needs && x.needs.length)) && c.allow,
+            all = sql('SELECT * FROM ' + qi(pt.name) + ' ORDER BY "id" LIMIT ' + (held ? 60 : 1)),
+            reason = (o: SqlRow) => moveBlock(app.id, def, pt, { ...o, [P.column]: x.from[0], [own]: u.id }, x),
+            have = (held && all.find((o) => !reason(o))) || all[0],
             row = have || { id: tempRecord(app, pt) };
           if (!row.id) {
             r[c.id] = tOk(true, 'no ' + pt.label.toLowerCase() + ' to try it on');
@@ -478,6 +483,15 @@ export function buildSuites(app: TestApp) {
           }
           sql('UPDATE ' + qi(pt.name) + ' SET ' + qi(P.column) + ' = ?, ' + qi(own) + ' = ? WHERE "id" = ?', [x.from[0], u.id, row.id]); // put one record in the right state, owned by this person, inside the savepoint
           const res = apiCall(app, u, 'POST', '/api/' + pt.name + '/' + row.id + '/' + x.id, {}, 'check');
+          if (
+            held &&
+            res.status === 409 &&
+            res.error &&
+            res.error === reason(sql('SELECT * FROM ' + qi(pt.name) + ' WHERE "id" = ?', [row.id])[0])
+          ) {
+            r[c.id] = tOk(true, 'held back on every record there is: ' + res.error);
+            return;
+          }
           r[c.id] = c.allow
             ? tOk(
                 res.status === 200 && res.data[P.column] === x.to,

@@ -1,17 +1,5 @@
 import type { FormEvent } from 'react';
-import type {
-  AppAction,
-  AppDef,
-  BackedDef,
-  AppTable,
-  AppUser,
-  ColumnDef,
-  Row,
-  Screen,
-  StoredRow,
-  TableDef,
-  Transition,
-} from '@/shared/types/app';
+import type { AppAction, AppDef, BackedDef, AppTable, AppUser, ColumnDef, Row, Screen, StoredRow, TableDef } from '@/shared/types/app';
 import type { AppRecord, Dict, Pane, PaneForm, RecordRef, Stage, Walk } from '@/shared/types/workspace';
 import { BRAND, U, arr, confirmBox, cx, initials, label, needNet, notify, online, openDialog, toast } from './core';
 import { DBX, dbExists } from './db';
@@ -31,6 +19,8 @@ import { FirstRun, FirstTour, guideMenu, replayFirstRun } from './firstrun';
 import { roleLine, soleUser } from './onboarding';
 import { SETTINGS_SCREEN, canOpenSettings, fmtOf, homeScreen } from './app-settings';
 import { later } from './later';
+import { isLocked } from './logic';
+import { CalcMark, KeyNumbers, LineItems, Moves, StagePath, keyNumbers, movesFor } from './record-extras';
 
 // Loaded the first time they are drawn, to keep them out of the first page load.
 const TeamConsole = later(() => import('./room-ui'), 'TeamConsole');
@@ -500,7 +490,8 @@ export function Screen({ app, user, pane, scr }: ScreenProps) {
 export function formCols(app: AppRecord, user: AppUser, t: AppTable, isNew: boolean) {
   const def = app.def,
     acc = accOf(def, user.role, t.name);
-  return t.columns.filter((c) => !isStatusCol(def, t, c) && !(isNew && t.owner === c.name && acc.list === 'own'));
+  // a calculated field is worked out by the app, so no form asks for it
+  return t.columns.filter((c) => !c.formula && !isStatusCol(def, t, c) && !(isNew && t.owner === c.name && acc.list === 'own'));
 }
 export function FieldInput({ app, user, c, f, idp }: { app: AppRecord; user: AppUser; c: ColumnDef; f: PaneForm; idp: string }) {
   const def = app.def,
@@ -623,7 +614,8 @@ export function saveForm(app: AppRecord, user: AppUser, t: AppTable, f: PaneForm
     return r.data;
   }
   f.errs = r.fields || {};
-  f.err = r.status + ' ' + r.error;
+  // a rule of the app refused the save: its own sentence is the whole message
+  f.err = (r.status === 400 || r.status === 409) && !r.fields ? String(r.error) : r.status + ' ' + r.error;
   return null;
 }
 export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUser; pane: Pane; f: PaneForm }) {
@@ -790,15 +782,9 @@ export function RecordDrawer({
     acc = accOf(def, user.role, t.name),
     P = def.process && def.process.table === t.name ? def.process : null,
     sc = P ? colOf(t, P.column) : null;
-  const trs = P ? P.transitions.filter((x) => x.roles.includes(user.role) && x.from.includes(String(row[P.column]))) : [];
-  const act = (tr: Transition) => {
-    const r = apiCall(app, user, 'POST', '/api/' + t.name + '/' + row.id + '/' + tr.id, {}, 'app');
-    toast(
-      r.status === 200 && P ? tr.label + ': now ' + label(r.data[P.column]).toLowerCase() : r.status + ' ' + r.error,
-      r.status === 200 ? 'success' : 'danger',
-    );
-    notify();
-  };
+  const trs = movesFor(app, user, t, row),
+    locked = isLocked(P, row),
+    tiles = keyNumbers(app, t);
   const del = async () => {
     if (
       !(await confirmBox({
@@ -818,7 +804,8 @@ export function RecordDrawer({
       notify();
     }
   };
-  const canEdit = acc.update === 'all' || (acc.update === 'own' && row[t.owner || 'created_by'] === user.id);
+  const canEdit = !locked && (acc.update === 'all' || (acc.update === 'own' && row[t.owner || 'created_by'] === user.id)),
+    canDelete = acc.delete && !locked;
   const edit = () => editForm(pane, t, row);
   const kids = def.tables.filter(
     (k) =>
@@ -859,14 +846,11 @@ export function RecordDrawer({
       </div>
       <div className="drawer-body">
         <DemoNote app={app} table={t.name} row={row} />
+        {P && <StagePath app={app} t={t} row={row} />}
         {P && (
           <div className="row wrap">
             <span className={'badge b-' + stateTone(def, t, sc, row[P.column])}>{stateLabel(def, t, sc, row[P.column])}</span>
-            {trs.map((x, i) => (
-              <Btn key={x.id} className={cx('btn sm', i === 0 && 'primary')} onClick={() => act(x)}>
-                {x.label}
-              </Btn>
-            ))}
+            <Moves app={app} user={user} t={t} row={row} />
             {!trs.length && (
               <span className="t-cap muted">
                 {'No workflow action for a '}
@@ -876,19 +860,29 @@ export function RecordDrawer({
             )}
           </div>
         )}
+        <KeyNumbers app={app} user={user} t={t} row={row} />
         <dl className="fields">
           {t.columns
-            .filter((c) => !isStatusCol(def, t, c))
+            .filter((c) => !isStatusCol(def, t, c) && !tiles.includes(c))
             .map((c) => (
               <div key={c.name} className={cx('f', c.type === 'longtext' && 'wide')}>
-                <dt>{c.label}</dt>
+                <dt>
+                  {c.label}
+                  <CalcMark app={app} t={t} c={c} />
+                </dt>
                 <dd>
                   <Cell app={app} user={user} t={t} c={c} v={row[c.name]} />
                 </dd>
               </div>
             ))}
         </dl>
-        {(canEdit || acc.delete || def.actions.some((a) => a.table === t.name)) && (
+        {locked && P && (
+          <p className="lg-locked t-cap muted">
+            <Icon n="lock" s="16" />
+            {'Locked: ' + stateLabel(def, t, sc, row[P.column]).toLowerCase() + ' ' + t.label.toLowerCase() + ' can no longer be changed.'}
+          </p>
+        )}
+        {(canEdit || canDelete || def.actions.some((a) => a.table === t.name)) && (
           <div className="row wrap">
             {canEdit && (
               <Btn className="btn sm" onClick={edit}>
@@ -896,7 +890,7 @@ export function RecordDrawer({
                 Edit
               </Btn>
             )}
-            {acc.delete && (
+            {canDelete && (
               <Btn className="btn sm" onClick={del}>
                 <Icon n="trash" s="16" />
                 Delete
@@ -948,7 +942,7 @@ export function RecordDrawer({
           </section>
         )}
         {kids.map((k) => (
-          <Related key={k.name} app={app} user={user} pane={pane} t={t} k={k} row={row} />
+          <LineItems key={k.name} app={app} user={user} pane={pane} t={t} k={k} row={row} />
         ))}
         <section>
           <h3 className="sec-h">Activity</h3>
@@ -975,83 +969,6 @@ export function RecordDrawer({
     </aside>
   );
 }
-export function Related({
-  app,
-  user,
-  pane,
-  t,
-  k,
-  row,
-}: {
-  app: AppRecord;
-  user: AppUser;
-  pane: Pane;
-  t: AppTable;
-  k: AppTable;
-  row: StoredRow;
-}) {
-  const def = app.def,
-    c = k.columns.find((x) => x.type === 'ref' && x.ref === t.name);
-  if (!c) return null;
-  const res = fetchApi(app, user, '/api/' + k.name, {
-      filter: {
-        [c.name]: row.id,
-      },
-    }),
-    P = def.process && def.process.table === k.name ? def.process : null;
-  if (res.status !== 200) return null;
-  const list: StoredRow[] = res.data;
-  return (
-    <section>
-      <div className="row between">
-        <h3 className="sec-h">
-          {k.label}
-          {' ('}
-          {list.length})
-        </h3>
-        {accOf(def, user.role, k.name).create && (
-          <Btn
-            className="btn subtle sm"
-            onClick={() =>
-              patchPane(pane, {
-                form: {
-                  table: k.name,
-                  id: null,
-                  vals: {
-                    [c.name]: row.id,
-                  },
-                  errs: {},
-                },
-              })
-            }
-          >
-            <Icon n="add" s="16" />
-            Add
-          </Btn>
-        )}
-      </div>
-      {list.length ? (
-        <ul className="rel">
-          {list.slice(0, 6).map((r) => (
-            <li key={r.id}>
-              <button className="rel-i" onClick={() => openRecord(pane, k.name, r.id)}>
-                <span className="ellipsis grow">{rowTitle(app, user, k, r)}</span>
-                {P && (
-                  <span className={'badge b-' + stateTone(def, k, colOf(k, P.column), r[P.column])}>
-                    {stateLabel(def, k, colOf(k, P.column), r[P.column])}
-                  </span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="muted t-cap">None yet.</p>
-      )}
-    </section>
-  );
-}
-
 /* ---------- the stage: the built app, as one or two users, with the walkthrough player ---------- */
 export function startWalk(app: AppRecord) {
   const st = stageOf(app);

@@ -36,10 +36,12 @@ export const SLOT_VALUES = {
 export const PLAN_LIMITS = {
   people: { min: 1, max: 4 },
   lists: { min: 1, max: 6 },
-  fields: { min: 2, max: 10 },
+  fields: { min: 2, max: 14 },
   stages: { min: 3, max: 7 },
   /** question cards before the plan, not counting the demo data card */
   questions: 5,
+  /** rules that refuse a save */
+  checks: 8,
 } as const;
 
 /** A kind of person who uses the app. Same shape as a `Role` of the brief. */
@@ -65,6 +67,11 @@ export interface PlanField {
   ref?: string;
   /** type `user`: limit the person to one kind of person */
   role?: string;
+  /**
+   * a calculated field: the formula its value is worked out from (src/shared/logic). Nobody types into it. For
+   * example `quantity * unit_price`, or on an order `sum(order_lines.line_total)`.
+   */
+  formula?: string;
 }
 
 /** A list of records the app keeps. */
@@ -94,6 +101,8 @@ export interface PlanStage {
   /** snake_case */
   id: string;
   label: string;
+  /** a record in this stage can no longer be changed or deleted (an approved claim, a paid invoice) */
+  locked?: boolean;
 }
 
 /** Who may move a record from one stage to another. */
@@ -104,6 +113,21 @@ export interface PlanMove {
   to: string;
   /** ids of the kinds of people who may do it */
   by: string[];
+  /** a formula that must hold for the record before the move is offered: `total <= 5000` */
+  when?: string;
+  /** why not, in plain words, shown when `when` does not hold: "Orders over 5,000 need the director" */
+  unless?: string;
+  /** fields that must be filled in before the move */
+  needs?: string[];
+}
+
+/** A rule every record of a list must keep. A save that breaks it is refused and the person is told why. */
+export interface PlanCheck {
+  list: string;
+  /** a formula that must hold: `ends_on >= starts_on`, `overlaps(starts_at, ends_at, doctor) = 0` */
+  when: string;
+  /** what the person is told when a save is refused: one plain sentence */
+  message: string;
 }
 
 /** How a record moves. An app has one of these or none: a personal tracker has no approval steps. */
@@ -167,6 +191,8 @@ export interface PlanSpec {
   helpers: string | null;
   answers: PlanAnswer[];
   notInThisVersion: PlanGap[];
+  /** rules the app enforces on every save. Missing on a plan from before rules existed. */
+  checks?: PlanCheck[];
 }
 
 /* ---------- the question cards ---------- */
@@ -187,6 +213,7 @@ export type PlanPatch = Partial<
     | 'demoData'
     | 'overview'
     | 'notInThisVersion'
+    | 'checks'
   >
 >;
 

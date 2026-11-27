@@ -275,6 +275,7 @@ export function packOf(app: AppRecord, o: { data: string; as?: string | null }):
       process: def.process,
       access: def.access,
       team: def.team,
+      logic: def.logic || null,
     },
     views: {
       views: Object.keys(def.views || {}).map((t) => ({
