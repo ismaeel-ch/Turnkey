@@ -9,6 +9,7 @@
  */
 import type { AppDef, Check, RecordStep, Row } from './app';
 import type { PlanSpec } from '@/shared/plan/types';
+import type { Interview } from './interview';
 
 /** A value whose shape is not described yet. Narrow it where you read it. */
 export type Loose = unknown;
@@ -452,7 +453,8 @@ export interface ViewState {
   /** model calls made this session */
   calls: number;
   savedAt: number;
-  home: { text: string; note: string };
+  /** the Home tab: the sentence being typed, a note under it, and the interview that follows "Continue" */
+  home: { text: string; note: string; interview?: Interview | null };
   /** the handoff being animated between stations, per app */
   handoff: Dict<number | null>;
   chatDraft: Dict<string>;
@@ -987,7 +989,8 @@ export interface Pane {
   ds: { range: string; f: DashFilter[] } | null;
   /** the agent room's start form */
   tf: PaneForm | null;
-  login: { u: string; p: string; err: string } | null;
+  /** the sign-in screen: what was typed, the error, and whether the username and password form is unfolded */
+  login: { u: string; p: string; err: string; open?: boolean } | null;
   conn: PaneCall | null;
   /** phone layout: the open sheet */
   sheet?: string | null;
@@ -995,6 +998,8 @@ export interface Pane {
   caseId?: number | null;
   /** drawn by a check, not by a person: nothing is remembered */
   test?: boolean;
+  /** the first-use tour while it runs: the stop on show (src/workspace/firstrun.tsx) */
+  guide?: { stop: number } | null;
 }
 
 /** The walkthrough player: the step on show, each step's result, and what the tour remembers. */
