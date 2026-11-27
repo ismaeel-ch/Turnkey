@@ -165,6 +165,16 @@ describe('the build as a list of steps', () => {
     });
   });
 
+  it('does not count stages for an app that has none', () => {
+    // an app planned with no stages keeps a process with nothing in it
+    const empty = { table: '', column: '', initial: '', states: [], transitions: [] };
+    const several = { ...def, process: empty } as unknown as AppDef;
+    const alone = { ...several, brief: { ...def.brief, roles: [def.brief?.roles[0]] } } as unknown as AppDef;
+    const text = (d: AppDef) => buildSteps(input(app('ready', built(), { def: d }), { tests: pass })).steps[2].text;
+    expect(text(several)).toBe('No stages. Who can see and do what is set for 2 kinds of people.');
+    expect(text(alone)).toBe('No stages, and one kind of person who can see and do everything.');
+  });
+
   it('shows the first agent waiting for an answer as the step that needs the owner', () => {
     const a = app('building', { research: line('waiting', { hold: 'question' }) });
     const B = buildSteps(input(a, { running: true }));

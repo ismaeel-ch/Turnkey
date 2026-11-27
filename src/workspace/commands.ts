@@ -26,7 +26,7 @@ import {
 import { RUNS, stopRun } from './line';
 import { toggleAgentsPanel } from './activity';
 import { DETAILS, VIEWS, rebuildAsk } from './shell-a';
-import { buildMode, showHow } from './steps-view';
+import { buildMode, showHow } from './build-mode';
 import { openShare } from './share';
 import { redo, redoable, undo, undoable } from './history';
 import { openHistory } from './history-ui';

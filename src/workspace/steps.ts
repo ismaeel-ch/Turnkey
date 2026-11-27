@@ -109,14 +109,20 @@ function made(id: string, app: AppRecord): string {
     return n(def.tables.length, 'list') + ' with ' + n(fields, 'field') + (rows ? ', and ' + n(rows, 'example record') : '') + '.';
   }
   if (id === 'backend') {
-    const p = def.process;
+    const p = def.process,
+      who = n(roles, 'kind of person', 'kinds of people');
     if (!p) return 'The rules are written.';
+    // an app with no stages has a process with nothing in it: its rules are only who can see and do what
+    if (!p.states.length)
+      return roles > 1
+        ? 'No stages. Who can see and do what is set for ' + who + '.'
+        : 'No stages, and one kind of person who can see and do everything.';
     return (
       n(p.states.length, 'stage') +
       ', ' +
       n(p.transitions.length, 'way', 'ways') +
       ' to move a record, and who can see what for ' +
-      n(roles, 'kind of person', 'kinds of people') +
+      who +
       '.'
     );
   }

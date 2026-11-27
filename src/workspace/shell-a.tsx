@@ -81,7 +81,7 @@ import { AppLogo, ReleaseView, isDirty, relOf } from './release';
 import { ApiView, ChatPanel, ConnView, DataView } from './shell-b';
 import { startTour } from './shell-c';
 import { RerunBar } from './rerun';
-import { StepsView, buildMode, showHow } from './steps-view';
+import { buildMode, showHow } from './build-mode';
 import { openPalette, openShortcuts } from './commands';
 import { touchOf, touchText } from './provenance';
 import { fmtUsd, usageLine } from '@/platform/agui/usage';
@@ -89,6 +89,8 @@ import { HistoryButtons, openHistory } from './history-ui';
 
 // The meeting view of a run loads the first time it is picked.
 const MeetingView = lazy(() => import('./meeting').then((m) => ({ default: m.MeetingView })));
+// the list of steps, its model and the plan's team are not needed before an app is open
+const StepsView = lazy(() => import('./steps-view').then((m) => ({ default: m.StepsView })));
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
 export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
@@ -1032,7 +1034,9 @@ export function BuildView({ app }: { app: AppRecord }) {
   return (
     <div className={cx('build scroll', plain && 'plain')}>
       {plain ? (
-        <StepsView app={app} />
+        <Suspense fallback={null}>
+          <StepsView app={app} />
+        </Suspense>
       ) : (
         <>
           <div className="how-bar">
