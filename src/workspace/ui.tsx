@@ -1,4 +1,6 @@
 import {
+  Children,
+  Fragment,
   cloneElement,
   createElement,
   forwardRef,
@@ -64,6 +66,7 @@ import { NativeField } from '@/platform/dom';
 import { ICONS } from './icons';
 import { accFor, cx, initials } from './core';
 import { AGENTS } from './line';
+import { DIALOG_EXIT, useDialogOpen } from './motion';
 
 /* ===== Turnkey prototype · small Fluent-style building blocks ===== */
 /** A class name part that may be left out. */
@@ -664,6 +667,8 @@ export function refocus(targets: string[], within?: ParentNode | null) {
   if (typeof document === 'undefined') return;
   let n = 0;
   const look = () => {
+    // a dialog on its way out still holds the focus for a moment: wait for it to go
+    if (document.activeElement?.closest('[data-closing]')) return void (++n < 24 && setTimeout(look, 50));
     if (!focusLost()) return;
     const root = within && (within as Node).isConnected ? within : document;
     for (const sel of targets) {
@@ -691,6 +696,25 @@ export function useFocusOnArrive<T extends HTMLElement>() {
   }, []);
   return ref;
 }
+/* Fluent 2 on the buttons of a dialog (the same holds for a drawer and for a form in a built app):
+   - the main action comes first, to the left of the others, and there is one main action at most;
+   - a Close icon in the corner is for a dialog with no button that closes it: next to Cancel or Close it is redundant. */
+const flat = (n: ReactNode): ReactNode[] =>
+  Children.toArray(n).flatMap((c) => (isValidElement<{ children?: ReactNode }>(c) && c.type === Fragment ? flat(c.props.children) : [c]));
+const classOf = (c: ReactNode) => (isValidElement<{ className?: string }>(c) ? String(c.props.className || '').split(/\s+/) : []);
+const isMain = (c: ReactNode) => classOf(c).includes('primary') || classOf(c).includes('danger');
+const textOf = (c: ReactNode): string =>
+  typeof c === 'string' || typeof c === 'number'
+    ? String(c)
+    : isValidElement<{ children?: ReactNode }>(c)
+      ? Children.toArray(c.props.children).map(textOf).join('')
+      : '';
+const CLOSES = /^(close|cancel|done|not now|got it)$/i;
+/** A row of actions in Fluent's order: the main one first, the rest as written. */
+export function actionOrder(actions: ReactNode): ReactNode[] {
+  const all = flat(actions);
+  return [...all.filter(isMain), ...all.filter((c) => !isMain(c))];
+}
 export function Dialog({
   title,
   children,
@@ -698,6 +722,7 @@ export function Dialog({
   onClose,
   wide,
   cls,
+  x,
 }: {
   title: ReactNode;
   children?: ReactNode;
@@ -705,23 +730,30 @@ export function Dialog({
   onClose?: () => void;
   wide?: boolean;
   cls?: string;
+  /** The Close icon in the corner. Left out, it shows only when no button in the footer closes the dialog. */
+  x?: boolean;
 }) {
   useRestorePage();
+  // false while the dialog plays its way out, after the store has let go of it (motion.tsx)
+  const open = useDialogOpen();
+  const acts = foot ? actionOrder(foot) : [];
+  const corner = x ?? !acts.some((c) => CLOSES.test(textOf(c).trim()));
   return (
     <FluentDialog
-      open
+      open={open}
+      surfaceMotion={DIALOG_EXIT}
       modalType="modal"
       onOpenChange={(e, d) => {
-        if (!d.open && onClose) onClose();
+        if (open && !d.open && onClose) onClose();
       }}
     >
-      <DialogSurface className={cx('dialog', wide && 'wide', cls)}>
-        <DialogBody className="dlg">
+      <DialogSurface className={cx('dialog', wide && 'wide', cls)} backdropMotion={DIALOG_EXIT} data-closing={open ? undefined : ''}>
+        <DialogBody className={cx('dlg', !acts.length && 'no-foot')}>
           <div className="dhead">
             <DialogTitle as="h2" className="t-sub1 grow">
               {title}
             </DialogTitle>
-            {onClose && (
+            {onClose && corner && (
               <Btn className="btn subtle icon" aria-label="Close" onClick={onClose}>
                 <Icon n="dismiss" />
               </Btn>
@@ -730,7 +762,7 @@ export function Dialog({
           <DialogContent className="dbody" ref={scrollStop} role="region" aria-label="Dialog content">
             {children}
           </DialogContent>
-          {foot && <DialogActions className="dfoot">{foot}</DialogActions>}
+          {acts.length > 0 && <DialogActions className="dfoot">{acts}</DialogActions>}
         </DialogBody>
         <FocusOnOpen />
       </DialogSurface>

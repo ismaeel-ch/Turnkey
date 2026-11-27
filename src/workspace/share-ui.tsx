@@ -92,7 +92,7 @@ export function ShareDialog({ p }: { p: { app: string } }) {
               Not now
             </Btn>
             <Btn className="btn primary" id="sh-release" data-autofocus disabled={!!block || sh.rbusy} onClick={first}>
-              {sh.rbusy ? <Spinner /> : <Icon n="rocket" s="16" />}Release version 1.0 and make the link
+              {sh.rbusy ? <Spinner /> : <Icon n="rocket" s="16" />}Release and share
             </Btn>
           </>
         }
@@ -321,7 +321,7 @@ export function OpenLinkDialog({ p }: { p: OpenLinkProps }) {
     }
   };
   return (
-    <Dialog title="Open a shared app" onClose={closeDialog}>
+    <Dialog title="Open a shared app" onClose={closeDialog} x={false}>
       <form className="col gap12" onSubmit={go}>
         <p className="muted">Paste a Turnkey app link. The app opens on its own, with its own copy of the data in this browser.</p>
         <Field id="ol-text" label="Link" error={p.err || null}>
@@ -339,11 +339,11 @@ export function OpenLinkDialog({ p }: { p: OpenLinkProps }) {
           />
         </Field>
         <div className="row end">
-          <Btn type="button" className="btn" onClick={closeDialog}>
-            Cancel
-          </Btn>
           <Btn type="submit" className="btn primary" disabled={!!p.busy}>
             {p.busy ? <Spinner /> : <Icon n="open" s="16" />}Open the app
+          </Btn>
+          <Btn type="button" className="btn" onClick={closeDialog}>
+            Cancel
           </Btn>
         </div>
       </form>
@@ -554,7 +554,7 @@ export function SoloShell() {
               commit();
             }}
           >
-            OK
+            Got it
           </Btn>
         </div>
       )}
@@ -611,7 +611,7 @@ export function SoloShell() {
               commit();
             }}
           >
-            OK
+            Got it
           </Btn>
         </div>
       )}

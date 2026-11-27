@@ -3,7 +3,7 @@
 //   src/styles/fluent-theme.css    design tokens (light and dark, only the ones used), accent sets, chart colours
 //   src/styles/theme.generated.ts  ACC_HEX: the solid accent colours, for places that need them in script (app icons)
 //
-// Run `npm run theme` after adding a token to src/workspace, src/styles/workspace.css or src/styles/agents.css. Both outputs are committed.
+// Run `npm run theme` after adding a token to src/workspace, src/styles/workspace.css, src/styles/agents.css or src/styles/motion.css. Both outputs are committed.
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -17,7 +17,7 @@ const D = T.webDarkTheme;
 
 const walk = (dir) =>
   fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]));
-const css = ['workspace.css', 'agents.css'].map((f) => fs.readFileSync(path.join(root, 'src', 'styles', f), 'utf8')).join('\n');
+const css = ['workspace.css', 'agents.css', 'motion.css'].map((f) => fs.readFileSync(path.join(root, 'src', 'styles', f), 'utf8')).join('\n');
 const js = walk(path.join(root, 'src', 'workspace'))
   .filter((f) => /\.tsx?$/.test(f))
   .map((f) => fs.readFileSync(f, 'utf8'))

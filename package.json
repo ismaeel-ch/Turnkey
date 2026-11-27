@@ -1,6 +1,6 @@
 {
   "name": "turnkey",
-  "version": "0.5.9",
+  "version": "0.5.11",
   "private": true,
   "description": "Turnkey: describe the app your work needs and a team of agents builds its database, backend, views, pages and tests on a workflow you can watch and change.",
   "license": "MIT",
@@ -37,6 +37,7 @@
     "@copilotkit/react-core": "^1.90.2",
     "@copilotkit/runtime": "^1.90.2",
     "@fluentui/react-components": "^9.75.3",
+    "@fluentui/react-motion-components-preview": "^0.15.11",
     "@langchain/core": "^1.5.1",
     "@langchain/langgraph": "^1.7.5",
     "@vercel/blob": "^2.9.0",

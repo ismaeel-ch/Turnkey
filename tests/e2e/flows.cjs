@@ -11,7 +11,7 @@ const check = (name, ok, detail) => { results.push({ name, ok: !!ok }); console.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function newPage(browser, opts) {
-  const ctx = await browser.newContext({ viewport: (opts && opts.viewport) || { width: 1440, height: 900 }, colorScheme: (opts && opts.scheme) || 'light', serviceWorkers: opts && opts.noWorker ? 'block' : 'allow' });
+  const ctx = await browser.newContext({ viewport: (opts && opts.viewport) || { width: 1440, height: 900 }, colorScheme: (opts && opts.scheme) || 'light', reducedMotion: opts && opts.reduce ? 'reduce' : 'no-preference', serviceWorkers: opts && opts.noWorker ? 'block' : 'allow' });
   await ctx.route('https://**/*', (route) => route.abort()); // the app is self-contained: nothing outside its own origin is needed
   if (opts && opts.init) await ctx.addInitScript(opts.init);
   const page = await ctx.newPage();
@@ -1227,7 +1227,7 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   const gn = await st(page, () => window.__formwork.guide()); check('the feature guide lists every feature', gn >= 25 && await page.locator('.guide-i').count() === gn, gn); await shot(page, '98-guide');
   await page.fill('#guide-q', 'share'); await sleep(150); const few = await page.locator('.guide-i').count(); await page.fill('#guide-q', 'test suite'); await sleep(150);
   await page.locator('.guide-i .btn', { hasText: 'Open the tests' }).click(); await page.waitForSelector('.tests-view');
-  check('the guide can be searched, and Show me jumps to the feature', few > 0 && few < gn && await page.locator('.dialog').count() === 0);
+  await page.waitForFunction(() => !document.querySelector('.dialog'), null, { timeout: 2000 }).catch(() => {}); check('the guide can be searched, and Show me jumps to the feature', few > 0 && few < gn && await page.locator('.dialog').count() === 0);
   await ctx.close();
   // React Flow blocked: the plain line of stations takes over
   const n2 = await newPage(browser, { init: NO_CANVAS }), c2 = n2.ctx, p2 = n2.page; await enter(p2, url); await setSpeed(p2, 'instant'); await buildTpl(p2, 'leave'); await sleep(500);
@@ -1243,7 +1243,7 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   check('phone: Data, API, Connections and the app actions are under More', ['Data', 'API', 'Connections', 'Share by link', 'Delete app'].every((x) => more.some((m) => m.indexOf(x) === 0)), more);
   await pp.locator('.sheet-i', { hasText: 'Share by link' }).click(); await pp.waitForSelector('.dialog.share'); await sleep(450); const db = await pp.locator('.dialog.share').boundingBox();
   check('phone: dialogs rise from the bottom as sheets', db.width === 390 && Math.round(db.y + db.height) === 844, db);
-  await pp.locator('.dialog .dhead .btn').click(); await sleep(200); await pp.locator('.titlebar .acct').click(); await pp.waitForSelector('.sheet'); const menu = await pp.locator('.sheet .sheet-l').allInnerTexts();
+  await pp.locator('.dialog .dfoot .btn', { hasText: 'Not now' }).click(); await sleep(400); await pp.locator('.titlebar .acct').click(); await pp.waitForSelector('.sheet'); const menu = await pp.locator('.sheet .sheet-l').allInnerTexts();
   check('phone: the menu holds Live, Online, Debug, the guide and the account', ['Live', 'Online', 'Debug mode', 'Feature guide', 'Sign out'].every((x) => menu.includes(x)), menu); await shot(pp, '99c-phone-menu');
   await ph.ctx.close();
   await firstUse(browser, url);
@@ -1499,7 +1499,7 @@ async function firstUse(browser, url) {
   check('an empty list, for a person who may add: what will be here and a button to add the first one', e.title === 'You have no visit notes yet' && e.text === 'You see your own visit notes here.' && e.btn.join() === 'New visit note', e);
   await page.locator('.app-main .empty .btn').click(); await page.waitForSelector('.app-dialog');
   check('the empty list\'s button opens the form for a new record', /New visit note/i.test(await page.locator('.app-dialog h2').innerText()));
-  await page.locator('.app-dialog .dfoot .btn').first().click(); await shot(page, 'fu-05-empty');
+  await page.locator('.app-dialog .dfoot .btn', { hasText: 'Cancel' }).click(); await shot(page, 'fu-05-empty');
   await menuItem('Imran'); await page.locator('.app-nav .nav-i', { hasText: 'Visit notes' }).click(); await page.waitForSelector('.app-main .empty');
   e = await empty();
   check('an empty list, for a person who may not add: who adds them, and no button', e.title === 'No visit notes yet' && e.text === 'They appear here when someone signed in as Doctor adds one.' && e.btn.length === 0, e);
@@ -1510,7 +1510,7 @@ async function firstUse(browser, url) {
 
   // an app with one kind of person has no sign-in screen
   await page.locator('#pv' + aid).selectOption(''); await page.waitForSelector('.login-card');
-  await sql('UPDATE "users" SET "role" = \'manager\''); await page.locator('.login-more').click(); await page.waitForSelector('.app-main');
+  await sql('UPDATE "users" SET "role" = \'manager\''); await page.locator('.login-more').click({ timeout: 3000 }).catch(() => {}); await page.waitForSelector('.app-main'); // the click only makes the page draw again; the sign-in card may already be gone by the time it has settled
   const one = await st(page, (id) => ({ login: document.querySelectorAll('.login-card').length, who: (document.querySelector('.persona-t .t-strong') || {}).innerText, pick: [...document.querySelectorAll('#pv' + id + ' option')].map((o) => o.textContent) }), aid);
   check('one kind of person: the app opens straight away as its first person, with no sign-in screen to preview', one.login === 0 && one.who === 'Sara Malik' && !one.pick.includes('Sign-in screen') && one.pick.length === 6, one);
   await page.locator('.app-head .persona').click(); const mi = await page.locator('.app-head .menu .mi').allInnerTexts();
@@ -2112,7 +2112,7 @@ async function flowReact(browser, url) {
   check('choosing from a select runs its handler once, and the field shows the choice', sel.calls === 1 && sel.v !== '', sel);
   await page.focus('#sh-as'); await page.keyboard.press('Escape'); await sleep(250); // the Release button that had focus is gone from the page, so focus goes back into the dialog first
   check('Escape closes the dialog', await page.locator('.dialog.share').count() === 0);
-  await page.locator('[data-tour="share"]').click(); await page.waitForSelector('.dialog.share'); await page.locator('.dialog .dhead .btn').click(); await sleep(150);
+  await page.locator('[data-tour="share"]').click(); await page.waitForSelector('.dialog.share'); await page.locator('.dialog .dhead .btn').click(); await sleep(400);
   check('the Close button closes it too, and a dialog can be opened again', await page.locator('.dialog').count() === 0);
   await st(page, () => { window.__changeCalls = 0; });
   const sw = page.locator('#sw-live'), on0 = await sw.isChecked(), dis = await sw.isDisabled();
@@ -2371,6 +2371,55 @@ async function flowHistory(browser, url) {
   a = await appState(page);
   check('the Undo button takes back the restore', a.cols.patients.includes('insurance_provider') && (await hist()).at === 1, a.cols.patients);
   await ctx.close();
+  await fluentMotion(browser, url);
+}
+// Fluent 2 motion and where actions sit. Motion: destinations fade quickly, sets of items come in one after another, what leaves plays a short exit
+// before it goes, all on Fluent's duration and curve tokens, and none of it runs when the device asks for reduced motion. Actions: the main one
+// comes first in a dialog, and a dialog with Cancel has no Close icon beside it.
+async function fluentMotion(browser, url) {
+  const WATCH = () => { window.__anims = []; document.addEventListener('animationstart', (e) => { const cs = getComputedStyle(e.target); window.__anims.push({ name: e.animationName, cls: String(e.target.className && e.target.className.baseVal !== undefined ? e.target.className.baseVal : e.target.className), dur: cs.animationDuration, ease: cs.animationTimingFunction, delay: cs.animationDelay }); }, true); };
+  const anims = (page, name) => st(page, (n) => { const a = window.__anims.filter((x) => x.name === n); window.__anims = []; return a; }, name);
+  const gone = (page, sel) => page.waitForFunction((s) => !document.querySelector(s), sel, { timeout: 2000 }).then(() => true, () => false);
+  const leaving = (page, sel) => st(page, (s) => { const e = document.querySelector(s); return !!e && e.getAnimations({ subtree: true }).some((a) => a.playState === 'running'); }, sel);
+  const toList = async (page) => { await view(page, 'App'); if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click(); await page.waitForSelector('.app-nav .nav-i'); await sleep(700); await st(page, () => { window.__anims = []; }); await nav(page, 'Patients'); await page.waitForSelector('.app .tbl tbody tr'); await sleep(600); };
+  {
+    const { ctx, page } = await newPage(browser, { init: '(' + WATCH + ')()' });
+    await enter(page, url, { plain: true }); await buildTpl(page, 'clinic'); await sleep(600); await st(page, () => { window.__anims = []; });
+    await view(page, 'Release'); await sleep(500);
+    const fade = (await anims(page, 'tk-fade')).filter((a) => !/badge|steps-tag|menu/.test(a.cls));
+    check('motion: a change of view is a quick fade on Fluent\'s tokens (150 ms, linear), not a slide', fade.length >= 1 && fade.every((a) => a.dur === '0.15s' && /linear|cubic-bezier\(0, 0, 1, 1\)/.test(a.ease)), fade);
+    await toList(page);
+    const rise = (await anims(page, 'tk-rise')).filter((a) => /clickable/.test(a.cls) || a.cls === '');
+    const delays = [...new Set(rise.map((a) => a.delay))];
+    check('motion: the rows of a list come in one after another, decelerating, and the offsets stop after the sixth', rise.length >= 7 && rise.every((a) => a.dur === '0.25s' && a.ease === 'cubic-bezier(0, 0, 0, 1)') && delays.slice(0, 3).join() === '0s,0.03s,0.06s' && delays.length === 7 && delays[6] === '0.15s', { n: rise.length, delays });
+    await sleep(1200);
+    check('motion: nothing keeps moving once a page has settled', (await st(page, () => window.__anims.filter((a) => a.name.startsWith('tk-')).length)) === 0);
+    await page.locator('.app .tbl tbody tr').first().click(); await page.waitForSelector('.drawer'); await sleep(500);
+    await st(page, () => document.querySelector('.drawer-head .btn[aria-label=Close]').click()); await sleep(30);
+    const out = await leaving(page, '.drawer');
+    check('motion: the record panel plays a short exit when it is closed, then is gone', out && await gone(page, '.drawer'), out);
+    await page.locator('.scr-head .btn.primary').click(); await page.waitForSelector('.app-dialog'); await sleep(400);
+    const form = await st(page, () => ({ acts: [...document.querySelectorAll('.app-dialog .dfoot .btn')].map((b) => b.innerText.trim()), first: document.querySelector('.app-dialog .dfoot .btn').type, x: document.querySelectorAll('.app-dialog .dhead .btn').length }));
+    check('actions: a built app\'s form puts the main action first and has no Close icon next to Cancel', form.acts.join() === 'Create,Cancel' && form.first === 'submit' && form.x === 0, form);
+    await page.locator('.app-dialog .dfoot .btn', { hasText: 'Cancel' }).click();
+    check('motion: the form\'s layer fades out and is gone', await gone(page, '.app-dialog'));
+    await page.locator('[data-tour="share"]').click(); await page.waitForSelector('.dialog.share, .dialog'); await sleep(500);
+    const dlg = await st(page, () => ({ acts: [...document.querySelectorAll('.dialog .dfoot .btn')].map((b) => [b.innerText.trim(), b.classList.contains('primary')]), x: document.querySelectorAll('.dialog .dhead .btn').length }));
+    check('actions: a dialog puts its one main action first, and a dialog with a button that closes it has no Close icon', dlg.acts.length === 2 && dlg.acts[0][1] && !dlg.acts[1][1] && dlg.acts[1][0] === 'Not now' && dlg.x === 0, dlg);
+    await page.keyboard.press('Escape'); await sleep(40);
+    const still = await page.locator('.dialog').count();
+    check('motion: a dialog plays Fluent\'s exit before it goes, and the page behind is readable again', still === 1 && await gone(page, '.dialog') && (await sleep(400), await st(page, () => document.getElementById('root').getAttribute('aria-hidden'))) !== 'true', still);
+    await ctx.close();
+  }
+  {
+    const { ctx, page } = await newPage(browser, { init: '(' + WATCH + ')()', reduce: true });
+    await enter(page, url, { plain: true }); await buildTpl(page, 'clinic'); await view(page, 'Release'); await toList(page);
+    const moved = await st(page, () => window.__anims.filter((a) => a.name.startsWith('tk-')).length);
+    await page.locator('.app .tbl tbody tr').first().click(); await page.waitForSelector('.drawer'); await sleep(60);
+    const box = await st(page, () => { const d = document.querySelector('.drawer'), cs = getComputedStyle(d); return { opacity: cs.opacity, transform: cs.transform }; });
+    check('motion: with reduced motion on, nothing fades, rises or slides: the panel is simply there', moved === 0 && box.opacity === '1' && /none|matrix\(1, 0, 0, 1, 0, 0\)/.test(box.transform), { moved, box });
+    await ctx.close();
+  }
 }
 // The Settings page every built app has: who may open it, and that each setting changes how the app behaves.
 async function flowSettings(browser, url) {

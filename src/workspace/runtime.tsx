@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react';
+import type { FormEvent, Ref } from 'react';
 import type { AppAction, AppDef, BackedDef, AppTable, AppUser, ColumnDef, Row, Screen, StoredRow, TableDef } from '@/shared/types/app';
 import type { AppRecord, Dict, Pane, PaneForm, RecordRef, Stage, Walk } from '@/shared/types/workspace';
 import { BRAND, U, arr, confirmBox, cx, initials, label, needNet, notify, online, openDialog, toast } from './core';
@@ -11,6 +11,7 @@ import { REC } from './registry';
 import { DemoActions, DemoBar, DemoNote } from './demo-data-ui';
 import { setDemoMark } from './demo-data';
 import { Avatar, Btn, Empty, Field, Icon, Input, MBar, Menu, Proto, Select, Switch, Textarea, type MenuEntry } from './ui';
+import { LayerMotion, PanelMotion } from './motion';
 import { AppSheets, AppTabs, isCompact, useElWidth, type SoloItem } from './mobile';
 import { Explorer } from './views-a';
 import { Dash } from './views-b';
@@ -335,10 +336,10 @@ export function AppPane({
             <Empty icon="lock" title="Nothing to open" text={roleName(def, user.role) + ' has no screens.'} />
           )}
         </main>
-        {pane.rec && <RecordDrawer app={app} user={user} pane={pane} rec={pane.rec} compact={compact} />}
+        <PanelMotion>{pane.rec && <RecordDrawer app={app} user={user} pane={pane} rec={pane.rec} compact={compact} />}</PanelMotion>
       </div>
       {compact && <AppTabs screens={screens} scr={scr} pane={pane} go={go} />}
-      {pane.form && <RecordForm app={app} user={user} pane={pane} f={pane.form} />}
+      <LayerMotion>{pane.form && <RecordForm app={app} user={user} pane={pane} f={pane.form} />}</LayerMotion>
       {compact && pane.sheet && (
         <AppSheets
           app={app}
@@ -709,7 +710,20 @@ function StepsBody({ app, user, t, f, wz, idp }: { app: AppRecord; user: AppUser
     </div>
   );
 }
-export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUser; pane: Pane; f: PaneForm }) {
+export function RecordForm({
+  app,
+  user,
+  pane,
+  f,
+  ref,
+}: {
+  app: AppRecord;
+  user: AppUser;
+  pane: Pane;
+  f: PaneForm;
+  /** Set by LayerMotion, which fades the form's layer in and out. */
+  ref?: Ref<HTMLDivElement>;
+}) {
   const t = tableOf(app.def, f.table);
   if (!t) return null;
   const cols = formCols(app, user, t, !f.id),
@@ -731,6 +745,7 @@ export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUs
   return (
     <div
       className="app-modal"
+      ref={ref}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) close();
       }}
@@ -744,9 +759,6 @@ export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUs
       >
         <div className="dhead">
           <h2 className="t-sub1 grow">{f.id ? 'Edit ' + t.one.toLowerCase() : 'New ' + t.one.toLowerCase()}</h2>
-          <Btn type="button" className="btn subtle icon" aria-label="Close" onClick={close}>
-            <Icon n="dismiss" />
-          </Btn>
         </div>
         <div className="dbody">
           {wz ? (
@@ -761,9 +773,7 @@ export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUs
           {f.err && <MBar tone="danger">{f.err}</MBar>}
         </div>
         <div className="dfoot">
-          <Btn type="button" className="btn" onClick={close}>
-            Cancel
-          </Btn>
+          {/* a form in steps keeps Back before Next, as every other step by step flow here does */}
           {wz && wz.at > 0 && (
             <Btn type="button" className="btn" data-step="back" onClick={() => patchForm(f, { step: wz.at - 1 })}>
               Back
@@ -771,6 +781,9 @@ export function RecordForm({ app, user, pane, f }: { app: AppRecord; user: AppUs
           )}
           <Btn type="submit" className="btn primary" data-step={wz ? (wz.last ? 'save' : 'next') : undefined}>
             {wz && !wz.last ? 'Next' : f.id ? 'Save' : 'Create'}
+          </Btn>
+          <Btn type="button" className="btn" onClick={close}>
+            Cancel
           </Btn>
         </div>
       </form>
@@ -839,14 +852,14 @@ export function FormScreen({ app, user, pane, scr }: ScreenProps) {
         )}
         {f.err && <MBar tone="danger">{f.err}</MBar>}
         <div className="row gap8">
-          <Btn className="btn primary" type="submit" data-step={wz ? (wz.last ? 'save' : 'next') : undefined}>
-            {wz && !wz.last ? 'Next' : 'Create ' + t.one.toLowerCase()}
-          </Btn>
           {wz && wz.at > 0 && (
             <Btn type="button" className="btn" data-step="back" onClick={() => patchForm(f, { step: wz.at - 1 })}>
               Back
             </Btn>
           )}
+          <Btn className="btn primary" type="submit" data-step={wz ? (wz.last ? 'save' : 'next') : undefined}>
+            {wz && !wz.last ? 'Next' : 'Create ' + t.one.toLowerCase()}
+          </Btn>
         </div>
       </form>
     </div>
@@ -858,12 +871,15 @@ export function RecordDrawer({
   pane,
   rec,
   compact,
+  ref,
 }: {
   app: AppRecord;
   user: AppUser;
   pane: Pane;
   rec: RecordRef;
   compact: boolean;
+  /** Set by PanelMotion, which slides the panel in and out. */
+  ref?: Ref<HTMLElement>;
 }) {
   const def = app.def,
     t = tableOf(def, rec.table),
@@ -882,7 +898,7 @@ export function RecordDrawer({
     );
   if (res.status !== 200)
     return (
-      <aside className="drawer">
+      <aside className="drawer" ref={ref}>
         <div className="drawer-head">
           {back}
           <strong className="grow">{t.one}</strong>
@@ -950,7 +966,7 @@ export function RecordDrawer({
     });
   };
   return (
-    <aside className="drawer" aria-label={t.one + ' details'}>
+    <aside className="drawer" aria-label={t.one + ' details'} ref={ref}>
       <div className="drawer-head">
         {back}
         <div className="col gap0 grow">
