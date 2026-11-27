@@ -17,6 +17,15 @@ versions are semantic versions. Each release lists the pull requests merged into
   agent run, is kept with the app (so a share link, a release and an earlier version carry it), and is noted for the
   next release. The builder has a Settings button above the app that opens the page as someone who may.
 
+### Changed
+
+- Every component was checked against Fluent 2, and `docs/fluent2-components.md` lists each one with its status.
+  People's pictures and the agent, step and tool tiles are Fluent's Avatar. "Change", "Skip" and "What is this?" are
+  Fluent's Link. A button that shows only an icon has Fluent's Tooltip. The current choice in a menu has its checkmark
+  on the left. The buttons inside the workflow canvas are Fluent buttons (they were plain browser buttons). About 40
+  rows, tiles and cards written as plain buttons have hover and pressed fills. Text sizes, weights and corners in the
+  agents chat, the meeting, the agent room and built apps are Fluent tokens, and small controls are 24, 32 or 40 px tall.
+
 ## [0.5.8] - 2026-11-28
 
 Built apps work things out: calculated fields, rules, moves with a condition, locked stages, and four new samples.

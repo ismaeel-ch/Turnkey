@@ -852,7 +852,7 @@ html.tk-opening .boot-btn{cursor:progress}.boot-wait{align-self:center}
 .set-card-h+.set-line{border-top:0;padding-top:0}
 .set-line-t{flex:1;min-width:0}.set-line-c{flex:none;display:flex;align-items:center;gap:8px;max-width:60%}.set-line-c .tk-select{min-width:200px}
 .set-swatches{display:flex;flex-wrap:wrap;gap:8px}
-.set-swatch{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:50%;background:var(--acc);color:var(--acc-on);cursor:pointer}
+.set-swatch{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:var(--borderRadiusCircular);background:var(--acc);color:var(--acc-on);cursor:pointer}
 .set-swatch:hover{box-shadow:0 0 0 2px var(--colorNeutralBackground1),0 0 0 3px var(--colorNeutralStroke1)}
 .set-swatch.on{box-shadow:0 0 0 2px var(--colorNeutralBackground1),0 0 0 4px var(--acc)}
 .set-swatch:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:3px}.set-swatch:disabled{opacity:.5;cursor:default}
