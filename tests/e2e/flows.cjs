@@ -1235,9 +1235,19 @@ async function expenseSample(browser, url) {
     await shot(page, 'ex-02-just-me-welcome');
     await page.getByRole('button', { name: 'Not now' }).click(); await removeDemo(page);
     check('expenses, just me: removing the demo data empties the expenses and keeps the categories', await rows(page, a.id, 'expenses') === 0 && await rows(page, a.id, 'categories') === 6);
+    await view(page, 'Build'); await page.locator('#steps-change').click(); await page.waitForSelector('#improve-text');
+    await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'improve-text');
+    check('expenses, just me: "Change something" on the finished build opens Release with the cursor in the change box, which is there before version 1.0 too', /Want something changed before you release\?/.test(await page.locator('#improve').innerText()) && await page.locator('#rel-go').count() === 1);
     await release(page, '1.0');
     await improve(page, 'Add a shop field to expenses'); const b = await appFull(page);
     check('expenses, just me: released as 1.0, then a new field and release 1.1, with the history keeping both', b.cols.expenses.includes('shop') && /1\.1/.test(await page.locator('.rel-hist').innerText()) && /1\.0/.test(await page.locator('.rel-hist').innerText()), b.cols.expenses);
+    // nothing changed since 1.1: the page says how to get to the next version, and the owner can still release again
+    const nextText = await page.locator('#rel-next').innerText();
+    await page.locator('#rel-again').click(); await page.waitForSelector('#rel-notes');
+    const emptyBlocked = await page.locator('#rel-go').isDisabled();
+    await page.fill('#rel-notes', 'New people start with the demo data.'); await page.locator('#rel-go').click();
+    await page.waitForFunction(() => /Version 1\.1\.1 · up to date/.test((document.getElementById('rel-state') || {}).innerText || ''), null, { timeout: 20000 });
+    check('expenses, just me: with nothing changed the page says how to make the next version, and "Release again without changes" goes out as 1.1.1 once the owner says why', /Nothing has changed since version 1\.1\./.test(nextText) && /1\.1\.1 or 1\.2/.test(nextText) && emptyBlocked && /1\.1\.1/.test(await page.locator('.rel-hist').innerText()), nextText);
     await ctx.close();
   }
 

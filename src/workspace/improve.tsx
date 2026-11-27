@@ -863,7 +863,7 @@ export function ImproveBox({ app }: { app: AppRecord }) {
   };
   return (
     <div className="col gap8 improve" id="improve">
-      <h3 className="widget-h">Something wrong, or something missing?</h3>
+      <h3 className="widget-h">{rel ? 'Something wrong, or something missing?' : 'Want something changed before you release?'}</h3>
       <p className="muted">
         {'Say it in your own words. You get a plan first, and ' +
           (rel ? 'people keep version ' + rel.v + ' until you release the change.' : 'nothing changes until you say go ahead.')}

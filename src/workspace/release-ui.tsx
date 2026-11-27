@@ -157,8 +157,10 @@ export function ReleaseView({ app }: { app: AppRecord }) {
     R = relForm(app.id);
   const kind = rel ? R.kind || suggestKind(app) : 'first',
     v = rel ? verNext(rel.v, kind) : '1.0',
-    text = R.text != null ? R.text : draftNotes(app).join('\n'),
-    can = !block && (!rel || dirty),
+    // with nothing changed since the live version, a release goes out only when the owner asks for one and says why
+    again = !!rel && !dirty && !!R.again,
+    text = R.text != null ? R.text : again ? '' : draftNotes(app).join('\n'),
+    can = !block && (!rel || dirty || (again && !!text.trim())),
     // a real launch starts empty; a later version starts new people the way the one before it did
     start: StartWith = R.start || (rel ? startWith(rel.start) : 'empty'),
     waiting = rel ? draftLog(app).length : 0,
@@ -174,7 +176,7 @@ export function ReleaseView({ app }: { app: AppRecord }) {
         .filter(Boolean),
       { start },
     );
-    setRelForm(app.id, r ? { busy: false, text: null, kind: null, start: null } : { busy: false });
+    setRelForm(app.id, r ? { busy: false, text: null, kind: null, start: null, again: false } : { busy: false });
   };
   const kinds = [
     {
@@ -193,6 +195,13 @@ export function ReleaseView({ app }: { app: AppRecord }) {
       title: 'The app works differently now',
     },
   ];
+  const improve = (
+    <Suspense fallback={null}>
+      <Card className="card rel-improve">
+        <ImproveBox app={app} />
+      </Card>
+    </Suspense>
+  );
   if (!app.def.screens.length)
     return (
       <div className="release scroll">
@@ -273,16 +282,39 @@ export function ReleaseView({ app }: { app: AppRecord }) {
             </span>
           </div>
         </Card>
-        {rel && (
-          <Suspense fallback={null}>
-            <Card className="card rel-improve">
-              <ImproveBox app={app} />
-            </Card>
-          </Suspense>
+        {rel && improve}
+        {rel && !dirty && !again && (
+          <Card className="card rel-form" id="rel-next">
+            <h3 className="widget-h">{'Release a new version'}</h3>
+            <p className="muted" id="rel-next-text">
+              {'Nothing has changed since version ' +
+                rel.v +
+                '. Say what to change in the box above. Once the change is built, you release it here as version ' +
+                verNext(rel.v, 'fix') +
+                ' or ' +
+                verNext(rel.v, 'feature') +
+                '.'}
+            </p>
+            <div className="row wrap">
+              <Btn
+                className="btn"
+                id="rel-again"
+                disabled={!!block}
+                title={block || undefined}
+                onClick={() => setRelForm(app.id, { again: true, kind: 'fix' })}
+              >
+                <Icon n="rocket" s="16" />
+                Release again without changes
+              </Btn>
+              <span className="t-cap muted">For example, to change what new people start with.</span>
+            </div>
+          </Card>
         )}
-        {(!rel || dirty) && (
+        {(!rel || dirty || again) && (
           <Card className="card rel-form">
-            <h3 className="widget-h">{rel ? 'Release the draft as version ' + v : 'Before you release'}</h3>
+            <h3 className="widget-h">
+              {again ? 'Release version ' + v : rel ? 'Release the draft as version ' + v : 'Before you release'}
+            </h3>
             {!rel && (
               <ul className="plain ticks" id="rel-ready">
                 <li className={st && st.fresh && st.failed ? 'bad' : undefined}>
@@ -323,15 +355,19 @@ export function ReleaseView({ app }: { app: AppRecord }) {
               id="rel-notes"
               label={rel ? 'What is new' : 'First release, becomes version 1.0'}
               hint={
-                rel
-                  ? 'Written from the ' +
-                    draftLog(app).length +
-                    ' change' +
-                    (draftLog(app).length === 1 ? '' : 's') +
-                    ' since version ' +
+                again
+                  ? 'Nothing in the app changed since version ' +
                     rel.v +
-                    '. One line each. Edit them freely: people see these when they update.'
-                  : 'One line each. People see these in About this app. Turnkey chooses the number: you do not have to.'
+                    '. Say in one line why it goes out again: people see it when they update.'
+                  : rel
+                    ? 'Written from the ' +
+                      draftLog(app).length +
+                      ' change' +
+                      (draftLog(app).length === 1 ? '' : 's') +
+                      ' since version ' +
+                      rel.v +
+                      '. One line each. Edit them freely: people see these when they update.'
+                    : 'One line each. People see these in About this app. Turnkey chooses the number: you do not have to.'
               }
             >
               <Textarea
@@ -371,10 +407,20 @@ export function ReleaseView({ app }: { app: AppRecord }) {
                 {'Release version '}
                 {v}
               </Btn>
+              {again && (
+                <Btn
+                  className="btn subtle"
+                  id="rel-again-cancel"
+                  onClick={() => setRelForm(app.id, { again: false, text: null, kind: null })}
+                >
+                  Cancel
+                </Btn>
+              )}
               <span className="t-cap muted">Every test runs once more first. If one fails, nothing is released.</span>
             </div>
           </Card>
         )}
+        {!rel && improve}
         <Card className="card rel-share">
           <h3 className="widget-h">Share and install</h3>
           <div className="rel-share-grid">

@@ -137,6 +137,22 @@ function StepRow({ app, st, i }: { app: AppRecord; st: BuildStep; i: number }) {
   );
 }
 
+/** Opens the Release page with the cursor in the box where the owner says what to change. The box loads on demand, so
+ *  this waits a few frames for it. */
+export function askForChange(app: AppRecord) {
+  U.view[app.id] = 'release';
+  notify();
+  let tries = 0;
+  const focus = () => {
+    const el = document.getElementById('improve-text');
+    if (el) {
+      el.scrollIntoView({ block: 'center' });
+      el.focus();
+    } else if (++tries < 60) requestAnimationFrame(focus);
+  };
+  requestAnimationFrame(focus);
+}
+
 export function StepsView({ app }: { app: AppRecord }) {
   const busy = !!RUNS[app.id],
     B = stepsOf(app),
@@ -217,6 +233,14 @@ export function StepsView({ app }: { app: AppRecord }) {
             }}
           >
             Open the app
+          </Btn>
+          <Btn
+            className="btn sm"
+            id="steps-change"
+            title="Say what to change. You get a plan first, then release it as a new version."
+            onClick={() => askForChange(app)}
+          >
+            Change something
           </Btn>
         </div>
       )}
