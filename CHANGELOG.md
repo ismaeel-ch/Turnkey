@@ -5,6 +5,31 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-27
+
+Polish on the guided build: one name per agent, Demo builds that do what their plan says, a faster first load, and
+Try a sample through the questions and plan.
+
+### Added
+
+- Release one change on its own while the rest of the draft waits. ([#231](https://github.com/ismaeel-ch/Turnkey/pull/231))
+- Try a sample asks its one question and shows the plan before it builds the sales bidding desk. ([#236](https://github.com/ismaeel-ch/Turnkey/pull/236))
+
+### Changed
+
+- Every agent goes by the name the plan gives it, everywhere: Planner, List builder, Rules builder, View advisor,
+  Screen designer, Tester, Access checker and List checker. A Demo build started from its plan runs the reviews and
+  the pause that plan lists. ([#240](https://github.com/ismaeel-ch/Turnkey/pull/240))
+- The first page load is 496 KB instead of 590 KB: saved builds and screens opened on demand load on first use. ([#238](https://github.com/ismaeel-ch/Turnkey/pull/238))
+- The README, the judge walk and the submission lead with the guided build. ([#234](https://github.com/ismaeel-ch/Turnkey/pull/234)) ([#242](https://github.com/ismaeel-ch/Turnkey/pull/242))
+
+### Fixed
+
+- Five fixes in the guided flow: rules for people an answer removed, the steps bar on phones, a pause opening the
+  chat over the steps on phones, the agents panel log scrolling, and plain words in first-release notes. ([#233](https://github.com/ismaeel-ch/Turnkey/pull/233))
+- Saved runs follow field renames, for every app with a team. ([#230](https://github.com/ismaeel-ch/Turnkey/pull/230))
+- The live site check walks the rest of the guided flow. ([#228](https://github.com/ismaeel-ch/Turnkey/pull/228))
+
 ## [0.5.0] - 2026-11-27
 
 The guided build. Turnkey asks a few questions, shows a plan in plain words, builds exactly that plan with a team
