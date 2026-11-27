@@ -3,7 +3,8 @@
 
    - install:  keep the page, the SQLite engine, the icons, the stylesheet and chunks the page names, and every chunk those
                chunks can load later (a Demo build, the workflow canvas), so nothing is missing once the connection goes.
-   - fetch:    the page and the icons answer from the cache and are refreshed in the background; files whose names
+   - fetch:    the page comes from the network (the kept copy when offline or after 4 s), so a release shows on the
+               next load; the icons answer from the cache and are refreshed in the background; files whose names
                change with their content (/_next/static, /vendor) answer from the cache and go to the network once.
    - never:    anything under /api/, anything that is not a GET, anything on another origin.
    - activate: delete every cache of an older deployment. */
@@ -122,6 +123,8 @@ self.addEventListener('message', (event) => {
 });
 
 const IMMUTABLE = KEEPABLE;
+// How long a navigation waits for the network before it answers from the kept copy.
+const PAGE_WAIT_MS = 4000;
 const SHELL = /^\/(a\/(manifest|icon)|icons\/|manifest\.webmanifest$|favicon\.ico$|icon\.svg$|apple-icon\.png$)/;
 
 async function refresh(cache, key, request) {
@@ -159,11 +162,16 @@ self.addEventListener('fetch', (event) => {
       return;
     }
     if (path !== '/') return; // anything else goes to the network as before
+    // The network first, so a reload after a release gets the new page (and with it the new code) straight away.
+    // The kept copy answers when there is no network, or when it is too slow to answer in a few seconds.
     event.respondWith(
       (async () => {
         const cache = await caches.open(CACHE);
-        const hit = await cache.match('/');
         const update = refresh(cache, '/', new Request('/', { headers: { accept: 'text/html' } }));
+        const slow = new Promise((resolve) => setTimeout(() => resolve(null), PAGE_WAIT_MS));
+        const fresh = await Promise.race([update, slow]);
+        if (fresh) return fresh;
+        const hit = await cache.match('/');
         if (hit) {
           event.waitUntil(update);
           return hit;
