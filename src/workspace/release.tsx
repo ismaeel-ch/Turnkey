@@ -44,9 +44,15 @@ import { inverseSteps, verCmp, verNext, verParts } from './record-steps';
 import type { VersionSteps } from './record-steps';
 import { currentVersion } from '@/shared/history';
 import { saveShortLink } from '@/platform/share-link';
-import { exportMarkdown, exportPage, exportPdf, exportSqlite, exportZip } from './export';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 
+// The exports (document, PDF, page, database, zip) load the first time one is asked for.
+type ExportName = 'exportMarkdown' | 'exportPage' | 'exportPdf' | 'exportSqlite' | 'exportZip';
+const runExport = (app: AppRecord, name: ExportName) =>
+  void import('./export').then(
+    (m) => void m[name](app),
+    (e: unknown) => toast('The export could not be made: ' + errText(e), 'danger'),
+  );
 // The box for saying what is wrong or missing loads the first time the Release page of a released app shows.
 const ImproveBox = lazy(() => import('./improve').then((m) => ({ default: m.ImproveBox })));
 
@@ -1471,23 +1477,23 @@ export function ReleaseView({ app }: { app: AppRecord }) {
             rules, screens, tests, which agent made what and the run timeline. Hand it to the team that builds the production version.
           </p>
           <div className="row wrap">
-            <Btn className="btn primary" id="exp-md" onClick={() => exportMarkdown(app)}>
+            <Btn className="btn primary" id="exp-md" onClick={() => runExport(app, 'exportMarkdown')}>
               <Icon n="download" s="16" />
               Document (.md)
             </Btn>
-            <Btn className="btn" id="exp-pdf" onClick={() => exportPdf(app)}>
+            <Btn className="btn" id="exp-pdf" onClick={() => runExport(app, 'exportPdf')}>
               <Icon n="download" s="16" />
               PDF (print)
             </Btn>
-            <Btn className="btn" id="exp-html" onClick={() => exportPage(app)}>
+            <Btn className="btn" id="exp-html" onClick={() => runExport(app, 'exportPage')}>
               <Icon n="download" s="16" />
               Page (.html)
             </Btn>
-            <Btn className="btn" id="exp-sqlite" onClick={() => exportSqlite(app)}>
+            <Btn className="btn" id="exp-sqlite" onClick={() => runExport(app, 'exportSqlite')}>
               <Icon n="download" s="16" />
               Database (.sqlite)
             </Btn>
-            <Btn className="btn" id="exp-zip" onClick={() => exportZip(app)}>
+            <Btn className="btn" id="exp-zip" onClick={() => runExport(app, 'exportZip')}>
               <Icon n="download" s="16" />
               Everything (.zip)
             </Btn>
