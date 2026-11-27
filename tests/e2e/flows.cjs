@@ -954,6 +954,8 @@ async function flowViews(browser, url) {
   check('the built app is in the library', await page.locator('.app-row').count() === 1 && await page.locator('[data-tpl="clinic"] .badge.b-success').count() === 1);
   await page.locator('.app-row .btn[aria-label^="Duplicate"]').click(); await sleep(200);
   check('duplicate adds a second saved app', await page.locator('.app-row').count() === 2 && (await page.locator('.app-row strong').first().innerText()).includes('copy'), await page.locator('.app-row strong').allInnerTexts());
+  for (const scheme of ['light', 'dark']) { await page.emulateMedia({ colorScheme: scheme }); await sleep(150); const rows = await appRowsLook(page); check('Your apps (' + scheme + '): each card is one line, logo and name on the left, the three buttons side by side, the description cut short', appRowsOk(rows), rows); }
+  await page.emulateMedia({ colorScheme: 'light' });
   await shot(page, '78-library'); await page.locator('.app-open').first().click(); await page.waitForSelector('.work-head'); await view(page, 'Data'); await page.waitForSelector('.split .side-i');
   check('the copy has its own SQLite file with the same rows', (await page.locator('.side-i', { hasText: 'patients' }).locator('.t-cap').innerText()).trim() === '14');
   await ctx.close();
@@ -1914,6 +1916,15 @@ const fitNow = (page) => st(page, () => {
   }
   return { scroll: document.documentElement.scrollWidth - W, out: out.slice(0, 6), small: small.slice(0, 6) };
 });
+/** How each card under Your apps is laid out: the logo and name start at the card's left edge, the share, duplicate and
+ *  delete buttons sit side by side on one line, the long description is cut short instead of running past the card,
+ *  and a card is no taller than two lines (one on a wide screen). */
+const appRowsLook = (page) => page.evaluate(() => [...document.querySelectorAll('.app-row')].map((r) => {
+  const c = r.getBoundingClientRect(), o = r.querySelector('.app-open').getBoundingClientRect(), d = r.querySelector('.app-open .t-cap');
+  const b = [...r.querySelectorAll('.btn.icon')].map((x) => x.getBoundingClientRect());
+  return { h: Math.round(c.height), left: Math.round(o.left - c.left), btnsInRow: b.length === 3 && b.every((x) => Math.abs(x.top - b[0].top) < 2) && b[0].right <= b[1].left && b[1].right <= b[2].left, inside: r.scrollWidth <= r.clientWidth + 1 && Math.round(o.right) <= Math.round(c.right) && (!d || d.getBoundingClientRect().right <= c.right + 1), wide: c.width >= 700 };
+}));
+const appRowsOk = (rows) => rows.length > 0 && rows.every((x) => x.left <= 12 && x.btnsInRow && x.inside && x.h <= (x.wide ? 72 : 120));
 const fitsOk = (f) => f.scroll <= 0 && !f.out.length && !f.small.length;
 /** Checks one screen in the light theme, then again in the dark one. */
 async function fitBoth(page, label) {
@@ -1959,7 +1970,12 @@ async function flowSizes(browser, url) {
     await page.waitForSelector('.dialog.share'); await page.locator('#sh-release').click(); await page.waitForFunction(() => /#app=1\./.test((document.getElementById('sh-link') || {}).value || '')); await sleep(200);
     await fitBoth(page, at + 'the share dialog');
     if (!link) { link = await page.inputValue('#sh-link'); await page.waitForFunction(() => /^https?:\/\/[^/]+\/[a-z0-9-]+$/.test((document.getElementById('sh-short') || {}).value || ''), null, { timeout: 15000 }).catch(() => {}); short = await page.inputValue('#sh-short').catch(() => ''); }
-    await shot(page, 'sz-' + w + '-share'); await ctx.close();
+    await shot(page, 'sz-' + w + '-share');
+    await page.locator('.dialog.share').getByRole('button', { name: 'Close' }).first().click(); await page.waitForSelector('.fui-DialogSurface__backdrop', { state: 'detached', timeout: 5000 }).catch(() => {});
+    await page.locator('.brand').first().click(); await page.waitForSelector('.home .app-row'); await sleep(200);
+    const rows = await appRowsLook(page);
+    check(at + 'Your apps: the card keeps its logo and name on the left, its three buttons side by side and its description inside', appRowsOk(rows), rows);
+    await fitBoth(page, at + 'Home with a saved app'); await ctx.close();
 
     // the app on its own: from a link, installed, and from a short link
     const g = await newPage(browser, { viewport: { width: w, height: h } }), gp = g.page;
