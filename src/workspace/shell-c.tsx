@@ -102,6 +102,8 @@ import { historyHooks } from './history';
 import { Home, Titlebar, Workspace, lineApp } from './shell-a';
 import { installShortcuts, setSingleKeys } from './commands';
 import { later } from './later';
+import { BootScreen, noteWelcomed } from '@/platform/boot-screen';
+import { WELCOME_LEAD, WELCOME_NOTE, WELCOME_STEPS, WELCOME_TITLE } from '@/shared/welcome';
 
 // Loaded the first time they are drawn, to keep them out of the first page load.
 const GoBackDialog = later(() => import('./release-ui'), 'GoBackDialog');
@@ -145,6 +147,7 @@ function finishOnboarding(o: OnboardingForm, shortTour = false) {
   const a = createAccount(o.name || 'Demo user', o.user || 'demo', o.pass || 'demo');
   S.session = a.id;
   S.onboarded = true;
+  noteWelcomed(true);
   S.settings.demo = o.demo;
   S.settings.debug = o.dev;
   commit();
@@ -174,7 +177,7 @@ function startSample(o: OnboardingForm) {
 export function Onboarding() {
   useLayoutEffect(startEngineAfterPaint, []);
   const o = obForm(),
-    steps = ['Welcome', 'Your account', 'How to run', 'First app', 'Ready'],
+    steps = WELCOME_STEPS,
     liveOK = online();
   const next = () => {
     if (o.step === 1) {
@@ -206,12 +209,10 @@ export function Onboarding() {
   const body = [
     () => (
       <>
-        <h1 className="t-title1">Say what the work is. Get the whole app, ready to use.</h1>
+        <h1 className="t-title1">{WELCOME_TITLE}</h1>
         <p className="lead">
           {BRAND.name}
-          {
-            ' turns one sentence into a working business app. Five builder agents and a Tester make its database, rules, screens and tests while you watch, and code checks every handoff.'
-          }
+          {WELCOME_LEAD}
         </p>
         <div className="ob-quick row">
           <Btn className="btn primary" id="ob-sample" onClick={trySample}>
@@ -477,7 +478,7 @@ export function Onboarding() {
               </li>
             ))}
           </ol>
-          <p className="t-cap muted">An entry for the SSI Agent-A-Thon 2026. People and records in it are made up.</p>
+          <p className="t-cap muted">{WELCOME_NOTE}</p>
         </aside>
         <main className="ob-main">
           <div className="ob-body" key={o.step}>
@@ -1785,6 +1786,8 @@ export function Shell() {
 }
 function RootInner() {
   useStore();
+  // until the saved state is read, keep the screen the server drew, so a first visit goes straight to the welcome
+  if (U.boot === 'loading' && !stateLoaded) return <BootScreen />;
   if (U.boot === 'loading' && !welcomeFirst())
     return (
       <div className="splash">
@@ -1896,6 +1899,7 @@ export function boot() {
   LS.probe();
   loadState();
   stateLoaded = true;
+  noteWelcomed(!!S.onboarded);
   applyTheme();
   if (!S.shared) S.shared = {};
   Object.values(S.apps).forEach((a) => {
@@ -1938,7 +1942,10 @@ export function boot() {
   if (welcomeFirst()) {
     notify(); // draw the welcome screen now; it starts the engine once painted (the timer is only a fallback)
     setTimeout(startEngine, 3000);
-  } else setTimeout(startEngine, 40);
+  } else {
+    notify(); // swap the boot screen for the splash
+    setTimeout(startEngine, 40);
+  }
   probeClaude(0);
   const flush = () => {
     try {
