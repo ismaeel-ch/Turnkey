@@ -8,7 +8,7 @@ import { TYPE_LABEL, accOf, apiCall, appUsers, findCol, findRole, findTable, rol
 import { pushChat, say } from './line';
 import { carryData } from './carry';
 import { inverseSteps } from './record-steps';
-import { draftSteps, isDirty, relOf, suggestKind, verNext } from './release';
+import { aloneOffered, draftSteps, isDirty, relOf, suggestKind, verNext } from './release';
 import { appFromPack, readPack, unsqueeze } from './share';
 import { AppPane, newPane, stageOf } from './runtime';
 import { Btn, Dialog, Field, Icon, Spinner, Textarea } from './ui';
@@ -371,7 +371,7 @@ export async function goAhead(app: AppRecord, flowId: string) {
   commit();
   let ok = false;
   try {
-    ok = await runChange(B, p.steps, titleOf(flow.text), flow.kind);
+    ok = await runChange(B, p.steps, titleOf(flow.text), flow.kind, flow.id); // the change keeps the flow's id, so Try it can release it on its own
   } catch (e) {
     say(app, 'orchestrator', 'The change could not be made: ' + errText(e));
   }
@@ -703,6 +703,16 @@ export function TryItCard({ app, c }: { app: AppRecord; c: TryCard }) {
     await openCompare(app, c.role, c.table);
     setBusy(false);
   };
+  // the other changes in the draft keep waiting; the code for this loads the first time it is pressed
+  const alone = async () => {
+    setBusy(true);
+    try {
+      await (await import('./release-one')).releaseAlone(app, [c.flow]);
+    } catch (e) {
+      toast(errText(e), 'danger');
+    }
+    setBusy(false);
+  };
   return (
     <div className={cx('gcard', 'tryit', c.state === 'works' && 'ok')}>
       <div className="gc-h">
@@ -752,6 +762,12 @@ export function TryItCard({ app, c }: { app: AppRecord; c: TryCard }) {
           >
             <Icon n="rocket" s="16" />
             {'Release it as ' + verNext(rel.v, suggestKind(app))}
+          </Btn>
+        )}
+        {c.state === 'works' && rel && aloneOffered(app, c.flow) && (
+          <Btn className="btn sm" data-act="alone" disabled={busy} onClick={() => void alone()}>
+            {busy ? <Spinner /> : <Icon n="rocket" s="16" />}
+            {'Release only this ' + (c.kind === 'fix' ? 'fix' : 'change') + ' now'}
           </Btn>
         )}
       </div>
