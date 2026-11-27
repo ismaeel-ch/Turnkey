@@ -36,6 +36,7 @@ export function planFromDef(def: AppDef | null | undefined): PlanSpec | null {
         if (c.type === 'select') f.options = [...(c.options || [])];
         if (c.type === 'ref' && c.ref) f.ref = c.ref;
         if (c.type === 'user' && c.role) f.role = c.role;
+        if (c.formula) f.formula = c.formula;
         return f;
       }),
   }));
@@ -46,8 +47,17 @@ export function planFromDef(def: AppDef | null | undefined): PlanSpec | null {
       ? {
           list: p.table,
           field: p.column,
-          stages: p.states.map((s) => ({ id: s.id, label: s.label })),
-          moves: p.transitions.map((t) => ({ label: t.label, from: [...t.from], to: t.to, by: t.roles.filter((r) => ids.includes(r)) })),
+          stages: p.states.map((s) =>
+            (p.locked || []).includes(s.id) ? { id: s.id, label: s.label, locked: true } : { id: s.id, label: s.label },
+          ),
+          moves: p.transitions.map((t) => ({
+            label: t.label,
+            from: [...t.from],
+            to: t.to,
+            by: t.roles.filter((r) => ids.includes(r)),
+            ...(t.when ? { when: t.when, ...(t.unless ? { unless: t.unless } : {}) } : {}),
+            ...(t.needs?.length ? { needs: [...t.needs] } : {}),
+          })),
           note: brief.process?.note || '',
         }
       : null;
@@ -79,5 +89,6 @@ export function planFromDef(def: AppDef | null | undefined): PlanSpec | null {
     helpers: def.team ? def.team.about || def.team.title : null,
     answers: brief.decision ? [{ slot: 'decision', question: brief.decision.text, answer: brief.decision.answer, by: 'you' }] : [],
     notInThisVersion: [],
+    ...(def.logic?.rules.length ? { checks: def.logic.rules.map((r) => ({ list: r.table, when: r.when, message: r.message })) } : {}),
   };
 }

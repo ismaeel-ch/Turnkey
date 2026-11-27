@@ -21,6 +21,7 @@ import {
   say,
   stepEnd,
   stepStart,
+  logicCare,
 } from './line';
 import { applyChangeSync, keepChange, parseChange, planOps } from './changes';
 import type { ParsedChange } from './changes';
@@ -370,6 +371,11 @@ export function testerPrompt(app: BackedApp) {
     'delete: that person deletes the record this case created and must succeed. denied: the attempt must be refused with 403 (to prove someone may not delete or change a record, use denied with action delete or update' +
     (flows ? '; may not move it on, action is the transition id' : '') +
     ').\n- Cover: every rule in the brief at least once, one refusal per role that has limits, one case about required fields. Do not repeat the guided tour.\n- The app enforces only these things: which roles may see, create, edit and delete each table (all rows, only their own rows where the table has an owner column, or none), which roles may run each transition, and required fields. Do not write a case that depends on anything else, such as a field\'s value, a date or a count ("cannot start until assigned"): no access rule can make it pass.\n' +
+    (logicCare(app.def) || P?.locked?.length
+      ? '-' +
+        logicCare(app.def) +
+        ' To prove a rule, use invalid with values that break exactly that rule and are otherwise complete. To prove a held move, use denied with the transition id as "action". A record in a locked stage refuses update and delete: prove that with denied.\n'
+      : '') +
     VALUE_RULES +
     '\n\nFORMAT: {"cases":[{"name":"","why":"","steps":[]}]}'
   );
@@ -704,10 +710,21 @@ export function testerSteps(app: BackedApp, run: Run) {
     const s3 = stepStart(run, 'tests', 'backend', 'Repair', live ? 'model' : 'tool');
     let fixes: Repair[] = [],
       wrong: { id: string; why: string }[] = [];
-    if (live) {
+    // A case the app refuses with one of its own approved rules or conditions was written against the app, not for
+    // it: no repair of the app should make it pass, so it is withdrawn and said so.
+    const own = [
+      ...(app.def.logic?.rules || []).map((x) => x.message),
+      ...(app.def.process?.transitions || []).map((x) => x.unless || ''),
+    ].filter((x) => x.length > 8);
+    const against = fails.filter((f) => f.id.startsWith('case:') && own.some((m) => f.actual.includes(m)));
+    wrong = against
+      .map((f) => ({ id: f.id.slice(5), why: 'The app refuses a step of it by one of its own rules: ' + f.actual }))
+      .filter((x) => (app.def.cases || []).some((c) => c.id === x.id));
+    const open = fails.filter((f) => !wrong.some((w) => 'case:' + w.id === f.id));
+    if (live && open.length) {
       try {
         const tried = Q.rounds.flatMap((x) => x.fixes.filter((f) => f.ok).map((f) => f.text));
-        const o = await callModel(app, run, 'backend', repairPrompt(app, fails, tried), n);
+        const o = await callModel(app, run, 'backend', repairPrompt(app, open, tried), n);
         fixes = arr(o.fixes)
           .map((x) => ({
             by: 'backend',
@@ -716,12 +733,14 @@ export function testerSteps(app: BackedApp, run: Run) {
           }))
           .filter((x) => x.text)
           .slice(0, 5);
-        wrong = arr(o.wrong)
-          .map((x) => ({
-            id: snake(x && x.case),
-            why: str(x && x.why),
-          }))
-          .filter((x) => (app.def.cases || []).some((c) => c.id === x.id));
+        wrong = wrong.concat(
+          arr(o.wrong)
+            .map((x) => ({
+              id: snake(x && x.case),
+              why: str(x && x.why),
+            }))
+            .filter((x) => (app.def.cases || []).some((c) => c.id === x.id) && !wrong.some((w) => w.id === x.id)),
+        );
       } catch (e) {
         if (e instanceof Stopped || (e as { fatal?: boolean }).fatal) throw e;
       }

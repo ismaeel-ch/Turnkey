@@ -37,7 +37,8 @@ const fieldText = (f: PlanField) =>
   (f.type === 'select' ? '[' + (f.options || []).join('|') + ']' : '') +
   (f.type === 'ref' ? '->' + f.ref : '') +
   (f.type === 'user' && f.role ? '(' + f.role + ')' : '') +
-  (f.required ? '*' : '');
+  (f.required ? '*' : '') +
+  (f.formula ? ' = ' + f.formula : '');
 
 /**
  * The plan's lists as the Database prompt carries them, one line per list, in the notation the other prompts use for
@@ -83,8 +84,30 @@ const columnOf = (f: PlanField): ColumnDef => {
   if (f.type === 'select') c.options = [...(f.options || [])];
   if (f.type === 'ref') c.ref = f.ref;
   if (f.type === 'user' && f.role) c.role = f.role;
+  if (f.formula) {
+    c.formula = f.formula;
+    c.required = false;
+  }
   return c;
 };
+
+/**
+ * Puts the plan's formulas on the tables the Database agent returned. Which fields are calculated, and how, is the
+ * owner's approved plan: the agent's own word on it is not taken.
+ */
+export function formulasFromPlan<T extends { name: string; columns: ColumnDef[] }>(plan: PlanSpec, tables: T[]): T[] {
+  for (const t of tables) {
+    const l = plan.lists.find((x) => x.name === t.name);
+    for (const c of t.columns) {
+      const f = l?.fields.find((x) => x.name === c.name);
+      if (f?.formula && f.type === c.type) {
+        c.formula = f.formula;
+        c.required = false;
+      } else delete c.formula;
+    }
+  }
+  return tables;
+}
 
 /**
  * Brings tables back to the plan, for the Database agent's last attempt: tables the plan does not have are dropped,
@@ -165,9 +188,19 @@ export function backendFromPlan(plan: PlanSpec) {
           column: st.field,
           states: st.stages.map((s, i) => ({ id: s.id, label: s.label, tone: tone(s.id, i, st.stages.length) })),
           initial: st.stages[0].id,
-          transitions: st.moves.map((m) => ({ id: moveId(m.label), label: m.label, from: [...m.from], to: m.to, roles: [...m.by] })),
+          transitions: st.moves.map((m) => ({
+            id: moveId(m.label),
+            label: m.label,
+            from: [...m.from],
+            to: m.to,
+            roles: [...m.by],
+            ...(m.when ? { when: m.when, ...(m.unless ? { unless: m.unless } : {}) } : {}),
+            ...(m.needs?.length ? { needs: [...m.needs] } : {}),
+          })),
+          ...(st.stages.some((s) => s.locked) ? { locked: st.stages.filter((s) => s.locked).map((s) => s.id) } : {}),
         }
       : null,
+    logic: { rules: (plan.checks || []).map((c) => ({ table: c.list, when: c.when, message: c.message })) },
     access: plan.lists.flatMap((l) =>
       plan.people.map((p) => {
         const a = plan.permissions[l.name]?.[p.id] || { list: 'none', create: false, update: 'none', delete: false };
@@ -175,4 +208,41 @@ export function backendFromPlan(plan: PlanSpec) {
       }),
     ),
   };
+}
+
+/** A move as the plan and the built app both describe it. */
+interface MoveShape {
+  id: string;
+  label: string;
+  from: string[];
+  to: string;
+  roles: string[];
+}
+/**
+ * Pairs each move the Rules agent wrote with the move of the plan it stands for, so the plan's condition lands on the
+ * right one: first by name, then by the same stages and the same people, then by the same stages and one shared kind
+ * of person. A planned move is used once. Two moves between the same stages ("Finish" when within budget, "Sign off"
+ * by the director) must never end up with one condition, or nothing could make the move when it is not met.
+ */
+export function matchMoves<P extends MoveShape, B extends MoveShape>(planned: readonly P[], built: readonly B[]): Map<B, P> {
+  const left = planned.slice();
+  const fits = (p: P, b: B) => p.to === b.to && p.from.length === b.from.length && p.from.every((f) => b.from.includes(f));
+  const score = (p: P, b: B) =>
+    p.id === b.id || p.label.toLowerCase() === b.label.toLowerCase()
+      ? 3
+      : !fits(p, b)
+        ? 0
+        : p.roles.length === b.roles.length && p.roles.every((r) => b.roles.includes(r))
+          ? 2
+          : p.roles.some((r) => b.roles.includes(r))
+            ? 1
+            : 0;
+  const match = new Map<B, P>();
+  for (const want of [3, 2, 1])
+    for (const b of built) {
+      if (match.has(b)) continue;
+      const at = left.findIndex((p) => score(p, b) === want);
+      if (at >= 0) match.set(b, left.splice(at, 1)[0]);
+    }
+  return match;
 }

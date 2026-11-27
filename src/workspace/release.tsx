@@ -219,6 +219,8 @@ export function appSig(app: AppRecord) {
         d.theme,
         d.tour,
         d.cases || null,
+        // only when there are rules, so an app from before rules existed keeps the signature it had
+        ...(d.logic && d.logic.rules.length ? [d.logic] : []),
       ]),
     );
   SIGC[app.id] = {
