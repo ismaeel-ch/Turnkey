@@ -61,7 +61,7 @@ describe('validateTables', () => {
     expect(codes(validateTables([table('t', [col('s', 'select', { options: ['Not Snake', "x'; --"] })])]))).toContain('bad_option');
   });
 
-  it('enforces the limits of the design: 8 tables, 12 fields each', () => {
+  it('enforces the limits of the design: 8 tables, 16 fields each', () => {
     const many = Array.from({ length: LIMITS.tables + 1 }, (_, i) => table('t' + i, [col('a', 'text')]));
     expect(codes(validateTables(many))).toContain('too_many_tables');
     expect(validateTables(many.slice(0, LIMITS.tables)).ok).toBe(true);
@@ -70,8 +70,8 @@ describe('validateTables', () => {
         'wide',
         Array.from({ length: n }, (_, i) => col('c' + i, 'text')),
       );
-    expect(validateTables([wide(12)]).ok).toBe(true);
-    expect(codes(validateTables([wide(13)]))).toContain('too_many_columns');
+    expect(validateTables([wide(LIMITS.cols)]).ok).toBe(true);
+    expect(codes(validateTables([wide(LIMITS.cols + 1)]))).toContain('too_many_columns');
   });
 
   it('checks title, owner and duplicates', () => {

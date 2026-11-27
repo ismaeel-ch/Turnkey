@@ -270,8 +270,8 @@ export function normRules(o: Untrusted, tables: Tables): AppRule[] {
 }
 
 /** What is wrong with the app's logic as it stands, as plain sentences. */
-export const logicIssues = (def: LogicDef): string[] =>
-  logicProblems(
+export const logicIssues = (def: LogicDef): string[] => [
+  ...logicProblems(
     def.tables,
     def.logic?.rules || [],
     def.process && def.process.table
@@ -281,7 +281,32 @@ export const logicIssues = (def: LogicDef): string[] =>
           moves: def.process.transitions.map((x) => ({ label: x.label, when: x.when, needs: x.needs })),
         }
       : null,
+  ),
+  ...twinMoves(def.process),
+];
+
+/** Two moves from the same stage to the same stage on the same condition: when it is not met, nothing can make the
+ *  move, which is never what "over the limit needs the director" means. */
+function twinMoves(P: Process | null | undefined): string[] {
+  const out: string[] = [],
+    same = (a?: string, b?: string) => !!a && !!b && a.replace(/\s+/g, '') === b.replace(/\s+/g, '');
+  const moves = P ? P.transitions : [];
+  moves.forEach((a, i) =>
+    moves.slice(i + 1).forEach((b) => {
+      if (a.to === b.to && a.from.some((f) => b.from.includes(f)) && same(a.when, b.when))
+        out.push(
+          '"' +
+            a.label +
+            '" and "' +
+            b.label +
+            '" make the same move on the same condition (' +
+            a.when +
+            '), so nothing can make it when the condition is not met: give one of them the opposite condition, or none',
+        );
+    }),
   );
+  return out;
+}
 
 /* ---------- what reads a field ---------- */
 

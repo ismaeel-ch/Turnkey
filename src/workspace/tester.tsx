@@ -25,6 +25,7 @@ import {
 import { applyChangeSync, keepChange, parseChange, planOps } from './changes';
 import type { ParsedChange } from './changes';
 import { stName } from './custom';
+import { hasCalcs } from './logic';
 import { AGENT_NAMES } from '@/shared/plan/team';
 
 /* ===== Turnkey prototype · the Tester: test cases written by an agent, run by code, failures sent back for repair =====
@@ -370,6 +371,9 @@ export function testerPrompt(app: BackedApp) {
     'delete: that person deletes the record this case created and must succeed. denied: the attempt must be refused with 403 (to prove someone may not delete or change a record, use denied with action delete or update' +
     (flows ? '; may not move it on, action is the transition id' : '') +
     ').\n- Cover: every rule in the brief at least once, one refusal per role that has limits, one case about required fields. Do not repeat the guided tour.\n- The app enforces only these things: which roles may see, create, edit and delete each table (all rows, only their own rows where the table has an owner column, or none), which roles may run each transition, and required fields. Do not write a case that depends on anything else, such as a field\'s value, a date or a count ("cannot start until assigned"): no access rule can make it pass.\n' +
+    (hasCalcs(app.def.tables) || app.def.logic?.rules.length || P?.transitions.some((x) => x.when || x.needs?.length) || P?.locked?.length
+      ? '- This app also works things out: the fields written with " = formula" in TABLES are calculated, RULES refuse a save, and a transition marked "only when" or "needs" in WORKFLOW is held back until that is true. Those are enforced too. Never put a calculated field in "values". Every create and update that must succeed has to keep every rule of its table (a rule may forbid adding to a record in a late or locked stage, or an amount above what is owed), and a transition step has to meet its condition first, which may take earlier steps in the same case (add a line before submitting, a payment before closing). To prove a rule, use invalid with values that break exactly that rule and are otherwise complete. To prove a held move, use denied with the transition id as "action". A record in a locked stage refuses update and delete: prove that with denied.\n'
+      : '') +
     VALUE_RULES +
     '\n\nFORMAT: {"cases":[{"name":"","why":"","steps":[]}]}'
   );

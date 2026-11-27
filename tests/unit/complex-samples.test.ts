@@ -145,3 +145,13 @@ describe('the order desk, used through its own endpoints', () => {
     expect(dept(3).committed).toBe(4960);
   });
 });
+
+describe('logic an agent got wrong', () => {
+  it('two moves to the same stage on the same condition are sent back', async () => {
+    const { logicIssues } = await import('@/workspace/logic');
+    const def = structuredClone(APPS.orders.def);
+    expect(logicIssues(def)).toEqual([]);
+    def.process!.transitions.find((x) => x.id === 'approve_large_order')!.when = 'total <= 5000';
+    expect(logicIssues(def).join(' ')).toMatch(/"Approve" and "Approve large order" make the same move on the same condition/);
+  });
+});
