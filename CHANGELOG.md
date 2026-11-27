@@ -20,6 +20,7 @@ Every built app gets its own Settings page, and the person menu in its header ha
   add back the demo data, download or restore the database, and Start over. Each choice applies at once with no
   agent run, is kept with the app (so a share link, a release and an earlier version carry it), and is noted for the
   next release. The builder has a Settings button above the app that opens the page as someone who may.
+  ([#290](https://github.com/ismaeel-ch/Turnkey/pull/290))
 
 ### Fixed
 
