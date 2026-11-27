@@ -896,11 +896,14 @@ const noInstallOffer = () => false;
 export function ResetDialog() {
   const apps = S.session ? myApps() : [],
     out = !S.session;
+  const canStartOver = (a: AppRecord) => a.status === 'ready' && !RUNS[a.id] && dbExists(a.id);
+  // records people added themselves: starting over deletes them, so the row says how many
+  const own = apps.reduce((n, a) => n + (canStartOver(a) ? demoCounts(a).own : 0), 0);
   const act = (kind: string) => {
     if (kind === 'data') {
       let n = 0;
       apps.forEach((a) => {
-        if (a.status === 'ready' && !RUNS[a.id] && dbExists(a.id)) {
+        if (canStartOver(a)) {
           reseed(a);
           n++;
         }
@@ -942,10 +945,12 @@ export function ResetDialog() {
               apps.length +
               ' app' +
               (apps.length === 1 ? '' : 's') +
-              ' and puts the demo data back. Records you added are deleted. Tables, screens and your changes stay. To remove only the made-up records, open an app and use Remove demo data.'
+              ' and puts the demo data back. ' +
+              (own ? 'This deletes the ' + own + (own === 1 ? ' record' : ' records') + ' you added. ' : '') +
+              'Lists, screens and your changes stay. To remove only the made-up records, open an app and use Remove demo data.'
             }
           >
-            <Btn className="btn" disabled={!apps.length} onClick={() => act('data')}>
+            <Btn className="btn" data-reset="data" disabled={!apps.length} onClick={() => act('data')}>
               Start over
             </Btn>
           </SetRow>
