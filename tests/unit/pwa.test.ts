@@ -203,7 +203,11 @@ describe('deploymentOf and keepableFiles', () => {
 
 describe('service worker', () => {
   type Listener = (e: Record<string, unknown>) => void;
-  function load(version = 'abc') {
+  function load(
+    version = 'abc',
+    net: (url: string) => Promise<Response> = async (url) =>
+      new Response(url.endsWith('/') || url === '/' ? '<script src="/_next/static/c.js"></script>' : 'ok'),
+  ) {
     const listeners: Record<string, Listener> = {};
     const store = new Map<string, Map<string, Response>>();
     const fetched: string[] = [];
@@ -229,7 +233,7 @@ describe('service worker', () => {
     const fetchFn = async (u: string | Request) => {
       const url = typeof u === 'string' ? u : u.url;
       fetched.push(url);
-      return new Response(url.endsWith('/') || url === '/' ? '<script src="/_next/static/c.js"></script>' : 'ok');
+      return net(url);
     };
     vm.runInNewContext(fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8'), {
       self,
@@ -237,8 +241,14 @@ describe('service worker', () => {
       fetch: fetchFn,
       URL,
       Response,
-      Request,
+      // the worker names its own page as '/': a worker resolves that against its origin, Node needs it spelled out
+      Request: class extends Request {
+        constructor(u: string, o?: RequestInit) {
+          super(new URL(u, 'http://x'), o);
+        }
+      },
       Promise,
+      setTimeout,
     });
     return { listeners, store, fetched };
   }
@@ -289,5 +299,22 @@ describe('service worker', () => {
     listeners.activate({ waitUntil: (x: Promise<unknown>) => (p = x) });
     await p;
     expect([...store.keys()].sort()).toEqual(['other-site', 'turnkey-new']);
+  });
+  it('opens the page from the network, so a reload after a release gets the new code', async () => {
+    const { listeners, store } = load('abc', async () => new Response('new page'));
+    store.set('turnkey-abc', new Map([['/', new Response('old page')]]));
+    const { ev, out } = fetchEvent('/', { mode: 'navigate' });
+    listeners.fetch(ev);
+    expect(await ((await out.responded) as Response).text()).toBe('new page');
+    expect(await store.get('turnkey-abc')!.get('/')!.clone().text()).toBe('new page');
+  });
+  it('opens the kept page when there is no network', async () => {
+    const { listeners, store } = load('abc', async () => {
+      throw new TypeError('offline');
+    });
+    store.set('turnkey-abc', new Map([['/', new Response('kept page')]]));
+    const { ev, out } = fetchEvent('/', { mode: 'navigate' });
+    listeners.fetch(ev);
+    expect(await ((await out.responded) as Response).text()).toBe('kept page');
   });
 });

@@ -62,9 +62,11 @@ import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto,
 import { isStatusCol, startWalk } from './runtime';
 import { latestTouchOfTable, touchOf, touchShort, touchText } from './provenance';
 import { later } from './later';
+import { isDirty, relOf, releaseBlock, suggestKind, verNext, waitingRelease } from './release';
 
 // Loaded the first time they are drawn, to keep them out of the first page load.
 const ReleaseCard = later(() => import('./release-ui'), 'ReleaseCard');
+const ReleaseAskCard = later(() => import('./release-ui'), 'ReleaseAskCard');
 const FlowCards = later(() => import('./custom-ui'), 'FlowCards');
 
 // Improving an app after it is built (the plan card, its questions, try it) loads the first time one of its cards shows.
@@ -1404,6 +1406,8 @@ export function ChatCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
       return <FlowCards app={app} m={m} />;
     case 'released':
       return <ReleaseCard app={app} m={m} />;
+    case 'relask':
+      return <ReleaseAskCard app={app} m={m} />;
     default:
       return null;
   }
@@ -1559,8 +1563,20 @@ export function ChatPanel({ app }: { app: AppRecord }) {
   const waiting = busy && (RUNS[app.id].answer || RUNS[app.id].gate),
     idle = !busy && !PENDING[app.id],
     ftips = idle ? flowTips(app) : [],
-    tips = app.status === 'ready' && idle ? suggestChanges(app).slice(0, ftips.length ? 4 : 5) : [],
-    team = STATIONS.map((s) => s.agent).filter((id, i, a) => a.indexOf(id) === i),
+    tips = app.status === 'ready' && idle ? suggestChanges(app).slice(0, ftips.length ? 4 : 5) : [];
+  // the draft can go out from here too: the chip asks for the release card, the same as typing "release"
+  const rel = relOf(app),
+    relTip =
+      app.status === 'ready' &&
+      idle &&
+      app.def &&
+      app.def.screens.length &&
+      (!rel || isDirty(app)) &&
+      !waitingRelease(app) &&
+      !releaseBlock(app)
+        ? 'Release version ' + (rel ? verNext(rel.v, suggestKind(app)) : '1.0')
+        : '';
+  const team = STATIONS.map((s) => s.agent).filter((id, i, a) => a.indexOf(id) === i),
     active = workingAgent(app),
     handovers = handoversOf(app.chat);
   return (
@@ -1617,6 +1633,15 @@ export function ChatPanel({ app }: { app: AppRecord }) {
               {t}
             </Chip>
           ))}
+        </div>
+      )}
+      {relTip && (
+        <div className="chat-tips rel-tips">
+          <span className="t-cap muted">{rel ? 'Your changes are in the draft' : 'Ready for people to use'}</span>
+          <Chip onClick={() => send(relTip)}>
+            <Icon n="rocket" s="12" />
+            {relTip}
+          </Chip>
         </div>
       )}
       {ftips.length > 0 && (

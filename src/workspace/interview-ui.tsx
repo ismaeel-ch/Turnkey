@@ -115,8 +115,8 @@ function Moves({ plan, waiting }: { plan: PlanSpec; waiting?: QuestionCard | nul
           <div className="iv-flow">
             {path.main.map((s, i) => (
               <span key={s} className="row gap4">
-                {i > 0 && <Icon n="chevRight" s="16" cls="muted" />}
                 <span className="iv-stage">{s}</span>
+                {i < path.main.length - 1 && <Icon n="chevRight" s="16" cls="muted" />}
               </span>
             ))}
           </div>

@@ -83,6 +83,7 @@ import { openPalette, openShortcuts } from './commands';
 import { touchOf, touchText } from './provenance';
 import { fmtUsd, usageLine } from '@/platform/agui/usage';
 import { HistoryButtons, openHistory } from './history-ui';
+import { useNewerVersion } from '@/platform/pwa/update';
 import { later } from './later';
 
 // Loaded the first time they are drawn, to keep them out of the first page load.
@@ -108,7 +109,8 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
     s = S.settings,
     on = online(),
     mode = modeNow(),
-    net = netInfo();
+    net = netInfo(),
+    newer = useNewerVersion();
   const addTab = () => {
     const t: Tab = {
       id: uid('tab'),
@@ -190,6 +192,16 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
             </span>
           )}
         </span>
+        {newer && (
+          <Btn
+            className="btn sm primary tb-update"
+            title={'Turnkey ' + newer + ' is out. Reload to use it; your apps and records stay in this browser.'}
+            onClick={() => location.reload()}
+          >
+            <Icon n="sync" s="16" />
+            Update
+          </Btn>
+        )}
         <Btn
           className={cx('btn subtle sm net', !on && 'is-offline')}
           data-tour="net"
