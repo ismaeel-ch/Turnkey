@@ -4,8 +4,9 @@ import { AGENTS } from '@/workspace/agents';
 import { REVIEWERS } from '@/workspace/reviewers';
 import { agentThe, parseFlow, reviewPrompt } from '@/workspace/custom';
 import { planFromSaved } from '@/workspace/interview';
-import { HOME_TEMPLATES } from '@/workspace/builds';
+import { HOME_TEMPLATES } from '@/workspace/catalog';
 import '@/workspace/tester';
+import '@/workspace/saved';
 
 /* An agent has one name for the owner: the plan, the Build steps, the chat, the timeline and the workflow all use it. */
 

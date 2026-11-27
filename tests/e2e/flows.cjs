@@ -58,9 +58,10 @@ async function quickStarts(browser, url) { // the two ways in from the first scr
     check('first visit: the welcome screen shows while the SQLite engine is still loading', !(await page.locator('.splash').count()) && await page.locator('.ob-body .lead').isVisible());
     await page.click('#ob-sample'); await page.waitForSelector('.splash', { timeout: 5000 });
     for (let i = 0; i < 100 && !asked; i++) await sleep(50);
-    release(); await page.waitForSelector('.tour-pop', { timeout: 15000 });
+    release(); await page.waitForSelector('.iv-ask', { timeout: 15000 });
+    await page.locator('.iv-usual').click(); await page.locator('.iv-act .iv-build').click(); await page.waitForSelector('.tour-pop', { timeout: 15000 });
     const s = await st(page, () => { const S = window.__formwork.state(), t = (S.tabs[S.session] || []).find((x) => x.id === S.active[S.session]), a = t && t.app ? S.apps[t.app] : null; return { tpl: a && a.tpl, status: a && a.status }; });
-    check('first visit: Try a sample clicked before the engine is ready waits behind the splash, then builds', asked && s.tpl === 'biddesk' && ['building', 'ready'].includes(s.status), s);
+    check('first visit: Try a sample clicked before the engine is ready waits behind the splash, then asks, plans and builds', asked && s.tpl === 'biddesk' && ['building', 'ready'].includes(s.status), s);
     await ctx.close();
   }
   for (const vp of [null, { width: 390, height: 844 }]) {
@@ -69,9 +70,18 @@ async function quickStarts(browser, url) { // the two ways in from the first scr
     await page.goto(url); await page.waitForSelector('#ob-sample', { timeout: 20000 });
     check(tag + 'first screen says what Turnkey does in one line and offers both quick starts', /turns one sentence into a working business app/.test(await page.locator('.ob-body .lead').innerText()) && await page.locator('#ob-own').isVisible());
     await page.click('#ob-sample');
+    await page.waitForSelector('.iv-ask', { timeout: 8000 });
+    const q = await ivNow(page), sq = await st(page, () => { const F = window.__formwork, iv = F.view().home.interview; return { demo: F.state().settings.demo, tpl: iv && iv.tpl, sample: !!(iv && iv.sample), usual: [...document.querySelectorAll('.iv-ask .iv-opt')].filter((x) => /Usual choice/.test(x.innerText)).length, tour: !!document.querySelector('.tour-pop') }; });
+    check(tag + 'Try a sample: opens the sales bidding desk interview in Demo, with the usual choice marked, before anything is built', sq.demo && sq.tpl === 'biddesk' && sq.sample && q.step === 'questions' && q.apps === 0 && q.card === 'demo_data' && sq.usual === 1 && /BidDesk|bidding desk/i.test(q.name) && !sq.tour, { q, sq });
+    await shot(page, vp ? '00-phone-sample-question' : '00-sample-question');
+    await page.locator('.iv-usual').click(); await page.waitForSelector('.iv-act .iv-build');
+    const p = await ivNow(page);
+    check(tag + 'Try a sample: the usual choices lead straight to the plan, with demo data on and nothing built yet', p.step === 'plan' && p.plan && p.demo === true && p.apps === 0 && p.people.length >= 2, p);
+    await shot(page, vp ? '00-phone-sample-plan' : '00-sample-plan');
+    await page.locator('.iv-act .iv-build').click();
     await page.waitForSelector('.tour-pop', { timeout: 8000 });
-    const s = await st(page, () => { const F = window.__formwork, S = F.state(), t = (S.tabs[S.session] || []).find((x) => x.id === S.active[S.session]), a = t && t.app ? S.apps[t.app] : null; return { demo: S.settings.demo, tpl: a && a.tpl, status: a && a.status, steps: document.querySelector('.tour-pop').innerText }; });
-    check(tag + 'Try a sample: the sales bidding desk is building in Demo within a second, with a short tour', s.demo && s.tpl === 'biddesk' && s.status === 'building' && /1 of 4/.test(s.steps), s);
+    const s = await st(page, () => { const F = window.__formwork, S = F.state(), t = (S.tabs[S.session] || []).find((x) => x.id === S.active[S.session]), a = t && t.app ? S.apps[t.app] : null; return { demo: S.settings.demo, tpl: a && a.tpl, status: a && a.status, plan: !!(a && a.plan), iv: !!F.view().home.interview, steps: document.querySelector('.tour-pop').innerText }; });
+    check(tag + 'Try a sample: Build it starts the sales bidding desk build in Demo with its plan, then the short tour', s.demo && s.tpl === 'biddesk' && s.status === 'building' && s.plan && !s.iv && /1 of 4/.test(s.steps), s);
     await shot(page, vp ? '00-phone-sample' : '00-sample');
     await ctx.close();
   }
@@ -1083,7 +1093,7 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   check('the build is drawn as a React Flow workflow: request, 7 stations with the Tester, 7 gates, the app', fl.rf && fl.state === 'ready' && fl.nodes.length === 16 && fl.stations === 7 && fl.gates === 7 && fl.old === 0 && fl.nodes.includes('trigger') && fl.nodes.includes('ready'), fl);
   check('every handoff is an edge, and the send-back of the Database station is drawn', fl.edges.length === 16 && fl.edges.includes('e-b1') && fl.edges.includes('e-trig') && fl.edges.includes('e-ready'), fl.edges);
   await shot(page, '91-workflow');
-  await page.locator('.fl-gate').nth(1).click(); await sleep(250);
+  await page.locator('.fl-gate').nth(1).click(); await page.waitForSelector('.insp-body .test', { timeout: 5000 }).catch(() => {}); // the tests load on first use
   check('selecting a gate opens the tests of that station', /^Tests/.test(await page.locator('.insp-head [role=tab][aria-selected=true]').innerText()) && await page.locator('.insp-body .test').count() >= 10 && (await page.locator('.insp-head strong').innerText()) === 'Database');
   await page.locator('.station').nth(3).click(); await sleep(200);
   check('selecting an agent node shows what it wrote', (await page.locator('.insp-head strong').innerText()) === 'Views' && /^Output/.test(await page.locator('.insp-head [role=tab][aria-selected=true]').innerText()) && await page.locator('.station.sel').count() === 1);

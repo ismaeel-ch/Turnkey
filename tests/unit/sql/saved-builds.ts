@@ -1,5 +1,5 @@
-import { REC } from '@/workspace/builds';
-import '@/workspace/quests';
+import '@/workspace/saved';
+import { REC } from '@/workspace/registry';
 
 /**
  * The saved builds of the workspace (`REC` in src/workspace/builds.ts and quests.ts): what the Researcher and

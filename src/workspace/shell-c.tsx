@@ -76,45 +76,43 @@ import {
 import { appUsers, reseed, tourExec } from './engine';
 import { demoCounts, demoUndo, planDemoRemoval, tempDemoData } from './demo-data';
 import { DATA_VIEWS, migrateApp } from './viewspec';
-import { REC, TEMPLATES } from './builds';
-import { QUESTS } from './quests';
+import { CARDS, QUESTS, TEMPLATES, loadSaved } from './catalog';
 import { TEAMS } from './team';
 import { TESTS, runTestsSync, suiteOf } from './tests';
 import { FLOW, isDark } from './flow';
+import { AFTER_BUILD, beginInterview } from './interview';
 import { LIVE, RUNS, STATIONS, deleteApp, resumeInterrupted, runBuild, startBuild, stopRun } from './line';
 import type { PlanSpec } from '@/shared/plan/types';
 /** The Planner is loaded on first use, so only its types are imported here. */
 type Planner = typeof import('./planner');
 import { cancelRerun, queuedRerun } from './rerun';
 import { buildPack, editFromCanvas, parseChange } from './changes';
-import { AddStepDialog, REVIEW_RULES, WorkflowDialog, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
+import { REVIEW_RULES, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
 import { REVIEWERS } from './reviewers';
 import { fillWorkflowSteps, keepFix, suggestCases } from './tester';
 import { AgentAv, Btn, Dialog, Field, Icon, Input, Logo, MBar, Seg, Select, Spinner, Switch, TONE_ICON } from './ui';
 import { PhoneSheets } from './mobile';
-import { AgentActivity, activityNow } from './activity';
+import { activityNow } from './activity';
 import { APICACHE, stageOf } from './runtime';
-import {
-  AboutAppDialog,
-  OpenLinkDialog,
-  ShareDialog,
-  SoloShell,
-  enterSolo,
-  exitSolo,
-  openShared,
-  packOf,
-  linkCode,
-  shareLink,
-  squeeze,
-  unsqueeze,
-  framed,
-} from './share';
+import { enterSolo, exitSolo, openShared, packOf, linkCode, shareLink, squeeze, unsqueeze, framed } from './share';
 import { safetyCopyOf } from './carry';
-import { GoBackDialog, InstallAppDialog, isDirty, logoOf, relOf, releaseApp } from './release';
+import { isDirty, logoOf, relOf, releaseApp } from './release';
 import { HistoryDialog } from './history-ui';
 import { historyHooks } from './history';
 import { Home, Titlebar, Workspace, lineApp } from './shell-a';
 import { installShortcuts, setSingleKeys } from './commands';
+import { later } from './later';
+
+// Loaded the first time they are drawn, to keep them out of the first page load.
+const GoBackDialog = later(() => import('./release-ui'), 'GoBackDialog');
+const InstallAppDialog = later(() => import('./release-ui'), 'InstallAppDialog');
+const AboutAppDialog = later(() => import('./share-ui'), 'AboutAppDialog');
+const OpenLinkDialog = later(() => import('./share-ui'), 'OpenLinkDialog');
+const ShareDialog = later(() => import('./share-ui'), 'ShareDialog');
+const SoloShell = later(() => import('./share-ui'), 'SoloShell');
+const AgentActivity = later(() => import('./activity-ui'), 'AgentActivity');
+const AddStepDialog = later(() => import('./custom-ui'), 'AddStepDialog');
+const WorkflowDialog = later(() => import('./custom-ui'), 'WorkflowDialog');
 
 // The command palette and the shortcuts dialog load the first time one opens (Ctrl/Cmd+K or "?").
 const PaletteDialog = lazy(() => import('./palette').then((m) => ({ default: m.PaletteDialog })));
@@ -158,11 +156,20 @@ function finishOnboarding(o: OnboardingForm, shortTour = false) {
   void engineReady.then(() => {
     if (pick)
       startBuild({
-        request: REC[pick].sentence,
+        request: CARDS[pick].sentence,
         tpl: pick,
       });
     if (tour) setTimeout(() => startTour(shortTour), 900);
   });
+}
+/**
+ * "Try a sample" on the first screen: the sales bidding desk's own interview in Demo, with no model call. Its card
+ * shows the usual choice marked, then the plan, and "Build it" starts the build and the short tour.
+ */
+function startSample(o: OnboardingForm) {
+  finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: true, pick: '', tour: false });
+  AFTER_BUILD.sample = () => setTimeout(() => startTour(true), 900);
+  void engineReady.then(() => beginInterview(CARDS.biddesk.sentence, 'biddesk', false, true));
 }
 export function Onboarding() {
   useLayoutEffect(startEngineAfterPaint, []);
@@ -185,9 +192,8 @@ export function Onboarding() {
     setOb({ err: '', step: Math.min(steps.length - 1, o.step + 1) });
   };
   const finish = () => finishOnboarding(o);
-  // the two quick ways in from the first screen: a judge sees agents at work within seconds, or types a sentence
-  const trySample = () =>
-    finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: true, pick: 'biddesk', tour: true }, true);
+  // the two quick ways in from the first screen: a sample to answer, plan and build in under a minute, or a sentence of one's own
+  const trySample = () => startSample(o);
   const describeOwn = () => {
     finishOnboarding({ ...o, name: 'Demo user', user: 'demo', pass: 'demo', demo: U.live !== 'ready', pick: '', tour: false });
     void engineReady.then(() =>
@@ -216,8 +222,8 @@ export function Onboarding() {
           </Btn>
         </div>
         <p className="t-cap muted ob-quick-note">
-          Both use a demo account in this browser. Try a sample builds the sales bidding desk in about 30 seconds with no model calls. Get
-          started below sets up your own account first.
+          Both use a demo account in this browser. Try a sample asks one question about a sales bidding desk, shows you the plan, then
+          builds it in about 30 seconds with no model calls. Get started below sets up your own account first.
         </p>
         <div className="ob-line" aria-hidden="true">
           {STATIONS.map((s, i) => (
@@ -379,7 +385,7 @@ export function Onboarding() {
         <p className="muted">Each is one sentence. The agents build it while you take the tour.</p>
         <div className="choices three">
           {TEMPLATES.concat(QUESTS).map((id) => {
-            const r = REC[id];
+            const r = CARDS[id];
             return (
               <button
                 key={id}
@@ -436,7 +442,7 @@ export function Onboarding() {
           </li>
           <li>
             <Icon n="production" s="16" />
-            <span>{o.pick ? 'First app: ' + REC[o.pick].title + ', built as soon as you continue' : 'An empty workspace'}</span>
+            <span>{o.pick ? 'First app: ' + CARDS[o.pick].title + ', built as soon as you continue' : 'An empty workspace'}</span>
           </li>
         </ul>
         <Switch
@@ -1865,9 +1871,9 @@ export function probeClaude(tries: number) {
     notify();
   }
 }
-/* The SQLite engine (about 300 KB of WebAssembly) starts once. A first visit shows the welcome screen without it and
-   fetches the engine only after that screen has painted, so the two do not share the connection on a slow phone.
-   Every other screen waits for it behind the splash. */
+/* The SQLite engine (about 300 KB of WebAssembly) and the saved builds (catalog.ts) load once. A first visit shows the
+   welcome screen without them and fetches them only after that screen has painted, so they do not share the connection
+   on a slow phone. Every other screen waits for both behind the splash. */
 let markEngineReady: () => void = () => {};
 const engineReady = new Promise<void>((resolve) => {
   markEngineReady = resolve;
@@ -1912,7 +1918,7 @@ export function boot() {
     if (U.boot === 'ready') fromLink();
   });
   engineStart = () =>
-    void initSqlite()
+    void Promise.all([initSqlite(), loadSaved()])
       .then(() => {
         resumeInterrupted();
         return fromLink();

@@ -28,4 +28,6 @@ export interface Interview {
   editing: string | null;
   /** ticks on a "tick all that apply" card before Continue */
   ticks: string[] | null;
+  /** opened by "Try a sample" on the first screen: a short tour follows "Build it" */
+  sample?: boolean;
 }

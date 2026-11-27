@@ -53,15 +53,19 @@ import {
   roleName,
   tableOf,
 } from './engine';
-import { allConnectors, callConnector, connOn } from './builds';
+import { allConnectors, callConnector, connOn } from './connections';
 import { AGENTS, PENDING, RUNS, answerQuestion } from './line';
 import { DemoActions } from './demo-data-ui';
 import { editBlocked, editFromCanvas, handleChat, suggestChanges } from './changes';
-import { FlowCards, flowTips } from './custom';
+import { flowTips } from './custom';
 import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto, Select, Spinner, Switch, Tabs, Textarea } from './ui';
 import { isStatusCol, startWalk } from './runtime';
-import { ReleaseCard } from './release';
 import { latestTouchOfTable, touchOf, touchShort, touchText } from './provenance';
+import { later } from './later';
+
+// Loaded the first time they are drawn, to keep them out of the first page load.
+const ReleaseCard = later(() => import('./release-ui'), 'ReleaseCard');
+const FlowCards = later(() => import('./custom-ui'), 'FlowCards');
 
 // Improving an app after it is built (the plan card, its questions, try it) loads the first time one of its cards shows.
 const ChangePlanCard = lazy(() => import('./improve').then((m) => ({ default: m.ChangePlanCard })));

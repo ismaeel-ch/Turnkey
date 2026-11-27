@@ -1,4 +1,5 @@
 import { REC } from './registry';
+import { CARDS } from './catalog';
 import type { AccessRule, Dict, SavedCase } from '@/shared/types/workspace';
 
 /* ===== Turnkey · more saved builds for the Home page =====
@@ -6,7 +7,6 @@ import type { AccessRule, Dict, SavedCase } from '@/shared/types/workspace';
    three agents and waits for the board chair's approval, and purchase requests with a two-step approval. They are
    shown on Home under "Business apps" and are not offered in onboarding, which keeps its short list. All people,
    organisations and amounts are made up. */
-export const MORE_TEMPLATES = ['grants', 'purchasing'];
 
 // Every role sees every record of a table; only the roles in `write` change them, and only `boss` deletes.
 const readAll = (table: string, roles: string[], write: string[], boss: string): AccessRule[] =>
@@ -23,15 +23,7 @@ const readAll = (table: string, roles: string[], write: string[], boss: string):
 // The desk's first two applications are its saved cases, which come later in the same object.
 const grantCases = (): SavedCase[] => REC.grants.cases || [];
 REC.grants = {
-  id: 'grants',
-  title: 'Grant review desk',
-  icon: 'heart',
-  accent: 'magenta',
-  agents: ['Assessor', 'Budget reviewer', 'Due diligence'],
-  sentence:
-    'A community foundation reviews grant applications: programme officers record each one, three agents score it, size the award and check it, the board chair approves every grant, and trustees can read everything.',
-  blurb: 'Applications, scores, award options and checks. The board chair approves every grant.',
-  keys: ['grant', 'grants', 'foundation', 'charity', 'funding', 'donor', 'nonprofit', 'non-profit', 'award', 'applicant'],
+  ...CARDS.grants,
   usage: {
     research: [1280, 660, 6100],
     database: [2690, 3210, 15800],
@@ -1242,14 +1234,7 @@ REC.grants = {
 
 /* ---------- Purchase requests: two people approve before anything is bought ---------- */
 REC.purchasing = {
-  id: 'purchasing',
-  title: 'Purchase requests',
-  icon: 'cart',
-  accent: 'marigold',
-  sentence:
-    'Staff raise purchase requests, their budget holder approves or rejects each one, the buyer orders from an approved supplier, and the person who asked confirms delivery.',
-  blurb: 'Staff, a budget holder and a buyer. Nothing is ordered without approval.',
-  keys: ['purchase', 'purchasing', 'buy', 'buyer', 'order', 'supplier', 'vendor', 'requisition', 'expense', 'spend'],
+  ...CARDS.purchasing,
   usage: {
     research: [1210, 600, 5900],
     database: [2450, 2780, 13600],

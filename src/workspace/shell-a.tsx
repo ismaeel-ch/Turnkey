@@ -43,16 +43,13 @@ import type { MenuEntry, TabItem } from './ui';
 import { DBX, createTableSQL, dbCount, dbTables } from './db';
 import { TYPE_LABEL, VIEW_ICON, VIEW_LABEL, accOf, colOf, deriveEndpoints, roleName, tableOf } from './engine';
 import { DATA_VIEWS, VIEW_WHAT, viewFit, viewsOf } from './viewspec';
-import { HOME_TEMPLATES, REC, matchTemplate } from './builds';
+import { CARDS, HOME_TEMPLATES, QUESTS, matchTemplate } from './catalog';
 import { beginInterview, interviewNow } from './interview';
-import { QUESTS } from './quests';
 import { TEAMS, TeamAv } from './team';
-import { StationTests, TestsView, suiteOf, testable } from './tests';
-import { BuildSummary, FlowView } from './flow';
+import { suiteOf, testable } from './tests';
 import { type Station, AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp, rebuild, startBuild, stopRun } from './line';
-import { CustomTab, FlowChips, ReviewPanel, answerGate, flowList, flowOf, reviewerAt } from './custom';
+import { FlowChips, answerGate, flowList, flowOf, reviewerAt } from './custom';
 import { REVIEWERS } from './reviewers';
-import { TesterPanel } from './tester';
 import {
   AgentAv,
   Avatar,
@@ -76,7 +73,7 @@ import {
 import { AppLauncher, PhoneBar, PhoneNav } from './mobile';
 import { StageView, stageOf, startWalk, stateLabel, stateTone } from './runtime';
 import { enterSolo, keepShared, openShare, sharedApps } from './share';
-import { AppLogo, ReleaseView, isDirty, relOf } from './release';
+import { AppLogo, isDirty, relOf } from './release';
 import { ApiView, ChatPanel, ConnView, DataView } from './shell-b';
 import { startTour } from './shell-c';
 import { RerunBar } from './rerun';
@@ -85,6 +82,17 @@ import { openPalette, openShortcuts } from './commands';
 import { touchOf, touchText } from './provenance';
 import { fmtUsd, usageLine } from '@/platform/agui/usage';
 import { HistoryButtons, openHistory } from './history-ui';
+import { later } from './later';
+
+// Loaded the first time they are drawn, to keep them out of the first page load.
+const ReleaseView = later(() => import('./release-ui'), 'ReleaseView');
+const StationTests = later(() => import('./tests-ui'), 'StationTests');
+const TestsView = later(() => import('./tests-ui'), 'TestsView');
+const TesterPanel = later(() => import('./tester-ui'), 'TesterPanel');
+const BuildSummary = later(() => import('./flow-ui'), 'BuildSummary');
+const FlowView = later(() => import('./flow-ui'), 'FlowView');
+const CustomTab = later(() => import('./custom-ui'), 'CustomTab');
+const ReviewPanel = later(() => import('./custom-ui'), 'ReviewPanel');
 
 // The meeting view of a run loads the first time it is picked.
 const MeetingView = lazy(() => import('./meeting').then((m) => ({ default: m.MeetingView })));
@@ -343,7 +351,7 @@ export function Home() {
           'info',
           6500,
         );
-      beginInterview(REC[tpl].sentence, tpl, skip);
+      beginInterview(CARDS[tpl].sentence, tpl, skip);
     } else beginInterview(text, null, skip);
   };
   const del = async (a: AppRecord) => {
@@ -362,7 +370,7 @@ export function Home() {
   const builtOf = (id: string) => apps.find((a) => a.tpl === id && a.status !== 'failed'),
     build = (id: string) =>
       startBuild({
-        request: REC[id].sentence,
+        request: CARDS[id].sentence,
         tpl: id,
       });
   const buildAll = () => {
@@ -375,7 +383,7 @@ export function Home() {
     if (c) toast(c.name + ' was added to your library', 'success');
   };
   const card = (id: string) => {
-    const r = REC[id],
+    const r = CARDS[id],
       has = builtOf(id);
     return (
       <Card key={id} className="card tpl" data-tpl={id}>
