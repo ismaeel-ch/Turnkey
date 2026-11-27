@@ -608,7 +608,7 @@ async function flowMisc(browser, url) {
   await canvasFieldEdits(browser, url);
 }
 
-async function canvasFieldEdits(browser, url) { // the owner edits fields on the Data page itself; only the touched stations run again
+async function canvasFieldEdits(browser, url) { // the owner edits fields on the Data page and the look on the App page; only the touched stations run again
   const { ctx, page } = await newPage(browser); await enter(page, url); await buildTpl(page, 'clinic');
   await view(page, 'Data'); await page.locator('.split .side-i', { hasText: 'patients' }).first().click(); await page.getByRole('tab', { name: 'Columns' }).click();
   await page.waitForSelector('.field-edit'); await shot(page, '64-field-editor');
@@ -630,6 +630,15 @@ async function canvasFieldEdits(browser, url) { // the owner edits fields on the
   check('after a yes, the field is dropped', !a.cols.patients.includes('front_desk_note') && a.mig === 3, a.cols.patients);
   await page.getByLabel('New field name').fill('phone'); await page.locator('.field-edit .btn', { hasText: 'Add field' }).click(); await sleep(200);
   check('a field that already exists is refused on the page with the reason, and nothing runs', /already has a phone field/i.test(await page.locator('.field-edit').innerText()) && (await appState(page)).mig === 3);
+  // the look, changed on the App page: only the Screens station and the ones after it run again
+  await view(page, 'App'); await page.waitForSelector('.stage-bar .look-btn');
+  await page.locator('.stage-bar .look-btn').click(); await page.locator('.menu .mi', { hasText: 'Icon rail' }).click(); await waitIdle(page); a = await appState(page);
+  const look = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), ap = s.apps[t.app]; const c = ap.chat.filter((m) => m.card && m.card.type === 'plan').pop(); return { plan: c && c.card, said: ap.chat.some((m) => m.from === 'user' && /On the App page: Use an icon rail/.test(m.text)) }; });
+  check('the Look menu on the App page moves the navigation to an icon rail, and only Screens onwards runs again', a.nav === 'rail' && look.said && look.plan && look.plan.rerun[0] === 'Screens' && look.plan.skip.includes('Database'), [a.nav, look]);
+  await page.locator('.stage-bar .look-btn').click(); await page.locator('.menu .mi', { hasText: 'Purple' }).click(); await waitIdle(page); a = await appState(page);
+  check('the Look menu changes the accent colour', a.accent === 'purple', a.accent);
+  await page.locator('.work-head .menu-wrap .btn').click(); await page.locator('.menu .mi', { hasText: 'Rename app' }).click(); await page.fill('#rn-name', 'South Clinic'); await page.locator('.dialog button[type=submit]').click(); await waitIdle(page); a = await appState(page);
+  check('the Rename dialog renames through the same plan as a chat change', a.name === 'South Clinic' && /Rename the app/.test(a.last.text + JSON.stringify(a.last.card || '')), [a.name, a.last]);
   await ctx.close();
 }
 async function flowViews(browser, url) {
