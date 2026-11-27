@@ -23,7 +23,7 @@ import {
 } from './engine';
 import type { TourState } from './engine';
 import { mayOpen, viewFit, viewsOf } from './viewspec';
-import { REC } from './registry';
+import { savedCases } from './saved-runs';
 import { TEAMS, canRunTeam, checkTeam, teamApply } from './team';
 import type { TeamRun } from './team';
 import { RUNS, SPEED } from './line';
@@ -496,7 +496,7 @@ export function buildSuites(app: TestApp) {
   // the app's own agents
   const team = def.team;
   if (team) {
-    const cases = (app.tpl && REC[app.tpl] && REC[app.tpl].cases) || [],
+    const cases = savedCases(app),
       runner = users.find((u) => canRunTeam(def, u.role)) as AppUser,
       it = tableOf(def, team.input.table) as AppTable,
       tapp = app as Parameters<typeof teamApply>[0];
