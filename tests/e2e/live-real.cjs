@@ -22,8 +22,12 @@ const SENTENCES = {
   gym: 'A gym tracks members, class bookings and trainers',
   biddesk: 'A sales team bids on tenders: bid managers prepare each bid with a price, three agents score the tender, price it and challenge it, the sales director approves it before it goes out, and everyone sees what was won or lost.',
   grants: 'A community foundation reviews grant applications: programme officers record each one, three agents score it, size the award and check it, the board chair approves every grant, and trustees can read everything.',
+  'expense-me': 'I want to build an expense management app.',
+  'expense-company': 'I want to build an expense management app.',
   purchasing: 'Staff raise purchase requests, their budget holder approves or rejects each one, the buyer orders from an approved supplier, and the person who asked confirms delivery.',
 };
+// which answer to give when the Planner asks who the app is for; every other question takes the usual choice
+const PREFER = { 'expense-me': /just me|myself|only me|personal|my own/i, 'expense-company': /company|team|business|staff|employees/i };
 const QUEST_CHIP = { factcheck: 'Company blog draft', priorart: 'Smart bottle cap', debate: 'One codebase first' };
 
 const CLI_OVERHEAD = 1849;
@@ -69,6 +73,7 @@ const current = (page) =>
       qa: a.qa ? { status: a.qa.status, by: a.qa.by, rounds: a.qa.rounds.map((r) => [r.failed, r.total, r.fixes.map((f) => (f.ok ? '+' : '-') + f.text)]), dropped: a.qa.dropped.length } : null,
       tables: a.def.tables.map((x) => x.name + '(' + x.columns.length + ')'),
       screens: a.def.screens.length,
+      plan: a.plan ? { name: a.plan.name, people: a.plan.people.map((p) => p.id), lists: a.plan.lists.map((l) => l.name), stages: a.plan.stages ? a.plan.stages.stages.map((x) => x.id) : null } : null,
       line: Object.fromEntries(Object.keys(a.line).map((k) => [k, a.line[k].status])),
       attempts: Object.fromEntries(Object.keys(a.line).map((k) => [k, a.line[k].attempt])),
       fellBack: Object.keys(a.line).filter((k) => a.line[k].fellBack),
@@ -123,6 +128,9 @@ async function waitDone(page, ms) {
     if (a && !a.busy && (a.status === 'ready' || a.status === 'failed' || a.status === 'stopped')) return a;
     const o = page.locator('.gcard.ask .opt:not([disabled])');
     if (await o.count()) await o.first().click().catch(() => {});
+    // a plan that pauses for the owner after a step: approve it
+    const go = page.getByRole('button', { name: /Approve and continue|Looks right, continue/ });
+    if (await go.count()) await go.first().click().catch(() => {});
     await sleep(1000);
   }
   return { ...(await current(page)), timedOut: true };
@@ -134,13 +142,36 @@ async function runSample(browser, id) {
   await page.fill('#home-prompt', SENTENCES[id]);
   await page.locator('#home-go').click();
   // the Planner's questions come first: take the usual choices, then approve the plan it writes
-  await page.waitForSelector('.iv-ask, .iv-act .iv-build', { timeout: 3 * 60_000 });
-  if (await page.locator('.iv-usual').count()) await page.locator('.iv-usual').click();
+  const asked = [];
+  if (PREFER[id]) {
+    // answer card by card: the preferred option where one matches, else the usual one, else the first
+    for (let i = 0; i < 8; i++) {
+      await page.waitForSelector('.iv-ask, .iv-review, .iv-act .iv-build', { timeout: 3 * 60_000 });
+      const card = page.locator('.iv-ask');
+      if (!(await card.count())) break;
+      const title = (await card.locator('h3').innerText()).trim();
+      const opts = card.locator('.iv-opt');
+      const labels = await opts.locator('strong').allInnerTexts();
+      let k = labels.findIndex((l) => PREFER[id].test(l));
+      if (k < 0) k = Math.max(0, await opts.evaluateAll((els) => els.findIndex((e) => /Usual choice/.test(e.textContent))));
+      asked.push(title + ' -> ' + labels[k] + ' [' + labels.join(' | ') + ']');
+      await opts.nth(k).click();
+      if (await card.locator('.iv-next').count()) await card.locator('.iv-next').click().catch(() => {});
+      await page.waitForFunction((t) => !document.querySelector('.iv-ask h3') || document.querySelector('.iv-ask h3').textContent.trim() !== t, title, { timeout: 3 * 60_000 });
+      if (process.env.TK_TRACE) console.error('[' + id + '] ' + asked[asked.length - 1]);
+    }
+    // answers that differ from the usual ones are sent back to the Planner, which rewrites the plan
+    if (await page.locator('.iv-review').count()) await page.locator('.iv-review').click();
+  } else {
+    await page.waitForSelector('.iv-ask, .iv-act .iv-build', { timeout: 3 * 60_000 });
+    if (await page.locator('.iv-usual').count()) await page.locator('.iv-usual').click();
+  }
+  await page.locator('.iv-act .iv-build').waitFor({ timeout: 3 * 60_000 });
   await page.locator('.iv-act .iv-build').click({ timeout: 3 * 60_000 });
   const a = await waitDone(page, 15 * 60_000);
   await page.screenshot({ path: `/tmp/live-real-${id}.png` }).catch(() => {});
   await dumpApp(page, id);
-  const out = { run: id, seconds: Math.round((Date.now() - t0) / 1000), ...a, pageErrors: errors.slice(0, 8), usage: usageSince(off) };
+  const out = { run: id, seconds: Math.round((Date.now() - t0) / 1000), asked, ...a, pageErrors: errors.slice(0, 8), usage: usageSince(off) };
   await ctx.close();
   return out;
 }

@@ -715,6 +715,8 @@ export function normUI(o: Untrusted, def: BackedDef): UIDraft {
       };
     })
     .filter((x) => roleIds.includes(x.role))
+    // with only one kind of person there is nobody else to be refused, so a "denied" step can never pass
+    .filter((x) => x.do !== 'denied' || roleIds.length > 1)
     .slice(0, 10);
   const actions = arr(o.actions)
     .map((a: Untrusted) => ({
