@@ -5,6 +5,14 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+### Changed
+
+- The agents chat, the Meeting view, the Timeline and the Log are redesigned. Under the chat's title a strip says
+  who is working on what, with one segment per step. An agent's turn reads as one block, a thin line marks each
+  handover, cards are white Fluent cards, and the message box is one framed field with a note that agents can make
+  mistakes. The Meeting view shows a card per agent with its state, what it is doing and how long it worked, next
+  to the build line as a rail. The Log is a feed down one rail instead of a table.
+
 ## [0.5.4] - 2026-11-27
 
 A tidier row of view tabs on every list page of a built app, fixes found by ten more real builds on new sentences,

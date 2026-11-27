@@ -182,6 +182,13 @@ async function flowDemo(browser, url) {
   await page.locator('.meet-tile[data-agent=database]').click(); await page.waitForSelector('.meet-tile[data-agent=database].sel');
   check('meeting view: pressing a tile opens what that agent made', (await page.locator('section.inspector').first().getAttribute('aria-label')) === 'Database inspector', await page.locator('section.inspector').first().getAttribute('aria-label'));
   await shot(page, '09b-meeting');
+  // the agents chat: the strip under its title says where the build stands, a turn reads as one block, and a line marks each handover
+  const chatLook = await st(page, () => { const q = (s) => document.querySelector(s), all = (s) => [...document.querySelectorAll(s)]; const msgs = all('.chat .msgs .msg'); return { now: (q('.chat-now') || {}).innerText || '', tone: q('.chat-now') ? q('.chat-now').className : '', segs: all('.chat-now-bar i').map((e) => e.className).join(), seps: all('.chat .msg-sep').map((e) => e.innerText.trim()), heads: all('.chat .msg-who').length, cont: all('.chat .msg.cont').length, n: msgs.length, contHasHead: all('.chat .msg.cont .msg-who, .chat .msg.cont .msg-av').length, note: (q('.chat-note') || {}).innerText || '', frame: getComputedStyle(q('.composer')).borderTopWidth, card: getComputedStyle(q('.chat .gcard')).backgroundColor !== getComputedStyle(q('.chat')).backgroundColor }; });
+  check('agents chat: the strip under the title says every step is checked, with one segment per station', /Every step is checked/.test(chatLook.now) && /6 of 6/.test(chatLook.now) && /n-ok/.test(chatLook.tone) && chatLook.segs === 's-ok,s-ok,s-ok,s-ok,s-ok,s-ok', chatLook);
+  check('agents chat: an agent\'s turn is one block under one name, and a line marks each handover', chatLook.cont > 0 && chatLook.contHasHead === 0 && chatLook.heads > 0 && chatLook.heads + chatLook.cont <= chatLook.n && chatLook.seps.length >= 3 && chatLook.seps.some((t) => /List builder takes over/.test(t)), chatLook);
+  check('agents chat: cards stand out from the pane, the message box is one frame, and a note says agents can make mistakes', chatLook.card && chatLook.frame === '1px' && /Agents can make mistakes/.test(chatLook.note), chatLook);
+  const tile = await st(page, () => { const t = document.querySelector('.meet-tile[data-agent=database]'); return { state: (t.querySelector('.meet-state') || {}).innerText, work: (t.querySelector('.meet-work') || {}).innerText || '', rail: document.querySelectorAll('.meet-board .meet-step.s-ok .meet-rail').length }; });
+  check('meeting view: a tile says the agent\'s state and how long it worked, and the shared line ticks off each station', /Done/.test(tile.state) && /s in \d+ steps?/.test(tile.work) && tile.rail === 6, tile);
   await page.getByRole('button', { name: 'Workflow', exact: true }).click();
 
   // the built app
@@ -762,7 +769,7 @@ async function flowMisc(browser, url) {
   await page.evaluate(async () => { document.querySelector('button[title="Put every node back where it started"]').click(); await new Promise((r) => setTimeout(r, 20)); const el = document.createElement('style'); el.id = 'tk-hide-canvas'; el.textContent = '.flow-canvas{display:none !important}'; document.head.appendChild(el); });
   await sleep(1200); await page.evaluate(() => document.getElementById('tk-hide-canvas').remove()); await sleep(600); page.off('console', onNan);
   check('the workflow canvas hidden just after a change is not drawn at NaN, and shows its nodes again', nan.length === 0 && await page.locator('.flow-canvas .react-flow__node').first().isVisible(), nan.slice(0, 3));
-  await page.getByRole('button', { name: 'Log', exact: true }).click(); await sleep(100); check('log view lists steps', await page.locator('.line-wrap .tbl tbody tr').count() > 8); await shot(page, '61-log');
+  await page.getByRole('button', { name: 'Log', exact: true }).click(); await sleep(100); check('log view lists steps', await page.locator('.line-wrap .log-feed .log-i').count() > 8); await shot(page, '61-log');
   for (let i = 0; i < 4; i++) { await page.getByRole('button', { name: 'Workflow', exact: true }).click(); await page.locator('.station').nth(i).click(); await sleep(60); if (i === 1) { await page.locator('.insp-body .switch').click(); await sleep(60); await shot(page, '62-schema-sql'); } if (i === 2) await shot(page, '63-backend-out'); }
   // dialogs
   await page.locator('.work-head .menu-wrap .btn').click(); await page.locator('.menu .mi', { hasText: 'Export build pack' }).click(); await page.waitForSelector('.dialog .pack');
@@ -1094,7 +1101,7 @@ async function plainSteps(browser, url) { // Build opens on a plain list of step
   v = await list();
   check('"Show how it was built" opens the workflow canvas with the summary tiles and the four views, in place of the list', v.rows.length === 0 && await page.locator('.build-sum .kpi').count() === 6 && await page.locator('.build-bar .seg button').count() === 4 && await page.locator('.fl-node.station').count() === 7 && await page.locator('.inspector').count() === 1);
   await page.getByRole('button', { name: 'Timeline' }).click(); await page.waitForSelector('.tl-usage');
-  await page.getByRole('button', { name: 'Log', exact: true }).click(); await page.waitForSelector('.line-wrap .tbl tbody tr');
+  await page.getByRole('button', { name: 'Log', exact: true }).click(); await page.waitForSelector('.line-wrap .log-feed .log-i');
   await page.getByRole('button', { name: 'Meeting', exact: true }).click(); await page.waitForSelector('.meet-tile');
   check('the timeline, the log and the meeting are behind it too, and the choice is remembered as a setting', v.detail === true && await page.locator('.meet-tile').count() >= 6);
   await page.getByRole('button', { name: 'Workflow', exact: true }).click(); await page.waitForSelector('.react-flow .fl-gate'); await shot(page, 'steps-3-how');

@@ -54,11 +54,11 @@ import {
   tableOf,
 } from './engine';
 import { allConnectors, callConnector, connOn } from './connections';
-import { AGENTS, PENDING, RUNS, answerQuestion } from './line';
+import { AGENTS, PENDING, RUNS, STATIONS, answerQuestion } from './line';
 import { DemoActions } from './demo-data-ui';
 import { editBlocked, editFromCanvas, handleChat, suggestChanges } from './changes';
 import { flowTips } from './custom';
-import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto, Select, Spinner, Switch, Tabs, Textarea } from './ui';
+import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto, Select, Switch, Tabs, Textarea } from './ui';
 import { isStatusCol, startWalk } from './runtime';
 import { latestTouchOfTable, touchOf, touchShort, touchText } from './provenance';
 import { later } from './later';
@@ -1408,21 +1408,107 @@ export function ChatCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
       return null;
   }
 }
-export function Msg({ app, m }: { app: AppRecord; m: ChatMessage }) {
+/** One message in the agents chat. A message that follows another from the same sender (`cont`) drops its avatar and
+ *  name, so an agent's turn reads as one block; `handoff` names the agent that takes over, on a thin line above it. */
+export function Msg({ app, m, cont, handoff }: { app: AppRecord; m: ChatMessage; cont?: boolean; handoff?: boolean }) {
   const mine = m.from === 'user',
-    a = AGENTS[m.from];
+    a = AGENTS[m.from],
+    live = !mine && !!a && workingAgent(app) === m.from;
   return (
-    <div className={cx('msg', mine && 'me')}>
-      {!mine && <AgentAv id={m.from} size="sm" />}
-      <div className="msg-b">
-        {!mine && (
-          <div className="msg-who">
-            <strong>{a ? a.name : 'System'}</strong>
-            <span className="t-cap muted">{fmtClock(m.t).slice(0, 5)}</span>
-          </div>
+    <>
+      {handoff && a && (
+        <div className="msg-sep t-cap" role="separator">
+          <span>
+            <Icon n="arrowRight" s="12" />
+            {a.name}
+            {' takes over'}
+          </span>
+        </div>
+      )}
+      <div className={cx('msg', mine && 'me', cont && 'cont', m.card && 'has-card')}>
+        {!mine && !cont && (
+          <span className={cx('msg-av', live && 'live')}>
+            <AgentAv id={m.from} size="md" />
+          </span>
         )}
-        {m.text && <div className="msg-t">{m.text}</div>}
-        {m.card && <ChatCard app={app} m={m} />}
+        <div className="msg-b">
+          {!mine && !cont && (
+            <div className="msg-who">
+              <strong>{a ? a.name : 'System'}</strong>
+              <span className="t-cap muted">{fmtClock(m.t).slice(0, 5)}</span>
+            </div>
+          )}
+          {m.text && <div className="msg-t">{m.text}</div>}
+          {m.card && <ChatCard app={app} m={m} />}
+        </div>
+      </div>
+    </>
+  );
+}
+/** The messages where the work passes from one agent to another: the first message of an agent that is not the one
+ *  who spoke last. The owner and the Orchestrator do not count, they speak in between. */
+function handoversOf(chat: ChatMessage[]): Set<string> {
+  const out = new Set<string>();
+  let last = '';
+  for (const m of chat) {
+    if (m.from === 'user' || m.from === 'orchestrator' || !AGENTS[m.from]) continue;
+    if (last && last !== m.from) out.add(m.id);
+    last = m.from;
+  }
+  return out;
+}
+/** The agent whose station is working or being checked right now, if a build is running. */
+function workingAgent(app: AppRecord): string | null {
+  if (!RUNS[app.id]) return null;
+  const st = STATIONS.find((s) => ['working', 'checking'].includes(app.line[s.id].status));
+  return st ? st.agent : null;
+}
+/** The strip under the chat's title: who is working on what, one segment per station, and where the build stands. */
+function ChatNow({ app }: { app: AppRecord }) {
+  const busy = !!RUNS[app.id],
+    lines = STATIONS.map((s) => ({ s, st: app.line[s.id].status })),
+    done = lines.filter((x) => x.st === 'ok').length,
+    wait = lines.find((x) => x.st === 'waiting'),
+    on = lines.find((x) => x.st === 'working' || x.st === 'checking'),
+    bad = lines.find((x) => x.st === 'failed');
+  if (!busy && app.status !== 'ready' && app.status !== 'failed') return null;
+  const tone = wait ? 'ask' : busy ? 'on' : app.status === 'failed' ? 'bad' : 'ok';
+  const who = wait ? wait.s : on ? on.s : bad && !busy ? bad.s : null;
+  const text = wait
+    ? 'Waiting for you'
+    : on
+      ? on.st === 'checking'
+        ? 'Checking the ' + on.s.makes.toLowerCase()
+        : 'Making the ' + on.s.makes.toLowerCase()
+      : busy
+        ? done === lines.length
+          ? 'Testing every rule'
+          : 'Working'
+        : app.status === 'failed'
+          ? 'Stopped before it finished'
+          : 'Every step is checked';
+  return (
+    <div className={cx('chat-now', 'n-' + tone)} role="status">
+      <div className="chat-now-top">
+        {who ? (
+          <AgentAv id={who.agent} size="xs" />
+        ) : (
+          <Icon n={tone === 'ok' ? 'checkCircle' : tone === 'bad' ? 'warning' : 'flow'} s="16" />
+        )}
+        <span className="chat-now-t">
+          {who && <strong>{AGENTS[who.agent].name}</strong>}
+          <span>{text}</span>
+        </span>
+        <span className="t-cap muted chat-now-n">
+          {done}
+          {' of '}
+          {lines.length}
+        </span>
+      </div>
+      <div className="chat-now-bar" aria-hidden="true">
+        {lines.map((x) => (
+          <i key={x.s.id} className={'s-' + x.st} title={x.s.name} />
+        ))}
       </div>
     </div>
   );
@@ -1471,36 +1557,51 @@ export function ChatPanel({ app }: { app: AppRecord }) {
   const waiting = busy && (RUNS[app.id].answer || RUNS[app.id].gate),
     idle = !busy && !PENDING[app.id],
     ftips = idle ? flowTips(app) : [],
-    tips = app.status === 'ready' && idle ? suggestChanges(app).slice(0, ftips.length ? 4 : 5) : [];
+    tips = app.status === 'ready' && idle ? suggestChanges(app).slice(0, ftips.length ? 4 : 5) : [],
+    team = STATIONS.map((s) => s.agent).filter((id, i, a) => a.indexOf(id) === i),
+    active = workingAgent(app),
+    handovers = handoversOf(app.chat);
   return (
     <aside className="chat" data-tour="chat" aria-label="Agents">
       <div className="chat-head">
-        <strong>Builders</strong>
+        <Icon n="team" s="20" cls="chat-head-ic" />
+        <strong>Agents</strong>
         <span className={cx('badge', modeNow().cls)} title={modeNow().long}>
           {modeNow().text}
         </span>
         {!online() && S.settings.demo && <span className="badge b-warning">Offline</span>}
         <span className="grow" />
         <span className="chat-avs" aria-hidden="true">
-          {['researcher', 'database', 'backend', 'ui'].map((id) => (
-            <AgentAv key={id} id={id} size="xs" />
+          {team.map((id) => (
+            <span key={id} className={cx('chat-av', active === id && 'live')}>
+              <AgentAv id={id} size="xs" />
+            </span>
           ))}
         </span>
         <Btn className="btn subtle icon sm" aria-label="Hide the agents panel" title="Hide" onClick={() => setChat(false)}>
           <Icon n="panelRight" s="16" />
         </Btn>
       </div>
+      <ChatNow app={app} />
       <div className="msgs" ref={ref} aria-live="polite">
-        {app.chat.map((m) => (
-          <Msg key={m.id} app={app} m={m} />
-        ))}
+        {app.chat.map((m, i) => {
+          const prev = app.chat[i - 1],
+            same = !!prev && prev.from === m.from;
+          return <Msg key={m.id} app={app} m={m} cont={same} handoff={!same && handovers.has(m.id)} />;
+        })}
         {U.busy === app.id && (
           <div className="msg">
-            <AgentAv id="orchestrator" size="sm" />
+            <span className="msg-av live">
+              <AgentAv id="orchestrator" size="md" />
+            </span>
             <div className="msg-b">
-              <div className="msg-t">
-                <Spinner />
-                {' Reading your message'}
+              <div className="msg-t msg-typing">
+                <span className="typing" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                Reading your message
               </div>
             </div>
           </div>
@@ -1562,10 +1663,11 @@ export function ChatPanel({ app }: { app: AppRecord }) {
             }
           }}
         />
-        <Btn className="btn primary icon" type="submit" aria-label="Send" disabled={!draft.trim()}>
+        <Btn className="btn primary icon" type="submit" aria-label="Send" title="Send" disabled={!draft.trim()}>
           <Icon n="send" />
         </Btn>
       </form>
+      <p className="chat-note t-cap">Agents can make mistakes. Code checks every step.</p>
     </aside>
   );
 }
