@@ -1,6 +1,6 @@
 {
   "name": "turnkey",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "private": true,
   "description": "Turnkey: describe the app your work needs and a team of agents builds its database, backend, views, pages and tests on a workflow you can watch and change.",
   "license": "MIT",
