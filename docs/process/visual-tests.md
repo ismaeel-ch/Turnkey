@@ -8,9 +8,9 @@
 Light and dark, at desktop size (1280 × 800) and phone size (390 × 844):
 
 - desktop: onboarding, home, a built clinic app's Build view (the list of steps, then the workflow canvas behind
-  "Show how it was built"), the app's Overview and its second page, the Data view,
-  and the share dialog
-- phone: onboarding, home, the builder, and the app full screen
+  "Show how it was built"), the app's Overview, its second page and its Schedule list (view tabs, Filter, Copy CSV), the Data
+  view, and the share dialog
+- phone: onboarding, home, the builder, the app full screen, and its Schedule list
 
 ## How it keeps screenshots stable
 
