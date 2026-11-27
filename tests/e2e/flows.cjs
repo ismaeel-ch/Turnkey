@@ -580,6 +580,65 @@ async function flowLive(browser, url) {
   check('live: the failed run says plainly that no model is connected', JSON.stringify(c.last || '').includes('No model is connected'), c.last);
   await ctx.close();
   await liveOnStepAgent(browser, url);
+  await plannedBuild(browser, url);
+}
+// A build that starts from a plan the owner approved. The plan here is for one person and has no stages, the two things only a plan may ask for.
+const SOLO_PLAN = { v: 1, name: 'My Expenses', summary: 'Track what you spend by category.', audience: 'just_me', people: [{ id: 'owner', name: 'You', can: 'Add expenses and see where the money goes' }],
+  lists: [
+    { name: 'expenses', label: 'Expenses', one: 'expense', what: 'Everything you spend', title: 'what_for', owner: null, settings: false, fields: [{ name: 'what_for', label: 'What it was for', type: 'text', required: true }, { name: 'spent_on', label: 'Date', type: 'date', required: true }, { name: 'amount', label: 'Amount', type: 'money', required: true }, { name: 'category', label: 'Category', type: 'ref', ref: 'categories' }, { name: 'paid_with', label: 'Paid with', type: 'select', options: ['cash', 'card'] }] },
+    { name: 'categories', label: 'Categories', one: 'category', what: 'What you group your spending by', title: 'name', owner: null, settings: true, fields: [{ name: 'name', label: 'Name', type: 'text', required: true }, { name: 'monthly_budget', label: 'Monthly budget', type: 'money' }] }],
+  stages: null, permissions: { expenses: { owner: { list: 'all', create: true, update: 'all', delete: true } }, categories: { owner: { list: 'all', create: true, update: 'all', delete: true } } },
+  rules: ['Only you use the app.'], stories: [{ role: 'owner', want: 'add an expense in a few seconds', so: 'nothing is forgotten' }, { role: 'owner', want: 'see what I spent in each category', so: 'I know where the money goes' }],
+  demoData: true, overview: true, helpers: null, answers: [{ slot: 'audience', question: 'Who is this for?', answer: 'Just me', value: 'just_me', by: 'you' }], notInThisVersion: [] };
+const SOLO = {
+  db: (kept) => ({ tables: [
+    { name: 'expenses', label: 'Expenses', one: 'Expense', title: 'what_for', owner: null, columns: [{ name: 'what_for', label: 'What it was for', type: 'text', required: true }, { name: 'spent_on', label: 'Date', type: 'date', required: true }].concat(kept ? [{ name: 'amount', label: 'Amount', type: 'money', required: true }] : [], [{ name: 'category', label: 'Category', type: 'ref', ref: 'categories' }, { name: 'paid_with', label: 'Paid with', type: 'select', options: ['cash', 'card'] }]), rows: [{ what_for: 'Train ticket', spent_on: -3, amount: 12.5, category: 1, paid_with: 'card' }, { what_for: 'Lunch', spent_on: -1, amount: 8, category: 2, paid_with: 'cash' }] },
+    { name: 'categories', label: 'Categories', one: 'Category', title: 'name', owner: null, columns: [{ name: 'name', label: 'Name', type: 'text', required: true }, { name: 'monthly_budget', label: 'Monthly budget', type: 'money' }], rows: [{ name: 'Travel', monthly_budget: 120 }, { name: 'Food', monthly_budget: 300 }] }].concat(kept ? [] : [{ name: 'receipts', label: 'Receipts', one: 'Receipt', title: 'name', owner: null, columns: [{ name: 'name', label: 'Name', type: 'text', required: true }], rows: [{ name: 'A receipt' }] }]),
+  users: [{ name: 'Aisha Khan', role: 'owner' }] }),
+  views: { views: [{ table: 'expenses', use: [{ type: 'table', why: 'The full list.' }, { type: 'cards', why: 'One card each.' }, { type: 'calendar', date: 'spent_on', why: 'By day.' }, { type: 'chart', x: 'category', why: 'Spending per category.' }] }, { table: 'categories', use: [{ type: 'table', why: 'The full list.' }, { type: 'cards', why: 'One card each.' }] }],
+    dashboard: { title: 'Overview', date: { table: 'expenses', column: 'spent_on' }, widgets: [{ kind: 'kpi', label: 'Expenses', table: 'expenses', measure: 'count' }, { kind: 'kpi', label: 'Total spent', table: 'expenses', measure: 'sum:amount' }, { kind: 'bar', label: 'By category', table: 'expenses', x: 'category' }, { kind: 'line', label: 'Over time', table: 'expenses', x: 'spent_on', bucket: 'day' }, { kind: 'recent', label: 'Latest', table: 'expenses' }] } },
+  screens: { theme: { accent: 'teal', nav: 'side', icon: 'clipboard' }, screens: [{ name: 'Expenses', type: 'table', table: 'expenses', roles: ['owner'], columns: ['what_for', 'spent_on', 'amount', 'category'] }, { name: 'Categories', type: 'table', table: 'categories', roles: ['owner'], columns: ['name'] }, { name: 'New expense', type: 'form', table: 'expenses', roles: ['owner'] }],
+    tour: [{ role: 'owner', do: 'create', table: 'expenses', values: { what_for: 'Taxi', spent_on: 0, amount: 9.5, category: 1, paid_with: 'cash' }, say: 'Aisha adds an expense.' }, { role: 'owner', do: 'see', table: 'expenses', say: 'Aisha sees it in the list.' }, { role: 'owner', do: 'open', screen: 'Expenses', say: 'Aisha opens Expenses.' }] },
+  tester: { cases: [{ name: 'The first page opens', why: 'The owner needs a way in.', steps: [{ role: 'owner', do: 'open', screen: 'Expenses', say: 'Opens the page.' }] }, { name: 'An expense can be added and found', why: 'That is what the app is for.', steps: [{ role: 'owner', do: 'create', table: 'expenses', values: { what_for: 'Coffee', spent_on: 0, amount: 3 } }, { role: 'owner', do: 'see', table: 'expenses' }] }] },
+};
+async function plannedBuild(browser, url) {
+  const init = 'window.__SOLO = ' + JSON.stringify({ db1: SOLO.db(false), db2: SOLO.db(true), views: SOLO.views, screens: SOLO.screens, tester: SOLO.tester }) + `;
+    window.__calls = []; window.__dbPrompt = '';
+    window.claude = { use: async function (name) {
+      if (name !== 'sample') return null;
+      return async function (input) {
+        const who = /You are the ([\\w ]+?) agent/.exec(input)[1]; window.__calls.push(who); const G = window.__SOLO;
+        if (who === 'Database') window.__dbPrompt = input;
+        const out = who === 'Database' ? (window.__calls.filter((x) => x === 'Database').length === 1 ? G.db1 : G.db2) : who === 'View advisor' ? G.views : who === 'UI' ? G.screens : who === 'Tester' ? G.tester : { note: 'nobody should have asked ' + who };
+        await new Promise((r) => setTimeout(r, 40));
+        return { text: JSON.stringify(out), truncated: false };
+      };
+    } };`;
+  const { ctx, page } = await newPage(browser, { init });
+  await page.goto(url); await page.waitForSelector('.ob-card');
+  await page.getByRole('button', { name: 'Get started' }).click(); await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
+  await page.waitForFunction(() => !document.querySelectorAll('.choice')[1].disabled);
+  await page.locator('.choice').nth(1).click(); await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click(); await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click();
+  await page.waitForSelector('.home'); await setSpeed(page, 'instant');
+  const id = await st(page, (plan) => window.__formwork.plan.build('I want to build an expense management app', plan).id, SOLO_PLAN);
+  await waitReady(page); await page.waitForFunction((x) => { const t = window.__formwork.state().apps[x].tests; return t && t.total > 0; }, id, { timeout: 60000 }).catch(() => {});
+  const a = await st(page, (x) => { const F = window.__formwork, app = F.state().apps[x], d = app.def, run = app.runs[0], T = app.tests || {};
+    return { status: app.status, name: app.name, calls: window.__calls, dbPrompt: window.__dbPrompt, planned: d.brief && d.brief.planned, roles: d.brief ? d.brief.roles.length : 0, states: d.process ? d.process.states.length : -1, by: app.flow.by, attempts: Object.fromEntries(Object.keys(app.line).map((k) => [k, app.line[k].attempt])), line: Object.fromEntries(Object.keys(app.line).map((k) => [k, app.line[k].status])),
+      steps: run.steps.map((s) => s.station + ':' + s.label), tables: d.tables.map((t) => t.name + '(' + t.columns.map((c) => c.name).join(',') + ')'), access: d.access.expenses && d.access.expenses.owner, chat: app.chat.map((m) => String(m.text || '')).join(' | '), tests: [T.passed, T.failed, T.total], users: d.users.length }; }, id);
+  check('planned build: the first step reads the plan the owner approved and asks no model again', a.planned === true && a.line.research === 'ok' && !a.calls.includes('Researcher') && !a.calls.includes('Planner') && a.steps.includes('research:Plan you approved') && /You approved the plan/.test(a.chat) && a.name === 'My Expenses', [a.calls, a.steps.slice(0, 3), a.name]);
+  check('planned build: the Database agent is given the lists of the plan and sent back when it leaves them', /LISTS OF THE PLAN[^\n]*\nexpenses \(title: what_for, owner: none\): what_for:text\*, spent_on:date\*, amount:money\*/.test(a.dbPrompt) && a.attempts.database === 2 && /expenses needs the column .amount.|not in the plan: receipts/.test(a.dbPrompt) && a.tables.join(' ') === 'expenses(what_for,spent_on,amount,category,paid_with) categories(name,monthly_budget)', [a.attempts.database, a.tables, a.dbPrompt.slice(-300)]);
+  check('planned build: with one kind of person the rules are written by code from the plan, and no Backend agent is asked', a.by.backend === 'rules' && !a.calls.includes('Backend') && a.steps.includes('backend:Built-in rules') && a.access && a.access.list === 'all' && a.access.delete === true, [a.by, a.calls, a.access]);
+  check('planned build: an app for one person with no stages builds to ready, and its tests pass', a.status === 'ready' && a.roles === 1 && a.users === 1 && a.states === 0 && a.line.walkthrough === 'ok' && a.tests[2] > 20 && a.tests[0] === a.tests[2], [a.status, a.line, a.states, a.tests]);
+  await view(page, 'App'); await page.waitForSelector('.persona-btn, .app-nav .nav-i'); const asked = await page.locator('.persona-btn').count(); if (asked) await page.locator('.persona-btn').first().click(); await page.waitForSelector('.app-nav .nav-i');
+  const before = await st(page, (x) => window.__formwork.dbCount(x, 'expenses'), id);
+  await nav(page, 'New expense'); await page.waitForSelector('.form-page');
+  const inputs = page.locator('.form-page .form-grid input'); await inputs.nth(0).fill('Bus fare'); await inputs.nth(1).fill('2026-11-20'); await inputs.nth(2).fill('4.5');
+  await page.locator('.form-page button[type=submit]').click(); await page.waitForFunction(([x, n]) => window.__formwork.dbCount(x, 'expenses') > n, [id, before], { timeout: 10000 }).catch(() => {});
+  const after = await st(page, (x) => window.__formwork.dbCount(x, 'expenses'), id);
+  await nav(page, 'Expenses'); await page.waitForSelector('.scr'); await shot(page, 'p01-planned-solo-app');
+  check('planned build: the app opens for its one user, has no board of stages, and saves a new record', after === before + 1 && await page.locator('.app-nav .nav-i').count() === 4 && /Bus fare/.test(await page.locator('.scr').innerText()) && !(await page.locator('.kb-col').count()), [before, after, await page.locator('.app-nav .nav-i').allInnerTexts()]);
+  await ctx.close();
 }
 // Live without a stand-in on the page: every prompt goes to the server's step agent over AG-UI. The agent's stream is
 // scripted here (the test server has no model), so this proves the browser side: events in, answer out, steps on the timeline.

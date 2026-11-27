@@ -86,6 +86,9 @@ export interface PlanList {
   fields: PlanField[];
 }
 
+/** The name of the field that holds a record's stage, in every plan and every finished app. */
+export const STAGE_FIELD = 'status';
+
 /** One stage a record can be in. */
 export interface PlanStage {
   /** snake_case */
@@ -107,7 +110,10 @@ export interface PlanMove {
 export interface PlanStages {
   /** the list whose records move */
   list: string;
-  /** the choice field of that list that holds the stage; its options are the stage ids */
+  /**
+   * the choice field of that list that holds the stage; its options are the stage ids. Always `status`, the name the
+   * finished app gives that field; `normPlan` renames whatever the Planner called it
+   */
   field: string;
   /** in order; the first is where a new record starts */
   stages: PlanStage[];

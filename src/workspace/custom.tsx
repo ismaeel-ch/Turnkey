@@ -3,6 +3,7 @@ import type { AppTable, BackedDef, BriefedDef, ColumnDef, Untrusted } from '@/sh
 import type { FormEvent, ReactNode } from 'react';
 import type { AppFlow, AppRecord, ChatMessage, Dict, AddedAgent, Review, ReviewFinding, Run } from '@/shared/types/workspace';
 import type { Station } from './line';
+import { teamFor } from '@/shared/plan/team';
 import {
   NARROW,
   NO_MODEL,
@@ -50,6 +51,7 @@ import {
   pFlow,
   pTables,
   pace,
+  planOf,
   pushChat,
   runBuild,
   say,
@@ -75,7 +77,9 @@ import { RerunBar, queueRerun, queuedRerun } from './rerun';
    a standing instruction per agent, how many attempts a station gets, and whether an agent or the built-in rules do a step.
    What cannot: the order of the six stations, because each one needs what the one before it made. */
 export const APPROVE_AT = ['research', 'database', 'backend', 'views', 'screens']; // stations the line can stop after
-export const RULES_AT = ['views', 'screens']; // stations code can do without the agent
+export const RULES_AT = ['views', 'screens']; // stations the owner can give to code instead of the agent
+/** Stations code can do. A plan may also give the rules step to code (one kind of person, no stages); the owner cannot. */
+export const CODE_AT = ['backend', ...RULES_AT];
 export const NOTE_FOR = ['researcher', 'database', 'backend', 'views', 'ui'];
 export const NOTE_MAX = 280;
 export const NOTE_HINT: Dict<string> = {
@@ -145,7 +149,7 @@ export function normFlow(f: Untrusted): AppFlow {
       .slice(0, NOTE_MAX);
     if (t) o.notes[a] = t;
   });
-  RULES_AT.forEach((s) => {
+  CODE_AT.forEach((s) => {
     if (f.by && f.by[s] === 'rules') o.by[s] = 'rules';
   });
   arr(f.agents).forEach((a: Untrusted, i) => {
@@ -212,7 +216,7 @@ export function flowList(f: AppFlow) {
         (stepAuto(f, id) ? ', applies its changes' : ''),
     }),
   );
-  RULES_AT.forEach((s) => {
+  CODE_AT.forEach((s) => {
     if (f.by[s] === 'rules')
       out.push({
         icon: 'code',
@@ -1344,12 +1348,14 @@ export function showGate(app: AppRecord, run: Run, st: Station) {
   L.hold = 'approval';
   const s = stepStart(run, st.id, 'orchestrator', 'Waiting for your approval', 'wait'),
     next = STATIONS[stationIdx(st.id) + 1];
+  // A pause that comes from the plan gives the plan's own reason; one the owner switched on is theirs.
+  const plan = planOf(app),
+    planned = plan ? teamFor(plan).pauses.find((p) => p.after === st.id) : undefined;
   const m = say(
     app,
     'orchestrator',
-    'You asked me to stop after ' +
-      st.name +
-      '. Look at what ' +
+    (planned ? 'The plan stops here. ' + planned.why + ' ' : 'You asked me to stop after ' + st.name + '. ') +
+      'Look at what ' +
       (L.byRules ? 'the rules' : AGENTS[st.agent].name) +
       ' made, then approve it and ' +
       (next ? next.name + ' starts.' : 'the Tester starts.'),
