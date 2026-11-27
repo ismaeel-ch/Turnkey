@@ -8,7 +8,7 @@ Solo entry for the SSI Agent-A-Thon 2026.
 
 **Live app:** https://turnkey-bay.vercel.app/ (no login; **Demo** replays saved builds and calls no model)
 
-![A clinic sentence is typed on Home, the Planner asks one question, the plan appears, Build it starts six steps that turn to Done, and the built CareDesk app opens on a welcome for the receptionist](docs/images/demo.gif)
+![A clinic sentence is typed on Home, the Planner asks one question, the plan appears, Build it starts seven steps that turn to Done, and the built CareDesk app opens on a welcome for the receptionist](docs/images/demo.gif)
 
 _From one sentence to the running app, played at twice its speed: question, plan, build, first use. In Demo the
 sentence picks the closest saved build, so no model is called._
@@ -42,7 +42,7 @@ doctors` and press Enter. (With **Live** off in the title bar this replays the s
     <td><em>The plan in plain words. Nothing is built until the owner presses Build it.</em></td>
   </tr>
   <tr>
-    <td><img src="docs/images/build-steps.png" alt="CareDesk is built: six steps, each with its agent and what it made, all Done, 142 checks pass, and the agents' cards in the chat"></td>
+    <td><img src="docs/images/build-steps.png" alt="CareDesk is built: seven steps, each with its agent and what it made, all Done, 142 checks pass, and the agents' cards in the chat"></td>
     <td><img src="docs/images/first-use.png" alt="The built CareDesk app: a welcome for Sara, the receptionist, with what she can do, Book your first appointment and Show me around, above a demo data bar with Remove demo data"></td>
   </tr>
   <tr>
@@ -94,8 +94,8 @@ the build. Code decides whether each answer is good enough:
 
 In **Live**, each agent's turn runs on the server as a small LangGraph graph (draft, check the JSON against the
 role's schema, repair, at most three model calls) behind the CopilotKit runtime, streamed to the browser over AG-UI.
-Saved builds started from a template card have no plan; their canvas shows the stations by job
-(Research, Database, Backend, Views, Screens, Walkthrough, Tests).
+On the workflow canvas each station keeps a short job name (Research, Database, Backend, Views, Screens,
+Walkthrough, Tests) next to the name of the agent that does it.
 
 ```mermaid
 flowchart LR
@@ -127,9 +127,9 @@ _Behind "Show how it was built": each agent is a node and each check is a gate u
 
 _The Agents panel explains the team in the app itself; its Activity tab lists every step, tool call and hand-off as it happens._
 
-![The Tester's panel: run 1 fails one of 170 tests, the Backend agent repairs it, run 2 passes all 170, and the six test cases the Tester wrote](docs/images/tester-repair.png)
+![The Tester's panel: run 1 fails one of 170 tests, the Rules builder repairs it, run 2 passes all 170, and the six test cases the Tester wrote](docs/images/tester-repair.png)
 
-_The Tester's first run fails one case (a bid manager could delete a tender); the Backend agent repairs it and run 2 passes._
+_The Tester's first run fails one case (a bid manager could delete a tender); the Rules builder repairs it and run 2 passes._
 
 <table>
   <tr>
@@ -177,8 +177,8 @@ _The Bid room of the built BidDesk app, with the three agents' verdict for one t
    the demo data question. Press **Change** beside an answer to see the plan follow it.
 3. Read the plan: three kinds of people, three lists with their fields, six stages, a table of who can see and do
    what, and the agents that will build it. Press **Build it**.
-4. The **Build** tab lists six steps with the agent of each. The List builder's first attempt is sent back and fixed;
-   all 142 checks pass. **Show how it was built** opens the same run as a workflow canvas, timeline, log and meeting.
+4. The **Build** tab lists seven steps with the agent of each. The List builder's first attempt is sent back and fixed,
+   the Access checker leaves one suggestion in chat, and all 142 checks pass. **Show how it was built** opens the same run as a workflow canvas, timeline, log and meeting.
 5. Open **App**, sign in as Sara Malik (receptionist). Her welcome lists what she can do; **Show me around** is a
    four-stop tour. Pick someone else under **Preview as** to see the welcome for their job. **Remove demo data**
    empties the lists in one step, and the tests still pass; **Undo** brings the records back.
