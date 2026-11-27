@@ -46,6 +46,7 @@ import {
   draftLog,
   suggestKind,
   draftNotes,
+  aloneOffered,
   releaseBlock,
   releaseApp,
   recordCounts,
@@ -296,6 +297,11 @@ export function ReleaseView({ app }: { app: AppRecord }) {
                 </li>
               </ul>
             )}
+            {rel && aloneOffered(app) && (
+              <Suspense fallback={null}>
+                <WaitingList app={app} />
+              </Suspense>
+            )}
             <StartChoice app={app} value={start} first={!rel} onChange={(x) => setRelForm(app.id, { start: x })} />
             {rel && (
               <Field
@@ -473,6 +479,7 @@ export function ReleaseView({ app }: { app: AppRecord }) {
                     </span>
                     {i === 0 && r.kind !== 'first' ? <span className="badge b-outline">{REL_KIND[r.kind]}</span> : null}
                     {r.back ? <span className="badge b-outline">{'Same as ' + r.back}</span> : null}
+                    {r.left && r.left.length ? <span className="badge b-outline">On its own</span> : null}
                     <span className="t-cap muted grow" title={new Date(r.at).toLocaleString()}>
                       {new Date(r.at).toLocaleDateString(undefined, {
                         day: 'numeric',
@@ -520,6 +527,11 @@ export function ReleaseView({ app }: { app: AppRecord }) {
                       <li key={k}>{n}</li>
                     ))}
                   </ul>
+                  {r.left && r.left.length ? (
+                    <span className="t-cap muted">
+                      {'Left waiting in the draft: ' + sentence(wordList(r.left.map((x) => x.replace(/\.$/, ''))))}
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ol>
@@ -730,6 +742,8 @@ const runExport = (app: AppRecord, name: ExportName) =>
   );
 // The box for saying what is wrong or missing loads the first time the Release page of a released app shows.
 const ImproveBox = lazy(() => import('./improve').then((m) => ({ default: m.ImproveBox })));
+// Releasing one change on its own loads when the draft holds more than one.
+const WaitingList = lazy(() => import('./release-one').then((m) => ({ default: m.WaitingList })));
 export const logoText = (app: AppRecord) => {
   const lg = logoOf(app);
   return (

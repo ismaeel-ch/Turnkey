@@ -116,7 +116,9 @@ export interface AppRecord {
   /** set when the owner went back to an earlier version, until those changes are asked for again or let go */
   takenBack?: TakenBack | null;
   /** changes since the first build, for the next release's notes */
-  log?: { at: number; text: string; station: string; kind?: 'fix' | 'feature' }[];
+  log?: { at: number; text: string; station: string; kind?: 'fix' | 'feature'; group?: string }[];
+  /** the changes the owner approved, each with the operations that made it, so one can go out on its own */
+  changes?: ChangeSet[];
   /** stays the same across versions and copies, so an installed app finds its newest copy */
   uid?: string;
   /** when the app was installed on its own in this browser */
@@ -160,6 +162,20 @@ export interface QaState {
   dropped: { id: string; why: string }[];
 }
 
+/**
+ * One change the owner approved (from the Improve box, the chat or the canvas), kept with the operations that made it.
+ * Its notes in `log` and its migrations carry its `id` as `group`. A release can take it on its own: the operations
+ * are made again on top of the live version (src/workspace/release-one.tsx).
+ */
+export interface ChangeSet {
+  id: string;
+  at: number;
+  title: string;
+  kind: 'fix' | 'feature';
+  /** the operations as the change reader wrote them; the same input `planOps` takes */
+  ops: Loose[];
+}
+
 /** One released version of an app. */
 export interface Release {
   v: string;
@@ -180,6 +196,8 @@ export interface Release {
   back?: string;
   /** what a person who opens this version for the first time starts with (a version from before the choice: demo data) */
   start?: StartWith;
+  /** released on its own: only some of the draft's changes went out, and these stayed waiting */
+  left?: string[];
 }
 
 /**

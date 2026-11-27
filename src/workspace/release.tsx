@@ -1,5 +1,5 @@
 import type { BriefedDef, Logo, RecordStep, Theme, Untrusted } from '@/shared/types/app';
-import type { AppRecord, Dict, Release, StartWith } from '@/shared/types/workspace';
+import type { AppRecord, ChangeSet, Dict, Release, StartWith } from '@/shared/types/workspace';
 import { ACC_HEX } from '@/styles/theme.generated';
 import { toStyle } from '@/platform/dom';
 import { ICONS } from './icons';
@@ -240,13 +240,14 @@ export const REL_KIND: Dict<string> = {
   rollback: 'Went back',
 };
 /** Notes a change for the next release. `kind` is the owner's own word on it (a fix or a new feature), when they gave one. */
-export function logChange(app: AppRecord, text: string, station?: string, kind?: 'fix' | 'feature' | null) {
+export function logChange(app: AppRecord, text: string, station?: string, kind?: 'fix' | 'feature' | null, group?: string) {
   if (!app.log) app.log = [];
   app.log.push({
     at: Date.now(),
     text: str(text).slice(0, 160),
     station: station || '',
     ...(kind ? { kind } : {}),
+    ...(group ? { group } : {}),
   });
   if (app.log.length > 80) app.log.splice(0, app.log.length - 80);
 }
@@ -317,6 +318,38 @@ export function draftNotes(app: AppRecord) {
   });
   return out.length ? out.slice(-12) : ['Small changes.'];
 }
+/** One change waiting in the draft. Edits made some other way are gathered into one entry with no `set`. */
+export interface Waiting {
+  id: string;
+  title: string;
+  kind: 'fix' | 'feature' | null;
+  notes: string[];
+  set: ChangeSet | null;
+}
+/** What waits in the draft, one entry for each change the owner approved, then the other edits together. */
+export function waitingChanges(app: AppRecord): Waiting[] {
+  if (!relOf(app)) return [];
+  const sets = arr<ChangeSet>(app.changes),
+    out: Waiting[] = [],
+    by: Dict<Waiting> = {};
+  draftLog(app).forEach((x) => {
+    const set = (x.group && sets.find((c) => c.id === x.group)) || null,
+      id = set ? set.id : '';
+    let w = by[id];
+    if (!w) {
+      w = by[id] = { id, title: set ? set.title : 'Other changes', kind: set ? set.kind : null, notes: [], set };
+      out.push(w);
+    }
+    const t = pastTense(x.text);
+    if (!w.notes.includes(t)) w.notes.push(t);
+  });
+  return out.sort((a, b) => (a.set ? 0 : 1) - (b.set ? 0 : 1));
+}
+/** Whether a change can go out on its own: it was kept with its operations, and something else waits beside it. */
+export const aloneOffered = (app: AppRecord, id?: string) => {
+  const w = waitingChanges(app);
+  return w.length > 1 && w.some((x) => x.set && (!id || x.id === id));
+};
 /** What each released version did to the records, oldest first: a link carries it so a device can replay it. */
 export const relHistory = (app: AppRecord): VersionSteps[] =>
   relList(app)
@@ -353,10 +386,10 @@ export async function refreshShortLink(app: AppRecord, code: string) {
  * owner chose for new people. The copy kept with the release always holds the demo data, so it stays small and the
  * app can go back to it.
  */
-async function firstCopy(app: AppRecord, rel: Release): Promise<string> {
+async function firstCopy(app: AppRecord, rel: Release, src: AppRecord): Promise<string> {
   const start = startWith(rel.start);
   if (!rel.pack || start === 'demo') return rel.pack || '';
-  const pack = packOf(app, { data: start, as: '' });
+  const pack = packOf(src, { data: start, as: '' });
   pack.ver = rel.v;
   pack.uid = app.uid;
   pack.notes = rel.notes;
@@ -365,10 +398,13 @@ async function firstCopy(app: AppRecord, rel: Release): Promise<string> {
   if (app.short) pack.slug = app.short.slug;
   return squeeze(JSON.stringify(pack));
 }
-/** Puts a version that was just released under the short link. */
-function publish(app: AppRecord, rel: Release) {
+/**
+ * Puts a version that was just released under the short link. `src` holds the version's records when that is not the
+ * app itself (a change released on its own is made in a copy); it is read before this returns, so it can go after.
+ */
+export function publish(app: AppRecord, rel: Release, src: AppRecord = app) {
   const fallback = rel.pack || '';
-  void firstCopy(app, rel)
+  void firstCopy(app, rel, src)
     .catch(() => fallback)
     .then((code) => (code ? refreshShortLink(app, code) : false))
     .then((ok) => ok && commit());
