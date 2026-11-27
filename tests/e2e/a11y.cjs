@@ -110,6 +110,16 @@ async function scheme(browser, s) {
   for (const v of ['Build', 'App', 'Tests', 'Data', 'API', 'Connections', 'Release']) {
     await view(page, v);
     await screen(page, s + ': built app, ' + v + ' view');
+    if (v === 'App') {
+      // the app's own Settings page, section by section, opened as someone who may
+      await page.locator('.stage-settings').click();
+      await page.waitForSelector('.set-card');
+      for (const part of await page.locator('.set-nav .set-tab').allInnerTexts()) {
+        await page.locator('.set-nav .set-tab', { hasText: part }).click();
+        await page.waitForSelector('.set[data-settings="' + part.trim().toLowerCase() + '"]');
+        await screen(page, s + ': built app, Settings, ' + part.trim());
+      }
+    }
     if (v === 'Build') {
       // Build opens on the plain list of steps; the canvas and its views are behind this button
       await page.locator('#show-how').click();

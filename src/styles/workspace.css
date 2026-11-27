@@ -825,3 +825,36 @@ html:not(.tk-seen) #boot,html.tk-seen #boot-welcome,html.tk-up #boot,html.tk-up 
 .boot-btn:hover{background:var(--colorNeutralBackground1Hover);border-color:var(--colorNeutralStroke1Hover)}.boot-btn:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:1px}
 .boot-btn.primary{background:var(--colorBrandBackground);border-color:transparent;color:var(--colorNeutralForegroundOnBrand)}.boot-btn.primary:hover{background:var(--colorBrandBackgroundHover)}
 html.tk-opening .boot-btn{cursor:progress}.boot-wait{align-self:center}
+/* ---------- a built app's own Settings page (src/workspace/app-settings-ui.tsx) ---------- */
+.app-gear{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:none;border:0;border-radius:var(--borderRadiusMedium);background:transparent;color:inherit;cursor:pointer}
+.app-gear:hover,.app-gear.on{background:rgba(255,255,255,.2)}.app-gear:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
+.scr.set{gap:16px;background:var(--colorNeutralBackground3);max-width:none}
+.set-head{display:flex;flex-direction:column;gap:2px}.set-head h2,.set-head p{margin:0}
+.set-body{display:flex;align-items:flex-start;gap:24px;min-width:0}
+.set-nav{flex:none;width:176px;position:sticky;top:0}.set-nav .set-tab{justify-content:flex-start}
+.set-main{flex:1;min-width:0;max-width:760px;display:flex;flex-direction:column;gap:16px}
+.set-card{display:flex;flex-direction:column;gap:12px;padding:16px 20px 20px;border-radius:var(--borderRadiusXLarge);background:var(--colorNeutralBackground1);box-shadow:var(--shadow2)}
+.set-card.danger{box-shadow:var(--shadow2),inset 0 0 0 1px var(--colorStatusDangerBorder1)}
+.set-card-h{display:flex;flex-direction:column;gap:2px}.set-card-h h3,.set-card-h p,.set-card>p{margin:0}
+.set-card .field{max-width:360px}.set-name{width:100%}
+.set-line{display:flex;align-items:center;gap:16px;min-height:44px;padding-top:12px;border-top:1px solid var(--colorNeutralStroke3)}
+.set-card-h+.set-line{border-top:0;padding-top:0}
+.set-line-t{flex:1;min-width:0}.set-line-c{flex:none;display:flex;align-items:center;gap:8px;max-width:60%}.set-line-c .tk-select{min-width:200px}
+.set-swatches{display:flex;flex-wrap:wrap;gap:8px}
+.set-swatch{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:50%;background:var(--acc);color:var(--acc-on);cursor:pointer}
+.set-swatch:hover{box-shadow:0 0 0 2px var(--colorNeutralBackground1),0 0 0 3px var(--colorNeutralStroke1)}
+.set-swatch.on{box-shadow:0 0 0 2px var(--colorNeutralBackground1),0 0 0 4px var(--acc)}
+.set-swatch:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:3px}.set-swatch:disabled{opacity:.5;cursor:default}
+.set-people{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.set-person{display:flex;align-items:center;gap:8px;min-height:48px;padding:6px 0;border-top:1px solid var(--colorNeutralStroke3)}.set-person:first-child{border-top:0}
+.set-person .tk-input{flex:0 1 240px;min-width:100px}.set-person .tk-select{flex:none;min-width:150px}
+.set-add{display:flex;align-items:flex-end;gap:8px;padding-top:12px;border-top:1px solid var(--colorNeutralStroke3)}.set-add .field{max-width:none}.set-add .field.grow{flex:1;min-width:0}.set-add .input{width:100%}.set-add-b{flex:none}
+.set-stage{display:flex;align-items:center;gap:8px;min-height:44px;padding-top:8px;border-top:1px solid var(--colorNeutralStroke3)}.set-card-h+.set-stage{border-top:0;padding-top:0}
+.set-stage-n{width:16px;text-align:right}.set-stage .tk-input{flex:0 1 220px}
+.set-sample{display:flex;flex-direction:column;gap:2px;margin:0;padding:10px 12px;border-radius:var(--borderRadiusMedium);background:var(--colorNeutralBackground3)}
+.set.narrow{padding-bottom:92px}.set.narrow .set-body{flex-direction:column;gap:12px;align-items:stretch}
+.set.narrow .set-nav{width:auto;position:static;overflow-x:auto;scrollbar-width:none;margin:0 -12px;padding:0 4px}.set.narrow .set-nav .set-tab{flex:none}
+.set.narrow .set-card{padding:12px 12px 16px}.set.narrow .set-line{flex-direction:column;align-items:stretch;gap:8px}.set.narrow .set-line-c{max-width:none}.set.narrow .set-line-c .tk-select,.set.narrow .set-line-c .btn{width:100%}
+.set.narrow .set-person{flex-wrap:wrap}.set.narrow .set-person .tk-input{flex:1 1 140px}.set.narrow .set-person .tk-select{flex:1 1 140px}.set.narrow .set-person .grow{display:none}
+.set.narrow .set-add{flex-direction:column;align-items:stretch}.set.narrow .set-stage .tk-input{flex:1 1 120px}
+.set-foot{padding-top:12px;border-top:1px solid var(--colorNeutralStroke3)}

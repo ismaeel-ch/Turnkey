@@ -2,7 +2,11 @@ import { useState, useLayoutEffect, useRef, type FocusEvent, type MouseEvent, ty
 import type { AppTable, AppUser, ColumnDef, Dash as DashDef, DashWidget, Screen, StoredRow } from '@/shared/types/app';
 import type { AppRecord, Dict, Pane, ViewFilter, ViewOptions } from '@/shared/types/workspace';
 import { toStyle } from '@/platform/dom';
-import { DOW, MON, cap, cx, fmtDate, fmtNum, fmtTime, isoDate, notify, parseISO, toast, today } from './core';
+import { DOW, MON, cap, cx, fmtNum as plainNum, isoDate, notify, parseISO, toast, today } from './core';
+import { colFmt, fmtOf } from './app-settings';
+
+/** Writes one value of a chart, a pivot or a number card. */
+type NumFmt = (v: unknown) => string;
 import { accOf, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isMeasure } from './viewspec';
 import { Btn, Card, Empty, FilterChip, Icon, Seg, Switch } from './ui';
@@ -390,12 +394,15 @@ export function HBars({
   unit,
   onPick,
   picked,
+  fmt: fmtNum = plainNum,
 }: {
   cats: CatBar[];
   series: Group[];
   unit: string;
   onPick?: (c: CatBar, s: Group) => void;
   picked?: string | null;
+  /** how a value is written: the app's way for the number or money field that is counted */
+  fmt?: NumFmt;
 }) {
   const { ref: tipRef, ...T } = useTip(),
     many = series.length > 1,
@@ -478,6 +485,7 @@ export function TimePlot({
   whole,
   onPick,
   about,
+  fmt: fmtNum = plainNum,
 }: {
   buckets: string[];
   b: string;
@@ -487,6 +495,7 @@ export function TimePlot({
   whole: boolean;
   onPick?: (i: number) => void;
   about: string;
+  fmt?: NumFmt;
 }) {
   const { ref: tipRef, ...T } = useTip(),
     w = useWidth(tipRef),
@@ -666,7 +675,7 @@ export function TimePlot({
     </div>
   );
 }
-export function DataTable({ head, rows }: { head: string[]; rows: (string | number)[][] }) {
+export function DataTable({ head, rows, fmt: fmtNum = plainNum }: { head: string[]; rows: (string | number)[][]; fmt?: NumFmt }) {
   return (
     <div className="tbl-wrap">
       <table className="tbl compact">
@@ -829,6 +838,7 @@ export function VChart({ app, user, pane, scr, t, rows, cfg, setCfg, drill }: Vi
             unit={M.label}
             whole={M.fn === 'count'}
             about={about}
+            fmt={colFmt(app.def, M.col)}
             onPick={(i) =>
               drill([
                 {
@@ -840,11 +850,17 @@ export function VChart({ app, user, pane, scr, t, rows, cfg, setCfg, drill }: Vi
             }
           />
         ) : (
-          <HBars cats={CD ? CD.cats : []} series={series} unit={M.label} onPick={(c, s) => drill(pickPair(xc, sp, c, s))} />
+          <HBars
+            cats={CD ? CD.cats : []}
+            series={series}
+            unit={M.label}
+            fmt={colFmt(app.def, M.col)}
+            onPick={(c, s) => drill(pickPair(xc, sp, c, s))}
+          />
         )}
         <p className="t-cap muted">Select a mark to see the records behind it.</p>
       </Card>
-      {cfg.table ? <DataTable head={head} rows={table} /> : null}
+      {cfg.table ? <DataTable head={head} rows={table} fmt={colFmt(app.def, M.col)} /> : null}
     </>
   );
 }
@@ -853,6 +869,7 @@ export function VPivot({ app, user, pane, scr, t, rows, cfg, setCfg, set, drill 
     cc = colOf(t, cfg.cols),
     M = measureOf(t, cfg.measure),
     cats = t.columns.filter(isCat),
+    fmtNum = colFmt(app.def, M.col),
     id = 'pv' + scr.id + pane.n;
   if (!rc || !cc || rc.name === cc.name)
     return <Empty icon="grid" title="Pick two different fields" text="A pivot crosses one category field with another." />;
@@ -1116,11 +1133,11 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
       tone = P ? stateTone(def, t, colOf(t, P.column), x.r[P.column]) : 'info',
       name = rowTitle(app, user, t, x.r, scr.label),
       when =
-        fmtDate(asText(x.r[sc.name])) +
+        fmtOf(def).date(asText(x.r[sc.name])) +
         (ec && x.r[ec.name] && x.r[ec.name] !== x.r[sc.name]
-          ? ' to ' + fmtDate(asText(x.r[ec.name]))
+          ? ' to ' + fmtOf(def).date(asText(x.r[ec.name]))
           : sc.type === 'datetime'
-            ? ', ' + fmtTime(asText(x.r[sc.name]))
+            ? ', ' + fmtOf(def).time(asText(x.r[sc.name]))
             : '');
     return (
       <button
@@ -1525,6 +1542,7 @@ export function Dash({
           unit={M.label}
           whole={M.fn === 'count'}
           about={w.label}
+          fmt={colFmt(app.def, M.col)}
           onPick={(i) =>
             goRecords(app, user, pane, t.name, {
               filters: base
@@ -1547,6 +1565,7 @@ export function Dash({
           cats={C.cats}
           series={C.series}
           unit={M.label}
+          fmt={colFmt(app.def, M.col)}
           picked={pickedOf(t.name, xc.name)}
           onPick={(c) => toggle(t.name, xc.name, c.val)}
         />
@@ -1633,10 +1652,10 @@ export function Dash({
                   }
                 >
                   <span className="kpi-l">{x.w.label}</span>
-                  <span className="kpi-v">{fmtNum(v)}</span>
+                  <span className="kpi-v">{colFmt(app.def, M.col)(v)}</span>
                   <span className="kpi-s">
                     {hasW && M.fn === 'count' && all.length
-                      ? Math.round((v / all.length) * 100) + '% of ' + fmtNum(all.length)
+                      ? Math.round((v / all.length) * 100) + '% of ' + fmtOf(app.def).num(all.length)
                       : M.fn === 'count'
                         ? 'in total'
                         : M.label.toLowerCase()}

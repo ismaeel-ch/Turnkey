@@ -219,6 +219,8 @@ export function appSig(app: AppRecord) {
         d.theme,
         d.tour,
         d.cases || null,
+        // left out while nothing was set, so an app released before there were settings keeps its signature
+        ...(d.settings ? [d.settings, d.users] : []),
       ]),
     );
   SIGC[app.id] = {
