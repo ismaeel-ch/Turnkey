@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, Suspense, lazy } from 'react';
 import { AreaBoundary } from '@/platform/area-boundary';
 import {
   BRAND,
@@ -52,7 +52,6 @@ import { type Station, AGENTS, PENDING, RUNS, STATIONS, deleteApp, duplicateApp,
 import { CustomTab, FlowChips, ReviewPanel, answerGate, flowList, flowOf, reviewerAt } from './custom';
 import { REVIEWERS } from './reviewers';
 import { TesterPanel } from './tester';
-import { MeetingView } from './meeting';
 import {
   AgentAv,
   Avatar,
@@ -84,6 +83,9 @@ import { openPalette, openShortcuts } from './commands';
 import { touchOf, touchText } from './provenance';
 import { fmtUsd, usageLine } from '@/platform/agui/usage';
 import { HistoryButtons, openHistory } from './history-ui';
+
+// The meeting view of a run loads the first time it is picked.
+const MeetingView = lazy(() => import('./meeting').then((m) => ({ default: m.MeetingView })));
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
 export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
@@ -1136,7 +1138,9 @@ export function BuildView({ app }: { app: AppRecord }) {
       ) : mode === 'timeline' ? (
         <TimelineView app={app} run={run} />
       ) : mode === 'meeting' ? (
-        <MeetingView app={app} run={run} sel={sel} />
+        <Suspense fallback={null}>
+          <MeetingView app={app} run={run} sel={sel} />
+        </Suspense>
       ) : (
         <LogView app={app} run={run} />
       )}
