@@ -403,7 +403,7 @@ export interface ErrorCard {
 }
 /** Cards drawn by the workflow (custom.tsx) and release (release.tsx) modules, which read them themselves. */
 export interface OtherCard {
-  type: 'flow' | 'gate' | 'review' | 'flowinfo' | 'released';
+  type: 'flow' | 'gate' | 'review' | 'flowinfo' | 'released' | 'relask';
   [field: string]: Loose;
 }
 export type BuilderCard =

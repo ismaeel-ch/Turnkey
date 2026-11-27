@@ -951,6 +951,10 @@ async function flowViews(browser, url) {
   await page.locator('.vx .chips .btn', { hasText: 'Clear all' }).click();
   await vtab(page, 'Calendar'); await page.locator('.vopts .seg button', { hasText: 'Week' }).click(); await sleep(80); check('calendar has a week span', await page.locator('.cal-grid.wk .cal-day').count() === 7);
   await page.locator('.vopts .seg button', { hasText: 'Month' }).click();
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Previous month' }).click();
+  const none = page.locator('.cal-none .link-btn'), noneText = (await none.count()) ? await none.innerText() : '';
+  if (noneText) await none.click(); await sleep(80);
+  check('an empty month offers the nearest month with records', /^Go to \d+ \w+ \d{4}$/.test(noneText) && await page.locator('.cal-grid .cal-chip').count() > 0 && !(await page.locator('.cal-none').count()), noneText);
   await vtab(page, 'Timeline'); const lanes = await page.locator('.gt-lane').count(); await page.locator('.vopts .seg button', { hasText: 'Quarter' }).click(); await sleep(80);
   check('timeline has a lane per doctor and zooms', lanes === 3 && await page.locator('.gt-item').count() === 39, [lanes, await page.locator('.gt-item').count()]);
   await vtab(page, 'Tree'); const rows0 = await page.locator('.tree-row').count(); await page.locator('.tree-tog').first().click(); await sleep(60);
@@ -1224,6 +1228,75 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   await ph.ctx.close();
   await firstUse(browser, url);
   await expenseSample(browser, url);
+  await chatRelease(browser, url);
+}
+
+/* ---------- changing a built app and releasing it from the agents chat alone, with a card for each decision ---------- */
+async function chatRelease(browser, url) {
+  const { ctx, page } = await newPage(browser); await enter(page, url, { plain: true }); await buildTpl(page, 'clinic'); await waitIdle(page);
+  const relCard = '.gcard.relask[data-card="relask"]', last = async () => (await appFull(page)).chat.slice(-1)[0];
+  const relNow = () => st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), a = s.apps[t.app]; return { rel: (a.releases || []).map((r) => r.v), start: a.releases && a.releases[0] ? a.releases[0].start : null, kinds: (a.releases || []).map((r) => r.kind), notes: a.releases && a.releases[0] ? a.releases[0].notes : [] }; });
+  const tip = page.locator('.chat .rel-tips .chip');
+  check('chat: a built app that is not released yet offers "Release version 1.0" under the chat', (await tip.count()) === 1 && /Release version 1\.0/.test(await tip.innerText()), await tip.count());
+  await tip.click(); await page.waitForSelector(relCard);
+  const c1 = (await page.locator(relCard).innerText()).replace(/\s+/g, ' ');
+  check('chat: asking for the first release puts a card in the chat with version 1.0, what people start with, the notes and the tests, and nothing is released yet', /Release version 1\.0/.test(c1) && (await page.locator(relCard + ' [data-start]').count()) === 3 && /First release/.test(await page.locator(relCard + ' .relask-notes').inputValue()) && /tests pass/.test(c1) && (await relNow()).rel.length === 0 && (await tip.count()) === 0, c1);
+  const ev = await st(page, () => window.__formwork.logs.EV.filter((e) => e.type === 'CUSTOM' && e.name === 'interrupt' && e.value && e.value.reason === 'release').length);
+  check('chat: the release card is an AG-UI interrupt: the agents wait for the owner', ev === 1, ev);
+  await page.locator(relCard + ' [data-start="demo"]').click(); await shot(page, 'cr-01-release-card');
+  await page.locator(relCard + ' [data-act="release"]').click(); await page.waitForFunction(() => /Version 1\.0 is released/.test([...document.querySelectorAll('.chat .msg-t')].map((x) => x.innerText).join(' ')), null, { timeout: 30000 });
+  let r = await relNow();
+  check('chat: pressing Release on the card releases 1.0 with the start the owner picked, and the card says so', r.rel.join() === '1.0' && r.start === 'demo' && (await page.locator('.gcard.relask', { hasText: 'Released as version 1.0' }).count()) === 1, r);
+
+  // a change typed in chat after the release: a plan that waits, "go ahead" typed, then "it works" typed
+  await say(page, 'Add a notes field to patients');
+  const go = page.locator('.gcard.cplan [data-act="go"]');
+  for (let i = 0; i < 100 && !(await go.count()); i++) { const o = page.locator('.gcard.ask .opt:not([disabled])'); if (await o.count()) await o.first().click().catch(() => {}); await sleep(150); }
+  let a = await appFull(page);
+  check('chat: after a release, a change typed in the chat shows its plan and waits; nothing changes before the owner says go ahead', (await go.count()) === 1 && !a.cols.patients.includes('notes') && !a.dirty, a.cols.patients);
+  await shot(page, 'cr-02-plan-waits');
+  await say(page, 'go ahead'); await page.waitForSelector('.gcard.tryit', { timeout: 60000 }); a = await waitFree(page);
+  check('chat: typing "go ahead" approves the plan like its button: the change is built in the draft and 1.0 stays live', a.cols.patients.includes('notes') && a.dirty && a.rel.join() === '1.0' && (await page.locator('.gcard.cplan', { hasText: 'You said go ahead' }).count()) === 1, [a.cols.patients, a.rel]);
+  await say(page, 'it works'); await sleep(200);
+  check('chat: typing "it works" answers the Try it card, and the chat says how to release', /Say "release" here/.test((await last()).text) && /Release version 1\.1/.test(await tip.innerText()), (await last()).text);
+
+  // "release it as a fix", then "no", then "release" and "yes"
+  await say(page, 'release it as a fix'); await page.waitForSelector(relCard);
+  const c2 = (await page.locator(relCard).innerText()).replace(/\s+/g, ' ');
+  check('chat: "release it as a fix" asks for 1.0.1, with the notes written from the change', /Release version 1\.0\.1/.test(c2) && /Notes/.test(await page.locator(relCard + ' .relask-notes').inputValue()), c2);
+  await say(page, 'no'); await sleep(200); r = await relNow();
+  check('chat: typing "no" under the release card releases nothing and closes the card', r.rel.join() === '1.0' && (await page.locator(relCard).count()) === 0 && /Nothing was released/.test((await last()).text), r);
+  await say(page, 'release'); await page.waitForSelector(relCard);
+  await page.locator(relCard + ' .seg button', { hasText: 'New feature' }).click();
+  check('chat: the kind on the card sets the number: a new feature is 1.1', /Release version 1\.1\b/.test(await page.locator(relCard + ' [data-act="release"]').innerText()));
+  await say(page, 'yes'); await page.waitForFunction(() => /Version 1\.1 is released/.test([...document.querySelectorAll('.chat .msg-t')].map((x) => x.innerText).join(' ')), null, { timeout: 30000 });
+  r = await relNow(); a = await appFull(page);
+  check('chat: typing "yes" releases 1.1 as a new feature, with the change in its notes, and the draft is clean', r.rel.join() === '1.1,1.0' && r.kinds[0] === 'feature' && r.notes.some((n) => /Notes/.test(n)) && !a.dirty, r);
+
+  // release again with nothing changed: the card asks why
+  await say(page, 'release again'); await page.waitForSelector(relCard);
+  const btn = page.locator(relCard + ' [data-act="release"]');
+  check('chat: "release again" with nothing changed offers 1.1.1 and waits for a reason before it can go out', /Release version 1\.1\.1/.test(await btn.innerText()) && await btn.isDisabled() && /Nothing has changed since version 1\.1/.test((await last()).text), await btn.innerText());
+  await page.fill(relCard + ' .relask-notes', 'New people now start with the demo data.'); await btn.click();
+  await page.waitForFunction(() => /Version 1\.1\.1 is released/.test([...document.querySelectorAll('.chat .msg-t')].map((x) => x.innerText).join(' ')), null, { timeout: 30000 });
+  r = await relNow();
+  check('chat: with a reason it is released again as 1.1.1, with the owner\'s note', r.rel[0] === '1.1.1' && r.notes.join() === 'New people now start with the demo data.', r);
+  await view(page, 'Release'); await page.waitForSelector('#rel-state');
+  check('chat: the Release page shows what the chat released', /Version 1\.1\.1 · up to date/.test(await page.locator('#rel-state').innerText()));
+
+  // on a phone the card fits and works
+  await page.setViewportSize({ width: 390, height: 844 }); await sleep(300);
+  await page.locator('.phone-nav .tab-i', { hasText: 'Chat' }).click(); await page.waitForSelector('.composer textarea');
+  await say(page, 'Add a board of appointments by room');
+  for (let i = 0; i < 100 && !(await go.count()); i++) { const o = page.locator('.gcard.ask .opt:not([disabled])'); if (await o.count()) await o.first().click().catch(() => {}); await sleep(150); }
+  await go.last().click(); await page.waitForSelector('.gcard.tryit [data-act="works"]', { timeout: 60000 }); await waitFree(page); await page.locator('.gcard.tryit [data-act="works"]').last().click();
+  await say(page, 'release'); await page.waitForSelector(relCard);
+  const box = await page.locator(relCard).boundingBox(), rb = await page.locator(relCard + ' [data-act="release"]').boundingBox(), wide = await st(page, () => document.documentElement.scrollWidth);
+  check('phone: the release card fits the screen, its Release button is in reach, and the page does not scroll sideways', box && box.x >= 0 && box.x + box.width <= 390 && rb && rb.x + rb.width <= 390 && wide <= 390, [box, rb, wide]);
+  await shot(page, 'cr-03-phone-release-card');
+  await page.locator(relCard + ' [data-act="release"]').click(); await page.waitForFunction(() => /Version 1\.2 is released/.test([...document.querySelectorAll('.chat .msg-t')].map((x) => x.innerText).join(' ')), null, { timeout: 30000 });
+  check('phone: a change and its release, all from the chat', (await relNow()).rel[0] === '1.2');
+  await ctx.close();
 }
 
 /* ---------- the expense manager: "who is this for?" decides which app is built, then demo data, first use and releases ---------- */
@@ -1288,7 +1361,8 @@ async function expenseSample(browser, url) {
     await view(page, 'App'); await page.waitForSelector('.stage-bar');
     check('expenses, just me: an app for one person offers no "Two users" side-by-side preview', await page.locator('.stage-bar .btn', { hasText: 'Two users' }).count() === 0);
     // a change typed in the chat, cut off by closing the page while its steps run: it is kept, and it still gets a release note
-    await setSpeed(page, 'normal'); await say(page, 'Add a notes field to expenses');
+    await say(page, 'Add a notes field to expenses'); await waitPlan(page);
+    await setSpeed(page, 'normal'); await say(page, 'go ahead');
     await page.waitForFunction(() => !!document.querySelector('.work-head .spin'), null, { timeout: 15000 });
     await page.reload(); await page.waitForSelector('.views .tab'); await setSpeed(page, 'instant');
     const cut = await appFull(page); await view(page, 'Release'); await page.waitForSelector('#rel-notes');
@@ -1462,6 +1536,9 @@ async function drive(page, o) { o = o || {}; const seen = [];
   return { a: await appFull(page), seen };
 }
 const waitFree = async (page) => { await sleep(150); for (let i = 0; i < 600; i++) { const a = await appFull(page); if (a && !a.busy) return a; await sleep(80); } return appFull(page); };
+// after a release a change typed in the chat waits for its plan to be approved: answer any question, then type "go ahead"
+const waitPlan = async (page) => { const go = page.locator('.gcard.cplan [data-act="go"]'); for (let i = 0; i < 150 && !(await go.count()); i++) { const o = page.locator('.gcard.ask .opt:not([disabled])'); if (await o.count()) await o.first().click().catch(() => {}); await sleep(150); } };
+const chatGoAhead = async (page) => { await waitPlan(page); await say(page, 'go ahead'); await page.waitForSelector('.gcard.tryit [data-act="works"]', { timeout: 120000 }); await waitFree(page); await say(page, 'it works'); };
 const confirmYes = async (page) => { await page.waitForSelector('.dialog .dfoot .btn.primary'); await page.locator('.dialog .dfoot .btn.primary').click(); await sleep(150); };
 async function flowCustom(browser, url) {
   // ----- A. Live and the connection, in a copy of the page that has no model behind it -----
@@ -1732,7 +1809,7 @@ async function flowRound6(browser, url) {
   check('share starts with what the release chose, and an empty link opens the app with its people and pages but no records', shSeg === 'Demo data' && await shOn() === 'Empty' && /No records at all\. Right for a real launch\./.test(emptyHint) && linkEmpty.length < link10.length && emptyCopy.data === 'empty' && emptyCopy.ver === '1.0' && emptyCopy.rows === 0 && emptyCopy.people > 0 && emptyCopy.pages > 0, [shSeg, linkEmpty.length, link10.length, emptyCopy]);
   await page.locator('.dialog.share .seg button', { hasText: 'Demo data' }).click(); await page.waitForFunction((n) => ((document.getElementById('sh-link') || {}).value || '').length > n, linkEmpty.length); await page.waitForFunction(() => /^https?:\/\/[^/]+\/[a-z0-9-]+$/.test((document.getElementById('sh-short') || {}).value || ''), null, { timeout: 15000 }).catch(() => {});
   await page.locator('.dialog .dhead .btn[aria-label="Close"]').click(); await sleep(150);
-  await say(page, 'Add a notes field to tenders'); a = await waitFree(page);
+  await say(page, 'Add a notes field to tenders'); await chatGoAhead(page); a = await waitFree(page);
   check('a change after a release goes into a draft; the released version stays what people get', a.dirty && a.rel.join() === '1.0' && /Draft · 1\.0 is out/.test(await page.locator('#app-state').innerText()) && a.cols.tenders.includes('notes'), [a.dirty, a.rel]);
   await view(page, 'Release'); await sleep(200); const notes = await page.inputValue('#rel-notes');
   check('the next release is suggested as new features, 1.1, with notes written from the change', /Added Notes \(long text\) to Tenders/.test(notes) && /Release version 1\.1$/.test((await page.locator('#rel-go').innerText()).trim()) && await page.locator('.rel-form .seg button.on').innerText() === 'New features · 1.1', [notes, await page.locator('#rel-go').innerText()]);
@@ -1798,18 +1875,18 @@ async function flowRound6(browser, url) {
   check('a problem is read as a fix, and the Tester looks for it as that kind of person before anything is planned', /A problem to fix/.test(impSeen) && /This sounds like a problem to fix\. I see it too\. Signed in as Sana Malik \(Bid manager\), the rules do not allow them to delete risks\./.test((await page.locator('.msg').filter({ hasText: 'I see it too' }).last().innerText().catch(() => '')).replace(/\s+/g, ' ')), impSeen);
   check('the plan says what will change, who works on it and who is not needed, what happens to the records, and the version it becomes', /Fix, becomes version 1\.2\.1/.test(planFix) && /What will change Let Bid manager delete risks/.test(planFix) && impNow.plan.plan.team.map((w) => w.who).join() === 'Rules builder,Screen designer,Tester' && /Not needed for this change: Planner, List builder, View advisor\./.test(planFix) && /Your records Nothing is changed No record is touched/.test(planFix) && /More people will see or do something\. Bid manager \(2 people\) will be able to delete risks\./.test(planFix), planFix);
   check('the plan waits: nothing is changed until the owner says go ahead', impNow.del === false && impNow.runs === imp0.runs && !(await appFull(page)).dirty && impNow.plan.decided === null && await page.locator('.gcard.cplan [data-act="change"]').count() === 1 && await page.locator('.gcard.cplan [data-act="later"]').count() === 1, [impNow.del, impNow.runs, imp0.runs]);
-  await page.locator('.gcard.cplan [data-act="go"]').click(); await page.waitForSelector('.gcard.tryit', { timeout: 30000 }); await waitIdle(page); impNow = await imp(); a = await appFull(page);
+  await page.locator('.gcard.cplan [data-act="go"]').click(); await page.waitForSelector('.gcard.tryit [data-act="works"]', { timeout: 30000 }); await waitIdle(page); impNow = await imp(); a = await appFull(page);
   check('Go ahead builds the change in the draft with only the stations it needs, and every test passes', impNow.del === true && impNow.plan.decided === 'go' && impNow.changed.reran.join() === 'Backend,Screens,Walkthrough' && impNow.changed.skipped.join() === 'Research,Database,Views' && a.dirty && a.status === 'ready' && a.tests.failed === 0 && a.rel[0] === '1.2', [impNow.del, impNow.changed, a.tests, a.rel]);
   const tryFix = await flatText('.gcard.tryit');
   check('then the owner is asked to try it as the person it is about, beside the version people have', /You said: "Bid managers cannot delete risks"\. See version 1\.2 and the draft side by side, both signed in as Bid manager\./.test(tryFix) && impNow.tryit.role === 'bid_manager' && impNow.tryit.table === 'risks' && impNow.tryit.state === null, tryFix);
-  await page.locator('.gcard.tryit [data-act="compare"]').click(); await page.waitForSelector('.dialog.compare #cmp-after .app', { timeout: 20000 }); await page.waitForSelector('.dialog.compare #cmp-before .app'); await page.waitForFunction(() => { const d = document.querySelector('.dialog.compare'); return !!d && getComputedStyle(d).opacity === '1' && !d.getAnimations().some((x) => x.playState === 'running'); });
+  await page.locator('.gcard.tryit [data-act="compare"]').last().click(); await page.waitForSelector('.dialog.compare #cmp-after .app', { timeout: 20000 }); await page.waitForSelector('.dialog.compare #cmp-before .app'); await page.waitForFunction(() => { const d = document.querySelector('.dialog.compare'); return !!d && getComputedStyle(d).opacity === '1' && !d.getAnimations().some((x) => x.playState === 'running'); });
   const sides = await st(page, () => { const s = window.__formwork.state(), side = (id) => { const el = document.getElementById(id); return { head: el.querySelector('.cmp-h').innerText.replace(/\s+/g, ' '), rows: /(\d+) risks/.exec(el.innerText) ? Number(/(\d+) risks/.exec(el.innerText)[1]) : -1, welcome: /Welcome,/.test(el.innerText) }; }, copy = Object.values(s.apps).find((x) => x.shared && x.shared.preview), rule = (app) => ((app.def.access.risks || {}).bid_manager || {}).delete; return { title: document.querySelector('.dialog.compare h2').innerText, b: side('cmp-before'), a: side('cmp-after'), copyVer: copy && copy.shared.ver, copyDel: copy && rule(copy), width: document.querySelector('.dialog.compare').getBoundingClientRect().width }; });
   check('before and after: the released version and the draft side by side on the same records, both as the person the change is about', sides.title === 'Before and after, as Bid manager' && /Before Version 1\.2, what people have now/.test(sides.b.head) && /After The draft, with your change/.test(sides.a.head) && sides.b.rows > 0 && sides.b.rows === sides.a.rows && !sides.b.welcome && !sides.a.welcome && sides.copyVer === '1.2' && sides.copyDel === false && sides.width > 900, sides); await shot(page, 'r6-05b-before-after');
   await page.locator('#cmp-done').click(); await page.waitForSelector('.dialog.compare', { state: 'detached' }); impNow = await imp();
   check('closing the comparison throws the copy of the released version away', impNow.copies === imp0.copies, [impNow.copies, imp0.copies]);
-  await page.locator('.gcard.tryit [data-act="works"]').click(); await page.waitForSelector('.gcard.tryit [data-act="release"]'); impNow = await imp();
+  await page.locator('.gcard.tryit [data-act="works"]').last().click(); await page.waitForSelector('.gcard.tryit [data-act="release"]'); impNow = await imp();
   check('"It works" keeps the change in the draft and offers to release it as the next fix', impNow.tryit.state === 'works' && /Release it as 1\.2\.1/.test(await flatText('.gcard.tryit [data-act="release"]')) && /goes out when you release version 1\.2\.1/.test(impNow.said.join(' ')), [impNow.tryit, impNow.said]);
-  await page.locator('.gcard.tryit [data-act="release"]').click(); await page.waitForSelector('#rel-go'); await sleep(200);
+  await page.locator('.gcard.tryit [data-act="release"]').last().click(); await page.waitForSelector('#rel-go'); await sleep(200);
   check('the release form is ready for it: a fix, 1.2.1, with the note written from the change', /Release version 1\.2\.1$/.test((await page.locator('#rel-go').innerText()).trim()) && await page.locator('.rel-form .seg button.on').innerText() === 'Fixes · 1.2.1' && /Now lets Bid manager delete risks/.test(await page.inputValue('#rel-notes')), [await page.locator('#rel-go').innerText(), await page.inputValue('#rel-notes')]);
   // a problem reported while using the app: who and where come with it, one question, and "Not now" changes nothing
   await view(page, 'App'); await sleep(200); await page.selectOption('select[aria-label="Preview as"]', { label: 'Hira Siddiqui · Finance analyst' }); await sleep(250); await page.locator('.app-nav .nav-i', { hasText: /^\s*Pipeline\s*$/ }).click(); await sleep(200);
@@ -2058,10 +2135,18 @@ async function flowSizes(browser, url) {
     const { ctx, page } = await newPage(browser, { viewport: { width: w, height: h } });
     await page.goto(url); await page.waitForSelector('.ob-card', { timeout: 20000 }); await sleep(200);
     await fitBoth(page, at + 'onboarding');
+    if (phone) { // the steps bar keeps its own height on the shorter steps instead of sharing the spare height with the form
+      await page.getByRole('button', { name: 'Get started' }).click(); await page.waitForSelector('.ob-rail');
+      const rail = await st(page, () => Math.round(document.querySelector('.ob-rail').getBoundingClientRect().height));
+      check(at + 'onboarding: the steps bar stays a slim bar at the top', rail < 80, rail);
+      await page.getByRole('button', { name: 'Back' }).click(); await sleep(150);
+    }
     await enter(page, url); await fitBoth(page, at + 'home');
     await page.fill('#home-prompt', 'a clinic that books patient appointments'); await page.locator('#home-go').click(); await page.waitForSelector('.iv-ask'); await fitBoth(page, at + 'the questions before a build');
     if (phone) { const o = await st(page, () => { const r = (s) => document.querySelector(s).getBoundingClientRect(); return { ask: r('.iv-ask').top, plan: r('.iv-canvas').top }; }); check(at + 'the question card comes first and the plan so far is under it', o.ask < o.plan, o); }
     await page.locator('.iv-usual').click(); await page.waitForSelector('.iv-act .iv-build'); await fitBoth(page, at + 'the plan to approve');
+    if (phone) { const lead = await st(page, () => [...document.querySelectorAll('.iv-flow:not(.iv-also)')].some((f) => { const k = [...f.children], top = (e) => Math.round(e.getBoundingClientRect().top); return k.some((e, i) => i && top(e) > top(k[i - 1]) + 4 && e.firstElementChild && e.firstElementChild.tagName.toLowerCase() === 'svg'); }));
+      check(at + 'the plan: no line of stages starts with an arrow', !lead); }
     await page.locator('.iv-over').click(); await page.waitForSelector('#home-prompt'); await page.fill('#home-prompt', '');
     if (phone) {
       const b = await st(page, () => { const r = (s) => document.querySelector(s).getBoundingClientRect(), a = r('.act-launch'), ws = r('.ws-btn'), ac = r('.acct'), bar = r('.titlebar.phone'); const hit = (x, y) => x.left < y.right && y.left < x.right && x.top < y.bottom && y.top < x.bottom; return { inBar: a.top >= bar.top && a.bottom <= bar.bottom, overWs: hit(a, ws), overAcct: hit(a, ac), w: a.width, h: a.height }; });
@@ -2079,6 +2164,15 @@ async function flowSizes(browser, url) {
       await page.locator('.phone-nav .tab-i', { hasText: 'App' }).click(); await page.getByRole('button', { name: 'Open the app' }).click(); await page.waitForSelector('.solo .app');
       if (await page.locator('.persona-btn').count()) await page.locator('.persona-btn').first().click();
       await page.waitForSelector('.app-tabs'); await sleep(300); await fitBoth(page, at + 'the app full screen');
+      if (w === 390 && await page.locator('.app-tabs > *', { hasText: 'Schedule' }).count()) { // a pivot keeps its total row, and a timeline scrolls sideways instead of piling its labels on top of each other
+        await page.locator('.app-tabs > *', { hasText: 'Schedule' }).first().click(); await sleep(200);
+        await page.locator('.vs-tabs [role=tab]', { hasText: 'Pivot' }).click(); await page.waitForSelector('.tbl.pivot');
+        const pv = await st(page, () => { const f = document.querySelector('.tbl.pivot tfoot tr'), h = document.querySelector('.tbl.pivot thead tr'); return { disp: getComputedStyle(f).display, cells: f.children.length, cols: h.children.length, w: Math.round(f.getBoundingClientRect().width), tw: Math.round(document.querySelector('.tbl.pivot').getBoundingClientRect().width) }; });
+        check(at + 'the pivot total is a row of the table, one cell per column', pv.disp === 'table-row' && pv.cells === pv.cols && pv.w === pv.tw, pv);
+        await page.locator('.vs-tabs [role=tab]', { hasText: 'Timeline' }).click(); await page.waitForSelector('.gt .gt-item');
+        const gt = await st(page, () => { const g = document.querySelector('.gt'), t = [...document.querySelectorAll('.gt-tick')].filter((e) => e.textContent).map((e) => e.getBoundingClientRect()); return { scrolls: g.scrollWidth > g.clientWidth, overlap: t.some((r, i) => i && r.left < t[i - 1].right - 1) }; });
+        check(at + 'the timeline scrolls sideways and its day labels do not overlap', gt.scrolls && !gt.overlap, gt);
+      }
       await page.locator('.app-head .persona').click(); await page.waitForSelector('.sheet'); await page.locator('.sheet-i', { hasText: 'Back to Turnkey' }).click(); await page.waitForSelector('.phone-nav');
       await page.locator('.phone-nav .tab-i', { hasText: 'More' }).click(); await page.waitForSelector('.sheet'); await page.locator('.sheet .sheet-i', { hasText: 'Share by link' }).click();
     }

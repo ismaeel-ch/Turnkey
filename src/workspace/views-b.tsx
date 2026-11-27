@@ -1281,6 +1281,7 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
         {inWin.length}
         {' of '}
         {items.length} {t.label.toLowerCase()}
+        {items.length < rows.length ? ' with a date' : ''}
         {' fall between these dates'}
         {P ? '. Colour shows the status.' : '.'}
       </p>

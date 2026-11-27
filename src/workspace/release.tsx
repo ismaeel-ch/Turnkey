@@ -3,11 +3,11 @@ import type { AppRecord, ChangeSet, Dict, Release, StartWith } from '@/shared/ty
 import { ACC_HEX } from '@/styles/theme.generated';
 import { toStyle } from '@/platform/dom';
 import { ICONS } from './icons';
-import { S, arr, commit, cx, emit, errText, hashStr, label, me, str, toast, toolCall, uid } from './core';
+import { S, U, arr, commit, cx, emit, errText, hashStr, label, me, setChat, str, toast, toolCall, uid } from './core';
 import { dbAdopt, dbCount, dbDrop } from './db';
 import { TEAMS } from './team';
 import { runTestsSync, testStats } from './tests';
-import { RUNS, STATIONS, pushChat } from './line';
+import { RUNS, STATIONS, pushChat, say } from './line';
 import { appFromPack, framed, packOf, readPack, squeeze, startWith, unsqueeze } from './share';
 import type { Pack } from './share';
 import { carryData } from './carry';
@@ -17,6 +17,7 @@ import { inverseSteps, verCmp, verNext, verParts } from './record-steps';
 import type { VersionSteps } from './record-steps';
 import { currentVersion } from '@/shared/history';
 import { saveShortLink } from '@/platform/share-link';
+import type { ReleaseAsk } from '@/shared/chat-intent';
 
 /* ===== Turnkey prototype · releases, the app's own icon, and installing the app on its own =====
    Building gives you a draft. Releasing turns the draft into a numbered version: the tests must pass, the notes say
@@ -554,6 +555,128 @@ export async function releaseApp(app: AppRecord, kind: string, notes: string[], 
   commit();
   publish(app, rel);
   return rel;
+}
+
+/* ---------- releasing from the chat ---------- */
+/* "Release it" typed in the agents chat gets a card there with the version, its notes and the tests: the owner checks it
+   and presses Release, or types yes. It shares the Release page's form (U.rel), so both show the same draft. */
+/** The release form as the chat card and the Release page both read it. */
+export function relDraft(app: AppRecord) {
+  const rel = relOf(app),
+    R = U.rel[app.id] || { kind: null, text: null, busy: false },
+    again = !!rel && !isDirty(app) && !!R.again,
+    kind = rel ? R.kind || suggestKind(app) : 'first',
+    text = R.text != null ? R.text : again ? '' : draftNotes(app).join('\n');
+  return {
+    rel,
+    R,
+    again,
+    kind,
+    v: rel ? verNext(rel.v, kind) : '1.0',
+    text,
+    notes: text
+      .split('\n')
+      .map((x) => x.replace(/^[-•*]\s*/, '').trim())
+      .filter(Boolean),
+    start: (R.start || (rel ? startWith(rel.start) : 'empty')) as StartWith,
+  };
+}
+/** The release card that waits in the chat, if there is one. */
+export function waitingRelease(app: AppRecord) {
+  for (let i = app.chat.length - 1; i >= 0; i--) {
+    const c = app.chat[i].card;
+    if (c && c.type === 'relask') return c.decided == null ? c : null;
+  }
+  return null;
+}
+/** The owner asked for a release in the chat: say what would go out and put the release card in front of them. */
+export function askRelease(app: AppRecord, ask?: ReleaseAsk | null) {
+  const why = releaseBlock(app);
+  if (why)
+    return void say(
+      app,
+      'orchestrator',
+      why + (/tests fail/.test(why) ? ' Open the tests to see which ones, then ask again.' : ' Ask again when it is done.'),
+    );
+  if (!app.def || !app.def.screens.length) return void say(app, 'orchestrator', 'There is nothing to release yet. Build the app first.');
+  const rel = relOf(app),
+    dirty = isDirty(app),
+    prev = U.rel[app.id];
+  for (const m of app.chat) if (m.card && m.card.type === 'relask' && m.card.decided == null) m.card.decided = 'replaced';
+  U.rel[app.id] = {
+    kind: rel ? (ask && ask.kind) || (!dirty ? 'fix' : prev && prev.kind) || null : null,
+    text: rel && !dirty ? '' : prev ? prev.text : null,
+    busy: false,
+    start: prev ? prev.start : null,
+    again: !!rel && !dirty,
+  };
+  const d = relDraft(app),
+    n = draftLog(app).length;
+  say(
+    app,
+    'orchestrator',
+    !rel
+      ? 'Here is version 1.0, ready to release. Check the notes and what your people start with, then press Release. Every test runs once more first.'
+      : dirty
+        ? 'The draft has ' +
+          (n ? n + ' change' + (n === 1 ? '' : 's') : 'changes') +
+          ' since version ' +
+          rel.v +
+          '. Here is version ' +
+          d.v +
+          ', ready to release. People keep ' +
+          rel.v +
+          ' until you press Release.'
+        : 'Nothing has changed since version ' +
+          rel.v +
+          '. You can still release it again as ' +
+          d.v +
+          ': say in the notes why it goes out, for example a change to what new people start with.',
+    { type: 'relask', id: uid('ra'), decided: null },
+  );
+  emit('CUSTOM', { name: 'interrupt', app: app.id, value: { reason: 'release', version: d.v } });
+  setChat(true);
+  commit();
+}
+/** Release button on the chat card, or "yes" typed under it. */
+export async function releaseFromChat(app: AppRecord) {
+  const c = waitingRelease(app);
+  if (!c) return null;
+  const d = relDraft(app);
+  if (d.again && !d.notes.length) {
+    say(app, 'orchestrator', 'Nothing changed since version ' + d.rel?.v + ', so say in the notes on the card why it goes out again.');
+    commit();
+    return null;
+  }
+  U.rel[app.id] = { ...d.R, busy: true };
+  pushChat(app, 'user', 'Release version ' + d.v);
+  commit();
+  const r = await releaseApp(app, d.kind, d.notes, { start: d.start });
+  if (r) {
+    c.decided = 'released';
+    c.v = r.v;
+    U.rel[app.id] = { kind: null, text: null, busy: false, start: null, again: false };
+  } else U.rel[app.id] = { ...d.R, busy: false };
+  emit('CUSTOM', { name: 'resume', app: app.id, value: { reason: 'release', released: !!r } });
+  commit();
+  return r;
+}
+/** Not now on the chat card, or "no" typed under it. */
+export function declineRelease(app: AppRecord) {
+  const c = waitingRelease(app);
+  if (!c) return;
+  c.decided = 'later';
+  const rel = relOf(app),
+    R = U.rel[app.id];
+  if (R) U.rel[app.id] = { ...R, again: false, text: R.again ? null : R.text };
+  pushChat(app, 'user', 'Not now');
+  say(
+    app,
+    'orchestrator',
+    'Nothing was released.' + (rel ? ' People keep version ' + rel.v + '.' : '') + ' Say "release" whenever you are ready.',
+  );
+  emit('CUSTOM', { name: 'resume', app: app.id, value: { reason: 'release', released: false } });
+  commit();
 }
 
 /* ---------- going back ---------- */
