@@ -134,7 +134,7 @@ describe('mendToPlan', () => {
           col('x2', 'text'),
           col('x3', 'text'),
         ],
-        rows: [{ what_for: 'Train ticket', amount: 'twelve', x1: 'kept', x3: 'dropped' }],
+        rows: [{ what_for: 'Train ticket', amount: 'twelve', x1: 'kept', x3: 'dropped', _by: 1 }],
       },
       { name: 'receipts', title: 'name', owner: null, columns: [col('name', 'text')], rows: [{ name: 'A receipt' }] },
     ]);
@@ -146,7 +146,7 @@ describe('mendToPlan', () => {
     expect(expenses.columns[0].label).toBe('Spent on what');
     expect(expenses.title).toBe('what_for');
     // a value of the wrong type is not carried over, and a column code added cannot be required of rows written without it
-    expect(expenses.rows).toEqual([{ what_for: 'Train ticket', x1: 'kept' }]);
+    expect(expenses.rows).toEqual([{ what_for: 'Train ticket', x1: 'kept', _by: 1 }]);
     expect(expenses.columns.find((c) => c.name === 'amount')?.required).toBe(false);
     expect(expenses.columns.find((c) => c.name === 'what_for')?.required).toBe(true);
     expect(categories.rows).toEqual([]);

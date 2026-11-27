@@ -1,4 +1,4 @@
-import { SQL_TYPE, type ColumnDef, type TableDef } from './types';
+import { DEMO_COLUMN, SQL_TYPE, type ColumnDef, type TableDef } from './types';
 
 /** Quote an identifier the way `qi` does in db.js. */
 export const quoteIdent = (n: string): string => '"' + String(n).replace(/"/g, '""') + '"';
@@ -25,6 +25,7 @@ export function createTableSql(t: TableDef): string {
     ...t.columns.map(columnSql),
     '"created_by" INTEGER REFERENCES "users"("id")',
     '"created_at" TEXT',
+    quoteIdent(DEMO_COLUMN) + ' INTEGER NOT NULL DEFAULT 0',
   ];
   return 'CREATE TABLE ' + quoteIdent(t.name) + ' (\n  ' + lines.join(',\n  ') + '\n)';
 }

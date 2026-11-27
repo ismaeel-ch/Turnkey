@@ -112,8 +112,8 @@ export function mendToPlan<T extends Table & { rows?: Record<string, unknown>[];
     const keep = new Set(columns.map((c) => c.name));
     const rows = (t?.rows || []).map((r) => {
       const row: Record<string, unknown> = {};
-      // a value written for a column of another type is not carried over
-      for (const k of Object.keys(r || {})) if (keep.has(k) && !changed.has(k)) row[k] = r[k];
+      // a value written for a column of another type is not carried over; marks on the row itself (`_by`, `_demo`) stay
+      for (const k of Object.keys(r || {})) if (k.startsWith('_') || (keep.has(k) && !changed.has(k))) row[k] = r[k];
       return row;
     });
     return {

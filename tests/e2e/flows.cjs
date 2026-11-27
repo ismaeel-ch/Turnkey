@@ -258,7 +258,10 @@ async function flowDemo(browser, url) {
   check('walkthrough still passes after the changes', a.tour.every(Boolean), a.tour);
 
   // reset data, sign out and in, reload
-  await view(page, 'Data'); await page.locator('.side-foot .btn', { hasText: 'Reset data' }).click(); await page.locator('.dialog .btn.primary').click(); await sleep(400);
+  await view(page, 'Data'); await page.locator('.side-foot [data-demo-act="over"]').click(); await page.waitForSelector('.dialog');
+  const overText = await page.locator('.dialog').innerText();
+  check('Start over (the former Reset data) says how many added records it deletes before it does', /This deletes the \d+ records? you added/.test(overText) && await page.locator('.dialog .btn.danger', { hasText: 'Start over' }).count() === 1, overText);
+  await page.locator('.dialog .btn.danger').click(); await page.waitForFunction(() => { const el = [...document.querySelectorAll('.side-i')].find((x) => /patients/.test(x.textContent)); return el && el.querySelector('.t-cap').textContent.trim() === '14'; }, null, { timeout: 5000 }).catch(() => {});
   const cnt = await page.locator('.side-i', { hasText: 'patients' }).locator('.t-cap').innerText();
   check('reset data restores 14 patients', cnt.trim() === '14', cnt);
   await page.locator('.titlebar .acct').click(); await page.locator('.menu .mi', { hasText: 'Sign out' }).click(); await page.waitForSelector('.signin');
@@ -353,6 +356,78 @@ async function flowDemo(browser, url) {
   await page.locator('.titlebar .acct').click(); await page.locator('.menu .mi', { hasText: 'Reset data' }).click(); await page.locator('.dialog .btn.danger').click(); await page.waitForSelector('.ob-card');
   const keys = await st(page, () => window.__turnkeyStorage.keys().length + Object.keys(localStorage).filter((k) => k.indexOf('formwork:') === 0).length);
   check('erase everything clears storage and returns to onboarding', keys === 0, keys);
+  await ctx.close();
+  await demoData(browser, url);
+}
+
+async function demoData(browser, url) { // made-up records carry a tag and leave in one step; records someone added never do
+  const { ctx, page } = await newPage(browser); await enter(page, url); await buildTpl(page, 'clinic');
+  const id = (await appState(page)).id;
+  const counts = () => st(page, (id) => { const c = window.__formwork.demo.counts(id); return { demo: c.demo, own: c.own }; }, id);
+  const one = (text) => st(page, ([id, text]) => Number(Object.values(window.__formwork.sql(id, text)[0])[0]), [id, text]);
+  const settled = (demo, own) => page.waitForFunction(([id, demo, own]) => { const c = window.__formwork.demo.counts(id); return c.demo === demo && c.own === own; }, [id, demo, own], { timeout: 5000 }).catch(() => {});
+  const bar = () => page.locator('.app .demo-bar').innerText();
+  const people = await one('SELECT COUNT(*) FROM "users"');
+  await view(page, 'App'); await page.locator('.persona-btn').first().click(); await page.waitForSelector('.app .demo-bar');
+  let c = await counts(), text = await bar();
+  check('a built app says it holds demo data and how much', c.demo === 61 && c.own === 0 && text.includes("You're looking at demo data.") && /14 patients, 39 appointments and 8 visit notes are made up/.test(text) && /Remove demo data/.test(text), [c, text]);
+  check('the first welcome says the records are demo data', /The records here are demo data/.test(await page.locator('.fr-welcome').innerText()), await page.locator('.fr-welcome').innerText());
+  await nav(page, 'Patients'); await page.waitForSelector('.app .tbl tbody tr');
+  check('every made-up record carries a Demo tag', await page.locator('.app .tbl tbody tr').count() === 14 && await page.locator('.app .tbl tbody .b-demo').count() === 14, await page.locator('.app .tbl tbody .b-demo').count());
+  await shot(page, '90-demo-bar');
+  // a record of my own, made in the app
+  await page.locator('.scr-head .btn.primary').click(); await page.waitForSelector('.app-dialog');
+  await page.locator('.app-dialog input[type=text], .app-dialog input:not([type])').first().fill('Test Patient'); await page.locator('.app-dialog button[type=submit]').click(); await page.waitForSelector('.drawer strong.t-sub2');
+  c = await counts(); text = await bar();
+  check('a record I add is mine: no tag, no demo note, and the bar counts it as real', c.demo === 61 && c.own === 1 && await page.locator('.drawer .demo-note').count() === 0 && await page.locator('.app .tbl tbody tr').count() === 15 && await page.locator('.app .tbl tbody .b-demo').count() === 14 && /Your own 1 record is real/.test(text), [c, text]);
+  await page.locator('.drawer [aria-label="Close"]').click(); await page.waitForSelector('.drawer', { state: 'detached' });
+  // an appointment of my own for a made-up patient: that patient has to stay
+  await st(page, (id) => { const f = window.__formwork, cols = f.sql(id, 'PRAGMA table_info("appointments")').map((x) => x.name).filter((x) => x !== 'id' && x !== 'is_demo'), list = cols.map((x) => '"' + x + '"').join(','); f.sql(id, 'INSERT INTO "appointments" (' + list + ', "is_demo") SELECT ' + list + ', 0 FROM "appointments" WHERE "patient_id" = 1 LIMIT 1'); }, id);
+  await settled(61, 2);
+  await page.locator('.app .demo-bar .btn', { hasText: 'Remove demo data' }).click(); await page.waitForSelector('.dialog .demo-plan');
+  const goes = await page.locator('.dialog [data-demo="goes"]').innerText(), stays = await page.locator('.dialog [data-demo="stays"]').innerText(), kept = await page.locator('.dialog [data-demo="kept"]').innerText();
+  check('one confirmation says what goes, what stays and what is kept', /13 patients, 39 appointments and 8 visit notes, all made up/.test(goes) && /1 patient and 1 appointment you added/.test(stays) && /people who can sign in/.test(stays) && /1 demo record that your own records point to/.test(kept) && /stops being demo data/.test(kept), [goes, stays, kept]);
+  await shot(page, '91-demo-remove');
+  await page.locator('.dialog .btn.danger', { hasText: 'Remove demo data' }).click(); await settled(0, 3);
+  c = await counts(); text = await bar();
+  const left = { mine: await one('SELECT COUNT(*) FROM "patients" WHERE "full_name" = \'Test Patient\''), patients: await one('SELECT COUNT(*) FROM "patients"'), appts: await one('SELECT COUNT(*) FROM "appointments"'), notes: await one('SELECT COUNT(*) FROM "visit_notes"'), broken: await st(page, (id) => window.__formwork.sql(id, 'PRAGMA foreign_key_check').length, id), people: await one('SELECT COUNT(*) FROM "users"') };
+  check('removing the demo data deletes only made-up records', c.demo === 0 && c.own === 3 && left.mine === 1 && left.patients === 2 && left.appts === 1 && left.notes === 0 && left.broken === 0 && left.people === people, [c, left]);
+  check('afterwards the bar says so and offers Undo and Add demo data again', /Demo data removed\./.test(text) && /Your 3 records are untouched/.test(text) && /Undo/.test(text) && /Add demo data again/.test(text) && await page.locator('.app .tbl tbody .b-demo').count() === 0, text);
+  await shot(page, '92-demo-removed');
+  const run = await st(page, (id) => { const f = window.__formwork; f.runTests(f.state().apps[id]); const res = f.tests()[id].res, keys = Object.keys(res); return { total: keys.length, bad: keys.filter((k) => !res[k].ok).map((k) => k + ': ' + res[k].actual) }; }, id);
+  check('the generated tests still pass with the demo data gone: each makes its own records and takes them out', run.total > 100 && run.bad.length === 0 && (await counts()).demo === 0 && await one('SELECT COUNT(*) FROM "patients"') === 2, run);
+  await page.locator('.app .demo-bar .btn', { hasText: 'Undo' }).click(); await settled(61, 2);
+  c = await counts();
+  check('Undo puts the demo data back as it was', c.demo === 61 && c.own === 2 && await one('SELECT COUNT(*) FROM "patients"') === 15, c);
+  await page.locator('.app .demo-bar .btn', { hasText: 'Remove demo data' }).click(); await page.locator('.dialog .btn.danger').click(); await settled(0, 3);
+  await page.locator('.app .demo-bar .demo-link', { hasText: 'Add demo data again' }).click(); await settled(61, 3);
+  c = await counts();
+  check('Add demo data again brings the made-up records back next to mine, with every link in place', c.demo === 61 && c.own === 3 && await st(page, (id) => window.__formwork.sql(id, 'PRAGMA foreign_key_check').length, id) === 0 && await one('SELECT COUNT(*) FROM "appointments" a JOIN "patients" p ON p."id" = a."patient_id" WHERE a."is_demo" = 1 AND p."is_demo" = 1') === 39, c);
+  // a made-up record I want to keep
+  await page.locator('.app .tbl tbody tr', { has: page.locator('.b-demo') }).first().click(); await page.waitForSelector('.drawer .demo-note');
+  await page.locator('.drawer .demo-note .btn', { hasText: 'Keep this record' }).click(); await settled(60, 4);
+  c = await counts();
+  check('Keep this record turns a made-up record into one of mine', c.demo === 60 && c.own === 4 && await page.locator('.drawer .demo-note').count() === 0, c);
+  await page.locator('.drawer [aria-label="Close"]').click(); await page.waitForSelector('.drawer', { state: 'detached' });
+  // starting over is the only action that deletes added records, and it says so first
+  await say(page, 'Reset the data'); await sleep(300); let a = await appState(page);
+  check('asked in chat to reset the data, Turnkey refuses while records I added would be lost', /would delete the 4 records you added/.test(a.last.text) && (await counts()).own === 4, a.last.text);
+  await say(page, 'Remove the demo data'); await settled(0, 4); a = await appState(page);
+  check('asked in chat to remove the demo data, only the made-up records go', (await counts()).demo === 0 && (await counts()).own === 4 && await one('SELECT COUNT(*) FROM "patients" WHERE "full_name" = \'Test Patient\'') === 1, [await counts(), a.last.text]);
+  // an empty list offers the demo data back, next to the button that adds a first record
+  await page.locator('.app-head .persona').click(); await page.locator('.app-head .menu .mi', { hasText: 'Dr. Ayesha' }).click(); await page.waitForSelector('.fr-welcome');
+  const quiet = await page.locator('.fr-welcome').innerText();
+  await nav(page, 'Visit notes'); await page.waitForSelector('.app-main .empty');
+  const offers = await page.locator('.app-main .empty button').allInnerTexts();
+  check('with the demo data gone, a welcome no longer mentions it and an empty list offers to add it again', !/demo data/.test(quiet) && offers.map((x) => x.trim()).join() === 'New visit note,Add demo data again', [quiet, offers]);
+  await page.locator('.app-main .empty [data-demo-act="add"]').click(); await settled(61, 4);
+  check('Add demo data again on an empty list fills it', (await counts()).demo === 61 && await one('SELECT COUNT(*) FROM "visit_notes"') === 8, await counts());
+  await page.locator('.stage-bar [data-demo-act="over"]').click(); await page.waitForSelector('.dialog');
+  const over = await page.locator('.dialog').innerText(); c = await counts();
+  check('Start over names the number of added records it deletes', new RegExp('This deletes the ' + c.own + ' records you added').test(over) && /use Remove demo data instead/.test(over), over);
+  await page.locator('.dialog .btn.danger', { hasText: 'Start over' }).click(); await settled(61, 0);
+  c = await counts();
+  check('Start over empties the lists and puts the demo data back', c.demo === 61 && c.own === 0 && await one('SELECT COUNT(*) FROM "patients"') === 14, c);
   await ctx.close();
 }
 
@@ -1442,7 +1517,12 @@ async function flowRound6(browser, url) {
   // ----- releases -----
   await view(page, 'Release'); await page.waitForSelector('.release');
   check('release: a built app is a draft until it is released, and the notes are drafted for it', /Draft · not released yet/.test(await page.locator('#rel-state').innerText()) && /^First release: \d+ pages for 3 roles, with a team of 3 agents inside\./.test(await page.inputValue('#rel-notes')) && /Release version 1\.0/.test(await page.locator('#rel-go').innerText()) && await page.locator('#rel-share').isDisabled(), await page.inputValue('#rel-notes'));
+  const startTxt = (await page.locator('#rel-start').innerText()).replace(/\s+/g, ' ');
+  check('before the first release the page asks what people start with: empty is the usual choice, beside demo data and the records as they are', /Before you release/.test(await page.locator('.rel-form').innerText()) && await page.locator('#rel-start .choice').count() === 3 && await page.locator('#rel-start .choice.on').getAttribute('data-start') === 'empty' && /Empty Usual choice No records\. Right for a real launch\./.test(startTxt) && /Demo data The \d+ made-up records/.test(startTxt) && /The records as they are now \d+ records/.test(startTxt) && /Nothing yet/.test(await page.locator('#rel-live').innerText()), startTxt);
+  await page.locator('#rel-start .choice[data-start="demo"]').click(); await page.waitForSelector('#rel-start .choice.on[data-start="demo"]'); await shot(page, 'r6-03a-before-release');
   await page.locator('#rel-go').click(); await page.waitForFunction(() => /Version 1\.0 · up to date/.test((document.getElementById('rel-state') || {}).innerText || '')); a = await appFull(page);
+  const relStart = () => st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return s.apps[t.app].releases[0].start; });
+  check('the release remembers the choice, and the page says what is live and what the draft holds', await relStart() === 'demo' && /Version 1\.0, released .*This is what people with the link or the installed app have\./.test(await page.locator('#rel-live').innerText()) && /The same as the live version/.test(await page.locator('#rel-draft').innerText()), [await page.locator('#rel-live').innerText(), await page.locator('#rel-draft').innerText()]);
   check('release 1.0: every test ran first, the version is kept, and the app says so', a.rel.join() === '1.0' && !a.dirty && /Version 1\.0/.test(await page.locator('#app-state').innerText()) && a.chat.some((m) => m.card === 'released') && await page.locator('.rel-item').count() === 1, [a.rel, a.dirty]); await shot(page, 'r6-03-release');
   // ----- the deliverable: one document from the app's state, in each format -----
   const xtmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'tk-export-')), grab = async (id) => { const [d] = await Promise.all([page.waitForEvent('download'), page.locator(id).click()]); const p = path.join(xtmp, d.suggestedFilename()); await d.saveAs(p); return { name: d.suggestedFilename(), buf: fs.readFileSync(p) }; };
@@ -1459,7 +1539,14 @@ async function flowRound6(browser, url) {
   check('export: the zip holds the document, the page, the database and the definition', /-build-pack\.zip$/.test(xzip.name) && xzip.buf.subarray(0, 4).toString('hex') === '504b0304' && /\/deliverable\.md/.test(zs) && /\/deliverable\.html/.test(zs) && /\/app\.json/.test(zs) && /\/README\.txt/.test(zs) && zs.includes('SQLite format 3') && xzip.buf.subarray(-22, -18).toString('hex') === '504b0506', xzip.name);
   await page.locator('#rel-share').click(); await page.waitForSelector('.dialog.share'); await page.waitForFunction(() => /#app=1\./.test((document.getElementById('sh-link') || {}).value || '')); const link10 = await page.inputValue('#sh-link'); await page.waitForFunction(() => /^https?:\/\/[^/]+\/[a-z0-9-]+$/.test((document.getElementById('sh-short') || {}).value || ''), null, { timeout: 15000 }).catch(() => {}); const short10 = await page.inputValue('#sh-short').catch(() => '');
   check('Share also gives a short link named after the app', /\/biddesk$/.test(short10), short10);
-  check('share: the link carries version 1.0 and the dialog shows the app\'s own icon', /Version 1\.0/.test(await page.locator('#sh-ver').innerText()) && await page.locator('.dialog.share .applogo svg').count() === 1, await page.locator('#sh-ver').innerText()); await page.locator('.dialog .dhead .btn[aria-label="Close"]').click(); await sleep(150);
+  check('share: the link carries version 1.0 and the dialog shows the app\'s own icon', /Version 1\.0/.test(await page.locator('#sh-ver').innerText()) && await page.locator('.dialog.share .applogo svg').count() === 1, await page.locator('#sh-ver').innerText());
+  const shOn = async () => (await page.locator('.dialog.share .seg button.on').innerText()).trim(), shSeg = await shOn();
+  await page.locator('.dialog.share .seg button', { hasText: 'Empty' }).click(); await page.waitForFunction((l) => { const v = (document.getElementById('sh-link') || {}).value || ''; return /#app=1\./.test(v) && v !== l; }, link10); const linkEmpty = await page.inputValue('#sh-link'), emptyHint = await page.locator('.dialog.share').innerText();
+  const eg = await newPage(browser); await eg.page.goto(url + '#app=' + linkEmpty.split('#app=')[1]); await eg.page.waitForSelector('.solo .app', { timeout: 30000 });
+  const emptyCopy = await st(eg.page, () => { const s = window.__formwork.state(), x = Object.values(s.apps).find((y) => y.shared); return { data: x.shared.data, ver: x.shared.ver, rows: x.def.tables.reduce((n, t) => n + window.__formwork.sql(x.id, 'SELECT COUNT(*) AS n FROM "' + t.name + '"')[0].n, 0), people: window.__formwork.sql(x.id, 'SELECT COUNT(*) AS n FROM "users"')[0].n, pages: x.def.screens.length }; }); await eg.ctx.close();
+  check('share starts with what the release chose, and an empty link opens the app with its people and pages but no records', shSeg === 'Demo data' && await shOn() === 'Empty' && /No records at all\. Right for a real launch\./.test(emptyHint) && linkEmpty.length < link10.length && emptyCopy.data === 'empty' && emptyCopy.ver === '1.0' && emptyCopy.rows === 0 && emptyCopy.people > 0 && emptyCopy.pages > 0, [shSeg, linkEmpty.length, link10.length, emptyCopy]);
+  await page.locator('.dialog.share .seg button', { hasText: 'Demo data' }).click(); await page.waitForFunction((n) => ((document.getElementById('sh-link') || {}).value || '').length > n, linkEmpty.length); await page.waitForFunction(() => /^https?:\/\/[^/]+\/[a-z0-9-]+$/.test((document.getElementById('sh-short') || {}).value || ''), null, { timeout: 15000 }).catch(() => {});
+  await page.locator('.dialog .dhead .btn[aria-label="Close"]').click(); await sleep(150);
   await say(page, 'Add a notes field to tenders'); a = await waitFree(page);
   check('a change after a release goes into a draft; the released version stays what people get', a.dirty && a.rel.join() === '1.0' && /Draft · 1\.0 is out/.test(await page.locator('#app-state').innerText()) && a.cols.tenders.includes('notes'), [a.dirty, a.rel]);
   await view(page, 'Release'); await sleep(200); const notes = await page.inputValue('#rel-notes');
@@ -1469,6 +1556,7 @@ async function flowRound6(browser, url) {
   await page.locator('#rel-go').click(); await page.waitForFunction(() => /Version 1\.1 · up to date/.test((document.getElementById('rel-state') || {}).innerText || '')); a = await appFull(page);
   await page.locator('#rel-share').click(); await page.waitForSelector('.dialog.share'); await page.waitForFunction(() => /#app=1\./.test((document.getElementById('sh-link') || {}).value || '')); const link11 = await page.inputValue('#sh-link'); await page.locator('.dialog .dhead .btn[aria-label="Close"]').click(); await sleep(150);
   check('release 1.1: two versions in the history, newest first, each with its notes', a.rel.join() === '1.1,1.0' && !a.dirty && await page.locator('.rel-item').count() === 2 && /Added Notes/.test(await page.locator('.rel-item').first().innerText()) && link11 !== link10, a.rel);
+  check('the next version starts new people the way the one before it did', await relStart() === 'demo', await relStart());
   const lg0 = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return JSON.stringify(window.__formwork.wf.logo(s.apps[t.app])); });
   await page.locator('#rel-logo-next').click(); await sleep(200); a = await appFull(page); const lg1 = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]); return JSON.stringify(window.__formwork.wf.logo(s.apps[t.app])); });
   check('icon: designed as data by the UI agent (a shield with a spark here); another design changes it and makes a draft', /"glyph":"briefcase","shape":"shield","fill":"gradient","mark":"spark"/.test(lg0) && lg1 !== lg0 && a.dirty && /Your pick/.test(await page.locator('#rel-logo-text').innerText()) && /Fixes · 1\.1\.1/.test(await page.locator('.rel-form .seg button.on').innerText()), [lg0, lg1]);
@@ -1481,6 +1569,12 @@ async function flowRound6(browser, url) {
   const kept = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), app = s.apps[t.app]; return { client: window.__formwork.sql(t.app, 'SELECT "client" AS c FROM "tenders" WHERE "id" = 1')[0].c, away: window.__formwork.sql(t.app, 'SELECT "value" AS v FROM "tk_put_away" WHERE "table_name" = \'tenders\' AND "column_name" = \'notes\'').map((r) => r.v), taken: app.takenBack, kind: app.releases[0].kind, back: app.releases[0].back }; });
   check('going back to 1.0 is released at once as 1.1.1: the later field is gone, the tests pass, the history stays', !a.cols.tenders.includes('notes') && a.tests.failed === 0 && a.rel.join() === '1.1.1,1.1,1.0' && !a.dirty && a.status === 'ready' && kept.kind === 'rollback' && kept.back === '1.0' && /Same as 1\.0/.test(await page.locator('.rel-item').first().innerText()), [a.cols.tenders, a.tests, a.rel, kept.kind]);
   check('going back keeps every record, and puts away the values the older version has no field for', a.rows === rowsBefore && kept.client === 'Kept through going back' && kept.away.join() === 'Typed into the newer field' && kept.taken && kept.taken.to === '1.0' && kept.taken.why === 'Nobody used the notes' && kept.taken.items.some((x) => /Added Notes/.test(x)), [a.rows, rowsBefore, kept]);
+  // what was taken back is listed, and one press puts it in the draft again without releasing anything
+  const takenTxt = (await page.locator('#rel-taken').innerText()).replace(/\s+/g, ' ');
+  check('the Release page lists what going back took out and why', /You went back from version 1\.1 to 1\.0\./.test(takenTxt) && /Added Notes/.test(takenTxt) && /What went wrong: Nobody used the notes/.test(takenTxt) && await page.locator('#rel-bring-back').count() === 1, takenTxt); await shot(page, 'r6-03d-taken-back');
+  await page.locator('#rel-bring-back').click(); await page.waitForFunction(() => /Version 1\.1\.1 is out · draft has changes/.test((document.getElementById('rel-state') || {}).innerText || ''), null, { timeout: 20000 }); a = await appFull(page);
+  const again = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), app = s.apps[t.app]; return { notes: window.__formwork.sql(t.app, 'SELECT "notes" AS c FROM "tenders" WHERE "id" = 1')[0].c, client: window.__formwork.sql(t.app, 'SELECT "client" AS c FROM "tenders" WHERE "id" = 1')[0].c, taken: app.takenBack || null }; });
+  check('putting them back changes only the draft: the field and its put-away values return, every record stays, 1.1.1 stays live', a.cols.tenders.includes('notes') && again.notes === 'Typed into the newer field' && again.client === 'Kept through going back' && a.rows === rowsBefore && a.rel.join() === '1.1.1,1.1,1.0' && a.dirty && a.tests.failed === 0 && !again.taken && /Release version 1\.2$/.test((await page.locator('#rel-go').innerText()).trim()) && /New people start with: demo data/.test(await page.locator('#rel-start').innerText()), [a.cols.tenders, again, a.rel, await page.locator('#rel-go').innerText()]);
 
   // ----- the app on its own: link, install, update that keeps the records -----
   const g = await newPage(browser), gp = g.page; await gp.goto(url + '#app=' + link10.split('#app=')[1]); await gp.waitForSelector('.solo .app', { timeout: 30000 }); await sleep(300);

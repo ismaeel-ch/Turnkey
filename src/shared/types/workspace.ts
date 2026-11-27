@@ -100,7 +100,10 @@ export interface AppRecord {
   rev: number;
   /** who made or last changed each item of the definition, by item key (src/workspace/provenance.ts) */
   touched?: Dict<Touch>;
-  /** the seed rows by table, kept so "Reset data" can put them back */
+  /**
+   * the rows the app started with, by table: its demo data, kept so it can be added again after it was removed.
+   * A row is demo data unless it says `_demo: 0`; in a copy that started from someone's real records only `_demo: 1` is
+   */
   seed?: { rows: Dict<Row[]> } | null;
   /** the last permission matrix the Backend check ran */
   matrix?: { at: number; calls: number; refused: number; failed: string[] } | null;
@@ -175,7 +178,15 @@ export interface Release {
   steps?: RecordStep[];
   /** for a release that went back: the version it is the same as */
   back?: string;
+  /** what a person who opens this version for the first time starts with (a version from before the choice: demo data) */
+  start?: StartWith;
 }
+
+/**
+ * What a new copy of an app starts with: `empty` is no records except the starter settings, `demo` is the made-up
+ * records the app was built with, `live` is a copy of the owner's records as they are.
+ */
+export type StartWith = 'empty' | 'demo' | 'live';
 
 /** What going back to an earlier version took out of the app, kept so the owner can ask for it again. */
 export interface TakenBack {
@@ -484,7 +495,7 @@ export interface ViewState {
   noteDraft: Dict<string>;
   /** release form, per app */
   /** the Release view's form, by app id */
-  rel: Dict<{ kind: string | null; text: string | null; busy: boolean }>;
+  rel: Dict<{ kind: string | null; text: string | null; busy: boolean; start?: StartWith | null }>;
   /** last Details tab, per app */
   detail: Dict<string>;
   /** the chat peek on narrow screens */
@@ -502,7 +513,7 @@ export interface SharedInfo {
   at: number;
   /** the username the link signs in as, or '' for the sign-in screen */
   as: string;
-  data: 'live' | 'demo';
+  data: StartWith;
   /** the owner's own preview of their link, replaced by the next one */
   preview: boolean;
   /** the released version, and the app's lasting id */
@@ -537,7 +548,7 @@ export interface SoloView {
 /** The share dialog: which data and person the link carries, and the link once it is packed. */
 export interface ShareState {
   app: string;
-  data: 'live' | 'demo';
+  data: StartWith;
   as: string;
   code: string | null;
   busy: boolean;
