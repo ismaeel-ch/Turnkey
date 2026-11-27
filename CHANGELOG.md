@@ -24,6 +24,8 @@ and smaller view fixes.
 - Views: the clinic's demo visit notes match their appointments, an empty calendar month points to the next record,
   timeline labels stay readable over the Today line, and on phones the pivot's Total row and the timeline scroll
   sideways instead of piling up. ([#273](https://github.com/ismaeel-ch/Turnkey/pull/273))
+- Guided build: no empty gap above the onboarding form on phones, the stage arrows in the plan end each wrapped line,
+  and a step's status badge stays on the right. ([#281](https://github.com/ismaeel-ch/Turnkey/pull/281))
 
 ## [0.5.4] - 2026-11-27
 
