@@ -526,6 +526,22 @@ export function renameEverywhere(app: AppRecord & { def: BackedDef }, t: AppTabl
   def.actions.forEach((a) => {
     if (a.table === t.name && a.arg === old) a.arg = nn;
   });
+  // the app's own agents: saved runs follow the rename through the migration log (saved-runs.ts), the team here
+  const team = def.team;
+  if (team) {
+    if (team.input.table === t.name) {
+      if (team.input.column === old) team.input.column = nn;
+      team.samples.forEach((s) => mv(s.values));
+    }
+    team.agents.forEach((a) => {
+      if (team.input.table === t.name) a.sets = a.sets.map((x) => (x === old ? nn : x));
+      if (a.writes === t.name) mv(a.fixed);
+    });
+    if (team.jump && team.jump.table === t.name) {
+      if (team.jump.column === old) team.jump.column = nn;
+      mv(team.jump.set);
+    }
+  }
   arr<Row>(app.seed && app.seed.rows[t.name]).forEach((r) => mv(r));
 }
 /** One step of a change: what the plan card needs to know about it (`StepFacts`), and how to make it. */

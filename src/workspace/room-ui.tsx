@@ -22,7 +22,7 @@ import { VIEW_ICON, accOf, apiCall, colOf, roleName, tableOf, tourValues } from 
 import { DATA_VIEWS } from './viewspec';
 import { usageLine } from '@/platform/agui/usage';
 import { allConnectors, connOn } from './connections';
-import { REC } from './registry';
+import { savedCases } from './saved-runs';
 import { TEAMS, type TeamRun, TeamAv, canRunTeam, runTeam, sameText, stopTeam, teamBlock, teamCase, teamJump } from './team';
 import { Avatar, Btn, Card, Empty, Icon, Input, MBar, Proto, Spinner } from './ui';
 import {
@@ -430,8 +430,7 @@ export function TeamConsole({ app, user, pane, scr }: ScreenProps & { test?: boo
   const tapp = app as TeamApp,
     T: TeamRun | undefined = TEAMS[app.id],
     running = !!T && T.status === 'running',
-    saved = app.tpl ? REC[app.tpl] : undefined,
-    cases = (saved && saved.cases) || [],
+    cases = savedCases(app),
     src = pane.test ? 'check' : 'app';
   const f = teamFormOf(pane, it.name),
     acc = accOf(def, user.role, it.name),
