@@ -19,7 +19,8 @@ import { ACCENTS, accOf, apiCall, appUsers, colOf, roleName, tableOf, tourExec, 
 import { editBlocked, editFromCanvas } from './changes';
 import { REC, allConnectors, callConnector, connOn } from './builds';
 import { TeamConsole } from './room';
-import { resetAppData } from './line';
+import { DemoActions, DemoBar, DemoNote } from './demo-data-ui';
+import { setDemoMark } from './demo-data';
 import { Avatar, Btn, Empty, Field, Icon, Input, MBar, Menu, Proto, Select, Switch, Textarea, type MenuEntry } from './ui';
 import { AppSheets, AppTabs, isCompact, useElWidth, type SoloItem } from './mobile';
 import { Explorer } from './views-a';
@@ -303,6 +304,7 @@ export function AppPane({
           <span className="persona">{who}</span>
         )}
       </header>
+      {!pane.test && <DemoBar app={app} />}
       <div className="app-body">
         {!compact && navKind !== 'top' && nav(navKind)}
         <main className="app-main">
@@ -774,7 +776,7 @@ export function RecordDrawer({
     if (
       !(await confirmBox({
         title: 'Delete this ' + t.one.toLowerCase() + '?',
-        body: 'It is removed from the database. Reset data brings the seed rows back.',
+        body: 'It is removed from the database for good.',
         yes: 'Delete',
         danger: true,
       }))
@@ -829,6 +831,7 @@ export function RecordDrawer({
         {shut}
       </div>
       <div className="drawer-body">
+        <DemoNote app={app} table={t.name} row={row} />
         {P && (
           <div className="row wrap">
             <span className={'badge b-' + stateTone(def, t, sc, row[P.column])}>{stateLabel(def, t, sc, row[P.column])}</span>
@@ -1057,16 +1060,6 @@ export function StageView({ app }: { app: AppRecord }) {
     saved = app.tpl ? REC[app.tpl] : undefined;
   const setUser = (pane: Pane, id: number | null) => patchPane(pane, { uid: id, screen: null, rec: null, form: null, guide: null });
   const split = () => toggleSplit(st, users);
-  const reset = async () => {
-    if (
-      await confirmBox({
-        title: 'Reset the data in ' + app.name + '?',
-        body: 'Every table is emptied and the original seed rows are put back. Tables, users and screens stay as they are.',
-        yes: 'Reset data',
-      })
-    )
-      resetAppData(app);
-  };
   return (
     <div className="stage" data-tour="stage">
       <div className="stage-bar">
@@ -1119,10 +1112,7 @@ export function StageView({ app }: { app: AppRecord }) {
           <Icon n="playOutline" s="16" />
           <span className="hide-sm">Play walkthrough</span>
         </Btn>
-        <Btn className="btn sm" onClick={reset}>
-          <Icon n="reset" s="16" />
-          <span className="hide-sm">Reset data</span>
-        </Btn>
+        <DemoActions app={app} />
       </div>
       <div className={cx('devices', st.split && 'two')}>
         <div className="device">
@@ -1234,6 +1224,8 @@ function walkExec(app: AppRecord, st: Stage, T: Walk, i: number) {
     p.form = null;
   }
   if (x.screen) p.screen = x.screen;
+  // what the walkthrough makes is made up too: it carries the Demo tag and leaves with the demo data
+  if (x.ok && x.rec && app.def.tour[i].do === 'create') setDemoMark(app, x.rec.table, x.rec.id, true);
   p.rec = x.rec || null;
   p.vs = {};
 }
@@ -1285,7 +1277,7 @@ export function WalkPlayer({ app, st, T }: { app: AppRecord; st: Stage; T: Walk 
               {' steps passed.'}
             </strong>
             {
-              ' These are the steps the Walkthrough station ran as the acceptance test. Here they made real records, so use Reset data to clear them.'
+              ' These are the steps the Walkthrough station ran as the acceptance test. The records they made here are marked "Demo". Remove demo data clears them.'
             }
           </p>
           <div className="row">
