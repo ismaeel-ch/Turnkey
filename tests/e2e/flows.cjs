@@ -338,6 +338,7 @@ async function demoData(browser, url) { // made-up records carry a tag and leave
   await view(page, 'App'); await page.locator('.persona-btn').first().click(); await page.waitForSelector('.app .demo-bar');
   let c = await counts(), text = await bar();
   check('a built app says it holds demo data and how much', c.demo === 61 && c.own === 0 && text.includes("You're looking at demo data.") && /14 patients, 39 appointments and 8 visit notes are made up/.test(text) && /Remove demo data/.test(text), [c, text]);
+  check('the first welcome says the records are demo data', /The records here are demo data/.test(await page.locator('.fr-welcome').innerText()), await page.locator('.fr-welcome').innerText());
   await nav(page, 'Patients'); await page.waitForSelector('.app .tbl tbody tr');
   check('every made-up record carries a Demo tag', await page.locator('.app .tbl tbody tr').count() === 14 && await page.locator('.app .tbl tbody .b-demo').count() === 14, await page.locator('.app .tbl tbody .b-demo').count());
   await shot(page, '90-demo-bar');
@@ -380,6 +381,14 @@ async function demoData(browser, url) { // made-up records carry a tag and leave
   check('asked in chat to reset the data, Turnkey refuses while records I added would be lost', /would delete the 4 records you added/.test(a.last.text) && (await counts()).own === 4, a.last.text);
   await say(page, 'Remove the demo data'); await settled(0, 4); a = await appState(page);
   check('asked in chat to remove the demo data, only the made-up records go', (await counts()).demo === 0 && (await counts()).own === 4 && await one('SELECT COUNT(*) FROM "patients" WHERE "full_name" = \'Test Patient\'') === 1, [await counts(), a.last.text]);
+  // an empty list offers the demo data back, next to the button that adds a first record
+  await page.locator('.app-head .persona').click(); await page.locator('.app-head .menu .mi', { hasText: 'Dr. Ayesha' }).click(); await page.waitForSelector('.fr-welcome');
+  const quiet = await page.locator('.fr-welcome').innerText();
+  await nav(page, 'Visit notes'); await page.waitForSelector('.app-main .empty');
+  const offers = await page.locator('.app-main .empty button').allInnerTexts();
+  check('with the demo data gone, a welcome no longer mentions it and an empty list offers to add it again', !/demo data/.test(quiet) && offers.map((x) => x.trim()).join() === 'New visit note,Add demo data again', [quiet, offers]);
+  await page.locator('.app-main .empty [data-demo-act="add"]').click(); await settled(61, 4);
+  check('Add demo data again on an empty list fills it', (await counts()).demo === 61 && await one('SELECT COUNT(*) FROM "visit_notes"') === 8, await counts());
   await page.locator('.stage-bar [data-demo-act="over"]').click(); await page.waitForSelector('.dialog');
   const over = await page.locator('.dialog').innerText(); c = await counts();
   check('Start over names the number of added records it deletes', new RegExp('This deletes the ' + c.own + ' records you added').test(over) && /use Remove demo data instead/.test(over), over);
@@ -1035,6 +1044,130 @@ async function flowNew(browser, url) { // workflow canvas, generated tests, shar
   check('phone: dialogs rise from the bottom as sheets', db.width === 390 && Math.round(db.y + db.height) === 844, db);
   await pp.locator('.dialog .dhead .btn').click(); await sleep(200); await pp.locator('.titlebar .acct').click(); await pp.waitForSelector('.sheet'); const menu = await pp.locator('.sheet .sheet-l').allInnerTexts();
   check('phone: the menu holds Live, Online, Debug, the guide and the account', ['Live', 'Online', 'Debug mode', 'Feature guide', 'Sign out'].every((x) => menu.includes(x)), menu); await shot(pp, '99c-phone-menu');
+  await ph.ctx.close();
+  await firstUse(browser, url);
+}
+
+/* ---------- first use of a built app: "Choose who you are", the welcome, the tour, the checklist, empty screens ---------- */
+async function firstUse(browser, url) {
+  const { ctx, page } = await newPage(browser); await enter(page, url); await buildTpl(page, 'clinic'); await waitIdle(page);
+  const aid = (await appState(page)).id;
+  const sql = async (text) => { await st(page, ([id, q]) => { window.__formwork.sql(id, q); }, [aid, text]); };
+  const welcome = () => st(page, () => { const w = document.querySelector('.fr-welcome'); return w ? { text: w.innerText, points: [...w.querySelectorAll('.fr-points li')].map((x) => x.innerText.trim()), btn: (w.querySelector('.btn.primary') || {}).innerText || '' } : null; });
+  const menuItem = async (name) => { await page.locator('.app-head .persona').click(); await page.locator('.app-head .menu .mi', { hasText: name }).click(); };
+  await view(page, 'App'); await page.waitForSelector('.login-card');
+  // sign-in: words for the people who use the app, not for its builder
+  const si = await st(page, () => ({ text: document.querySelector('.login-card').innerText, people: [...document.querySelectorAll('.persona-btn')].map((b) => [...b.querySelectorAll('.col > span')].map((x) => x.innerText.trim())), form: document.querySelectorAll('.login-form').length }));
+  check('sign-in asks "Choose who you are" and says nothing about seeding or agents', /Choose who you are/.test(si.text) && !/seeded|Database agent/i.test(si.text), si.text.slice(0, 120));
+  check('sign-in: each person has their name, their kind of person and one line on what it does', si.people.length === 6 && si.people.every((p) => p.length === 3 && p.every(Boolean)) && si.people[0].join('|') === 'Sara Malik|Receptionist|Registers patients, books and checks in appointments' && si.people[5][1] === 'Clinic manager', si.people);
+  check('sign-in: the username and password form is folded away until asked for', si.form === 0);
+  await page.locator('.login-more').click(); await page.waitForSelector('.login-form');
+  check('sign-in: unfolding the form shows it, with the password note', /Every password is demo/.test(await page.locator('.login-pw').innerText()) && (await page.locator('.login-more').getAttribute('aria-expanded')) === 'true');
+  await page.locator('.login-form .input').first().fill('nobody'); await page.locator('.login-form .input').nth(1).fill('wrong'); await page.locator('.login-form button[type=submit]').click(); await page.waitForSelector('.login-card .mbar');
+  check('sign-in: a wrong username or password is refused and the form stays open', await page.locator('.login-form').count() === 1 && await page.locator('.app-main').count() === 0);
+  await shot(page, 'fu-01-signin');
+
+  // the welcome: one card, once per person, different for each kind of person
+  await page.locator('.persona-btn').first().click(); await page.waitForSelector('.fr-welcome');
+  let w = await welcome();
+  check('first sign-in shows a welcome: who you are, three things you can do, one button for the first of them', /Welcome, Sara/.test(w.text) && /Receptionist/.test(w.text) && w.points.length === 3 && w.points[0] === 'Book an appointment for a patient with a doctor' && w.btn === 'Book your first appointment' && /Show me around/.test(w.text) && /Not now/.test(w.text), w);
+  check('the welcome is a card above the page, not a dialog: the app behind it can be used', await page.locator('.app-main .dash').count() === 1 && await page.locator('.app-main > .fr-welcome').count() === 1 && await page.locator('.dialog, .app-modal').count() === 0);
+  check('the owner is told that each kind of person gets their own welcome', /Your people will see a welcome like this/.test(w.text));
+  await shot(page, 'fu-02-welcome');
+  await page.locator('.app-nav .nav-i').nth(1).click(); await page.waitForSelector('.fr-welcome', { state: 'detached' });
+  await page.locator('.app-nav .nav-i').nth(0).click(); await page.waitForSelector('.app-main .dash');
+  await menuItem('Sign out'); await page.waitForSelector('.login-card'); await page.locator('.persona-btn').first().click(); await page.waitForSelector('.app-main .dash');
+  check('the welcome is shown once: moving to another screen closes it, and signing in again does not bring it back', await page.locator('.fr-welcome').count() === 0);
+  await menuItem('Dr. Ayesha'); await page.waitForSelector('.fr-welcome');
+  w = await welcome();
+  check('a different kind of person gets a different welcome and a different first thing to do', /Welcome, Dr\. Ayesha/.test(w.text) && /Doctor/.test(w.text) && w.points[0] === 'See only your own appointments' && w.btn === 'Open My day', w);
+
+  // the checklist comes with the main button and ticks itself
+  await page.locator('.fr-welcome .btn.primary').click(); await page.waitForSelector('.fr-list');
+  const list = () => st(page, () => ({ on: (document.querySelector('.app-nav .nav-i.on') || {}).innerText, count: (document.querySelector('.fr-list .badge') || {}).innerText, items: [...document.querySelectorAll('.fr-items li')].map((x) => (x.classList.contains('ok') ? '✓ ' : '○ ') + x.querySelector('.col > span').innerText.replace(/^(Done|To do):\s*/, '').trim()), doIt: document.querySelectorAll('.fr-items .btn').length }));
+  let l = await list();
+  check('the welcome\'s main button opens the right screen and brings the Getting started checklist', l.on.trim() === 'My day' && await page.locator('.fr-welcome').count() === 0 && l.items.length >= 3 && l.items.length <= 5 && l.items[0] === '○ Open an appointment and look around' && l.doIt === 1, l);
+  const before = l.count;
+  await page.locator('.app-nav .nav-i', { hasText: 'My schedule' }).click(); await page.waitForSelector('.cal-grid'); await page.locator('.cal-chip').first().click(); await page.waitForSelector('.drawer');
+  await page.waitForFunction(() => { const li = document.querySelector('.fr-items li'); return li && li.classList.contains('ok'); });
+  l = await list();
+  check('a checklist item ticks itself when the person does it', l.items[0] === '✓ Open an appointment and look around' && l.count !== before, [before, l]);
+  await page.locator('.drawer .drawer-head .btn').last().click(); await shot(page, 'fu-03-checklist');
+  await page.locator('.fr-toggle').click(); await page.waitForSelector('.fr-items', { state: 'detached' });
+  check('the checklist folds to its title', (await page.locator('.fr-toggle').getAttribute('aria-expanded')) === 'false' && await page.locator('.fr-list').count() === 1);
+  await page.getByRole('button', { name: 'Hide the checklist' }).click(); await page.waitForSelector('.fr-list', { state: 'detached' });
+  await menuItem('Getting started'); await page.waitForSelector('.fr-items');
+  check('a hidden checklist comes back from the person menu', await page.locator('.fr-items li').count() === l.items.length);
+
+  // the tour: offered, at most four stops, one bubble at a time, usable from the keyboard
+  await menuItem('Show me around'); await page.waitForSelector('.fr-pop');
+  const stops = [];
+  for (let i = 0; i < 6 && await page.locator('.fr-pop').count(); i++) {
+    await page.waitForFunction((n) => { const p = document.querySelector('.fr-pop'); return p && p.dataset.i === String(n) && document.activeElement === p; }, i);
+    stops.push(await st(page, () => { const p = document.querySelector('.fr-pop'), h = document.querySelector('.fr-hole'), a = document.querySelector('.fr-tour').getBoundingClientRect(), r = p.getBoundingClientRect(); return { text: p.innerText.replace(/\n+/g, ' | '), hole: !!h, inside: r.left >= a.left && r.right <= a.right + 1 && r.top >= a.top && r.bottom <= a.bottom + 1, bubbles: document.querySelectorAll('.fr-pop').length }; }));
+    if (i === 1) await shot(page, 'fu-04-tour');
+    await page.keyboard.press('ArrowRight'); await sleep(60);
+  }
+  check('Show me around: at most four stops, one bubble at a time, each inside the app and pointing at something', stops.length >= 2 && stops.length <= 4 && stops.every((s, i) => s.bubbles === 1 && s.inside && new RegExp('Stop ' + (i + 1) + ' of ' + stops.length).test(s.text)) && stops.filter((s) => s.hole).length >= stops.length - 1 && /Your screens/.test(stops[0].text), stops);
+  check('the tour ends after its last stop and leaves the app usable', await page.locator('.fr-tour').count() === 0 && await page.locator('.app-nav .nav-i.on').count() === 1);
+  await menuItem('Show me around'); await page.waitForSelector('.fr-pop'); await page.waitForFunction(() => document.activeElement === document.querySelector('.fr-pop')); await page.keyboard.press('Escape'); await page.waitForSelector('.fr-tour', { state: 'detached' });
+  check('Escape skips the tour', await page.locator('.fr-pop').count() === 0);
+
+  // the owner can see anyone's first run again
+  await page.getByRole('button', { name: 'Replay first run' }).click(); await page.waitForSelector('.fr-welcome');
+  check('Replay first run shows the previewed person their welcome again', /Welcome, Dr\. Ayesha/.test((await welcome()).text) && await page.locator('.fr-list').count() === 0);
+  await page.getByRole('button', { name: 'Close the welcome' }).click(); await page.waitForSelector('.fr-welcome', { state: 'detached' });
+  check('closing the welcome does not start the checklist or the tour: both are offered, never forced', await page.locator('.fr-list, .fr-tour').count() === 0);
+
+  // empty screens say why they are empty, by what this person may do
+  const empty = () => st(page, () => { const e = document.querySelector('.app-main .empty'); return e ? { title: e.querySelector('strong').innerText, text: (e.querySelector('p') || {}).innerText || '', btn: [...e.querySelectorAll('button')].map((b) => b.innerText.trim()) } : null; });
+  await page.locator('.app-nav .nav-i', { hasText: 'Patients' }).click(); await page.waitForSelector('.app .tbl'); await page.locator('.scr-head .search .input').fill('zzzz'); await page.waitForSelector('.app-main .empty');
+  let e = await empty();
+  check('a search with no matches says so and offers Clear filters', e.title === 'No patients match' && e.btn.join() === 'Clear filters', e);
+  await page.locator('.app-main .empty .btn').click(); await page.waitForSelector('.app .tbl tr.clickable');
+  check('Clear filters brings the records back', (await page.locator('.scr-head .search .input').inputValue()) === '');
+  await sql('DELETE FROM "visit_notes"'); await page.locator('.app-nav .nav-i', { hasText: 'Visit notes' }).click(); await page.waitForSelector('.app-main .empty');
+  e = await empty();
+  check('an empty list, for a person who may add: what will be here and a button to add the first one', e.title === 'You have no visit notes yet' && e.text === 'You see your own visit notes here.' && e.btn.join() === 'New visit note', e);
+  await page.locator('.app-main .empty .btn').click(); await page.waitForSelector('.app-dialog');
+  check('the empty list\'s button opens the form for a new record', /New visit note/i.test(await page.locator('.app-dialog h2').innerText()));
+  await page.locator('.app-dialog .dfoot .btn').first().click(); await shot(page, 'fu-05-empty');
+  await menuItem('Imran'); await page.locator('.app-nav .nav-i', { hasText: 'Visit notes' }).click(); await page.waitForSelector('.app-main .empty');
+  e = await empty();
+  check('an empty list, for a person who may not add: who adds them, and no button', e.title === 'No visit notes yet' && e.text === 'They appear here when someone signed in as Doctor adds one.' && e.btn.length === 0, e);
+  await sql('DELETE FROM "appointments"'); await sql('DELETE FROM "patients"');
+  await page.locator('.app-nav .nav-i', { hasText: 'Overview' }).click(); await page.waitForSelector('.app-main .dash .empty');
+  e = await empty();
+  check('a dashboard with nothing to count says so', e.title === 'Nothing to count yet' && /first appointment/.test(e.text), e);
+
+  // an app with one kind of person has no sign-in screen
+  await page.locator('#pv' + aid).selectOption(''); await page.waitForSelector('.login-card');
+  await sql('UPDATE "users" SET "role" = \'manager\''); await page.locator('.login-more').click(); await page.waitForSelector('.app-main');
+  const one = await st(page, (id) => ({ login: document.querySelectorAll('.login-card').length, who: (document.querySelector('.persona-t .t-strong') || {}).innerText, pick: [...document.querySelectorAll('#pv' + id + ' option')].map((o) => o.textContent) }), aid);
+  check('one kind of person: the app opens straight away as its first person, with no sign-in screen to preview', one.login === 0 && one.who === 'Sara Malik' && !one.pick.includes('Sign-in screen') && one.pick.length === 6, one);
+  await page.locator('.app-head .persona').click(); const mi = await page.locator('.app-head .menu .mi').allInnerTexts();
+  check('one kind of person: the person menu has no Sign out, and keeps the guide', !mi.some((x) => /Sign out/.test(x)) && mi.some((x) => /Getting started/.test(x)), mi);
+  await page.keyboard.press('Escape'); await page.getByRole('button', { name: 'Replay first run' }).click(); await page.waitForSelector('.fr-welcome');
+  check('one kind of person: the welcome does not talk about a job', /This is CareDesk\. Here you can:/.test((await welcome()).text));
+  await ctx.close();
+
+  // a phone: the welcome rises from the bottom, above the tabs, and the guide is in the account sheet
+  const ph = await newPage(browser, { viewport: { width: 390, height: 844 } }); const pp = ph.page;
+  await enter(pp, url); await buildTpl(pp, 'clinic'); await waitIdle(pp);
+  await pp.locator('.phone-nav .tab-i', { hasText: 'App' }).click(); await pp.getByRole('button', { name: 'Open the app' }).click(); await pp.waitForSelector('.solo .app-login');
+  const fits = await st(pp, () => document.documentElement.scrollWidth <= window.innerWidth + 1 && [...document.querySelectorAll('.persona-btn')].every((b) => b.getBoundingClientRect().right <= window.innerWidth));
+  check('phone: Choose who you are fits the screen', fits);
+  await pp.locator('.persona-btn').first().click(); await pp.waitForSelector('.fr-welcome.fr-sheet'); await sleep(250);
+  const sheet = await st(pp, () => { const w = document.querySelector('.fr-welcome').getBoundingClientRect(), t = document.querySelector('.app-tabs').getBoundingClientRect(); return { left: Math.round(w.left), right: Math.round(w.right), bottom: Math.round(w.bottom), tabs: Math.round(t.top), wide: window.innerWidth }; });
+  check('phone: the welcome is a sheet at the bottom, above the tabs, inside the screen', sheet.left >= 0 && sheet.right <= sheet.wide && sheet.bottom <= sheet.tabs && sheet.tabs - sheet.bottom < 24, sheet);
+  await shot(pp, 'fu-06-phone-welcome');
+  await pp.getByRole('button', { name: 'Not now' }).click(); await pp.waitForSelector('.fr-welcome', { state: 'detached' });
+  await pp.locator('.app-head .persona').click(); await pp.waitForSelector('.sheet'); const rows = await pp.locator('.sheet .sheet-l').allInnerTexts();
+  check('phone: Show me around and Getting started are in the account sheet', rows.includes('Show me around') && rows.includes('Getting started'), rows);
+  await pp.locator('.sheet-i', { hasText: 'Show me around' }).click(); await pp.waitForSelector('.fr-pop');
+  await pp.waitForFunction(() => !!document.querySelector('.fr-hole'));
+  const tp = await st(pp, () => { const p = document.querySelector('.fr-pop').getBoundingClientRect(); return { left: Math.round(p.left), right: Math.round(p.right), wide: window.innerWidth, sheet: document.querySelectorAll('.sheet').length }; });
+  check('phone: the tour bubble fits the screen and the sheet is out of its way', tp.left >= 0 && tp.right <= tp.wide && tp.sheet === 0, tp);
   await ph.ctx.close();
 }
 
