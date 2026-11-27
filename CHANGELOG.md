@@ -5,6 +5,16 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-27
+
+A tidier row of view tabs on every list page of a built app.
+
+### Fixed
+
+- The More views button is a small square like the tabs instead of a wide framed box, the tabs lose their heavy
+  outline and scroll sideways instead of wrapping, Filter and Copy CSV sit on the same row as the tabs, and the
+  search box shows its icon again. ([#267](https://github.com/ismaeel-ch/Turnkey/pull/267))
+
 ## [0.5.3] - 2026-11-27
 
 Changing a built app and putting out a new version is easy to find and always possible.
