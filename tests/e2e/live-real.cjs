@@ -25,6 +25,17 @@ const SENTENCES = {
   'expense-me': 'I want to build an expense management app.',
   'expense-company': 'I want to build an expense management app.',
   purchasing: 'Staff raise purchase requests, their budget holder approves or rejects each one, the buyer orders from an approved supplier, and the person who asked confirms delivery.',
+  // the way an owner with no technical words would put it: nothing here matches a saved build
+  members: 'I run a small gym and want to keep track of memberships, who has paid this month and when each membership runs out.',
+  schoolleave: 'Parents ask for their child to have days off school, the class teacher says yes or no, and the head teacher sees who is away each day.',
+  shop: 'My corner shop needs to know what stock we have, what is running low and what we have ordered from suppliers.',
+  rota: 'We are a small charity and need a rota so volunteers can sign up for shifts at our food bank.',
+  salon: 'A hair salon where customers book appointments with a stylist and we keep a note of what was done each visit.',
+  repairs: 'A phone repair shop logs each phone that comes in, the technician fixes it, and the front desk tells the customer when it is ready to collect.',
+  tutor: 'I am a private tutor. I want to keep track of my students, their lessons and which lessons have been paid for.',
+  hall: 'People book our community hall for events and the committee approves or turns down each booking.',
+  faults: 'Staff in our office report broken things like lights or chairs, and the caretaker fixes them and marks them done.',
+  reading: 'Just for me: a list of books I want to read, the ones I am reading and what I thought of each.',
 };
 // which answer to give when the Planner asks who the app is for; every other question takes the usual choice
 const PREFER = { 'expense-me': /just me|myself|only me|personal|my own/i, 'expense-company': /company|team|business|staff|employees/i };
@@ -37,7 +48,13 @@ function usageSince(offset) {
   const text = fs.readFileSync(logPath, 'utf8').slice(offset);
   const u = { apiUsd: 0, calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: 0, byTier: {}, errors: [] };
   for (const line of text.split('\n')) {
-    const m = /\[llm\] (\S+) (\S+) (\S+) in=(\d+) out=(\d+)(?: cache_read=(\d+))?(?: cache_write=(\d+))?(?: \$([\d.]+))?/.exec(line);
+    let m = /\[llm\] (\S+) (\S+) (\S+) in=(\d+) out=(\d+)(?: cache_read=(\d+))?(?: cache_write=(\d+))?(?: \$([\d.]+))?/.exec(line);
+    if (!m && line.startsWith('{') && line.includes('"event":"model_call"')) {
+      try {
+        const j = JSON.parse(line);
+        m = [line, j.provider, j.model, j.tier || '', j.inputTokens || 0, j.outputTokens || 0, j.cacheReadTokens || 0, j.cacheWriteTokens || 0, j.costUsd || 0];
+      } catch {}
+    }
     if (m) {
       u.calls++;
       u.input += +m[4];
@@ -123,17 +140,43 @@ async function enterLive(browser) {
 
 async function waitDone(page, ms) {
   const end = Date.now() + ms;
+  let said = 0;
   while (Date.now() < end) {
     const a = await current(page);
+    if (process.env.TK_TRACE && a && Date.now() - said > 30_000) {
+      said = Date.now();
+      console.error(new Date().toISOString().slice(11, 19), a.status, a.busy ? 'busy' : '', JSON.stringify(a.line), (a.chat || []).slice(-2).join(' / ').slice(0, 300));
+    }
     if (a && !a.busy && (a.status === 'ready' || a.status === 'failed' || a.status === 'stopped')) return a;
     const o = page.locator('.gcard.ask .opt:not([disabled])');
     if (await o.count()) await o.first().click().catch(() => {});
-    // a plan that pauses for the owner after a step: approve it
-    const go = page.getByRole('button', { name: /Approve and continue|Looks right, continue/ });
+    // a pause the plan asked for: approve it, in the chat card or on the list of steps
+    const go = page.getByRole('button', { name: /^(Approve and continue|Looks right, continue)$/ });
     if (await go.count()) await go.first().click().catch(() => {});
     await sleep(1000);
   }
   return { ...(await current(page)), timedOut: true };
+}
+
+/** TK_UNUSUAL names runs that answer every card otherwise than usual, so the Planner writes the plan a second time. */
+const unusual = (process.env.TK_UNUSUAL || '').split(',');
+async function answerOtherwise(page) {
+  for (let n = 0; n < 8; n++) {
+    await page.waitForFunction(() => { const iv = window.__formwork.view().home.interview; return iv && (iv.error || iv.plan || (!iv.busy && document.querySelector('.iv-ask, .iv-review'))); }, null, { timeout: 3 * 60_000 });
+    const ask = page.locator('.iv-ask');
+    if (!(await ask.count())) {
+      // every card is answered: "Review the plan" has the Planner write it from the answers
+      if (await page.locator('.iv-review').count()) await page.locator('.iv-review').click();
+      return;
+    }
+    const card = await page.evaluate((cid) => window.__formwork.view().home.interview.cards.find((c) => c.id === cid), await ask.getAttribute('data-card'));
+    if (card.id === 'demo_data' || card.options.length < 2) await page.locator(`.iv-ask .iv-opt[data-opt="${card.usual[0] || card.options[0].id}"]`).click();
+    else if (card.kind === 'many') {
+      for (const o of card.options) if (!card.usual.includes(o.id)) await page.locator(`.iv-ask .iv-opt[data-opt="${o.id}"]`).click();
+      await page.locator('.iv-ask .iv-next').click();
+    } else await page.locator(`.iv-ask .iv-opt[data-opt="${(card.options.find((o) => !card.usual.includes(o.id)) || card.options[0]).id}"]`).click();
+    await sleep(400);
+  }
 }
 
 async function runSample(browser, id) {
@@ -142,8 +185,11 @@ async function runSample(browser, id) {
   await page.fill('#home-prompt', SENTENCES[id]);
   await page.locator('#home-go').click();
   // the Planner's questions come first: take the usual choices, then approve the plan it writes
-  const asked = [];
-  if (PREFER[id]) {
+  await page.waitForFunction(() => { const iv = window.__formwork.view().home.interview; return iv && (iv.error || (!iv.busy && (iv.cards.length || iv.plan))); }, null, { timeout: 3 * 60_000 });
+  const asked = await page.evaluate(() => JSON.parse(JSON.stringify(window.__formwork.view().home.interview)));
+  const ivFailed = asked.error;
+  const picks = [];
+  if (!ivFailed && PREFER[id]) {
     // answer card by card: the preferred option where one matches, else the usual one, else the first
     for (let i = 0; i < 8; i++) {
       await page.waitForSelector('.iv-ask, .iv-review, .iv-act .iv-build', { timeout: 3 * 60_000 });
@@ -154,24 +200,32 @@ async function runSample(browser, id) {
       const labels = await opts.locator('strong').allInnerTexts();
       let k = labels.findIndex((l) => PREFER[id].test(l));
       if (k < 0) k = Math.max(0, await opts.evaluateAll((els) => els.findIndex((e) => /Usual choice/.test(e.textContent))));
-      asked.push(title + ' -> ' + labels[k] + ' [' + labels.join(' | ') + ']');
+      picks.push(title + ' -> ' + labels[k] + ' [' + labels.join(' | ') + ']');
       await opts.nth(k).click();
       if (await card.locator('.iv-next').count()) await card.locator('.iv-next').click().catch(() => {});
       await page.waitForFunction((t) => !document.querySelector('.iv-ask h3') || document.querySelector('.iv-ask h3').textContent.trim() !== t, title, { timeout: 3 * 60_000 });
-      if (process.env.TK_TRACE) console.error('[' + id + '] ' + asked[asked.length - 1]);
+      if (process.env.TK_TRACE) console.error('[' + id + '] ' + picks[picks.length - 1]);
     }
     // answers that differ from the usual ones are sent back to the Planner, which rewrites the plan
     if (await page.locator('.iv-review').count()) await page.locator('.iv-review').click();
-  } else {
-    await page.waitForSelector('.iv-ask, .iv-act .iv-build', { timeout: 3 * 60_000 });
-    if (await page.locator('.iv-usual').count()) await page.locator('.iv-usual').click();
+  } else if (!ivFailed && unusual.includes(id)) await answerOtherwise(page);
+  else if (!ivFailed && (await page.locator('.iv-usual').count())) await page.locator('.iv-usual').click();
+  if (!ivFailed) await page.waitForFunction(() => { const iv = window.__formwork.view().home.interview; return iv && (iv.error || (!iv.busy && iv.plan)); }, null, { timeout: 3 * 60_000 });
+  const planned = await page.evaluate(() => JSON.parse(JSON.stringify(window.__formwork.view().home.interview)));
+  if (process.env.TK_DUMP) {
+    fs.mkdirSync(process.env.TK_DUMP, { recursive: true });
+    fs.writeFileSync(`${process.env.TK_DUMP}/${id}.interview.json`, JSON.stringify({ asked, planned }, null, 1));
   }
-  await page.locator('.iv-act .iv-build').waitFor({ timeout: 3 * 60_000 });
+  if (ivFailed || planned.error) {
+    const out = { run: id, seconds: Math.round((Date.now() - t0) / 1000), interviewError: ivFailed || planned.error, pageErrors: errors.slice(0, 8), usage: usageSince(off) };
+    await ctx.close();
+    return out;
+  }
   await page.locator('.iv-act .iv-build').click({ timeout: 3 * 60_000 });
   const a = await waitDone(page, 15 * 60_000);
   await page.screenshot({ path: `/tmp/live-real-${id}.png` }).catch(() => {});
   await dumpApp(page, id);
-  const out = { run: id, seconds: Math.round((Date.now() - t0) / 1000), asked, ...a, pageErrors: errors.slice(0, 8), usage: usageSince(off) };
+  const out = { run: id, seconds: Math.round((Date.now() - t0) / 1000), asked, picks, ...a, pageErrors: errors.slice(0, 8), usage: usageSince(off) };
   await ctx.close();
   return out;
 }

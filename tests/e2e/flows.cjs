@@ -11,7 +11,7 @@ const check = (name, ok, detail) => { results.push({ name, ok: !!ok }); console.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function newPage(browser, opts) {
-  const ctx = await browser.newContext({ viewport: (opts && opts.viewport) || { width: 1440, height: 900 }, colorScheme: (opts && opts.scheme) || 'light' });
+  const ctx = await browser.newContext({ viewport: (opts && opts.viewport) || { width: 1440, height: 900 }, colorScheme: (opts && opts.scheme) || 'light', serviceWorkers: opts && opts.noWorker ? 'block' : 'allow' });
   await ctx.route('https://**/*', (route) => route.abort()); // the app is self-contained: nothing outside its own origin is needed
   if (opts && opts.init) await ctx.addInitScript(opts.init);
   const page = await ctx.newPage();
@@ -49,13 +49,27 @@ const nav = (page, name) => page.locator('.app-nav .nav-i', { hasText: name }).f
 const vtab = async (page, name) => { await page.locator('.vswitch [role=tab]', { hasText: name }).click(); await sleep(90); };
 
 async function quickStarts(browser, url) { // the two ways in from the first screen, for a judge who opens the URL cold
-  { // the first screen does not wait for the SQLite engine; a quick start clicked before it is ready waits for it
+  for (const [intent, next] of [['sample', '.iv-ask'], ['start', '#ob-name']]) { // the welcome the server draws works before the workspace script has run
     const { ctx, page } = await newPage(browser);
+    await page.goto(url); await page.waitForSelector('#boot-welcome [data-boot="' + intent + '"]', { timeout: 20000 });
+    if (intent === 'sample') {
+      await sleep(800);
+      const w = await st(page, () => ({ workspace: !!window.__formwork, card: !!document.querySelector('.ob-card'), lines: document.querySelectorAll('#boot-welcome .ob-st').length, ticks: document.querySelectorAll('#boot-welcome .ticks li').length }));
+      check('first visit: the server draws the whole welcome, and the workspace script waits for the first tap', !w.workspace && !w.card && w.lines === 6 && w.ticks === 3, w);
+    }
+    await page.click('#boot-welcome [data-boot="' + intent + '"]'); await page.waitForSelector(next, { timeout: 20000 });
+    const g = await st(page, () => ({ boot: !!(document.getElementById('boot-welcome') || {}).offsetParent, onboarded: window.__formwork.state().onboarded }));
+    check('first visit: ' + (intent === 'sample' ? 'Try a sample' : 'Get started') + ' pressed on the server\'s welcome loads the workspace and does what was asked', !g.boot && g.onboarded === (intent === 'sample'), g);
+    await ctx.close();
+  }
+  { // the first screen does not wait for the SQLite engine; a quick start clicked before it is ready waits for it
+    // (no service worker: it keeps the engine as it installs, and the page would then get it from there, past the route below)
+    const { ctx, page } = await newPage(browser, { noWorker: true });
     let release; const held = new Promise((r) => { release = r; }); let asked = false;
     await page.route('**/vendor/sql-wasm.wasm*', async (route) => { asked = true; await held; await route.continue(); });
     await page.goto(url); await page.waitForSelector('#ob-sample', { timeout: 20000 });
     await page.waitForFunction(() => !!window.__formwork, null, { timeout: 10000 });
-    check('first visit: the welcome screen shows while the SQLite engine is still loading', !(await page.locator('.splash').count()) && await page.locator('.ob-body .lead').isVisible());
+    check('first visit: the welcome screen shows while the SQLite engine is still loading', !(await page.locator('.splash').count()) && await page.locator('.ob-card .ob-body .lead').isVisible());
     await page.click('#ob-sample'); await page.waitForSelector('.splash', { timeout: 5000 });
     for (let i = 0; i < 100 && !asked; i++) await sleep(50);
     release(); await page.waitForSelector('.iv-ask', { timeout: 15000 });
@@ -68,7 +82,7 @@ async function quickStarts(browser, url) { // the two ways in from the first scr
     const tag = vp ? 'phone: ' : '';
     const { ctx, page } = await newPage(browser, vp ? { viewport: vp } : undefined);
     await page.goto(url); await page.waitForSelector('#ob-sample', { timeout: 20000 });
-    check(tag + 'first screen says what Turnkey does in one line and offers both quick starts', /turns one sentence into a working business app/.test(await page.locator('.ob-body .lead').innerText()) && await page.locator('#ob-own').isVisible());
+    check(tag + 'first screen says what Turnkey does in one line and offers both quick starts', /turns one sentence into a working business app/.test(await page.locator('.ob-card .ob-body .lead').innerText()) && await page.locator('#ob-own').isVisible());
     await page.click('#ob-sample');
     await page.waitForSelector('.iv-ask', { timeout: 8000 });
     const q = await ivNow(page), sq = await st(page, () => { const F = window.__formwork, iv = F.view().home.interview; return { demo: F.state().settings.demo, tpl: iv && iv.tpl, sample: !!(iv && iv.sample), usual: [...document.querySelectorAll('.iv-ask .iv-opt')].filter((x) => /Usual choice/.test(x.innerText)).length, tour: !!document.querySelector('.tour-pop') }; });
@@ -97,7 +111,7 @@ async function flowDemo(browser, url) {
   await quickStarts(browser, url);
   const { ctx, page } = await newPage(browser);
   await page.goto(url); await page.waitForSelector('.ob-card', { timeout: 20000 });
-  check('onboarding shows on first run', await page.locator('.ob-steps li').count() === 5);
+  check('onboarding shows on first run', await page.locator('.ob-card .ob-steps li').count() === 5);
   await shot(page, '01-onboarding');
   await page.getByRole('button', { name: 'Get started' }).click();
   await page.getByRole('button', { name: /Skip and use the demo account/ }).click();
@@ -203,6 +217,9 @@ async function flowDemo(browser, url) {
   check('a test case that jumps over workflow steps gets the missing steps, run by roles allowed to take them, and passes', gap.trs.join(',') === 'check_in:receptionist,start:doctor,complete:doctor' && gap.ok.every(Boolean), gap);
   const closed = await st(page, (aid) => { const F = window.__formwork; return { notes: F.tourStep(aid, { role: 'receptionist', do: 'hidden', table: 'visit_notes' }), patients: F.tourStep(aid, { role: 'doctor', do: 'hidden', table: 'patients' }) }; }, a.id);
   check('"cannot see" with nothing made in the case passes only when the whole table is closed to that person', closed.notes.ok === true && closed.patients.ok === false, closed);
+  const gone = await st(page, (aid) => { const F = window.__formwork, def = F.state().apps[aid].def, mk = def.tour.find((x) => x.do === 'create'), tn = mk.table || def.process.table, who = Object.keys(def.access[tn]).find((r) => def.access[tn][r].delete && def.access[tn][r].list !== 'none'); return { who, steps: F.tourStep(aid, [mk, { role: who, do: 'delete', table: tn }, { role: who, do: 'hidden', table: tn }]).map((r) => [r.ok, r.detail]), seen: F.tourStep(aid, { role: 'doctor', do: 'see', table: 'patients' }) }; }, a.id);
+  check('a test case can delete the record it made, and a later "cannot see" step finds it gone', !!gone.who && gone.steps.every((x) => x[0]) && /deleted/.test(gone.steps[1][1]), gone);
+  check('"can see" with nothing made in the case passes when the person sees the records already there', gone.seen.ok === true && /sees \d+ patients/.test(gone.seen.detail), gone.seen);
   await view(page, 'API'); await page.waitForSelector('.api-grid');
   await page.locator('.side-i', { hasText: '/visit_notes' }).nth(2).click(); await page.locator('.api-grid .btn.primary').click(); await sleep(100);
   check('receptionist is refused on POST /visit_notes', (await page.locator('.api-grid .badge').first().innerText()).trim() === '403', await page.locator('.api-grid .badge').first().innerText());
@@ -709,7 +726,7 @@ async function flowMisc(browser, url) {
   await page.goto(url); await page.waitForSelector('.ob-card'); await shot(page, '60-dark-onboarding');
   await page.getByRole('button', { name: 'Get started' }).click();
   await page.fill('#ob-name', 'Muhammad Ismaeel'); await page.fill('#ob-user', 'Ismaeel'); await page.fill('#ob-pass', 'abc'); await page.getByRole('button', { name: 'Continue' }).click(); await sleep(80);
-  check('short password is refused', (await page.locator('.ob-body').innerText()).includes('at least 4'));
+  check('short password is refused', (await page.locator('.ob-card .ob-body').innerText()).includes('at least 4'));
   await page.fill('#ob-pass', 'secret12'); await page.getByRole('button', { name: 'Continue' }).click(); await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: /empty workspace/ }).click(); await page.getByRole('button', { name: 'Continue' }).click(); await page.locator('.ob-body .switch').click(); await page.getByRole('button', { name: 'Open my workspace' }).click();
   await page.waitForSelector('.home'); await setSpeed(page, 'instant'); await howBuilt(page);
@@ -954,6 +971,8 @@ async function flowViews(browser, url) {
   check('the built app is in the library', await page.locator('.app-row').count() === 1 && await page.locator('[data-tpl="clinic"] .badge.b-success').count() === 1);
   await page.locator('.app-row .btn[aria-label^="Duplicate"]').click(); await sleep(200);
   check('duplicate adds a second saved app', await page.locator('.app-row').count() === 2 && (await page.locator('.app-row strong').first().innerText()).includes('copy'), await page.locator('.app-row strong').allInnerTexts());
+  for (const scheme of ['light', 'dark']) { await page.emulateMedia({ colorScheme: scheme }); await sleep(150); const rows = await appRowsLook(page); check('Your apps (' + scheme + '): each card is one line, logo and name on the left, the three buttons side by side, the description cut short', appRowsOk(rows), rows); }
+  await page.emulateMedia({ colorScheme: 'light' });
   await shot(page, '78-library'); await page.locator('.app-open').first().click(); await page.waitForSelector('.work-head'); await view(page, 'Data'); await page.waitForSelector('.split .side-i');
   check('the copy has its own SQLite file with the same rows', (await page.locator('.side-i', { hasText: 'patients' }).locator('.t-cap').innerText()).trim() === '14');
   await ctx.close();
@@ -1914,6 +1933,15 @@ const fitNow = (page) => st(page, () => {
   }
   return { scroll: document.documentElement.scrollWidth - W, out: out.slice(0, 6), small: small.slice(0, 6) };
 });
+/** How each card under Your apps is laid out: the logo and name start at the card's left edge, the share, duplicate and
+ *  delete buttons sit side by side on one line, the long description is cut short instead of running past the card,
+ *  and a card is no taller than two lines (one on a wide screen). */
+const appRowsLook = (page) => page.evaluate(() => [...document.querySelectorAll('.app-row')].map((r) => {
+  const c = r.getBoundingClientRect(), o = r.querySelector('.app-open').getBoundingClientRect(), d = r.querySelector('.app-open .t-cap');
+  const b = [...r.querySelectorAll('.btn.icon')].map((x) => x.getBoundingClientRect());
+  return { h: Math.round(c.height), left: Math.round(o.left - c.left), btnsInRow: b.length === 3 && b.every((x) => Math.abs(x.top - b[0].top) < 2) && b[0].right <= b[1].left && b[1].right <= b[2].left, inside: r.scrollWidth <= r.clientWidth + 1 && Math.round(o.right) <= Math.round(c.right) && (!d || d.getBoundingClientRect().right <= c.right + 1), wide: c.width >= 700 };
+}));
+const appRowsOk = (rows) => rows.length > 0 && rows.every((x) => x.left <= 12 && x.btnsInRow && x.inside && x.h <= (x.wide ? 72 : 120));
 const fitsOk = (f) => f.scroll <= 0 && !f.out.length && !f.small.length;
 /** Checks one screen in the light theme, then again in the dark one. */
 async function fitBoth(page, label) {
@@ -1959,7 +1987,12 @@ async function flowSizes(browser, url) {
     await page.waitForSelector('.dialog.share'); await page.locator('#sh-release').click(); await page.waitForFunction(() => /#app=1\./.test((document.getElementById('sh-link') || {}).value || '')); await sleep(200);
     await fitBoth(page, at + 'the share dialog');
     if (!link) { link = await page.inputValue('#sh-link'); await page.waitForFunction(() => /^https?:\/\/[^/]+\/[a-z0-9-]+$/.test((document.getElementById('sh-short') || {}).value || ''), null, { timeout: 15000 }).catch(() => {}); short = await page.inputValue('#sh-short').catch(() => ''); }
-    await shot(page, 'sz-' + w + '-share'); await ctx.close();
+    await shot(page, 'sz-' + w + '-share');
+    await page.locator('.dialog.share').getByRole('button', { name: 'Close' }).first().click(); await page.waitForSelector('.fui-DialogSurface__backdrop', { state: 'detached', timeout: 5000 }).catch(() => {});
+    await page.locator('.brand').first().click(); await page.waitForSelector('.home .app-row'); await sleep(200);
+    const rows = await appRowsLook(page);
+    check(at + 'Your apps: the card keeps its logo and name on the left, its three buttons side by side and its description inside', appRowsOk(rows), rows);
+    await fitBoth(page, at + 'Home with a saved app'); await ctx.close();
 
     // the app on its own: from a link, installed, and from a short link
     const g = await newPage(browser, { viewport: { width: w, height: h } }), gp = g.page;

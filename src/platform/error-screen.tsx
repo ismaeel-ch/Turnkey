@@ -1,6 +1,7 @@
 'use client';
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { bootScreenDone } from './boot-intent';
 
 /**
  * The outermost boundary of the workspace. A render error in React takes the whole tree down, so the page would go
@@ -16,6 +17,7 @@ export class ErrorScreen extends Component<{ children: ReactNode }, { error: Err
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[turnkey] the workspace could not draw', error, info.componentStack);
+    bootScreenDone(); // so this message is not hidden behind the boot screen
   }
 
   render() {

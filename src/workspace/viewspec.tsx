@@ -264,6 +264,21 @@ export function normViews(o: Untrusted, def: AppDef): ViewsDraft {
     dropped: all.length - widgets.length,
   };
 }
+/**
+ * A table the advisor said nothing useful about (only the table view, which every table gets) is given the views that
+ * fit it by rule, on every attempt: a missing answer is filled in rather than sent back for another model call.
+ * Views that do not fit are still the advisor's to fix.
+ */
+export function fillThinViews(vw: ViewsDraft, def: BackedDef): ViewsDraft {
+  const thin = def.tables.filter((t) => vw.views[t.name].length < 2);
+  if (!thin.length) return vw;
+  const sug = normViews(suggestViews(def), def);
+  thin.forEach((t) => {
+    const have = vw.views[t.name];
+    vw.views[t.name] = have.concat(sug.views[t.name].filter((v) => !have.some((k) => k.type === v.type)));
+  });
+  return vw;
+}
 export function mendViews(o: Untrusted, def: BackedDef) {
   // last attempt: keep what fits from the advisor's answer and fill the gaps by rule, instead of failing the build
   const vw = normViews(o, def),

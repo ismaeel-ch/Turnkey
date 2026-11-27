@@ -63,12 +63,14 @@ export interface Repair {
   text: string;
 }
 export type BackedApp = AppRecord & { def: BackedDef };
-export const CASE_DO = ['create', 'see', 'hidden', 'transition', 'denied', 'invalid', 'open'];
+export const CASE_DO = ['create', 'see', 'hidden', 'update', 'transition', 'delete', 'denied', 'invalid', 'open'];
 export const CASE_EXPECT: Record<string, string> = {
   create: '201 Created',
   see: 'the record is in the list',
   hidden: 'the record is not in the list',
+  update: 'the change is saved',
   transition: '200 OK',
+  delete: 'the record is deleted',
   denied: 'refused with 403',
   invalid: 'refused with 400',
   open: 'the page opens',
@@ -338,21 +340,72 @@ export function suggestCases(app: BackedApp): CaseDraft[] {
   }
   return out;
 }
-export const testerPrompt = (app: BackedApp) =>
-  HEAD('Tester') +
-  'BRIEF: ' +
-  pBrief(app.def.brief) +
-  '\n\nTABLES:\n' +
-  pTables(app.def) +
-  '\n\nUSERS: ' +
-  pUsers(app.def) +
-  '\n\nACCESS:\n' +
-  pAccess(app.def) +
-  '\n\nWORKFLOW:\n' +
-  pFlow(app.def) +
-  '\n\nWrite 5 to 8 test cases that prove the rules and user stories of the brief hold in the finished app. Code will play each case against the real endpoints, so a case is data, not prose.\n- Each case: {"name":"what must be true, in plain words","why":"the rule or user story it protects, quoted or paraphrased from the brief","steps":[...]} with 1 to 5 steps.\n- Each step: {"role":"role id","user":"optional username when two people of one role matter","do":"create|see|hidden|transition|denied|invalid|open","table":"table","values":{},"transition":"transition id","action":"create|update|delete|list or a transition id","say":"one present-tense sentence naming the person"}.\n- create needs "values" for the required columns and must succeed. invalid is a create that must be refused because required values are missing. see: that person lists the table and must find the record this case created. hidden: must not find it (in a case that created nothing in that table, hidden means the person sees none of it). transition: runs a workflow transition on the record this case created; a new record starts in the initial state and a transition runs only from one of its from states, so to reach a later state, add one transition step for every step of the workflow on the way, each by a role that may run it. denied: the attempt must be refused with 403.\n- Cover: every rule in the brief at least once, one refusal per role that has limits, one case about required fields. Do not repeat the guided tour.\n- The app enforces only these things: which roles may see, create, edit and delete each table (all rows, only their own rows where the table has an owner column, or none), which roles may run each transition, and required fields. Do not write a case that depends on anything else, such as a field\'s value, a date or a count ("cannot start until assigned"): no access rule can make it pass.\n' +
-  VALUE_RULES +
-  '\n\nFORMAT: {"cases":[{"name":"","why":"","steps":[]}]}';
+export function testerPrompt(app: BackedApp) {
+  const P = app.def.process,
+    flows = !!P && P.transitions.length > 0;
+  return (
+    HEAD('Tester') +
+    'BRIEF: ' +
+    pBrief(app.def.brief) +
+    '\n\nTABLES:\n' +
+    pTables(app.def) +
+    '\n\nUSERS: ' +
+    pUsers(app.def) +
+    '\n\nACCESS:\n' +
+    pAccess(app.def) +
+    '\n\nWORKFLOW:\n' +
+    pFlow(app.def) +
+    '\n\nWrite 5 to 8 test cases that prove the rules and user stories of the brief hold in the finished app. Code will play each case against the real endpoints, so a case is data, not prose.\n- Each case: {"name":"what must be true, in plain words","why":"the rule or user story it protects, quoted or paraphrased from the brief","steps":[...]} with 1 to 5 steps.\n- Each step: {"role":"role id","user":"optional username when two people of one role matter","do":"create|see|hidden|update|' +
+    (flows ? 'transition|' : '') +
+    'delete|denied|invalid|open","table":"table","values":{},' +
+    (flows ? '"transition":"transition id",' : '') +
+    '"action":"create|update|delete|list' +
+    (flows ? ' or a transition id' : '') +
+    '","say":"one present-tense sentence naming the person"}.\n- create needs "values" for the required columns and must succeed. invalid is a create that must be refused because required values are missing' +
+    (flows ? ' (leave out a required column other than ' + P.column + ': the workflow fills ' + P.column + ' in itself)' : '') +
+    '. see: that person lists the table and must find the record this case created. hidden: must not find it (in a case that created nothing in that table, hidden means the person sees none of it). update: that person changes "values" on the record this case created (marking it paid, adding a note) and must succeed. ' +
+    (flows
+      ? 'transition: runs a workflow transition on the record this case created, by its id from WORKFLOW; a new record starts in the initial state and a transition runs only from one of its from states, so to reach a later state, add one transition step for every step of the workflow on the way, each by a role that may run it. '
+      : 'This app has no workflow and no transitions: records change only by update. ') +
+    'delete: that person deletes the record this case created and must succeed. denied: the attempt must be refused with 403 (to prove someone may not delete or change a record, use denied with action delete or update' +
+    (flows ? '; may not move it on, action is the transition id' : '') +
+    ').\n- Cover: every rule in the brief at least once, one refusal per role that has limits, one case about required fields. Do not repeat the guided tour.\n- The app enforces only these things: which roles may see, create, edit and delete each table (all rows, only their own rows where the table has an owner column, or none), which roles may run each transition, and required fields. Do not write a case that depends on anything else, such as a field\'s value, a date or a count ("cannot start until assigned"): no access rule can make it pass.\n' +
+    VALUE_RULES +
+    '\n\nFORMAT: {"cases":[{"name":"","why":"","steps":[]}]}'
+  );
+}
+/**
+ * Cases no change to the app could make pass, taken out before they run: a transition the app does not have (a model
+ * writes "mark_paid" for an app with no workflow), or an "incomplete" create that leaves out only the stage field,
+ * which the workflow always fills in. Each is listed with the reason, like a case the Tester withdraws.
+ */
+export function unplayable(cases: TestCase[], def: BackedDef): { keep: TestCase[]; drop: { id: string; why: string }[] } {
+  const P = def.process,
+    trs = P ? P.transitions.map((t) => t.id) : [],
+    drop: { id: string; why: string }[] = [];
+  const why = (c: TestCase): string | null => {
+    for (const s of c.steps) {
+      if (s.do === 'transition' && !trs.includes(s.transition || ''))
+        return trs.length
+          ? 'It runs "' + (s.transition || '') + '", which is not a step of the workflow.'
+          : 'It runs "' + (s.transition || '') + '", but this app has no workflow.';
+      if (s.do === 'invalid') {
+        const t = tableOf(def, s.table || (P && P.table) || ''),
+          v = s.values || {},
+          missing = t ? t.columns.filter((c) => c.required && (v[c.name] === undefined || v[c.name] === null || v[c.name] === '')) : [];
+        if (t && missing.length && P && P.table === t.name && missing.every((c) => c.name === P.column))
+          return 'It leaves out only ' + P.column + ', which the workflow fills in on every new record.';
+      }
+    }
+    return null;
+  };
+  const keep = cases.filter((c) => {
+    const w = why(c);
+    if (w) drop.push({ id: c.id, why: w });
+    return !w;
+  });
+  return { keep, drop };
+}
 export function failingTests(app: AppRecord): FailingTest[] {
   const R = TESTS[app.id],
     out: FailingTest[] = [];
@@ -562,7 +615,9 @@ export function testerSteps(app: BackedApp, run: Run) {
         run.replayed++;
       }
     }
-    let cases = normCases(raw, app.def);
+    const sorted = unplayable(normCases(raw, app.def), app.def);
+    let cases = sorted.keep;
+    sorted.drop.forEach((d) => Q.dropped.push(d));
     if (cases.length < 2) {
       cases = normCases(
         {
