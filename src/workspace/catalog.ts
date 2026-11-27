@@ -11,7 +11,7 @@ export type SavedCard = Pick<
 
 export const TEMPLATES = ['clinic', 'helpdesk', 'leave', 'biddesk'];
 // Two more business apps for Home; onboarding offers only the first four, so a first-time visitor picks from a short list.
-export const MORE_TEMPLATES = ['grants', 'purchasing'];
+export const MORE_TEMPLATES = ['grants', 'purchasing', 'expenses'];
 export const QUESTS = ['factcheck', 'priorart', 'debate'];
 
 export const CARDS: Dict<SavedCard> = {
@@ -113,7 +113,16 @@ export const CARDS: Dict<SavedCard> = {
     sentence:
       'Staff raise purchase requests, their budget holder approves or rejects each one, the buyer orders from an approved supplier, and the person who asked confirms delivery.',
     blurb: 'Staff, a budget holder and a buyer. Nothing is ordered without approval.',
-    keys: ['purchase', 'purchasing', 'buy', 'buyer', 'order', 'supplier', 'vendor', 'requisition', 'expense', 'spend'],
+    keys: ['purchase', 'purchasing', 'buy', 'buyer', 'order', 'supplier', 'vendor', 'requisition'],
+  },
+  expenses: {
+    id: 'expenses',
+    title: 'Expense manager',
+    icon: 'receipt',
+    accent: 'seafoam',
+    sentence: 'I want to build an expense management app.',
+    blurb: 'Asks who it is for first: just you, or a company where managers approve and Finance pays.',
+    keys: ['expense', 'spend', 'reimburse', 'receipt'],
   },
 };
 
