@@ -713,6 +713,16 @@ export function normUI(o: Untrusted, def: BackedDef): UIDraft {
   roleIds.forEach((r) => {
     if (!screens.some((s) => s.type === 'dashboard' && s.roles.includes(r))) dash.roles.push(r);
   });
+  // two pages with one name read as one page in the menu: the overview keeps its name, a later page takes its table's
+  const named = new Set<string>();
+  [dash, ...screens.filter((s) => s !== dash)].forEach((s) => {
+    const t = tableOf(def, s.table),
+      base = s.name;
+    let k = 2;
+    if (named.has(s.name.toLowerCase()) && t && !named.has(t.label.toLowerCase())) s.name = t.label;
+    while (named.has(s.name.toLowerCase())) s.name = base + ' ' + k++;
+    named.add(s.name.toLowerCase());
+  });
   screens.sort((a, b) => Number(b.type === 'dashboard') - Number(a.type === 'dashboard')); // the overview comes first, for everyone
   const tour: TourStep[] = arr(o.tour)
     .map((x: Untrusted) => {

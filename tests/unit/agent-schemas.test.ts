@@ -92,6 +92,12 @@ describe('parseJSONLoose', () => {
     expect(parseJSONLoose('{"a":').ok).toBe(false);
     expect(parseJSONLoose('').ok).toBe(false);
   });
+  it('takes the corrected object when the model writes a broken one and then the whole answer again', () => {
+    const text =
+      '{"tables":[{"name":"plots"," rows":[]}],"users":[]}\n]}\n\nCorrection: the object above is malformed. Here is the complete, valid answer:\n\n{"tables":[{"name":"plots"}],"users":[]}';
+    expect(parseJSONLoose(text)).toEqual({ ok: true, value: { tables: [{ name: 'plots' }], users: [] } });
+    expect(parseJSONLoose('{"a":1\n{"b":').ok).toBe(false);
+  });
 });
 
 describe('detectRole', () => {

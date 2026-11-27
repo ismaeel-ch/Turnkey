@@ -36,6 +36,17 @@ const SENTENCES = {
   hall: 'People book our community hall for events and the committee approves or turns down each booking.',
   faults: 'Staff in our office report broken things like lights or chairs, and the caretaker fixes them and marks them done.',
   reading: 'Just for me: a list of books I want to read, the ones I am reading and what I thought of each.',
+  // a second round of everyday prompts (27 Nov): more domains, one-person and team apps
+  dogwalk: 'I walk dogs for people in my neighbourhood and need to keep track of the dogs, my walks and who still owes me money.',
+  cakes: 'Our bakery takes custom cake orders: the customer orders, the baker makes it, and a driver delivers it on the day.',
+  loans: 'Our office lends out laptops and projectors. Staff borrow them and IT checks them back in and chases late returns.',
+  allotment: 'A community garden with plots: people apply for a plot, the committee gives them one, and the treasurer records the yearly fee.',
+  habits: 'Just for me: my daily habits like exercise, reading and drinking water, and how many days in a row I kept each one.',
+  invoices: 'I am a freelance designer. I want to send invoices to my clients and see which ones are still unpaid.',
+  hiring: 'A small company hiring people: candidates apply for a job, interviewers leave feedback, and the hiring manager decides who gets an offer.',
+  vans: 'We have five delivery vans and need to track who drives each one, what we spend on fuel and when each van is due for a service.',
+  wedding: 'I am planning my wedding and need to keep track of guests, who has replied and what each of them will eat.',
+  football: 'Our kids football club needs to register players, collect the season fees and pick the squad for each match.',
 };
 // which answer to give when the Planner asks who the app is for; every other question takes the usual choice
 const PREFER = { 'expense-me': /just me|myself|only me|personal|my own/i, 'expense-company': /company|team|business|staff|employees/i };
