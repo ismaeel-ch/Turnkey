@@ -25,6 +25,8 @@ import { VIEW_ICON, VIEW_LABEL, accOf, apiCall, appUsers, colOf, roleName, table
 import { DATA_VIEWS, isCat, isDate, isMeasure, isNum, isRate, viewCfg, viewFit, viewsOf } from './viewspec';
 import { Btn, Empty, FilterChip, Icon, Input, MBar, Menu, Seg, Select, type MenuEntry } from './ui';
 import { Cell, cellText, fetchApi, isStatusCol, optLabel, patchPane, rowTitle, stateLabel, stateTone } from './runtime';
+import { DEMO_COL } from './db';
+import { DemoTag } from './demo-data-ui';
 import { VChart, VPivot, VTimeline } from './views-b';
 
 /* ===== Turnkey prototype · the data explorer: one table, many views =====
@@ -736,7 +738,8 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
       const set = l.filter((r) => r[c.name] != null && r[c.name] !== '');
       return set.length ? Math.round((sum(c, set) / set.length) * 10) / 10 : 0;
     },
-    id = 'tb' + scr.id + pane.n;
+    id = 'tb' + scr.id + pane.n,
+    tagged = list.some((r) => Number(r[DEMO_COL]) === 1); // a last column for the Demo tag, only while a made-up row is listed
   const row = (r: StoredRow) => (
     <tr
       key={r.id}
@@ -752,6 +755,11 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
           <Cell app={app} user={user} t={t} c={c} v={r[c.name]} />
         </td>
       ))}
+      {tagged && (
+        <td className="demo-cell">
+          <DemoTag row={r} />
+        </td>
+      )}
     </tr>
   );
   let body: ReactNode;
@@ -769,7 +777,7 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
       const shut = st.closed[gc.name + k.key];
       return [
         <tr key={'g' + k.key} className="grp">
-          <td colSpan={cols.length}>
+          <td colSpan={cols.length + (tagged ? 1 : 0)}>
             <button
               className="grp-b"
               aria-expanded={!shut}
@@ -920,6 +928,7 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
                     </button>
                   </th>
                 ))}
+                {tagged && <th className="demo-cell" aria-label="Demo data" />}
               </tr>
             </thead>
             <tbody>{body}</tbody>
@@ -937,6 +946,7 @@ export function VTable({ app, user, pane, scr, t, rows, st, set, open }: ViewPro
                             : ''}
                     </td>
                   ))}
+                  {tagged && <td className="demo-cell" />}
                 </tr>
               </tfoot>
             )}
@@ -1021,7 +1031,10 @@ export function VBoard({ app, user, pane, scr, t, rows, cfg, setCfg, open }: Vie
                   onDragStart={(e) => e.dataTransfer.setData('text/plain', String(r.id))}
                   onClick={() => open(r)}
                 >
-                  <span className="t-strong">{rowTitle(app, user, t, r, lab)}</span>
+                  <span className="t-strong">
+                    {rowTitle(app, user, t, r, lab)}
+                    <DemoTag row={r} />
+                  </span>
                   {lab !== t.title && <span className="muted t-cap">{rowTitle(app, user, t, r)}</span>}
                   {cols.map(
                     (c) =>
@@ -1246,6 +1259,7 @@ export function VCards({ app, user, scr, t, rows, open }: ViewProps) {
           <button key={r.id} className="card rcard" onClick={() => open(r)}>
             <span className="row between">
               <strong className="ellipsis">{rowTitle(app, user, t, r, lab)}</strong>
+              <DemoTag row={r} />
               {P && (
                 <span className={'badge b-' + stateTone(def, t, colOf(t, P.column), r[P.column])}>
                   {stateLabel(def, t, colOf(t, P.column), r[P.column])}

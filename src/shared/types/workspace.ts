@@ -91,7 +91,10 @@ export interface AppRecord {
   rev: number;
   /** who made or last changed each item of the definition, by item key (src/workspace/provenance.ts) */
   touched?: Dict<Touch>;
-  /** the seed rows by table, kept so "Reset data" can put them back */
+  /**
+   * the rows the app started with, by table: its demo data, kept so it can be added again after it was removed.
+   * A row is demo data unless it says `_demo: 0`; in a copy that started from someone's real records only `_demo: 1` is
+   */
   seed?: { rows: Dict<Row[]> } | null;
   /** the last permission matrix the Backend check ran */
   matrix?: { at: number; calls: number; refused: number; failed: string[] } | null;

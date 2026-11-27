@@ -30,7 +30,8 @@ import {
 } from './core';
 import { appUsers, roleName } from './engine';
 import { testStats } from './tests';
-import { AGENTS, PENDING, RUNS, STATIONS, deleteApp, resetAppData } from './line';
+import { AGENTS, PENDING, RUNS, STATIONS, deleteApp } from './line';
+import { demoMenuItems } from './demo-data-ui';
 import { flowOf } from './custom';
 import { REVIEWERS } from './reviewers';
 import { Btn, Avatar, Empty, Icon, Logo } from './ui';
@@ -498,21 +499,9 @@ export function AppLauncher({ app }: { app: AppRecord }) {
           disabled={!def.tour.length}
           onClick={() => startWalk(app)}
         />
-        <SheetRow
-          icon="reset"
-          label="Reset the data"
-          hint="Put the seed rows back"
-          onClick={async () => {
-            if (
-              await confirmBox({
-                title: 'Reset the data in ' + app.name + '?',
-                body: 'Every table is emptied and the original seed rows are put back.',
-                yes: 'Reset data',
-              })
-            )
-              resetAppData(app);
-          }}
-        />
+        {demoMenuItems(app).map((it) => (
+          <SheetRow key={it.label} icon={it.icon} label={it.label} onClick={it.on} />
+        ))}
       </div>
     </div>
   );

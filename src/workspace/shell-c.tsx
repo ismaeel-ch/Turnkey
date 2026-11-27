@@ -74,6 +74,7 @@ import {
   sqlRun,
 } from './db';
 import { appUsers, reseed, tourExec } from './engine';
+import { tempDemoData } from './demo-data';
 import { DATA_VIEWS, migrateApp } from './viewspec';
 import { REC, TEMPLATES } from './builds';
 import { QUESTS } from './quests';
@@ -906,7 +907,7 @@ export function ResetDialog() {
       });
       commit();
       closeDialog();
-      return toast('Seed data restored in ' + n + ' app' + (n === 1 ? '' : 's') + '.', 'success');
+      return toast('Started over in ' + n + ' app' + (n === 1 ? '' : 's') + '. The demo data is back.', 'success');
     }
     if (kind === 'apps') {
       apps.forEach(deleteApp);
@@ -935,17 +936,17 @@ export function ResetDialog() {
         </SetRow>
         {!out && (
           <SetRow
-            title="Restore seed data"
+            title="Start every app over"
             text={
-              'Empties the tables of your ' +
+              'Empties the lists of your ' +
               apps.length +
               ' app' +
               (apps.length === 1 ? '' : 's') +
-              ' and puts the original rows back. Tables, screens and your changes stay.'
+              ' and puts the demo data back. Records you added are deleted. Tables, screens and your changes stay. To remove only the made-up records, open an app and use Remove demo data.'
             }
           >
             <Btn className="btn" disabled={!apps.length} onClick={() => act('data')}>
-              Restore
+              Start over
             </Btn>
           </SetRow>
         )}
@@ -1256,7 +1257,7 @@ export function DialogHost() {
             </>
           }
         >
-          <p>{c.body}</p>
+          {typeof c.body === 'string' ? <p>{c.body}</p> : c.body}
         </Dialog>
       );
     }
@@ -1969,6 +1970,7 @@ export function boot() {
     tourStep: (id: string, step: TourStep | TourStep[], rows?: Dict<number>) => {
       dbSavepoint(id, 'hook');
       try {
+        tempDemoData(S.apps[id]);
         const st = { rows: rows || {}, last: null };
         return Array.isArray(step) ? step.map((x) => tourExec(S.apps[id], st, x)) : tourExec(S.apps[id], st, step);
       } finally {

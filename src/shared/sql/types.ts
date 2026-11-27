@@ -54,7 +54,9 @@ export const LIMITS = { tables: 8, cols: 12, rows: 40 } as const;
 
 /** Tables the runtime creates itself, and columns it adds to every table. */
 export const SYSTEM_TABLES = ['users', 'activity'] as const;
-export const SYSTEM_COLUMNS = ['id', 'created_by', 'created_at'] as const;
+/** The column that marks a row as demo data: 1 for a made-up row, 0 for a record someone added. */
+export const DEMO_COLUMN = 'is_demo';
+export const SYSTEM_COLUMNS = ['id', 'created_by', 'created_at', DEMO_COLUMN] as const;
 
 export interface ColumnDef {
   name: string;

@@ -18,7 +18,6 @@ import {
   ago,
   arr,
   commit,
-  confirmBox,
   copyText,
   cx,
   errText,
@@ -55,7 +54,8 @@ import {
   tableOf,
 } from './engine';
 import { allConnectors, callConnector, connOn } from './builds';
-import { AGENTS, PENDING, RUNS, answerQuestion, resetAppData } from './line';
+import { AGENTS, PENDING, RUNS, answerQuestion } from './line';
+import { DemoActions } from './demo-data-ui';
 import { editBlocked, editFromCanvas, handleChat, suggestChanges } from './changes';
 import { FlowCards, flowTips } from './custom';
 import { AgentAv, Btn, Card, Chip, Empty, Field, Icon, Input, Json, MBar, Proto, Select, Spinner, Switch, Tabs, Textarea } from './ui';
@@ -372,16 +372,6 @@ export function DataView({ app }: { app: AppRecord }) {
     }
     commit();
   };
-  const reset = async () => {
-    if (
-      await confirmBox({
-        title: 'Reset the data in ' + app.name + '?',
-        body: 'Every table is emptied and the original seed rows are put back. Tables, users and screens stay as they are.',
-        yes: 'Reset data',
-      })
-    )
-      resetAppData(app);
-  };
   const tabs = [
     {
       id: 'rows',
@@ -440,10 +430,7 @@ export function DataView({ app }: { app: AppRecord }) {
             <Icon n="copy" s="16" />
             Copy as SQL
           </Btn>
-          <Btn className="btn sm" onClick={reset}>
-            <Icon n="reset" s="16" />
-            Reset data
-          </Btn>
+          <DemoActions app={app} />
         </div>
       </aside>
       <div className="main">
@@ -487,7 +474,7 @@ export function DataView({ app }: { app: AppRecord }) {
           ) : (
             <div className="console pad">
               <p className="muted t-cap">
-                Runs on the real SQLite file in this browser. Writes are kept, so use Reset data to undo experiments.
+                Runs on the real SQLite file in this browser. Writes are kept, so use Start over to undo experiments.
               </p>
               <Textarea
                 native

@@ -1794,13 +1794,13 @@ export function resetAppData(app: AppRecord) {
     },
     'run_sql',
     {
-      purpose: 'reset data',
+      purpose: 'start over',
     },
     () => r,
     'backend',
   );
-  if (r.problems.length) toast('Reset finished with ' + r.problems.length + ' skipped rows.', 'warning');
-  else toast('Data reset. ' + r.rows + ' seed rows are back.', 'success');
+  if (r.problems.length) toast('Started over, with ' + r.problems.length + ' rows left out.', 'warning');
+  else toast('Started over. The ' + r.rows + ' demo records are back.', 'success');
   commit();
   return r;
 }

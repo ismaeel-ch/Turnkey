@@ -9,7 +9,6 @@ import {
   arr,
   closeDialog,
   commit,
-  confirmBox,
   copyText,
   emit,
   errText,
@@ -28,7 +27,8 @@ import { dbCount, dbDrop, dbExists, dbSave, qi, sqlRun } from './db';
 import { appUsers, deriveEndpoints, roleName } from './engine';
 import { REC } from './builds';
 import { runTestsSync, testStats } from './tests';
-import { APPLY, STATIONS, blankDef, blankLine, deleteApp, newRun, pushChat, resetAppData } from './line';
+import { APPLY, STATIONS, blankDef, blankLine, deleteApp, newRun, pushChat } from './line';
+import { demoMenuItems } from './demo-data-ui';
 import type { BuildApp, Station } from './line';
 import { normCases } from './tester';
 import { Btn, Dialog, Field, Icon, Input, MBar, Seg, Select, Spinner, Textarea } from './ui';
@@ -1045,16 +1045,6 @@ export function SoloShell() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one listener per app, not one per store update
   }, [app.id]);
-  const reset = async () => {
-    if (
-      await confirmBox({
-        title: 'Reset the data in ' + app.name + '?',
-        body: 'Every table is emptied and the rows the app started with are put back.',
-        yes: 'Reset data',
-      })
-    )
-      resetAppData(app);
-  };
   const extra: (SoloItem | null)[] = [
     {
       label: app.installed ? 'Installed on this device' : 'Install this app',
@@ -1072,11 +1062,7 @@ export function SoloShell() {
           app: app.id,
         }),
     },
-    {
-      label: 'Reset the data',
-      icon: 'reset',
-      on: reset,
-    },
+    ...demoMenuItems(app),
     signed && app.shared && !app.shared.preview
       ? {
           label: 'Save a copy to my library',
