@@ -7,7 +7,8 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [0.5.5] - 2026-11-27
 
-Change a built app and release a new version from the agents chat alone.
+Change a built app and release a new version from the agents chat alone, and every visit after a release gets the
+new code.
 
 ### Added
 
@@ -15,6 +16,14 @@ Change a built app and release a new version from the agents chat alone.
   release, notes to edit, what new people start with and the tests. Press Release or type "yes"; Not now or "no"
   stops it. "Release again" with nothing changed waits for a reason. After a release, a change typed in the chat
   shows its plan and waits for "go ahead", then asks you to try it. ([#275](https://github.com/ismaeel-ch/Turnkey/pull/275))
+
+### Fixed
+
+- The first visit after a release loads the new version instead of the one kept by the browser, and a tab left open
+  finds out when a newer version is live. ([#277](https://github.com/ismaeel-ch/Turnkey/pull/277))
+- Calendars on an empty month offer a way to the next records, timeline labels stay readable over the Today line,
+  pivots fit on phones, and the clinic's demo visit notes match their appointments.
+  ([#273](https://github.com/ismaeel-ch/Turnkey/pull/273))
 
 ## [0.5.4] - 2026-11-27
 
