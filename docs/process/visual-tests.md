@@ -7,7 +7,8 @@
 
 Light and dark, at desktop size (1280 × 800) and phone size (390 × 844):
 
-- desktop: onboarding, home, a built clinic app's Build view, the app's Overview and its second page, the Data view,
+- desktop: onboarding, home, a built clinic app's Build view (the list of steps, then the workflow canvas behind
+  "Show how it was built"), the app's Overview and its second page, the Data view,
   and the share dialog
 - phone: onboarding, home, the builder, and the app full screen
 

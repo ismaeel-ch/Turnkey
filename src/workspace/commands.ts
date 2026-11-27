@@ -26,6 +26,7 @@ import {
 import { RUNS, stopRun } from './line';
 import { toggleAgentsPanel } from './activity';
 import { DETAILS, VIEWS, rebuildAsk } from './shell-a';
+import { buildMode, showHow } from './steps-view';
 import { openShare } from './share';
 import { redo, redoable, undo, undoable } from './history';
 import { openHistory } from './history-ui';
@@ -126,6 +127,20 @@ export function commandsNow(): Command[] {
       keywords: 'start rebuild restart run',
       run: () => void rebuildAsk(app),
     });
+  if (app) {
+    const plain = buildMode(app) === 'steps';
+    add({
+      id: 'build-how',
+      group: 'Build',
+      title: plain ? 'Show how it was built' : 'Show the build as plain steps',
+      icon: plain ? 'flow' : 'tasks',
+      keywords: 'workflow canvas timeline log meeting agents steps list simple',
+      run: () => {
+        U.view[app.id] = 'build';
+        showHow(app, plain);
+      },
+    });
+  }
   if (app)
     add({
       id: 'workflow',

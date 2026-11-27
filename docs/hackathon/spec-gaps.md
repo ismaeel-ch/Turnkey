@@ -37,7 +37,8 @@ what, per table, field and screen.
 
 ### 1. Main canvas and a docked chat sidebar: Met
 
-The app's Build view is the canvas (`src/workspace/flow.tsx`, React Flow): your request, the six stations, a check
+The app's Build view opens on a plain list of steps for owners who are not technical (`src/workspace/steps-view.tsx`).
+"Show how it was built" opens the canvas (`src/workspace/flow.tsx`, React Flow): your request, the six stations, a check
 gate after each, review steps and approvals you add, and the finished app. The Builders chat is docked on the right
 (`src/workspace/shell-b.tsx`) and can be hidden. On a phone it becomes a bottom sheet (`mobile.tsx`).
 
@@ -93,7 +94,7 @@ screen card on the Screens station says who made it. Browser checks in the `demo
 
 ### 8. Run timeline: Met
 
-The Build view has Workflow, Timeline and Log tabs (`shell-a.tsx`). The Timeline shows who worked when; the Log
+Behind "Show how it was built", the Build view has Workflow, Timeline and Log tabs (`shell-a.tsx`). The Timeline shows who worked when; the Log
 lists every step; each station's Attempts tab shows the attempts and the checks that sent work back.
 
 ### 9. Export one deliverable document: Met
