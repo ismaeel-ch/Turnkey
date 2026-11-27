@@ -2,7 +2,7 @@
  * Which model tier answers each builder role.
  *
  * The browser asks for `default` (Sonnet) or `quick` (Haiku) for a whole build. On `default`, the roles that design
- * the app (brief, tables, rules) stay on Sonnet, and the roles that follow a design already made (views, screens, the
+ * the app (questions and plan, brief, tables, rules) stay on Sonnet, and the roles that follow a design already made (views, screens, the
  * tour, test cases, repairs, reviews, chat changes) go to Haiku, which costs about a twentieth as much. Measured on
  * real builds: docs/hackathon/budget.md.
  *

@@ -2,13 +2,14 @@
 import type { StepRole } from '@/shared/agent-contract';
 
 /**
- * Looks at the prompt the browser builds (PROMPTS in src/workspace/line.ts, testerPrompt, repairPrompt, the review and
- * change prompts, teamPrompt) and names the role. Anything unrecognised is `any`: it still has to be one JSON object.
+ * Looks at the prompt the browser builds (PROMPTS in src/workspace/line.ts, the Planner's two prompts in planner.ts,
+ * testerPrompt, repairPrompt, the review and change prompts, teamPrompt) and names the role. Anything unrecognised is `any`: it still has to be one JSON object.
  */
 export function detectRole(prompt: string): StepRole {
   const head = /^You are the ([\w ]+?) agent on Turnkey/.exec(prompt);
   if (head) {
     const who = head[1].trim();
+    if (who === 'Planner') return /\n\nWrite the final plan\./.test(prompt) ? 'plan' : 'questions';
     if (who === 'Researcher') return 'research';
     if (who === 'Database') return 'database';
     if (who === 'View advisor') return 'views';
