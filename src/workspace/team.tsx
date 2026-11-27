@@ -41,7 +41,8 @@ import {
 } from './core';
 import { ACCENTS, accOf, apiCall, appUsers, chk, colOf, seedValue, tableOf } from './engine';
 import type { ApiResult } from './engine';
-import { REC, allConnectors, callConnector, connOn } from './builds';
+import { allConnectors, callConnector, connOn } from './builds';
+import { savedCases } from './saved-runs';
 import { RUNS, SPEED, Stopped, fatal } from './line';
 import { TeamStreamError, jsonObject, splitToolName, streamTeam } from './team-stream';
 import { Icon } from './ui';
@@ -245,9 +246,8 @@ export const teamAgentOf = (appId: string, id: string) => {
 };
 export const sameText = (a: unknown, b: unknown) => str(a).replace(/\s+/g, ' ') === str(b).replace(/\s+/g, ' ');
 export function teamCase(app: TeamApp, text: string) {
-  const rec = app.tpl ? REC[app.tpl] : undefined,
-    col = app.def.team.input.column;
-  return ((rec && rec.cases) || []).find((c) => sameText(c.values[col], text)) || null;
+  const col = app.def.team.input.column;
+  return savedCases(app).find((c) => sameText(c.values[col], text)) || null;
 } // a saved run for exactly this input, if there is one
 
 /* ---------- running a team ---------- */
