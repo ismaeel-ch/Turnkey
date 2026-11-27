@@ -21,6 +21,8 @@ export const STEP_AGENT_ID = 'step';
 
 /** Which JSON shape the answer must have. Leave out `role` and the server works it out from the prompt. */
 export const STEP_ROLES = [
+  'questions', // Planner, first call: the question cards and the plan for the usual answers
+  'plan', // Planner, second call: the plan written from the owner's answers
   'research', // Researcher: the brief
   'database', // Database: tables, seed rows, users
   'backend', // Backend: workflow, access rules, optional agent team

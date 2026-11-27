@@ -5,7 +5,7 @@ import type { ChatRequest, Provider } from '@/server/llm';
 
 describe('model tier per builder role', () => {
   it('keeps the design roles on the default tier and sends the rest to the quick one', () => {
-    for (const r of ['research', 'database', 'backend'] as const) expect(tierFor(r, 'default', {})).toBe('default');
+    for (const r of ['questions', 'plan', 'research', 'database', 'backend'] as const) expect(tierFor(r, 'default', {})).toBe('default');
     for (const r of QUICK_ROLES_DEFAULT) expect(tierFor(r, 'default', {})).toBe('quick');
   });
   it('a quick build stays quick for every role', () => {

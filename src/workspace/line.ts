@@ -938,7 +938,7 @@ export const LIVE_SAY: Dict<string> = {
 /* The server's step agent reports its draft, check and repair steps; each one goes on the run's timeline under the
    station's open model call (team runs have no such step and are left alone), and into the event log. */
 const SERVER_STEP: Dict<[string, string]> = { draft: ['Draft', 'model'], validate: ['Format check', 'check'], repair: ['Repair', 'tool'] };
-export function serverStep(run: Run, agent: string, app: AppRecord, p: Untrusted) {
+export function serverStep(run: Run, agent: string, app: { id: string }, p: Untrusted) {
   const kind = p && SERVER_STEP[p.name];
   if (!kind) return;
   emit('CUSTOM', {
@@ -958,9 +958,10 @@ export function serverStep(run: Run, agent: string, app: AppRecord, p: Untrusted
   notify();
 }
 /** Who pays for and may stop a model call: a run of the line, a reviewer, the change planner or an app's own team. */
-type CallRun = { id: string; calls: number; tokIn: number; tokOut: number; usage?: UsageSum; agentUsage?: Dict<UsageSum> };
+export type CallRun = { id: string; calls: number; tokIn: number; tokOut: number; usage?: UsageSum; agentUsage?: Dict<UsageSum> };
 export async function callModel(
-  app: AppRecord,
+  // an app, or the Planner's stand-in for the app that does not exist yet: only the id is read
+  app: { id: string },
   run: CallRun,
   agent: string,
   prompt: string,
