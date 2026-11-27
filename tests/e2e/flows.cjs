@@ -1509,7 +1509,7 @@ async function firstUse(browser, url) {
 
   // an app with one kind of person has no sign-in screen
   await page.locator('#pv' + aid).selectOption(''); await page.waitForSelector('.login-card');
-  await sql('UPDATE "users" SET "role" = \'manager\''); await page.locator('.login-more').click(); await page.waitForSelector('.app-main');
+  await sql('UPDATE "users" SET "role" = \'manager\''); await page.locator('.login-more').click({ timeout: 3000 }).catch(() => {}); await page.waitForSelector('.app-main'); // the click only makes the page draw again; the sign-in card may already be gone by the time it has settled
   const one = await st(page, (id) => ({ login: document.querySelectorAll('.login-card').length, who: (document.querySelector('.persona-t .t-strong') || {}).innerText, pick: [...document.querySelectorAll('#pv' + id + ' option')].map((o) => o.textContent) }), aid);
   check('one kind of person: the app opens straight away as its first person, with no sign-in screen to preview', one.login === 0 && one.who === 'Sara Malik' && !one.pick.includes('Sign-in screen') && one.pick.length === 6, one);
   await page.locator('.app-head .persona').click(); const mi = await page.locator('.app-head .menu .mi').allInnerTexts();
