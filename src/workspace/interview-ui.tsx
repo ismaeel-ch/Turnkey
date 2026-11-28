@@ -37,7 +37,7 @@ import {
 } from './interview';
 import { STATIONS } from './line';
 import { REVIEWERS } from './reviewers';
-import { Btn, Card, Icon, Input, MBar, Spinner, Switch, refocus, useFocusOnArrive } from './ui';
+import { Btn, Card, Icon, IconAv, Input, LinkBtn, MBar, Spinner, Switch, refocus, useFocusOnArrive } from './ui';
 
 /* ===== The interview before a build, as the owner sees it =====
    Two screens on the Home tab after "Continue": the question cards with the plan filling in beside them, then the
@@ -52,12 +52,7 @@ const plannerId = () => STATIONS[0].agent;
 /** An agent's square badge: a builder agent, a reviewer, or the owner. */
 function Who({ id }: { id: string }) {
   const a = AGENTS[id] || REVIEWERS[id];
-  if (!a)
-    return (
-      <span className="av sq av-sm iv-you" aria-hidden="true">
-        <Icon n="person" s="16" />
-      </span>
-    );
+  if (!a) return <IconAv icon="person" size="sm" cls="iv-you" />;
   return (
     <span className={'av sq av-sm acc-' + a.acc} aria-hidden="true">
       <Icon n={a.icon} s="16" />
@@ -330,9 +325,9 @@ function Assumed({ iv, plan }: { iv: Interview; plan: PlanSpec }) {
                   {a.question} <strong>{a.answer}</strong>
                 </span>
                 {iv.cards.some((c) => c.id === a.slot) && (
-                  <button className="iv-link" onClick={() => changeAnswer(a.slot)} aria-label={'Change the answer to: ' + a.question}>
+                  <LinkBtn className="iv-link" onClick={() => changeAnswer(a.slot)} aria-label={'Change the answer to: ' + a.question}>
                     Change
-                  </button>
+                  </LinkBtn>
                 )}
               </li>
             ))}
@@ -390,9 +385,7 @@ function Team({ plan, title }: { plan: PlanSpec; title: string }) {
         ))}
         {t.notNeeded.map((n) => (
           <li key={n.agent} className="iv-agent off" data-off={n.agent}>
-            <span className="av sq av-sm iv-off" aria-hidden="true">
-              <Icon n="dismiss" s="16" />
-            </span>
+            <IconAv icon="dismiss" size="sm" cls="iv-off" />
             <span className="col gap0 grow">
               <span className="muted">
                 {n.who}
@@ -431,9 +424,9 @@ function Answered({ iv, except }: { iv: Interview; except?: string }) {
         <li key={c.id} className="col gap4" data-card={c.id}>
           <span className="t-cap muted">{c.title}</span>
           <span className="row gap8 end">
-            <button className="iv-link t-cap" onClick={() => changeAnswer(c.id)} aria-label={'Change the answer to: ' + c.title}>
+            <LinkBtn className="iv-link t-cap" onClick={() => changeAnswer(c.id)} aria-label={'Change the answer to: ' + c.title}>
               Change
-            </button>
+            </LinkBtn>
             <span className="iv-me">
               {answerText(c, iv.answers[c.id])}
               {iv.answers[c.id].by === 'usual' && <span className="t-cap muted"> · usual choice</span>}
@@ -517,12 +510,12 @@ function AskCard({ iv, card }: { iv: Interview; card: QuestionCard }) {
         </div>
       )}
       <div className="row between wrap gap8">
-        <button className="iv-link iv-skip" onClick={() => skipCard(card.id)}>
+        <LinkBtn className="iv-link iv-skip" onClick={() => skipCard(card.id)}>
           Skip this one
-        </button>
-        <button className="iv-link iv-usual" onClick={takeUsual}>
+        </LinkBtn>
+        <LinkBtn className="iv-link iv-usual" onClick={takeUsual}>
           Use the usual choices and show me the plan
-        </button>
+        </LinkBtn>
       </div>
     </Card>
   );

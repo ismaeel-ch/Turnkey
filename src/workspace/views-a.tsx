@@ -5,7 +5,7 @@ import { MON, MONTH, S, clone, copyText, cx, dayDiff, isoDate, label, notify, pa
 import { colFmt, defaultView, fmtOf } from './app-settings';
 import { VIEW_ICON, VIEW_LABEL, accOf, apiCall, appUsers, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isMeasure, isNum, isRate, viewCfg, viewFit, viewsOf } from './viewspec';
-import { Btn, Empty, FilterChip, Icon, Input, MBar, Menu, Seg, Select, type MenuEntry } from './ui';
+import { Btn, Empty, FilterChip, Icon, Input, LinkBtn, MBar, Menu, Seg, Select, type MenuEntry } from './ui';
 import { EmptyList } from './firstrun';
 import { Cell, cellText, fetchApi, isStatusCol, optLabel, patchPane, rowTitle, stateLabel, stateTone } from './runtime';
 import { DEMO_COL } from './db';
@@ -1249,9 +1249,9 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
       {nearD && (
         <p className="t-cap muted cal-none">
           {'Nothing this ' + (week ? 'week' : 'month') + '. '}
-          <button className="link-btn" onClick={() => move(nearOff)}>
+          <LinkBtn className="link-btn" onClick={() => move(nearOff)}>
             {'Go to ' + nearD.getDate() + ' ' + MON[nearD.getMonth()] + ' ' + nearD.getFullYear()}
-          </button>
+          </LinkBtn>
         </p>
       )}
       <div className={cx('cal-grid', week && 'wk')}>

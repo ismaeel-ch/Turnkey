@@ -19,7 +19,7 @@ import {
   type DemoPlan,
 } from './demo-data';
 import { resetAppData } from './line';
-import { Btn, Icon, refocus } from './ui';
+import { Btn, Icon, LinkBtn, refocus } from './ui';
 
 /* Each of these buttons goes away once pressed (the bar changes, Remove becomes Add), so the keyboard is put on what
    took its place. */
@@ -168,9 +168,9 @@ export function DemoBar({ app }: { app: AppRecord }) {
         <Btn className="btn sm" onClick={() => void askRemoveDemo(app)}>
           Remove demo data
         </Btn>
-        <button className="demo-link" aria-expanded={about} onClick={() => setAbout(!about)}>
+        <LinkBtn className="demo-link" aria-expanded={about} onClick={() => setAbout(!about)}>
           What is this?
-        </button>
+        </LinkBtn>
       </div>
     );
   }
@@ -194,9 +194,9 @@ export function DemoBar({ app }: { app: AppRecord }) {
           <Icon n="undo" s="16" />
           Undo
         </Btn>
-        <button className="demo-link" onClick={() => putBack(app)}>
+        <LinkBtn className="demo-link" onClick={() => putBack(app)}>
           Add demo data again
-        </button>
+        </LinkBtn>
         <Btn
           className="btn subtle icon sm"
           aria-label="Close this message"

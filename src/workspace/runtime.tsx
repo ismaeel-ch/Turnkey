@@ -773,14 +773,15 @@ export function RecordForm({
           {f.err && <MBar tone="danger">{f.err}</MBar>}
         </div>
         <div className="dfoot">
-          <Btn type="submit" className="btn primary" data-step={wz ? (wz.last ? 'save' : 'next') : undefined}>
-            {wz && !wz.last ? 'Next' : f.id ? 'Save' : 'Create'}
-          </Btn>
+          {/* a form in steps keeps Back before Next, as every other step by step flow here does */}
           {wz && wz.at > 0 && (
             <Btn type="button" className="btn" data-step="back" onClick={() => patchForm(f, { step: wz.at - 1 })}>
               Back
             </Btn>
           )}
+          <Btn type="submit" className="btn primary" data-step={wz ? (wz.last ? 'save' : 'next') : undefined}>
+            {wz && !wz.last ? 'Next' : f.id ? 'Save' : 'Create'}
+          </Btn>
           <Btn type="button" className="btn" onClick={close}>
             Cancel
           </Btn>
@@ -851,14 +852,14 @@ export function FormScreen({ app, user, pane, scr }: ScreenProps) {
         )}
         {f.err && <MBar tone="danger">{f.err}</MBar>}
         <div className="row gap8">
-          <Btn className="btn primary" type="submit" data-step={wz ? (wz.last ? 'save' : 'next') : undefined}>
-            {wz && !wz.last ? 'Next' : 'Create ' + t.one.toLowerCase()}
-          </Btn>
           {wz && wz.at > 0 && (
             <Btn type="button" className="btn" data-step="back" onClick={() => patchForm(f, { step: wz.at - 1 })}>
               Back
             </Btn>
           )}
+          <Btn className="btn primary" type="submit" data-step={wz ? (wz.last ? 'save' : 'next') : undefined}>
+            {wz && !wz.last ? 'Next' : 'Create ' + t.one.toLowerCase()}
+          </Btn>
         </div>
       </form>
     </div>

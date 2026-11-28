@@ -1,6 +1,7 @@
 /* The workflow canvas (React Flow) and the summary of a finished build. Split from flow.tsx so it loads the first
    time it is drawn (see later.tsx); the logic it uses stays in flow.tsx. */
 import * as React from 'react';
+import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import { createEagerRoot } from '@/platform/dom';
 import { createElement, useEffect, useRef } from 'react';
 import { toStyle } from '@/platform/dom';
@@ -502,7 +503,7 @@ export function flowKit(): FlowKit {
         d.noOpt
           ? null
           : e(
-              'button',
+              Btn,
               {
                 className: 'btn subtle icon sm nodrag nopan fl-opt',
                 title: 'Customize this step',
@@ -622,7 +623,7 @@ export function flowKit(): FlowKit {
         ),
         d.tests
           ? e(
-              'button',
+              Btn,
               {
                 className: 'btn subtle icon sm nodrag nopan',
                 title: d.all ? 'Run every test' : 'Run the ' + d.tests + ' tests of this gate',
@@ -715,7 +716,7 @@ export function flowKit(): FlowKit {
           d.name,
         ),
         e(
-          'button',
+          Btn,
           {
             className: 'btn subtle icon sm nodrag nopan',
             title: 'Run this step now',
@@ -730,7 +731,7 @@ export function flowKit(): FlowKit {
             : ic('play', '16'),
         ),
         e(
-          'button',
+          Btn,
           {
             className: 'btn subtle icon sm nodrag nopan',
             title: 'Remove this step',
@@ -811,7 +812,7 @@ export function flowKit(): FlowKit {
           'Your approval',
         ),
         e(
-          'button',
+          Btn,
           {
             className: 'btn subtle icon sm nodrag nopan',
             title: 'Remove this approval',
@@ -840,7 +841,7 @@ export function flowKit(): FlowKit {
       ),
       d.held
         ? e(
-            'button',
+            Btn,
             {
               className: 'btn primary sm nodrag nopan',
               onClick: stop(() => answerGate(appOf(d), true)),
@@ -965,7 +966,7 @@ export function flowKit(): FlowKit {
               className: 'row gap4 wrap',
             },
             e(
-              'button',
+              Btn,
               {
                 className: 'btn primary sm nodrag nopan',
                 onClick: stop(() => {
@@ -978,7 +979,7 @@ export function flowKit(): FlowKit {
             ),
             d.canRel
               ? e(
-                  'button',
+                  Btn,
                   {
                     className: 'btn sm nodrag nopan fl-release',
                     onClick: stop(() => {
@@ -1183,44 +1184,47 @@ export function flowKit(): FlowKit {
       FLOW.inst = i;
     };
     return (
-      <RF.ReactFlow<IslandNode, RouteEdge>
-        nodes={nodes}
-        edges={p.graph.edges}
-        nodeTypes={NODES}
-        edgeTypes={EDGES}
-        onNodesChange={onNodesChange}
-        onNodeClick={(_ev, n) => p.onPick(n)}
-        onInit={onInit}
-        fitView={!p.v}
-        fitViewOptions={p.fit}
-        defaultViewport={p.start}
-        colorMode={p.dark ? 'dark' : 'light'}
-        nodesConnectable={false}
-        edgesFocusable={false}
-        selectNodesOnDrag={false}
-        zoomOnScroll={false}
-        panOnScroll={false}
-        preventScrolling={false}
-        zoomOnDoubleClick={false}
-        minZoom={0.2}
-        maxZoom={1.6}
-        deleteKeyCode={null}
-        attributionPosition="bottom-left"
-      >
-        <RF.Background variant={RF.BackgroundVariant.Dots} gap={18} size={1.4} />
-        <Sync sig={p.sig} ids={p.graph.nodes.map((n) => n.id)} />
-        {p.map ? (
-          <RF.MiniMap
-            pannable
-            zoomable
-            position="bottom-right"
-            nodeStrokeWidth={3}
-            nodeBorderRadius={8}
-            ariaLabel="Map of the workflow"
-            style={{ width: 150, height: 96 }}
-          />
-        ) : null}
-      </RF.ReactFlow>
+      // the canvas is its own React root, so it brings Fluent's theme for the buttons and tooltips inside the nodes
+      <FluentProvider theme={p.dark ? webDarkTheme : webLightTheme} className="fl-island">
+        <RF.ReactFlow<IslandNode, RouteEdge>
+          nodes={nodes}
+          edges={p.graph.edges}
+          nodeTypes={NODES}
+          edgeTypes={EDGES}
+          onNodesChange={onNodesChange}
+          onNodeClick={(_ev, n) => p.onPick(n)}
+          onInit={onInit}
+          fitView={!p.v}
+          fitViewOptions={p.fit}
+          defaultViewport={p.start}
+          colorMode={p.dark ? 'dark' : 'light'}
+          nodesConnectable={false}
+          edgesFocusable={false}
+          selectNodesOnDrag={false}
+          zoomOnScroll={false}
+          panOnScroll={false}
+          preventScrolling={false}
+          zoomOnDoubleClick={false}
+          minZoom={0.2}
+          maxZoom={1.6}
+          deleteKeyCode={null}
+          attributionPosition="bottom-left"
+        >
+          <RF.Background variant={RF.BackgroundVariant.Dots} gap={18} size={1.4} />
+          <Sync sig={p.sig} ids={p.graph.nodes.map((n) => n.id)} />
+          {p.map ? (
+            <RF.MiniMap
+              pannable
+              zoomable
+              position="bottom-right"
+              nodeStrokeWidth={3}
+              nodeBorderRadius={8}
+              ariaLabel="Map of the workflow"
+              style={{ width: 150, height: 96 }}
+            />
+          ) : null}
+        </RF.ReactFlow>
+      </FluentProvider>
     );
     /* eslint-enable react-hooks/immutability */
   };

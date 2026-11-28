@@ -926,6 +926,7 @@ async function flowViews(browser, url) {
     check('view tabs bar at ' + w + ' px: tabs, More views, Filter and Copy CSV on one row, the buttons the same height, More views a small square with no frame', b.ok, b);
   }
   await page.setViewportSize({ width: 1440, height: 900 }); await sleep(150);
+  { const ramp = await offRamp(page, '.shell', true); check('Fluent type ramp: every text size in a built app, its list page and the agents chat is a step of the ramp', onRamp(ramp), ramp); }
   const expect = { Board: '.kb-col', Calendar: '.cal-grid .cal-chip', Timeline: '.gt .gt-item', Table: '.vx .tbl tbody tr', Chart: '.hb-row .hb-seg', Pivot: '.tbl.pivot .pv-b', Tree: '.tree .tree-row' }, drawn = {};
   for (const name of tabs) { await vtab(page, name); drawn[name] = await page.locator(expect[name]).count(); await shot(page, '72-view-' + name.toLowerCase()); }
   check('every view draws the same 39 appointments', Object.values(drawn).every((n) => n > 0) && drawn.Board === 6, drawn);
@@ -1080,10 +1081,10 @@ async function flowQuests(browser, url) {
 
 // Fluent 2's type ramp: text in the workspace is 10, 12, 14, 16, 20, 24, 28, 32 or 40 px and nothing in between. Returns the sizes that are not, by class.
 // The agents chat, the canvas and a built app's own screens are measured by their own checks.
-const offRamp = (page, root) => st(page, (sel) => { const ok = [10, 12, 14, 16, 20, 24, 28, 32, 40], bad = {}, r = document.querySelector(sel); if (!r) return { missing: sel };
+const offRamp = (page, root, all) => st(page, ([sel, all]) => { const ok = [10, 12, 14, 16, 20, 24, 28, 32, 40], bad = {}, r = document.querySelector(sel); if (!r) return { missing: sel };
   const w = document.createTreeWalker(r, NodeFilter.SHOW_TEXT); let n;
-  while ((n = w.nextNode())) { if (!n.textContent.trim()) continue; const e = n.parentElement; if (e.closest('.chat, .msg, .gcard, svg, .react-flow, .stage, [hidden]') || !e.getClientRects().length) continue; const f = parseFloat(getComputedStyle(e).fontSize); if (!ok.includes(f)) { const k = f + 'px ' + (typeof e.className === 'string' && e.className ? '.' + e.className.split(' ').slice(0, 3).join('.') : e.tagName); bad[k] = (bad[k] || 0) + 1; } }
-  return bad; }, root);
+  while ((n = w.nextNode())) { if (!n.textContent.trim()) continue; const e = n.parentElement; if (e.closest(all ? 'svg, .react-flow, [hidden]' : '.chat, .msg, .gcard, svg, .react-flow, .stage, [hidden]') || !e.getClientRects().length) continue; const f = parseFloat(getComputedStyle(e).fontSize); if (!ok.includes(f)) { const k = f + 'px ' + (typeof e.className === 'string' && e.className ? '.' + e.className.split(' ').slice(0, 3).join('.') : e.tagName); bad[k] = (bad[k] || 0) + 1; } }
+  return bad; }, [root, all]);
 const onRamp = (o) => Object.keys(o).length === 0;
 async function plainSteps(browser, url) { // Build opens on a plain list of steps; the canvas and its views are behind "Show how it was built"
   const { ctx, page } = await newPage(browser);

@@ -24,7 +24,6 @@ import {
   arr,
   brief,
   commit,
-  cx,
   emit,
   errText,
   label,
@@ -45,7 +44,7 @@ import { allConnectors, callConnector, connOn } from './connections';
 import { savedCases } from './saved-runs';
 import { RUNS, SPEED, Stopped, fatal } from './line';
 import { TeamStreamError, jsonObject, splitToolName, streamTeam } from './team-stream';
-import { Icon } from './ui';
+import { IconAv } from './ui';
 import { rowTitle } from './runtime';
 
 /* ===== Turnkey prototype · agent teams inside a built app =====
@@ -928,9 +927,5 @@ export function teamBlock(app: TeamApp, user: AppUser | null, text: string): { t
 
 /* ---------- the room itself (the screen where people start a run and watch the agents) is in room.js ---------- */
 export function TeamAv({ a, size }: { a: { acc: string; name: string; icon: string }; size?: string }) {
-  return (
-    <span className={cx('av sq', size && 'av-' + size, 'acc-' + a.acc)} title={a.name + ' agent'}>
-      <Icon n={a.icon} s={size === 'lg' ? '24' : '16'} />
-    </span>
-  );
+  return <IconAv icon={a.icon} acc={a.acc} size={size} title={a.name + ' agent'} />;
 }
