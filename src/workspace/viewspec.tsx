@@ -60,8 +60,10 @@ export const isCat = (c: ColumnDef) => ['select', 'user', 'ref', 'bool'].include
   isYear = (c: ColumnDef) => c.type === 'number' && /(^|_)year$/.test(c.name),
   /** A number that adds up: what totals, sums and averages use. */
   isMeasure = (c: ColumnDef) => isNum(c) && !isYear(c),
-  /** A score or rate on each record (rating, confidence, chance): adding them up means nothing, so a total row averages them. */
-  isRate = (c: ColumnDef) => isMeasure(c) && /(^|_)(rating|score|confidence|chance|accuracy|share|margin|weight|percent|pct)$/.test(c.name);
+  /** A score, rate or price per unit on each record (rating, confidence, unit price, hourly rate): adding them up means nothing, so a total row averages them. */
+  isRate = (c: ColumnDef) =>
+    isMeasure(c) &&
+    /(^|_)(rating|score|confidence|chance|accuracy|share|margin|weight|percent|pct|rate|unit_price|price_each)$/.test(c.name);
 export function viewFit(def: AppDef, t: AppTable, type: string): string | null {
   // null when the view fits the table, otherwise the reason it does not
   const cats = t.columns.filter(isCat).length,
@@ -376,7 +378,9 @@ export function suggestViews(def: BackedDef) {
     if (amount)
       w.push({
         kind: 'kpi',
-        label: 'Total ' + String(amount.label || label(amount.name)).toLowerCase(),
+        label: /^total\b/i.test(String(amount.label || label(amount.name)))
+          ? String(amount.label || label(amount.name))
+          : 'Total ' + String(amount.label || label(amount.name)).toLowerCase(),
         table: pt.name,
         measure: 'sum:' + amount.name,
       });

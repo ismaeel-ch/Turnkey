@@ -678,7 +678,7 @@ export function ReleaseAskCard({ app, m }: { app: AppRecord; m: ChatMessage }) {
         </div>
         <span className={c.decided === 'released' ? 'badge b-success' : 't-cap muted'}>
           {c.decided === 'released'
-            ? 'You pressed Release'
+            ? 'You released it'
             : c.decided === 'later'
               ? 'Not released'
               : c.decided === 'replaced'

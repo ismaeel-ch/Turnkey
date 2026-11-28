@@ -5,6 +5,23 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.12] - 2026-11-28
+
+Fixes from a bug hunt over the built apps released tonight.
+
+### Fixed
+
+- Charts no longer give two stages nearly the same green: the sixth colour is purple and green moves to seventh
+  (an order's "Approved" and "Rejected" looked alike). ([#301](https://github.com/ismaeel-ch/Turnkey/pull/301))
+- A timeline gives each name beside a short bar room before the next bar on its row, measured on the screen, so names
+  no longer run under each other when the agents chat is open. ([#301](https://github.com/ismaeel-ch/Turnkey/pull/301))
+- A field called Total is shown as "Total", not "Total total", in charts, pivots and the overview.
+  ([#301](https://github.com/ismaeel-ch/Turnkey/pull/301))
+- The total row averages a price per unit or an hourly rate instead of adding them up ("Price each: 88" on five
+  parts). ([#301](https://github.com/ismaeel-ch/Turnkey/pull/301))
+- "Yes" typed under the release card in the chat shows as "yes", and the card says "You released it" instead of
+  "You pressed Release". ([#301](https://github.com/ismaeel-ch/Turnkey/pull/301))
+
 ## [0.5.11] - 2026-11-28
 
 Every component checked against Fluent 2.

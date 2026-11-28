@@ -1657,7 +1657,7 @@ export async function handleChat(app: BackedApp, text: string, opt?: { rules?: b
   }
   // a short yes or no answers the card that waits at the end of the chat, the same as pressing its button
   const yn = opt && opt.rules ? null : replyIntent(text);
-  if (yn && (await answerWaiting(app, yn))) return;
+  if (yn && (await answerWaiting(app, yn, text))) return;
   pushChat(app, 'user', text);
   commit();
   if (PENDING[app.id]) return void say(app, 'orchestrator', 'Answer the approval card first.');
@@ -1739,13 +1739,13 @@ export async function handleChat(app: BackedApp, text: string, opt?: { rules?: b
  * "Yes" or "no" typed under the card that waits for the owner: a release, a change plan, or "try it". Answers it the way
  * its buttons do and says true; false when no card waits, so the message is read as anything else.
  */
-async function answerWaiting(app: BackedApp, yn: 'yes' | 'no'): Promise<boolean> {
+async function answerWaiting(app: BackedApp, yn: 'yes' | 'no', text: string): Promise<boolean> {
   if (PENDING[app.id]) {
     PENDING[app.id](yn === 'yes');
     return true;
   }
   if (waitingRelease(app)) {
-    if (yn === 'yes') await releaseFromChat(app);
+    if (yn === 'yes') await releaseFromChat(app, text);
     else declineRelease(app);
     return true;
   }

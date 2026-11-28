@@ -963,7 +963,10 @@ async function flowViews(browser, url) {
   const none = page.locator('.cal-none .link-btn'), noneText = (await none.count()) ? await none.innerText() : '';
   if (noneText) await none.click(); await sleep(80);
   check('an empty month offers the nearest month with records', /^Go to \d+ \w+ \d{4}$/.test(noneText) && await page.locator('.cal-grid .cal-chip').count() > 0 && !(await page.locator('.cal-none').count()), noneText);
-  await vtab(page, 'Timeline'); const lanes = await page.locator('.gt-lane').count(); await page.locator('.vopts .seg button', { hasText: 'Quarter' }).click(); await sleep(80);
+  await vtab(page, 'Timeline'); await sleep(150);
+  const clash = await st(page, () => { const hit = []; document.querySelectorAll('.gt-lane').forEach((ln) => { const it = [...ln.querySelectorAll('.gt-item')].map((e) => ({ e: e.getBoundingClientRect(), t: e.querySelector('.gt-t').getBoundingClientRect(), n: e.innerText })); it.forEach((a) => it.forEach((b) => { if (a !== b && Math.abs(a.e.top - b.e.top) < 2 && b.e.left >= a.e.left && b.e.left < a.t.right - 2 && a.t.right > a.e.right + 2) hit.push(a.n + ' / ' + b.n); })); }); return hit; });
+  check('timeline: a name beside a short bar never runs under the next bar on its row', clash.length === 0, clash.slice(0, 4));
+  const lanes = await page.locator('.gt-lane').count(); await page.locator('.vopts .seg button', { hasText: 'Quarter' }).click(); await sleep(80);
   check('timeline has a lane per doctor and zooms', lanes === 3 && await page.locator('.gt-item').count() === 39, [lanes, await page.locator('.gt-item').count()]);
   await vtab(page, 'Tree'); const rows0 = await page.locator('.tree-row').count(); await page.locator('.tree-tog').first().click(); await sleep(60);
   check('tree groups collapse', await page.locator('.tree-row').count() < rows0, [rows0, await page.locator('.tree-row').count()]);
