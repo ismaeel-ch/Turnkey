@@ -631,7 +631,7 @@ async function flowLive(browser, url) {
   await page.fill('#tm0_title', 'Launch note'); await page.fill('#tm0_text', 'The Pacific is the largest ocean. Our app has a million users.'); await page.locator('.team-start button[type=submit]').click(); await waitTeam(page);
   const tr = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), T = window.__formwork.teams()[t.app]; return { status: T.status, live: T.live, steps: T.steps.map((x) => [x.status, x.rows.length, x.updated, x.problems.length]), made: Object.keys(T.made).map((k) => k + ':' + T.made[k].length).join(','), error: T.error }; });
   check('live team: one server run of three agents, rows written through the API, a bad row refused without stopping the run', tr.status === 'done' && tr.live && JSON.stringify(tr.steps) === '[["ok",2,0,0],["ok",2,0,1],["ok",0,3,0]]' && tr.made === 'claims:2,evidence:2' && teamRuns.join('|') === 'team:Extractor,team:Researchers,team:Verifier' && !(await st(page, () => window.__calls)).some((x) => x.startsWith('team:')), [tr, teamRuns, await st(page, () => window.__calls)]);
-  check('live team: a public source that is down is said plainly, once, and the run still finishes', tr.status === 'done' && (await page.locator('.toasts').innerText()).split('Wikipedia is not answering right now').length === 2, await page.locator('.toasts').innerText());
+  check('live team: a public source that is down is said plainly, once, and the run still finishes', tr.status === 'done' && (await page.locator('.toast').allInnerTexts()).join('\n').split('Wikipedia is not answering right now').length === 2, await page.locator('.toast').allInnerTexts());
   const tu = await st(page, () => { const s = window.__formwork.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), T = window.__formwork.teams()[t.app]; return { calls: T.usage && T.usage.calls, cost: T.usage && T.usage.costUsd, agents: Object.keys(T.agentUsage || {}).join(','), head: document.querySelector('.team-cost')?.textContent || '', per: [...document.querySelectorAll('.team-a-cost')].map((x) => x.textContent).join('|') }; });
   check('live team: the room shows what the run\'s model calls cost, in total and for each agent', tu.calls === 3 && Math.abs(tu.cost - 0.0015) < 1e-9 && tu.agents === 'extractor,researchers,verifier' && /3 model calls\s· 5\.1k tokens\s· 67% from cache\s· \$0\.0015/.test(tu.head) && tu.per.split('|').length === 3 && tu.per.split('|').every((x) => /1 model call\s· 1\.7k tokens\s· .*\s· \$0\.0005/.test(x)), tu);
   check('live team: the agent could not set the status itself, the workflow did', (await page.locator('.team-log .badge').first().innerText()).trim() === 'Checked', await page.locator('.team-log .badge').first().innerText());
@@ -766,7 +766,7 @@ async function flowMisc(browser, url) {
   // the canvas fits itself a moment after it changes; if it is hidden by then (0 pixels wide), it must not be drawn at NaN
   const nan = []; const onNan = (m) => { if (/NaN/.test(m.text())) nan.push(m.text().slice(0, 120)); }; page.on('console', onNan);
   await view(page, 'Build'); await page.waitForSelector('.flow-canvas .react-flow__node'); await sleep(800);
-  await page.evaluate(async () => { document.querySelector('button[title="Put every node back where it started"]').click(); await new Promise((r) => setTimeout(r, 20)); const el = document.createElement('style'); el.id = 'tk-hide-canvas'; el.textContent = '.flow-canvas{display:none !important}'; document.head.appendChild(el); });
+  await page.evaluate(async () => { [...document.querySelectorAll('button')].find((b) => /Reset layout/.test(b.textContent)).click(); await new Promise((r) => setTimeout(r, 20)); const el = document.createElement('style'); el.id = 'tk-hide-canvas'; el.textContent = '.flow-canvas{display:none !important}'; document.head.appendChild(el); });
   await sleep(1200); await page.evaluate(() => document.getElementById('tk-hide-canvas').remove()); await sleep(600); page.off('console', onNan);
   check('the workflow canvas hidden just after a change is not drawn at NaN, and shows its nodes again', nan.length === 0 && await page.locator('.flow-canvas .react-flow__node').first().isVisible(), nan.slice(0, 3));
   await page.getByRole('button', { name: 'Log', exact: true }).click(); await sleep(100); check('log view lists steps', await page.locator('.line-wrap .log-feed .log-i').count() > 8); await shot(page, '61-log');
@@ -2434,8 +2434,16 @@ async function flowSettings(browser, url) {
   const sec = async (name) => { await page.locator('.set-nav .set-tab', { hasText: name }).click(); await page.waitForSelector('.set[data-settings="' + name.toLowerCase() + '"]'); await sleep(80); };
   const gear = () => page.locator('.device .app-gear').count();
   const line = (name) => page.locator('.set-line', { has: page.locator('.set-line-t label', { hasText: name }) }).first();
-  let lastToast = ''; // each message in this flow differs from the one before it
-  const toastText = async () => { await page.waitForFunction((prev) => { const t = [...document.querySelectorAll('.toast')].pop(); return !!t && t.innerText !== prev; }, lastToast); return (lastToast = await page.locator('.toast').last().innerText()); };
+  /* the newest toast not yet read: each toast carries its id, so one that has only outlived the last one read is not taken for a new one */
+  const readToasts = new Set();
+  const toastText = async () => {
+    const fresh = () => page.evaluate((seen) => [...document.querySelectorAll('.toast [data-toast]')].filter((t) => !seen.includes(t.getAttribute('data-toast'))).map((t) => [t.getAttribute('data-toast'), t.innerText]), [...readToasts]);
+    await page.waitForFunction((seen) => [...document.querySelectorAll('.toast [data-toast]')].some((t) => !seen.includes(t.getAttribute('data-toast'))), [...readToasts]);
+    await sleep(150);
+    const got = await fresh();
+    for (const id of await page.evaluate(() => [...document.querySelectorAll('.toast [data-toast]')].map((t) => t.getAttribute('data-toast')))) readToasts.add(id);
+    return got.length ? got[got.length - 1][1] : '';
+  };
 
   await as('Mariam Javed'); const staffGear = await gear();
   await as('Nida Hamid'); const holderGear = await gear();

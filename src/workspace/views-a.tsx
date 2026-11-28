@@ -5,7 +5,7 @@ import { MON, MONTH, S, clone, copyText, cx, dayDiff, isoDate, label, notify, pa
 import { colFmt, defaultView, fmtOf } from './app-settings';
 import { VIEW_ICON, VIEW_LABEL, accOf, apiCall, appUsers, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isMeasure, isNum, isRate, viewCfg, viewFit, viewsOf } from './viewspec';
-import { Btn, Empty, FilterChip, Icon, Input, LinkBtn, MBar, Menu, Seg, Select, type MenuEntry } from './ui';
+import { Btn, Empty, FilterChip, Icon, Input, LinkBtn, MBar, Menu, Seg, Select, type MenuEntry, Tip } from './ui';
 import { EmptyList } from './firstrun';
 import { Cell, cellText, fetchApi, isStatusCol, optLabel, patchPane, rowTitle, stateLabel, stateTone } from './runtime';
 import { DEMO_COL } from './db';
@@ -627,21 +627,21 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
                     ],
               )
               .map((v) => (
-                <button
-                  key={v.type}
-                  role="tab"
-                  aria-selected={v.type === view}
-                  className={cx('vs-b', v.type === view && 'on')}
-                  title={v.why}
-                  onClick={() =>
-                    set((s) => {
-                      s.view = v.type;
-                    })
-                  }
-                >
-                  <Icon n={VIEW_ICON[v.type]} s="16" />
-                  <span>{VIEW_LABEL[v.type]}</span>
-                </button>
+                <Tip text={v.why} key={v.type}>
+                  <button
+                    role="tab"
+                    aria-selected={v.type === view}
+                    className={cx('vs-b', v.type === view && 'on')}
+                    onClick={() =>
+                      set((s) => {
+                        s.view = v.type;
+                      })
+                    }
+                  >
+                    <Icon n={VIEW_ICON[v.type]} s="16" />
+                    <span>{VIEW_LABEL[v.type]}</span>
+                  </button>
+                </Tip>
               ))}
           </div>
           {more.length > 0 && (
@@ -1283,15 +1283,15 @@ export function VCalendar({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
                 )}
               </div>
               {(all ? list : list.slice(0, 3)).map((r) => (
-                <button
-                  key={r.id}
-                  className={cx('cal-chip', P && 'tone-' + stateTone(def, t, colOf(t, P.column), r[P.column]))}
-                  title={rowTitle(app, user, t, r) + (P ? ' · ' + stateLabel(def, t, colOf(t, P.column), r[P.column]) : '')}
-                  onClick={() => open(r)}
-                >
-                  {isDT && <span className="cal-t">{fmtOf(def).time(asText(r[dc.name]))}</span>}
-                  <span className="ellipsis">{rowTitle(app, user, t, r, lab)}</span>
-                </button>
+                <Tip text={rowTitle(app, user, t, r) + (P ? ' · ' + stateLabel(def, t, colOf(t, P.column), r[P.column]) : '')} key={r.id}>
+                  <button
+                    className={cx('cal-chip', P && 'tone-' + stateTone(def, t, colOf(t, P.column), r[P.column]))}
+                    onClick={() => open(r)}
+                  >
+                    {isDT && <span className="cal-t">{fmtOf(def).time(asText(r[dc.name]))}</span>}
+                    <span className="ellipsis">{rowTitle(app, user, t, r, lab)}</span>
+                  </button>
+                </Tip>
               ))}
               {list.length > 3 && !all && (
                 <button

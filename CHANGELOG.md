@@ -5,6 +5,19 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.13] - 2026-11-28
+
+The last three hand-made components are Fluent's own.
+
+### Changed
+
+- Toasts are Fluent's Toaster: a status icon, the message, a dismiss button, and Fluent's way in and out.
+  ([#304](https://github.com/ismaeel-ch/Turnkey/pull/304))
+- The panel that opens a record in a built app, and the sheets that rise from the bottom on a phone, are Fluent's
+  Drawer. ([#304](https://github.com/ismaeel-ch/Turnkey/pull/304))
+- Every button with a hint shows it in Fluent's Tooltip, not the browser's: buttons with words, and the rows and
+  tiles written as plain buttons. ([#304](https://github.com/ismaeel-ch/Turnkey/pull/304))
+
 ## [0.5.12] - 2026-11-28
 
 Fixes from a bug hunt over the built apps released tonight.

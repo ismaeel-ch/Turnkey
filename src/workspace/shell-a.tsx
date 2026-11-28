@@ -70,6 +70,7 @@ import {
   Switch,
   Tabs,
   Textarea,
+  Tip,
 } from './ui';
 import { AppLauncher, PhoneBar, PhoneNav } from './mobile';
 import { StageView, stageOf, startWalk, stateLabel, stateTone } from './runtime';
@@ -124,10 +125,12 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
   if (PHONE()) return <PhoneBar tabs={tabs} tab={tab} />;
   return (
     <header className="titlebar">
-      <button className="brand" title="New tab" onClick={() => openTab(null)}>
-        <Logo />
-        <span className="brand-t hide-md">{BRAND.name}</span>
-      </button>
+      <Tip text="New tab">
+        <button className="brand" onClick={() => openTab(null)}>
+          <Logo />
+          <span className="brand-t hide-md">{BRAND.name}</span>
+        </button>
+      </Tip>
       <nav className="tabstrip" aria-label="Open workspaces" data-tour="tabs">
         {tabs.map((t) => {
           const app = t.app ? S.apps[t.app] : null,
@@ -165,9 +168,11 @@ export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
             </div>
           );
         })}
-        <button className="newtab" aria-label="New tab" title="New tab" onClick={addTab}>
-          <Icon n="add" s="16" />
-        </button>
+        <Tip text="New tab">
+          <button className="newtab" aria-label="New tab" onClick={addTab}>
+            <Icon n="add" s="16" />
+          </button>
+        </Tip>
       </nav>
       <div className="tb-right">
         <span className="act-slot" />

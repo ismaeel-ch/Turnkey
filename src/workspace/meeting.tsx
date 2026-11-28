@@ -1,6 +1,6 @@
 import type { AppRecord, Run, RunStep } from '@/shared/types/workspace';
 import { U, cx, fmtMs, notify } from './core';
-import { AgentAv, Empty, Icon, Spinner, STATUS_META } from './ui';
+import { AgentAv, Empty, Icon, Spinner, STATUS_META, Tip } from './ui';
 import { AGENTS, RUNS, STATIONS } from './line';
 
 /** What one agent is doing right now, as a meeting tile shows it. */
@@ -189,41 +189,42 @@ export function MeetingView({ app, run, sel }: { app: AppRecord; run: Run | unde
               work = t.id === 'orchestrator' ? '' : workOf(run, t.id);
             return (
               <div key={t.id} role="listitem" className="meet-cell">
-                <button
-                  type="button"
-                  className={cx('meet-tile', 'm-' + t.state, 'acc-' + a.acc, t.station && sel === t.station && 'sel')}
-                  data-agent={t.id}
-                  disabled={!t.station}
-                  aria-label={a.name + ', ' + STATE_TEXT[t.state] + '. ' + t.caption}
-                  title={t.station ? 'Show what ' + a.name + ' made' : a.role}
-                  onClick={() => {
-                    if (!t.station) return;
-                    U.sel[app.id] = t.station;
-                    U.follow[app.id] = false;
-                    notify();
-                  }}
-                >
-                  <span className={cx('meet-av', t.state === 'talking' && 'live')}>
-                    <AgentAv id={t.id} size="lg" />
-                    {t.state === 'hand' && (
-                      <span className="meet-hand" aria-hidden="true">
-                        <Icon n="handRight" s="12" />
-                      </span>
-                    )}
-                  </span>
-                  <span className="meet-body">
-                    <span className="meet-head">
-                      <strong className="meet-name">{a.name}</strong>
-                      <span className={cx('meet-state badge', 'b-' + STATE_TONE[t.state])}>
-                        {t.state === 'talking' && <span className="meet-eq" aria-hidden="true" />}
-                        {t.state === 'done' && <Icon n="check" s="12" />}
-                        {STATE_TEXT[t.state]}
-                      </span>
+                <Tip text={t.station ? 'Show what ' + a.name + ' made' : a.role}>
+                  <button
+                    type="button"
+                    className={cx('meet-tile', 'm-' + t.state, 'acc-' + a.acc, t.station && sel === t.station && 'sel')}
+                    data-agent={t.id}
+                    disabled={!t.station}
+                    aria-label={a.name + ', ' + STATE_TEXT[t.state] + '. ' + t.caption}
+                    onClick={() => {
+                      if (!t.station) return;
+                      U.sel[app.id] = t.station;
+                      U.follow[app.id] = false;
+                      notify();
+                    }}
+                  >
+                    <span className={cx('meet-av', t.state === 'talking' && 'live')}>
+                      <AgentAv id={t.id} size="lg" />
+                      {t.state === 'hand' && (
+                        <span className="meet-hand" aria-hidden="true">
+                          <Icon n="handRight" s="12" />
+                        </span>
+                      )}
                     </span>
-                    <span className="meet-cap">{t.caption}</span>
-                    {work && <span className="meet-work t-cap">{work}</span>}
-                  </span>
-                </button>
+                    <span className="meet-body">
+                      <span className="meet-head">
+                        <strong className="meet-name">{a.name}</strong>
+                        <span className={cx('meet-state badge', 'b-' + STATE_TONE[t.state])}>
+                          {t.state === 'talking' && <span className="meet-eq" aria-hidden="true" />}
+                          {t.state === 'done' && <Icon n="check" s="12" />}
+                          {STATE_TEXT[t.state]}
+                        </span>
+                      </span>
+                      <span className="meet-cap">{t.caption}</span>
+                      {work && <span className="meet-work t-cap">{work}</span>}
+                    </span>
+                  </button>
+                </Tip>
               </div>
             );
           })}

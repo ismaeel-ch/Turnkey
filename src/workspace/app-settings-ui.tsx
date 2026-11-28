@@ -8,7 +8,7 @@ import { ACCENTS, VIEW_LABEL, appUsers, roleName } from './engine';
 import { exportSqlite } from './export';
 import { addDemoData, canAddDemoData, demoCounts } from './demo-data';
 import { askRemoveDemo, askStartOver } from './demo-data-ui';
-import { Avatar, Btn, Field, Icon, Input, MBar, Seg, Select, Switch } from './ui';
+import { Avatar, Btn, Field, Icon, Input, MBar, Seg, Select, Switch, Tip } from './ui';
 import {
   CURRENCIES,
   DATE_STYLES,
@@ -194,19 +194,19 @@ function General({ app, off, idp }: PartProps) {
           </span>
           <div className="set-swatches" role="radiogroup" aria-labelledby={idp + 'acc'}>
             {ACCENTS.map((a) => (
-              <button
-                key={a}
-                type="button"
-                role="radio"
-                aria-checked={th.accent === a}
-                aria-label={accentName(a)}
-                title={accentName(a)}
-                disabled={off}
-                className={cx('set-swatch', 'acc-' + a, th.accent === a && 'on')}
-                onClick={() => tell(setLook(app, { accent: a }))}
-              >
-                {th.accent === a && <Icon n="check" s="16" />}
-              </button>
+              <Tip text={accentName(a)} key={a}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={th.accent === a}
+                  aria-label={accentName(a)}
+                  disabled={off}
+                  className={cx('set-swatch', 'acc-' + a, th.accent === a && 'on')}
+                  onClick={() => tell(setLook(app, { accent: a }))}
+                >
+                  {th.accent === a && <Icon n="check" s="16" />}
+                </button>
+              </Tip>
             ))}
           </div>
         </div>

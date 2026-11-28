@@ -1,12 +1,22 @@
 import { AreaBoundary } from '@/platform/area-boundary';
 import { engineProblem, storageProblem } from './errors';
 import { modelHost } from '@/platform/model-client';
-import { type ReactElement, type ReactNode, Suspense, lazy, useState, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import {
+  type ReactElement,
+  type ReactNode,
+  Suspense,
+  lazy,
+  useEffect,
+  useState,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import { canPromptInstall, installHint, onInstallPrompt, promptInstall } from '@/platform/pwa/prompt';
 import type { BackedDef, TourStep } from '@/shared/types/app';
 import type { SqlValue } from '@/shared/types/sqljs';
 import type { AppRecord, Dict, Downloader, OnboardingForm, ProductTourStep, Settings, SignInForm } from '@/shared/types/workspace';
-import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
+import { FluentProvider, Toast, ToastTitle, Toaster, useToastController, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import { toStyle } from '@/platform/dom';
 import {
   APILOG,
@@ -90,8 +100,8 @@ import { buildPack, editFromCanvas, parseChange } from './changes';
 import { REVIEW_RULES, flowApply, flowEdit, parseFlow, reviewNow, tryFix } from './custom';
 import { REVIEWERS } from './reviewers';
 import { fillWorkflowSteps, keepFix, suggestCases } from './tester';
-import { AgentAv, Btn, Dialog, Field, Icon, Input, Logo, MBar, Seg, Select, Spinner, Switch, TONE_ICON } from './ui';
-import { DialogMotion, ToastMotion } from './motion';
+import { AgentAv, Btn, Dialog, Field, Icon, Input, Logo, MBar, Seg, Select, Spinner, Switch } from './ui';
+import { DialogMotion } from './motion';
 import { PhoneSheets } from './mobile';
 import { activityNow } from './activity';
 import { APICACHE, stageOf } from './runtime';
@@ -1361,28 +1371,59 @@ function useToastRoom() {
   }, []);
   return ref;
 }
+const TOASTER = 'tk-toasts';
+const TOAST_INTENT: Record<string, 'info' | 'success' | 'warning' | 'error'> = {
+  info: 'info',
+  success: 'success',
+  warning: 'warning',
+  danger: 'error',
+};
+/**
+ * The short messages at the bottom of the screen, drawn by Fluent's Toaster. The store still decides which toasts
+ * exist and for how long (`toast()` in core.ts): each one new to the store is handed to the Toaster, and each one
+ * gone from the store is dismissed there, so Fluent plays its way in and out.
+ */
 export function Toasts() {
   const ref = useToastRoom();
+  const { dispatchToast, dismissToast } = useToastController(TOASTER);
+  const shown = useRef(new Set<string>());
+  useEffect(() => {
+    const now = new Set(U.toasts.map((t) => String(t.id)));
+    for (const t of U.toasts) {
+      const id = String(t.id);
+      if (shown.current.has(id)) continue;
+      shown.current.add(id);
+      const close = () => {
+        U.toasts = U.toasts.filter((x) => x !== t);
+        notify();
+      };
+      dispatchToast(
+        <Toast className={'toast m-' + t.tone}>
+          <ToastTitle
+            action={
+              <Btn className="btn subtle icon sm" aria-label="Dismiss" onClick={close}>
+                <Icon n="dismiss" s="12" />
+              </Btn>
+            }
+          >
+            <span data-toast={id}>{t.text}</span>
+          </ToastTitle>
+        </Toast>,
+        // the store times each toast out, so Fluent's own timer is off
+        { toastId: id, intent: TOAST_INTENT[t.tone] || 'info', timeout: -1 },
+      );
+    }
+    for (const id of [...shown.current])
+      if (!now.has(id)) {
+        shown.current.delete(id);
+        dismissToast(id);
+      }
+  });
   return (
-    <div className="toasts" aria-live="polite" ref={ref}>
-      <ToastMotion>
-        {U.toasts.map((t) => (
-          <div key={t.id} className={'toast m-' + t.tone}>
-            <Icon n={TONE_ICON[t.tone] || 'info'} />
-            <span className="grow">{t.text}</span>
-            <Btn
-              className="btn subtle icon sm"
-              aria-label="Dismiss"
-              onClick={() => {
-                U.toasts = U.toasts.filter((x) => x !== t);
-                notify();
-              }}
-            >
-              <Icon n="dismiss" s="12" />
-            </Btn>
-          </div>
-        ))}
-      </ToastMotion>
+    <div className="toasts" ref={ref}>
+      {/* no `limit` here: the store already keeps at most four, and a toast Fluent has put in its queue cannot be
+          dismissed, so it would show later and stay */}
+      <Toaster toasterId={TOASTER} position="bottom-start" inline />
     </div>
   );
 }

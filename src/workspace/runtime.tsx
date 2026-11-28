@@ -10,7 +10,8 @@ import { allConnectors, callConnector, connOn } from './connections';
 import { REC } from './registry';
 import { DemoActions, DemoBar, DemoNote } from './demo-data-ui';
 import { setDemoMark } from './demo-data';
-import { Avatar, Btn, Empty, Field, Icon, Input, MBar, Menu, Proto, Select, Switch, Textarea, type MenuEntry } from './ui';
+import { DrawerBody, DrawerHeader, InlineDrawer } from '@fluentui/react-components';
+import { Avatar, Btn, Empty, Field, Icon, Input, MBar, Menu, Proto, Select, Switch, Textarea, type MenuEntry, Tip } from './ui';
 import { LayerMotion, PanelMotion } from './motion';
 import { AppSheets, AppTabs, isCompact, useElWidth, type SoloItem } from './mobile';
 import { Explorer } from './views-a';
@@ -222,16 +223,17 @@ export function AppPane({
   const nav = (cls: string) => (
     <nav className={'app-nav ' + cls} aria-label="Screens">
       {screens.map((s) => (
-        <button
-          key={s.id}
-          className={cx('nav-i', scr && s.id === scr.id && 'on')}
-          aria-current={scr && s.id === scr.id ? 'page' : undefined}
-          title={s.name}
-          onClick={() => go(s.id)}
-        >
-          <Icon n={s.icon || 'circle'} s={cls === 'rail' ? '20' : '16'} />
-          <span>{s.name}</span>
-        </button>
+        // in the rail the name is tiny, so it is also the tip; beside a full row it would only cover the next one
+        <Tip text={cls === 'rail' ? s.name : null} side="after" key={s.id}>
+          <button
+            className={cx('nav-i', scr && s.id === scr.id && 'on')}
+            aria-current={scr && s.id === scr.id ? 'page' : undefined}
+            onClick={() => go(s.id)}
+          >
+            <Icon n={s.icon || 'circle'} s={cls === 'rail' ? '20' : '16'} />
+            <span>{s.name}</span>
+          </button>
+        </Tip>
       ))}
     </nav>
   );
@@ -282,15 +284,16 @@ export function AppPane({
         <strong className="app-name ellipsis">{compact && inSet ? 'Settings' : compact && scr ? scr.name : app.name}</strong>
         <span className="grow" />
         {admin && !compact && (
-          <button
-            className={cx('app-gear', inSet && 'on')}
-            aria-label="Settings"
-            aria-current={inSet ? 'page' : undefined}
-            title="Settings"
-            onClick={settings}
-          >
-            <Icon n="settings" s="20" />
-          </button>
+          <Tip text="Settings">
+            <button
+              className={cx('app-gear', inSet && 'on')}
+              aria-label="Settings"
+              aria-current={inSet ? 'page' : undefined}
+              onClick={settings}
+            >
+              <Icon n="settings" s="20" />
+            </button>
+          </Tip>
         )}
         {compact ? (
           <button
@@ -898,20 +901,20 @@ export function RecordDrawer({
     );
   if (res.status !== 200)
     return (
-      <aside className="drawer" ref={ref}>
-        <div className="drawer-head">
+      <InlineDrawer as="aside" className="drawer" open position="end" surfaceMotion={null} ref={ref as Ref<HTMLDivElement>}>
+        <DrawerHeader className="drawer-head">
           {back}
           <strong className="grow">{t.one}</strong>
           {shut}
-        </div>
-        <div className="drawer-body">
+        </DrawerHeader>
+        <DrawerBody className="drawer-body">
           <MBar tone="warning">
             {res.status === 404
               ? user.name + ' cannot open this ' + t.one.toLowerCase() + ', or it no longer exists.'
               : res.status + ' ' + res.error}
           </MBar>
-        </div>
-      </aside>
+        </DrawerBody>
+      </InlineDrawer>
     );
   const row: StoredRow = res.data,
     acc = accOf(def, user.role, t.name),
@@ -966,8 +969,16 @@ export function RecordDrawer({
     });
   };
   return (
-    <aside className="drawer" aria-label={t.one + ' details'} ref={ref}>
-      <div className="drawer-head">
+    <InlineDrawer
+      as="aside"
+      className="drawer"
+      open
+      position="end"
+      surfaceMotion={null}
+      aria-label={t.one + ' details'}
+      ref={ref as Ref<HTMLDivElement>}
+    >
+      <DrawerHeader className="drawer-head">
         {back}
         <div className="col gap0 grow">
           <span className="t-cap muted">
@@ -978,8 +989,8 @@ export function RecordDrawer({
           <strong className="t-sub2">{rowTitle(app, user, t, row)}</strong>
         </div>
         {shut}
-      </div>
-      <div className="drawer-body">
+      </DrawerHeader>
+      <DrawerBody className="drawer-body">
         <DemoNote app={app} table={t.name} row={row} />
         {P && <StagePath app={app} t={t} row={row} />}
         {P && (
@@ -1100,8 +1111,8 @@ export function RecordDrawer({
             </p>
           )}
         </section>
-      </div>
-    </aside>
+      </DrawerBody>
+    </InlineDrawer>
   );
 }
 /* ---------- the stage: the built app, as one or two users, with the walkthrough player ---------- */
