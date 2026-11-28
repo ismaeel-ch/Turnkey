@@ -1406,7 +1406,7 @@ export function Toasts() {
               </Btn>
             }
           >
-            {t.text}
+            <span data-toast={id}>{t.text}</span>
           </ToastTitle>
         </Toast>,
         // the store times each toast out, so Fluent's own timer is off
@@ -1421,7 +1421,9 @@ export function Toasts() {
   });
   return (
     <div className="toasts" ref={ref}>
-      <Toaster toasterId={TOASTER} position="bottom-start" inline limit={4} />
+      {/* no `limit` here: the store already keeps at most four, and a toast Fluent has put in its queue cannot be
+          dismissed, so it would show later and stay */}
+      <Toaster toasterId={TOASTER} position="bottom-start" inline />
     </div>
   );
 }
