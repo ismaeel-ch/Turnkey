@@ -569,6 +569,41 @@ async function main() {
       return lims.join(' | ').slice(0, 120);
     });
 
+    // ---- 13. the apps a software house runs on itself: hours priced and approved, invoices, a limit in Settings ----
+    await step(page, 'For a software house: Timesheets and client billing builds with every test passing', async () => {
+      await page.locator('.brand').click();
+      await page.waitForSelector('[data-home="software"]', { timeout: 15000 });
+      await page.locator('[data-home="software"]').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+      await sleep(1800);
+      await page.locator('[data-tpl="billing"] .tpl-build').click();
+      await page.waitForSelector('.work-head', { timeout: 30000 });
+      const a = await waitBuilt(page, 120000);
+      expect(a.status === 'ready' && a.tests && a.tests.failed === 0, 'status ' + a.status + ', tests ' + JSON.stringify(a.tests));
+      return `${a.name}: ${a.tests.total} tests pass`;
+    });
+    await step(page, 'Timesheets and Billing: the project lead sees hours waiting, priced at the project rate', async () => {
+      await openTab(page, 'App');
+      await page.waitForSelector('.login-card, .app-nav', { timeout: 15000 });
+      if (await page.locator('.login-card').count()) await page.locator('.persona-btn', { hasText: 'Sobia' }).first().click();
+      else await page.selectOption('select[aria-label="Preview as"]', { label: 'Sobia Nawaz · Project lead' });
+      await page.waitForSelector('.lg-inbox', { timeout: 15000 });
+      await page.locator('.fr-welcome button[aria-label="Close"], .fr-welcome .btn', { hasText: 'Not now' }).first().click().catch(() => {});
+      await sleep(600);
+      const box = clean(await page.locator('.lg-inbox').innerText());
+      expect(/3 to do/.test(box), 'inbox: ' + box.slice(0, 120));
+      return box.slice(0, 120);
+    });
+    await step(page, 'Settings page: the most hours in one entry is a setting', async () => {
+      await page.locator('.stage-settings').click();
+      await page.waitForSelector('.set-card', { timeout: 15000 });
+      await page.locator('.set-nav .set-tab', { hasText: 'Limits' }).click();
+      await page.waitForSelector('.set-limit', { timeout: 10000 });
+      await sleep(600);
+      const lims = (await page.locator('.set-limit label').allInnerTexts()).map(clean);
+      expect(lims.some((x) => /^Hours/.test(x)), 'limits: ' + lims.join(' | '));
+      return lims.join(' | ').slice(0, 120);
+    });
+
     // the page itself must not have thrown along the way
     await step(page, 'No errors on the page', async () => {
       expect(!errors.length, errors.slice(0, 3).join(' | '));
