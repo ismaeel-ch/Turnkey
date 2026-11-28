@@ -22,6 +22,8 @@ export const SERIES_MAX = 8;
 /** A column's label, or its name when it has none. */
 export const colName = (c: ColumnDef) => c.label || c.name;
 export const cvar = (i: number | null | undefined) => 'var(--c' + (i == null || i < 0 ? 0 : (i % SERIES_MAX) + 1) + ')';
+/** "Total amount", but "Total" for a field already called Total (never "Total total"). */
+export const totalLabel = (name: string) => (/^total\b/i.test(name.trim()) ? cap(name.trim()) : 'Total ' + name.toLowerCase());
 /** What a chart counts: rows, or the total or average of a number column. */
 export type Measure = { fn: 'count'; col: null; label: string } | { fn: 'sum' | 'avg'; col: ColumnDef; label: string };
 export const measureOf = (t: AppTable, m: string | null | undefined): Measure => {
@@ -31,7 +33,7 @@ export const measureOf = (t: AppTable, m: string | null | undefined): Measure =>
     ? {
         fn: x[1] === 'sum' ? 'sum' : 'avg',
         col: c,
-        label: (x[1] === 'sum' ? 'Total ' : 'Average ') + colName(c).toLowerCase(),
+        label: x[1] === 'sum' ? totalLabel(colName(c)) : 'Average ' + colName(c).toLowerCase(),
       }
     : {
         fn: 'count',
@@ -714,7 +716,7 @@ export const measureOpts = (t: AppTable) => {
   ].concat(
     nums.map((c) => ({
       name: 'sum:' + c.name,
-      label: 'Total ' + colName(c).toLowerCase(),
+      label: totalLabel(colName(c)),
     })),
     nums.map((c) => ({
       name: 'avg:' + c.name,
@@ -1026,6 +1028,23 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
     lane = cfg.lane ? colOf(t, cfg.lane) : null,
     P = def.process && def.process.table === t.name ? def.process : null,
     id = 'tm' + scr.id + pane.n;
+  // The width of a lane's track in pixels, so that a short bar's name, drawn beside it, gets room before the next bar on
+  // its row. A narrow track (chat open, a phone) then stacks bars on more rows instead of drawing names over each other.
+  const [trackW, setTrackW] = useState(640),
+    gtRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const el = gtRef.current;
+    if (!el || typeof ResizeObserver !== 'function') return;
+    const measure = () => {
+      const tr = el.querySelector('.gt-track');
+      const w = tr ? Math.round(tr.getBoundingClientRect().width) : 0;
+      if (w > 0) setTrackW((was) => (Math.abs(was - w) > 8 ? w : was));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   if (!sc) return <Empty icon="timeline" title="No date field" />;
   const day = 864e5,
     base = today(),
@@ -1093,7 +1112,9 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
     const ends: number[] = [];
     l.list.forEach((x) => {
       const from = Math.max(0, pct(x.a)),
-        to = Math.max(pct(x.b), from + 15);
+        inside = Math.min(100, pct(x.b)) - from >= 18,
+        label = Math.min(170, rowTitle(app, user, t, x.r, scr.label).length * 6.6) + 22,
+        to = inside ? pct(x.b) + 0.5 : Math.max(pct(x.b), from + (label / trackW) * 100);
       let i = ends.findIndex((e) => e <= from);
       if (i < 0) {
         i = ends.length;
@@ -1218,7 +1239,7 @@ export function VTimeline({ app, user, pane, scr, t, rows, st, cfg, setCfg, set,
           </>
         )}
       </div>
-      <div className={cx('gt', lane && 'lanes')}>
+      <div className={cx('gt', lane && 'lanes')} ref={gtRef}>
         <div className="gt-head">
           {lane && <div className="gt-lab" />}
           <div className="gt-scale">

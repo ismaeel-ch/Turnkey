@@ -640,8 +640,8 @@ export function askRelease(app: AppRecord, ask?: ReleaseAsk | null) {
   setChat(true);
   commit();
 }
-/** Release button on the chat card, or "yes" typed under it. */
-export async function releaseFromChat(app: AppRecord) {
+/** Release button on the chat card, or "yes" typed under it (`said`: the words typed, shown as the owner's message). */
+export async function releaseFromChat(app: AppRecord, said?: string) {
   const c = waitingRelease(app);
   if (!c) return null;
   const d = relDraft(app);
@@ -651,7 +651,7 @@ export async function releaseFromChat(app: AppRecord) {
     return null;
   }
   U.rel[app.id] = { ...d.R, busy: true };
-  pushChat(app, 'user', 'Release version ' + d.v);
+  pushChat(app, 'user', said || 'Release version ' + d.v);
   commit();
   const r = await releaseApp(app, d.kind, d.notes, { start: d.start });
   if (r) {
