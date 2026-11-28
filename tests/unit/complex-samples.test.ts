@@ -105,7 +105,9 @@ describe('changing an app that works things out', () => {
     expect(app.chat.map((m) => m.text || '').join(' ')).toMatch(/How many is used by the calculated field Amount in Parts used/);
     // the changes it offers never include one it would refuse
     for (const tip of changes.suggestChanges(app)) expect(tip).not.toMatch(/Remove the (how many|amount|price each)/i);
-  });
+    // The first import of the workspace's change module, then two full test runs of the app: about 6 s on a CI runner,
+    // over vitest's 5 s default.
+  }, 20_000);
 });
 
 describe('the order desk, used through its own endpoints', () => {
