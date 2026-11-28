@@ -521,6 +521,54 @@ async function main() {
       await sleep(800);
     });
 
+    // ---- 12. an app that works things out: totals, budgets, approval by amount, and its Settings page ----
+    await step(page, 'Apps that work things out: Order Desk builds with every test passing', async () => {
+      await page.locator('.brand').click();
+      await page.waitForSelector('[data-home="complex"]', { timeout: 15000 });
+      await page.locator('[data-home="complex"]').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+      await sleep(600);
+      await page.locator('[data-tpl="orders"] .tpl-build').click();
+      await page.waitForSelector('.work-head', { timeout: 30000 });
+      for (let i = 0; i < 400; i++) {
+        const ask = page.locator('.step-ask .btn.primary');
+        if (await ask.count()) await ask.first().click().catch(() => {});
+        const o = page.locator('.gcard.ask .opt:not([disabled])');
+        if (await o.count()) await o.first().click().catch(() => {});
+        const s = await page.evaluate(() => {
+          const st = window.__formwork && window.__formwork.state();
+          const t = st && (st.tabs[st.session] || []).find((x) => x.id === st.active[st.session]);
+          return t && t.app ? st.apps[t.app].status : null;
+        });
+        if (s === 'ready' || s === 'failed') break;
+        await sleep(300);
+      }
+      const a = await waitBuilt(page, 120000);
+      expect(a.status === 'ready' && a.tests && a.tests.failed === 0, 'status ' + a.status + ', tests ' + JSON.stringify(a.tests));
+      return `${a.name}: ${a.tests.total} tests pass`;
+    });
+    await step(page, 'Order Desk: the manager sees orders waiting and what is left to spend', async () => {
+      await openTab(page, 'App');
+      await page.waitForSelector('.login-card, .app-nav', { timeout: 15000 });
+      if (await page.locator('.login-card').count()) await page.locator('.persona-btn', { hasText: 'Omar' }).first().click();
+      else await page.selectOption('select[aria-label="Preview as"]', { label: 'Omar Farooq · Department manager' });
+      await page.waitForSelector('.lg-inbox', { timeout: 15000 });
+      await page.locator('.fr-welcome button[aria-label="Close"], .fr-welcome .btn', { hasText: 'Not now' }).first().click().catch(() => {});
+      await sleep(600);
+      const box = clean(await page.locator('.lg-inbox').innerText());
+      expect(/to do/.test(box), 'inbox: ' + box.slice(0, 120));
+      return box.slice(0, 120);
+    });
+    await step(page, 'Settings page: the amount that needs the director is a setting', async () => {
+      await page.locator('.stage-settings').click();
+      await page.waitForSelector('.set-card', { timeout: 15000 });
+      await page.locator('.set-nav .set-tab', { hasText: 'Limits' }).click();
+      await page.waitForSelector('.set-limit', { timeout: 10000 });
+      await sleep(600);
+      const lims = (await page.locator('.set-limit label').allInnerTexts()).map(clean);
+      expect(lims.some((x) => /^Total/.test(x)), 'limits: ' + lims.join(' | '));
+      return lims.join(' | ').slice(0, 120);
+    });
+
     // the page itself must not have thrown along the way
     await step(page, 'No errors on the page', async () => {
       expect(!errors.length, errors.slice(0, 3).join(' | '));
