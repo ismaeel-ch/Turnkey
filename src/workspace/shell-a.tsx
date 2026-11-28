@@ -43,7 +43,7 @@ import type { MenuEntry, TabItem } from './ui';
 import { DBX, createTableSQL, dbCount, dbTables } from './db';
 import { TYPE_LABEL, VIEW_ICON, VIEW_LABEL, accOf, colOf, deriveEndpoints, roleName, tableOf } from './engine';
 import { DATA_VIEWS, VIEW_WHAT, viewFit, viewsOf } from './viewspec';
-import { CARDS, COMPLEX_TEMPLATES, MORE_TEMPLATES, QUESTS, TEMPLATES, matchTemplate } from './catalog';
+import { CARDS, COMPLEX_TEMPLATES, MORE_TEMPLATES, QUESTS, SOFTWARE_TEMPLATES, TEMPLATES, matchTemplate } from './catalog';
 import { beginInterview, interviewNow, switchToDemo } from './interview';
 import { modelGoneForToday, modelOutage } from '@/shared/api-error';
 import { TEAMS, TeamAv } from './team';
@@ -103,6 +103,8 @@ const MeetingView = lazy(() => import('./meeting').then((m) => ({ default: m.Mee
 const StepsView = lazy(() => import('./steps-view').then((m) => ({ default: m.StepsView })));
 /** The questions and the plan are loaded when a sentence is first sent, so they stay out of the first page load. */
 const InterviewView = lazy(() => import('./interview-ui').then((m) => ({ default: m.InterviewView })));
+/** Apps shown under "For a software house" on Home are left out of the sections below it, so each card appears once. */
+const notSoftware = (id: string) => !SOFTWARE_TEMPLATES.includes(id);
 
 /* ===== Turnkey prototype · shell: title bar with workspace tabs, home, workspace, the line ===== */
 export function Titlebar({ tabs, tab }: { tabs: Tab[]; tab: Tab }) {
@@ -631,6 +633,13 @@ export function Home() {
           ))}
         </ol>
         {mine}
+        <div className="col gap0 sec" data-home="software">
+          <h2 className="t-sub2">For a software house</h2>
+          <span className="t-cap muted">
+            What a software team runs on: sprints and bugs, timesheets and billing, new clients, projects, bids, support and leave.
+          </span>
+        </div>
+        <div className="tpl-grid">{SOFTWARE_TEMPLATES.map(card)}</div>
         <div className="row between sec" data-tour="quests">
           <div className="col gap0">
             <h2 className="t-sub2">Hackathon quests</h2>
@@ -648,12 +657,12 @@ export function Home() {
             Totals and budgets worked out for you, bookings that cannot clash, and approvals that depend on the amount.
           </span>
         </div>
-        <div className="tpl-grid">{COMPLEX_TEMPLATES.map(card)}</div>
+        <div className="tpl-grid">{COMPLEX_TEMPLATES.filter(notSoftware).map(card)}</div>
         <div className="col gap0 sec">
           <h2 className="t-sub2">Business apps</h2>
           <span className="t-cap muted">Record-keeping apps with roles and a workflow.</span>
         </div>
-        <div className="tpl-grid">{TEMPLATES.concat(MORE_TEMPLATES).map(card)}</div>
+        <div className="tpl-grid">{TEMPLATES.concat(MORE_TEMPLATES).filter(notSoftware).map(card)}</div>
         {!apps.length ? mine0 : null}
         {guests.length > 0 && (
           <>

@@ -4,13 +4,15 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AppRecord } from '@/shared/types/workspace';
 import { checkPlan, logicLines } from '@/shared/plan';
 import '@/workspace/saved';
-import { CARDS, COMPLEX_TEMPLATES, matchTemplate } from '@/workspace/catalog';
+import { CARDS, COMPLEX_TEMPLATES, SOFTWARE_NEW, matchTemplate } from '@/workspace/catalog';
 import { planFromSaved } from '@/workspace/interview';
 
 // The browser loads sql.js as a script from /vendor; here it comes straight from node_modules.
 vi.mock('@/platform/sqlite', () => ({ loadSqlite: () => createRequire(import.meta.url)('sql.js')() }));
 
-/* The four saved builds that work numbers out and enforce rules, built from their recordings on a real database. */
+/* The saved builds that work numbers out and enforce rules (the four in complex.ts and the three a software house runs on,
+   in software.ts), built from their recordings on a real database. */
+const LOGIC_APPS = [...COMPLEX_TEMPLATES, ...SOFTWARE_NEW];
 
 type Mods = {
   core: typeof import('@/workspace/core');
@@ -51,14 +53,20 @@ beforeAll(async () => {
   M.core.S.settings.demo = true;
   M.core.S.settings.speed = 'instant';
   await M.db.initSqlite();
-  for (const id of COMPLEX_TEMPLATES) APPS[id] = await build(id);
+  for (const id of LOGIC_APPS) APPS[id] = await build(id);
 }, 120_000);
 
-describe.each(COMPLEX_TEMPLATES)('the %s saved build', (id) => {
+describe.each(LOGIC_APPS)('the %s saved build', (id) => {
   it('builds with every check passed', () => {
     const app = APPS[id];
     expect(failedChecks(app)).toEqual([]);
     expect(app.status).toBe('ready');
+    // no station was sent back: the recording is right the first time
+    expect(
+      Object.entries(app.line)
+        .filter(([, st]) => (st.attempt || 1) > 1)
+        .map(([k]) => k),
+    ).toEqual([]);
   });
   it('passes every generated test', () => {
     M.tests.runTestsSync(APPS[id]);
@@ -217,5 +225,124 @@ describe('a move after a line was added', () => {
     const moved = play({ role: 'requester', do: 'transition', transition: 'submit' });
     expect(moved.ok).toBe(true);
     expect(play({ role: 'requester', do: 'denied', action: 'approve' }).ok).toBe(true);
+  });
+});
+
+/* ---------- the three apps a software house runs on, used through their own endpoints ---------- */
+const callIn = (id: string) => (role: string, method: string, path: string, body?: Record<string, unknown>) => {
+  const app = APPS[id],
+    u = M.engine.appUsers(app).find((x) => x.role === role)!;
+  return M.engine.apiCall(app, u, method, '/api/' + path, body || {}, 'check');
+};
+const one = (rows: { id: number }[], id: number) => rows.find((r) => r.id === id) as Record<string, unknown>;
+
+describe('the sprint board', () => {
+  const call = callIn('sprints');
+  const sprint = (id: number) => one(call('product_owner', 'GET', 'sprints').data, id);
+
+  it('adds up each sprint and counts the open bugs of each component', () => {
+    expect(sprint(2)).toMatchObject({ planned: 31, done_points: 3, room_left: 9, open_critical: 1, health: 'critical_open' });
+    const admin = one(call('product_owner', 'GET', 'components').data, 4);
+    expect(admin).toMatchObject({ open_bugs: 2, critical_bugs: 1 });
+  });
+
+  it('refuses work that would take a sprint over its capacity', () => {
+    const over = call('tester', 'POST', 'work_items', { title: 'Big story', kind: 'story', points: 10, sprint: 2 });
+    expect(over).toMatchObject({
+      status: 400,
+      error: 'A sprint cannot take more story points than its capacity. Move something out first.',
+    });
+    expect(call('tester', 'POST', 'work_items', { title: 'Fits', kind: 'story', points: 9, sprint: 2 }).status).toBe(201);
+    expect(sprint(2).room_left).toBe(0);
+  });
+
+  it('never closes a critical bug as won’t fix, and only a tester marks work done', () => {
+    const critical = call('product_owner', 'POST', 'work_items/17/close_wont_fix');
+    expect(critical.status).toBe(409);
+    expect(critical.error).toMatch(/critical bug cannot be closed/);
+    expect(call('product_owner', 'POST', 'work_items/15/close_wont_fix').status).toBe(200);
+    expect(call('developer', 'POST', 'work_items/7/verify').status).toBe(403);
+    expect(call('tester', 'POST', 'work_items/7/verify').status).toBe(200);
+    expect(call('tester', 'PATCH', 'work_items/7', { title: 'Changed later' }).status).toBe(409);
+  });
+});
+
+describe('timesheets and client billing', () => {
+  const call = callIn('billing');
+  const invoice = (id: number) => one(call('finance', 'GET', 'invoices').data, id);
+
+  it('prices hours at the project rate and works out what each invoice and client is owed', () => {
+    expect(invoice(1)).toMatchObject({ hours: 21, total: 945, paid: 945, balance: 0, state: 'paid' });
+    expect(invoice(2)).toMatchObject({ total: 840, paid: 500, balance: 340, state: 'overdue' });
+    expect(invoice(3)).toMatchObject({ hours: 14, total: 630, state: 'open' });
+    expect(one(call('finance', 'GET', 'clients').data, 1)).toMatchObject({ billed: 1575, owed: 630 });
+    expect(one(call('finance', 'GET', 'projects').data, 2)).toMatchObject({ used: 1080, budget_left: 220, budget_state: 'nearly_used' });
+    // hours that are not billable are worth nothing
+    expect(one(call('finance', 'GET', 'time_entries').data, 4).amount).toBe(0);
+  });
+
+  it('keeps developers to their own hours, at most 12 at a time, and out of the invoices', () => {
+    const mine = call('developer', 'GET', 'time_entries').data as { person: number }[];
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.every((e) => e.person === mine[0].person)).toBe(true);
+    expect(call('developer', 'POST', 'time_entries', { note: 'Long day', project: 1, worked_on: '2026-01-05', hours: 13 }).status).toBe(
+      400,
+    );
+    expect(call('developer', 'GET', 'invoices').status).toBe(403);
+  });
+
+  it('bills only approved, billable hours of the same client, and never takes more than is owed', () => {
+    expect(call('finance', 'PATCH', 'time_entries/8', { invoice: 3 })).toMatchObject({
+      status: 400,
+      error: 'An invoice only takes hours from its own client’s projects.',
+    });
+    expect(call('finance', 'PATCH', 'time_entries/4', { invoice: 3 }).status).toBe(200);
+    expect(call('finance', 'POST', 'time_entries/4/mark_invoiced')).toMatchObject({
+      status: 409,
+      error: 'Hours that are not billable are never invoiced.',
+    });
+    expect(
+      call('finance', 'POST', 'payments', { reference: 'Too much', invoice: 2, received_on: '2026-01-05', amount: 400 }),
+    ).toMatchObject({
+      status: 400,
+      error: 'Payments cannot add up to more than the invoice.',
+    });
+    expect(call('finance', 'POST', 'payments', { reference: 'The rest', invoice: 2, received_on: '2026-01-05', amount: 340 }).status).toBe(
+      201,
+    );
+    expect(invoice(2)).toMatchObject({ balance: 0, state: 'paid' });
+  });
+});
+
+describe('client onboarding', () => {
+  const call = callIn('onboarding');
+  const onboarding = (id: number) => one(call('delivery_lead', 'GET', 'onboardings').data, id);
+
+  it('works out the deposit due, the open required steps and the team', () => {
+    expect(onboarding(2)).toMatchObject({ deposit_due: 7200, steps: 5, required_open: 1, team_size: 2 });
+    expect(onboarding(4)).toMatchObject({ steps: 0, team_size: 0 });
+  });
+
+  it('holds setup back until there is a checklist and a team', () => {
+    const held = call('delivery_lead', 'POST', 'onboardings/4/start_setup');
+    expect(held).toMatchObject({ status: 409, error: 'Add the checklist and at least one team member first.' });
+  });
+
+  it('goes live only when every required step is done and the deposit is in, then closes the checklist', () => {
+    expect(call('delivery_lead', 'POST', 'onboardings/2/go_live').status).toBe(409);
+    expect(call('delivery_lead', 'PATCH', 'checklist_items/8', { done: true }).status).toBe(200);
+    expect(onboarding(2).required_open).toBe(0);
+    expect(call('delivery_lead', 'POST', 'onboardings/2/go_live').status).toBe(200);
+    expect(call('delivery_lead', 'PATCH', 'onboardings/2', { project: 'Something else' }).status).toBe(409);
+    expect(call('delivery_lead', 'POST', 'checklist_items', { step: 'Late step', onboarding: 2 })).toMatchObject({
+      status: 400,
+      error: 'This client is live, so its checklist is closed.',
+    });
+  });
+
+  it('shows a client only their own onboarding', () => {
+    const seen = call('client', 'GET', 'onboardings').data as { client_name: string }[];
+    expect(seen.map((o) => o.client_name)).toEqual(['Fourth Coffee']);
+    expect(call('client', 'GET', 'checklist_items').status).toBe(403);
   });
 });
