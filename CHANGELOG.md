@@ -12,11 +12,11 @@ The last three hand-made components are Fluent's own.
 ### Changed
 
 - Toasts are Fluent's Toaster: a status icon, the message, a dismiss button, and Fluent's way in and out.
-  ([#PRNUM](https://github.com/ismaeel-ch/Turnkey/pull/PRNUM))
+  ([#304](https://github.com/ismaeel-ch/Turnkey/pull/304))
 - The panel that opens a record in a built app, and the sheets that rise from the bottom on a phone, are Fluent's
-  Drawer. ([#PRNUM](https://github.com/ismaeel-ch/Turnkey/pull/PRNUM))
+  Drawer. ([#304](https://github.com/ismaeel-ch/Turnkey/pull/304))
 - Every button with a hint shows it in Fluent's Tooltip, not the browser's: buttons with words, and the rows and
-  tiles written as plain buttons. ([#PRNUM](https://github.com/ismaeel-ch/Turnkey/pull/PRNUM))
+  tiles written as plain buttons. ([#304](https://github.com/ismaeel-ch/Turnkey/pull/304))
 
 ## [0.5.12] - 2026-11-28
 
