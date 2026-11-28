@@ -17,6 +17,8 @@ export const COMPLEX_TEMPLATES = ['orders', 'vet', 'projects', 'dispatch'];
 // What a software house runs on itself, first on Home: three new apps (software.ts) and four from the lists above.
 export const SOFTWARE_NEW = ['sprints', 'billing', 'onboarding'];
 export const SOFTWARE_TEMPLATES = ['sprints', 'billing', 'onboarding', 'projects', 'biddesk', 'helpdesk', 'leave'];
+// The first-run picker ("Pick a first app"): software house apps first, the clinic last because the guided story uses it.
+export const FIRST_PICKS = ['sprints', 'billing', 'onboarding', 'biddesk', 'helpdesk', 'clinic'];
 export const QUESTS = ['factcheck', 'priorart', 'debate'];
 
 export const CARDS: Dict<SavedCard> = {

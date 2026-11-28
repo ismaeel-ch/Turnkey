@@ -130,6 +130,9 @@ async function flowDemo(browser, url) {
   check('live choice is offered whenever the device is online, wherever the page runs', !(await page.locator('.choice').nth(1).isDisabled()) && /Model connected|No model connected|Checking the model/.test(await page.locator('.choice').nth(1).innerText()));
   await page.getByRole('button', { name: 'Continue' }).click();
   await shot(page, '02-onboarding-pick');
+  const picks = (await page.locator('.choices .choice strong').allInnerTexts()).slice(0, 3).join();
+  check('first app picker leads with the software house apps, the sprint board picked', picks === 'Sprint board and bug triage,Timesheets and client billing,Client onboarding' && await page.locator('.choices .choice.on strong').innerText() === 'Sprint board and bug triage', picks);
+  await page.locator('.choices .choice', { hasText: 'Clinic appointments' }).click(); // the rest of this flow follows the clinic
   await page.getByRole('button', { name: 'Continue' }).click();
   await setSpeed(page, 'fast'); await howBuilt(page);
   await page.getByRole('button', { name: 'Open my workspace' }).click();
@@ -847,7 +850,7 @@ async function flowMisc(browser, url) {
   // a view where browser storage is blocked (like an embedded preview): everything still works, in memory
   const blocked = await newPage(browser, { init: "Storage.prototype.setItem = function () { throw new Error('storage disabled'); }; Object.defineProperty(window, 'indexedDB', { get() { return undefined; } });" });
   const p2 = blocked.page; await p2.goto(url); await p2.waitForSelector('.ob-card');
-  await p2.getByRole('button', { name: 'Get started' }).click(); await p2.getByRole('button', { name: /Skip and use the demo account/ }).click(); await p2.getByRole('button', { name: 'Continue' }).click(); await p2.getByRole('button', { name: 'Continue' }).click();
+  await p2.getByRole('button', { name: 'Get started' }).click(); await p2.getByRole('button', { name: /Skip and use the demo account/ }).click(); await p2.getByRole('button', { name: 'Continue' }).click(); await p2.locator('.choices .choice', { hasText: 'Clinic appointments' }).click(); await p2.getByRole('button', { name: 'Continue' }).click();
   await setSpeed(p2, 'instant'); await howBuilt(p2); await p2.locator('.ob-body .switch').click(); await p2.getByRole('button', { name: 'Open my workspace' }).click();
   await p2.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 20000 }); await p2.locator('.gcard.ask .opt').first().click(); await waitReady(p2); const m = await appState(p2);
   check('without browser storage the app still builds and says nothing will be kept', m.status === 'ready' && (await p2.locator('.mbar.bar').first().innerText()).includes('not available'), m.status);
