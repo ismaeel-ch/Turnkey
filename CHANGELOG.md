@@ -5,6 +5,18 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.17] - 2026-11-28
+
+The first-run picker leads with the software house apps too.
+
+### Changed
+
+- "Pick a first app" in the first-run setup shows the sprint board, timesheets and client billing, client onboarding,
+  the bidding desk, the IT helpdesk and clinic appointments, then the three quests. The sprint board is picked unless
+  you choose another. ([#312](https://github.com/ismaeel-ch/Turnkey/pull/312))
+- The example sentence in Home's box is about a software team's sprints and bugs.
+  ([#312](https://github.com/ismaeel-ch/Turnkey/pull/312))
+
 ## [0.5.16] - 2026-11-28
 
 Home opens on the apps a software house runs on itself.

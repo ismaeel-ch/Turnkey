@@ -86,7 +86,7 @@ import {
 import { appUsers, reseed, tourExec } from './engine';
 import { demoCounts, demoUndo, planDemoRemoval, tempDemoData } from './demo-data';
 import { DATA_VIEWS, migrateApp } from './viewspec';
-import { CARDS, QUESTS, TEMPLATES, loadSaved } from './catalog';
+import { CARDS, FIRST_PICKS, QUESTS, loadSaved } from './catalog';
 import { TEAMS } from './team';
 import { TESTS, runTestsSync, suiteOf } from './tests';
 import { FLOW, isDark } from './flow';
@@ -141,7 +141,7 @@ const CompareDialog = lazy(() => import('./improve').then((m) => ({ default: m.C
 /* ===== Turnkey prototype · shell: first-run onboarding, sign-in, dialogs, guided tour, boot ===== */
 /* The forms below keep their state in the view store (U), so it outlives a re-render. Components read it through a
    getter and change it only through these actions, never by writing to the store while rendering. */
-const OB_START: OnboardingForm = { step: 0, name: '', user: '', pass: '', demo: true, dev: false, pick: 'clinic', tour: true, err: '' };
+const OB_START: OnboardingForm = { step: 0, name: '', user: '', pass: '', demo: true, dev: false, pick: 'sprints', tour: true, err: '' };
 const obForm = (): OnboardingForm => U.ob || OB_START;
 function setOb(patch: Partial<OnboardingForm> | null) {
   U.ob = patch ? { ...obForm(), ...patch } : null;
@@ -390,7 +390,7 @@ export function Onboarding() {
         <h1 className="t-title2">Pick a first app</h1>
         <p className="muted">Each is one sentence. The agents build it while you take the tour.</p>
         <div className="choices three">
-          {TEMPLATES.concat(QUESTS).map((id) => {
+          {FIRST_PICKS.concat(QUESTS).map((id) => {
             const r = CARDS[id];
             return (
               <button

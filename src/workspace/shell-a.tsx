@@ -586,7 +586,9 @@ export function Home() {
             rows={2}
             aria-label="Describe the app"
             placeholder={
-              demo ? 'Try: a clinic that books patient appointments' : 'Example: a gym tracks members, class bookings and trainer schedules'
+              demo
+                ? 'Try: a software team plans sprints and tracks bugs'
+                : 'Example: a software house logs hours on client projects and bills its clients'
             }
             value={h.text}
             onInput={(e) => {
