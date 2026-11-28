@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactElement, type ReactNode } from 'react';
-import { PresenceGroup, motionTokens } from '@fluentui/react-components';
+import { motionTokens } from '@fluentui/react-components';
 import { Fade, Slide } from '@fluentui/react-motion-components-preview';
 
 /* ===== Motion for things that come and go, with Fluent's motion components =====
@@ -48,26 +48,6 @@ export function LayerMotion({ children }: { children?: ReactElement | null | fal
     <Fade visible={!!children} appear unmountOnExit duration={motionTokens.durationNormal} exitDuration={motionTokens.durationFaster}>
       {el}
     </Fade>
-  );
-}
-
-/** A stack of short messages: each rises into place, and fades down and out when its time is up. */
-export function ToastMotion({ children }: { children: ReactElement[] }) {
-  return (
-    <PresenceGroup>
-      {children.map((c) => (
-        <Slide
-          key={c.key}
-          outY="8px"
-          duration={motionTokens.durationNormal}
-          easing={IN}
-          exitDuration={motionTokens.durationFast}
-          exitEasing={OUT}
-        >
-          {c}
-        </Slide>
-      ))}
-    </PresenceGroup>
   );
 }
 

@@ -9,7 +9,7 @@ import { colFmt, fmtOf } from './app-settings';
 type NumFmt = (v: unknown) => string;
 import { accOf, colOf, roleName, tableOf } from './engine';
 import { DATA_VIEWS, isCat, isDate, isMeasure } from './viewspec';
-import { Btn, Card, Empty, FilterChip, Icon, Seg, Switch } from './ui';
+import { Btn, Card, Empty, FilterChip, Icon, Seg, Switch, Tip as BtnTip } from './ui';
 import { cellText, fetchApi, patchPane, rowTitle, stateLabel, stateTone } from './runtime';
 import { EmptyDash } from './firstrun';
 import { Inbox } from './record-extras';
@@ -1664,26 +1664,26 @@ export function Dash({
                 v = aggOf(M, rows),
                 hasW = Object.keys(x.w.where || {}).length > 0;
               return (
-                <button
-                  key={x.i}
-                  className="kpi"
-                  title="Open these records"
-                  onClick={() =>
-                    goRecords(app, user, pane, x.t.name, {
-                      filters: filtersFor(x.t.name).concat(whereF(x)),
-                    })
-                  }
-                >
-                  <span className="kpi-l">{x.w.label}</span>
-                  <span className="kpi-v">{colFmt(app.def, M.col)(v)}</span>
-                  <span className="kpi-s">
-                    {hasW && M.fn === 'count' && all.length
-                      ? Math.round((v / all.length) * 100) + '% of ' + fmtOf(app.def).num(all.length)
-                      : M.fn === 'count'
-                        ? 'in total'
-                        : M.label.toLowerCase()}
-                  </span>
-                </button>
+                <BtnTip text="Open these records" key={x.i}>
+                  <button
+                    className="kpi"
+                    onClick={() =>
+                      goRecords(app, user, pane, x.t.name, {
+                        filters: filtersFor(x.t.name).concat(whereF(x)),
+                      })
+                    }
+                  >
+                    <span className="kpi-l">{x.w.label}</span>
+                    <span className="kpi-v">{colFmt(app.def, M.col)(v)}</span>
+                    <span className="kpi-s">
+                      {hasW && M.fn === 'count' && all.length
+                        ? Math.round((v / all.length) * 100) + '% of ' + fmtOf(app.def).num(all.length)
+                        : M.fn === 'count'
+                          ? 'in total'
+                          : M.label.toLowerCase()}
+                    </span>
+                  </button>
+                </BtnTip>
               );
             })}
           </div>

@@ -24,7 +24,7 @@ import { usageLine } from '@/platform/agui/usage';
 import { allConnectors, connOn } from './connections';
 import { savedCases } from './saved-runs';
 import { TEAMS, type TeamRun, TeamAv, canRunTeam, runTeam, sameText, stopTeam, teamBlock, teamCase, teamJump } from './team';
-import { Avatar, Btn, Card, Empty, Icon, Input, MBar, Proto, Spinner } from './ui';
+import { Avatar, Btn, Card, Empty, Icon, Input, MBar, Proto, Spinner, Tip } from './ui';
 import {
   FieldInput,
   cellText,
@@ -138,9 +138,11 @@ export function CaseBoard({
             className={'bd-kid tone-' + (k.badge && x[k.badge] != null ? tone(kt, colOf(kt, k.badge), x[k.badge]) : 'neutral')}
           >
             <div className="bd-top">
-              <button className="bd-open" title={'Open this ' + kt.one.toLowerCase()} onClick={() => open(kt.name, x.id)}>
-                {title(kt, x)}
-              </button>
+              <Tip text={'Open this ' + kt.one.toLowerCase()}>
+                <button className="bd-open" onClick={() => open(kt.name, x.id)}>
+                  {title(kt, x)}
+                </button>
+              </Tip>
               {badge(kt, k.badge, x)}
             </div>
             {k.text && k.text !== kt.title && txt(kt, k.text, x) ? <p className="bd-text">{txt(kt, k.text, x)}</p> : null}
@@ -164,9 +166,11 @@ export function CaseBoard({
           </span>
         )}
         <div className="bd-top">
-          <button className="bd-open" title={'Open this ' + t.one.toLowerCase()} onClick={() => open(t.name, r.id)}>
-            {title(t, r)}
-          </button>
+          <Tip text={'Open this ' + t.one.toLowerCase()}>
+            <button className="bd-open" onClick={() => open(t.name, r.id)}>
+              {title(t, r)}
+            </button>
+          </Tip>
           {badge(t, p.badge, r)}
         </div>
         {p.rank && lv != null
@@ -275,9 +279,11 @@ export function CaseBoard({
                 <ul className="bd-lines">
                   {rs.map((r) => (
                     <li key={r.id}>
-                      <button className="bd-open" title={'Open this ' + t.one.toLowerCase()} onClick={() => open(t.name, r.id)}>
-                        {title(t, r)}
-                      </button>
+                      <Tip text={'Open this ' + t.one.toLowerCase()}>
+                        <button className="bd-open" onClick={() => open(t.name, r.id)}>
+                          {title(t, r)}
+                        </button>
+                      </Tip>
                       {p.text && p.text !== t.title && txt(t, p.text, r) ? <p className="bd-text">{txt(t, p.text, r)}</p> : null}
                     </li>
                   ))}
@@ -317,9 +323,11 @@ export function CaseBoard({
           {rows.map((r) => (
             <li key={r.id}>
               <div className="bd-top">
-                <button className="bd-open" title={'Open this ' + t.one.toLowerCase()} onClick={() => open(t.name, r.id)}>
-                  {title(t, r)}
-                </button>
+                <Tip text={'Open this ' + t.one.toLowerCase()}>
+                  <button className="bd-open" onClick={() => open(t.name, r.id)}>
+                    {title(t, r)}
+                  </button>
+                </Tip>
                 {p.weight ? (
                   <span className="t-cap muted" title={colOf(t, p.weight)?.label}>
                     {'× '}
@@ -352,9 +360,11 @@ export function CaseBoard({
             </span>
           ) : null}
           <div className="bd-top">
-            <button className="bd-open" title={'Open this ' + t.one.toLowerCase()} onClick={() => open(t.name, r.id)}>
-              {title(t, r)}
-            </button>
+            <Tip text={'Open this ' + t.one.toLowerCase()}>
+              <button className="bd-open" onClick={() => open(t.name, r.id)}>
+                {title(t, r)}
+              </button>
+            </Tip>
             {badge(t, p.badge, r)}
           </div>
           <dl className="bd-facts">

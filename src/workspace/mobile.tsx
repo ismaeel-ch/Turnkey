@@ -34,6 +34,7 @@ import { AGENTS, PENDING, RUNS, STATIONS, deleteApp } from './line';
 import { demoMenuItems } from './demo-data-ui';
 import { flowOf } from './custom';
 import { REVIEWERS } from './reviewers';
+import { DrawerBody, InlineDrawer } from '@fluentui/react-components';
 import { Btn, Avatar, Empty, Icon, Logo } from './ui';
 import { startWalk } from './runtime';
 import type { GuideEntry } from './firstrun';
@@ -148,8 +149,11 @@ export function Sheet({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <section
+      <InlineDrawer
         className={cx('sheet', tall && 'tall')}
+        open
+        position="bottom"
+        surfaceMotion={null}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -176,8 +180,8 @@ export function Sheet({
             </Btn>
           </header>
         </div>
-        <div className="sheet-body">{children}</div>
-      </section>
+        <DrawerBody className="sheet-body">{children}</DrawerBody>
+      </InlineDrawer>
     </div>
   );
 }

@@ -27,7 +27,7 @@ import {
   stepsAt,
 } from './custom';
 import { REVIEWERS } from './reviewers';
-import { Btn, AgentAv, Icon, STATUS_META } from './ui';
+import { Btn, AgentAv, Icon, STATUS_META, Tip } from './ui';
 import { useWidth } from './views-b';
 import { isDirty, relOf } from './release';
 import { LineView } from './shell-a';
@@ -1264,28 +1264,28 @@ function StepPalette({ app }: { app: AppRecord }) {
     <div className="flow-palette" role="toolbar" aria-label="Steps you can add to the workflow" data-tour="palette">
       <span className="t-cap muted">Drag a step onto a gate, or press it:</span>
       {tiles.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          className={cx('fp-tile', t.on && 'on')}
-          data-step={t.id}
-          draggable={!t.on}
-          disabled={t.on}
-          title={t.on ? t.label + ' is already in this workflow.' : t.job}
-          onDragStart={(ev) => {
-            ev.dataTransfer.setData(STEP_MIME, t.id);
-            ev.dataTransfer.effectAllowed = 'copy';
-          }}
-          onClick={() => {
-            const st = firstGate(t.id);
-            if (st) dropStep(app, t.id, st);
-          }}
-        >
-          <span className={'av sq av-xs acc-' + t.acc}>
-            <Icon n={t.icon} s="12" />
-          </span>
-          {t.label}
-        </button>
+        <Tip text={t.on ? t.label + ' is already in this workflow.' : t.job} key={t.id}>
+          <button
+            type="button"
+            className={cx('fp-tile', t.on && 'on')}
+            data-step={t.id}
+            draggable={!t.on}
+            disabled={t.on}
+            onDragStart={(ev) => {
+              ev.dataTransfer.setData(STEP_MIME, t.id);
+              ev.dataTransfer.effectAllowed = 'copy';
+            }}
+            onClick={() => {
+              const st = firstGate(t.id);
+              if (st) dropStep(app, t.id, st);
+            }}
+          >
+            <span className={'av sq av-xs acc-' + t.acc}>
+              <Icon n={t.icon} s="12" />
+            </span>
+            {t.label}
+          </button>
+        </Tip>
       ))}
     </div>
   );

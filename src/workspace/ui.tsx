@@ -11,6 +11,7 @@ import {
   type ButtonHTMLAttributes,
   type ChangeEvent,
   type InputHTMLAttributes,
+  type ReactElement,
   type ReactNode,
   type Ref,
   type SelectHTMLAttributes,
@@ -131,6 +132,26 @@ export function AgentAv({ id, size }: { id: string; size?: string }) {
   if (!a) return <Avatar name="You" size={size} acc="steel" />;
   return <IconAv icon={a.icon} acc={a.acc} size={size} title={a.name + ' agent'} />;
 }
+/** Fluent's Tooltip around a hand-written button, row or tile: `label` when the tip is the thing's only name. */
+export function Tip({
+  text,
+  label,
+  side,
+  children,
+}: {
+  text?: string | null;
+  label?: boolean;
+  /** where the tip opens: below (the usual place) or after, for a column of items */
+  side?: 'below' | 'after';
+  children: ReactElement;
+}) {
+  if (!text) return children;
+  return (
+    <Tooltip content={text} relationship={label ? 'label' : 'description'} withArrow positioning={side || 'below'}>
+      {children}
+    </Tooltip>
+  );
+}
 /** Text that acts: Fluent's Link drawn on a button, for "Change", "Skip" and other actions inside a sentence. */
 export const LinkBtn = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { quiet?: boolean }>(function LinkBtn(
   { className, quiet, children, ...rest },
@@ -167,19 +188,17 @@ export const Btn = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProps
       appearance={appearance}
       size={has('sm') ? 'small' : has('lg') ? 'large' : 'medium'}
       icon={iconOnly ? children : undefined}
-      // a button with words keeps its `title`: where the words are hidden (a narrow toolbar) it is the button's name
-      title={iconOnly ? undefined : title}
       {...rest}
     >
       {iconOnly ? undefined : children}
     </Button>
   );
-  if (!title || !iconOnly) return button;
-  // Fluent's Tooltip in place of the browser's own on a button that shows only an icon: it is the button's name,
-  // unless the button already has one, and then it describes it.
+  if (!title) return button;
+  // Fluent's Tooltip in place of the browser's own. On a button that shows only an icon and has no name it is the
+  // name; on any other it describes the button (words hidden on a narrow screen stay readable to a screen reader).
   const named = !!(rest as { 'aria-label'?: string })['aria-label'];
   return (
-    <Tooltip content={title} relationship={named ? 'description' : 'label'} withArrow positioning="below">
+    <Tooltip content={title} relationship={iconOnly && !named ? 'label' : 'description'} withArrow positioning="below">
       {button}
     </Tooltip>
   );
