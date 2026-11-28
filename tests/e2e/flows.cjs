@@ -910,7 +910,7 @@ async function canvasFieldEdits(browser, url) { // the owner edits fields on the
 async function flowViews(browser, url) {
   const { ctx, page } = await newPage(browser);
   await enter(page, url); await shot(page, '70-home-library');
-  check('home lists three quests and eleven business apps', await page.locator('.tpl').count() === 14 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
+  check('home lists three quests and fourteen business apps', await page.locator('.tpl').count() === 17 && await page.locator('.tpl .badge', { hasText: /^Quest/ }).count() === 3);
   await page.locator('[data-tpl="clinic"] .tpl-build').click(); await page.waitForSelector('.gcard.ask .opt:not([disabled])', { timeout: 30000 }); await page.locator('.gcard.ask .opt').first().click(); await waitReady(page);
   let a = await appState(page);
   check('six stations, and the Views station passed', Object.keys(a.line).length === 6 && a.line.views === 'ok', a.line);
