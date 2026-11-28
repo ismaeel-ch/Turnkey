@@ -77,6 +77,8 @@ async function snap(page, name) {
   await page.mouse.move(0, 0);
   if (await page.evaluate(() => document.activeElement && document.activeElement !== document.body)) await page.evaluate(() => document.activeElement.blur());
   await sleep(250);
+  // a tooltip opened by the last click or focus takes a moment to close: a picture never holds one
+  await page.waitForFunction(() => !document.querySelector('[role="tooltip"]'), null, { timeout: 5000 }).catch(() => {});
   await compare(name, await page.screenshot({ animations: 'disabled', caret: 'hide' }));
 }
 
