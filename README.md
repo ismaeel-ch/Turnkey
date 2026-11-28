@@ -29,11 +29,11 @@ doctors` and press Enter. (With **Live** off in the title bar this replays the s
 5. **First use.** Open the **App** tab and sign in as Sara Malik: the app welcomes her as a receptionist, lists what
    she can do, and offers a one-minute tour. The made-up records are marked **Demo**; **Remove demo data** empties
    the lists in one step (and can be undone).
-6. **Release and fix.** On **Release**, release version 1.0. Under "Something wrong, or something missing?", type or
-   pick **Add a notes field to patients**. You get a plan first, the change waits in a draft that only you see, and
-   after **It works** you release it as version 1.1. People with the link keep 1.0 until then. The Release page
-   always offers the next version: with nothing changed it explains how, and **Release again without changes** asks
-   only for a reason.
+6. **Release and fix, from the chat.** In the **Agents** panel press **Release version 1.0** and confirm on the card.
+   Then type `Add a notes field to patients`. You get a plan first and nothing changes until you type `go ahead`; the
+   change waits in a draft that only you see. Type `it works`, then `release` and `yes`, and it goes out as version 1.1. People
+   with the link keep 1.0 until then. The same steps are on the **Release** page if you prefer buttons, and with
+   nothing changed **Release again without changes** asks only for a reason.
 
 <table>
   <tr>
