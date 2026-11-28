@@ -5,6 +5,21 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.15] - 2026-11-28
+
+Live builds keep each person's records private the way the plan says.
+
+### Fixed
+
+- The Backend agent can no longer give anyone wider access than the plan the owner approved: where the plan says
+  doctors see only their own appointments, "every appointment" is narrowed back to "their own".
+  ([#308](https://github.com/ismaeel-ch/Turnkey/pull/308))
+- A test case that gives a record to the wrong person (a model miscounting the list of people) is lined up with its
+  own later steps before it runs, and the Tester now names people instead of numbering them.
+  ([#308](https://github.com/ismaeel-ch/Turnkey/pull/308))
+- Test cases that prove a rule (no double booking, an end after the start) are no longer dropped for leaving out the
+  stage, which the workflow fills in. ([#308](https://github.com/ismaeel-ch/Turnkey/pull/308))
+
 ## [0.5.14] - 2026-11-28
 
 The row of view tabs in a built app's list page stays one low row.

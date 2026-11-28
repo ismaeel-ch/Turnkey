@@ -1,7 +1,7 @@
-import type { AppTable, BackedDef, BriefedDef, Role, TestCase, TourStep, Untrusted } from '@/shared/types/app';
+import type { AppTable, AppUser, BackedDef, BriefedDef, Role, TestCase, TourStep, Untrusted } from '@/shared/types/app';
 import type { AppRecord, Dict, QaState, Run } from '@/shared/types/workspace';
 import { U, arr, commit, emit, errText, snake, str, toolCall, liveModelOn } from './core';
-import { accOf, appUsers, mainTable, roleName, tableOf } from './engine';
+import { accOf, appUsers, colOf, mainTable, roleName, tableOf } from './engine';
 import { REC } from './registry';
 import { TESTS, runTestsSync, suiteOf } from './tests';
 import {
@@ -184,6 +184,60 @@ export function fillWorkflowSteps(cases: TestCase[], def: BackedDef): TestCase[]
       steps.push(s);
     }
     return added ? { ...c, steps } : c;
+  });
+}
+/**
+ * A case names whose record it makes by the person's place in the USERS list ("doctor": 4), and a model can miscount:
+ * the appointment it means for Dr Chen goes to Dr Kim, and then "Dr Kim does not see it" fails although the access
+ * rules are right. The case's own later steps say whose record it is meant to be: a person who sees only their own
+ * records and must find it is the owner, and one who must not find it is not. Code lines the owner field up with
+ * those steps before the cases run. A case that does not say, or whose creator fills in their own record, is left as is.
+ */
+export function alignOwners(cases: TestCase[], def: BackedDef, users: AppUser[]): TestCase[] {
+  const P = def.process;
+  const person = (s: TourStep) => {
+    const who = (s.user || '').trim().toLowerCase(),
+      named = (x: AppUser) => x.username === who || x.name.toLowerCase() === who || x.name.toLowerCase().split(' ')[0] === who;
+    return (
+      (who && (users.find((x) => x.username === who) || users.find((x) => x.role === s.role && named(x)) || users.find(named))) ||
+      users.find((x) => x.role === s.role)
+    );
+  };
+  const holder = (v: unknown) => {
+    if (typeof v === 'number' || /^\d+$/.test(String(v ?? '').trim())) return users.find((u) => u.id === Number(v));
+    const name = String(v ?? '')
+      .trim()
+      .toLowerCase();
+    return name ? users.find((u) => u.name.toLowerCase() === name || u.username === name) : undefined;
+  };
+  return cases.map((c) => {
+    let changed = false;
+    const steps = c.steps.map((s, i) => {
+      if (s.do !== 'create') return s;
+      const tn = s.table || (P && P.table) || mainTable(def)?.name || '',
+        t = tableOf(def, tn),
+        oc = t && t.owner ? colOf(t, t.owner) : null;
+      if (!t || !oc || oc.type !== 'user' || (oc.role && person(s)?.role === oc.role)) return s;
+      // the steps about this record: the ones after it on the same list, up to the next record made there
+      const next = c.steps.findIndex((x, k) => k > i && x.do === 'create' && (x.table || tn) === tn),
+        after = c.steps.slice(i + 1, next < 0 ? undefined : next).filter((x) => (x.table || tn) === tn);
+      const who = (dos: string[]) =>
+        after
+          .filter((x) => dos.includes(x.do))
+          .map(person)
+          .filter((u): u is AppUser => !!u && (!oc.role || u.role === oc.role) && accOf(def, u.role, tn).list === 'own');
+      const finds = who(['see', 'update', 'delete']),
+        hidden = who(['hidden']),
+        now = holder((s.values || {})[oc.name]),
+        isHidden = (u: AppUser) => hidden.some((h) => h.id === u.id);
+      let want: AppUser | undefined;
+      if (finds.length && !isHidden(finds[0]) && now?.id !== finds[0].id) want = finds[0];
+      else if (!finds.length && now && isHidden(now)) want = users.find((u) => u.role === now.role && !isHidden(u));
+      if (!want) return s;
+      changed = true;
+      return { ...s, values: { ...(s.values || {}), [oc.name]: want.id } };
+    });
+    return changed ? { ...c, steps } : c;
   });
 }
 /** A case as code writes it, before normCases gives it an id. */
@@ -377,6 +431,7 @@ export function testerPrompt(app: BackedApp) {
         ' To prove a rule, use invalid with values that break exactly that rule and are otherwise complete. To prove a held move, use denied with the transition id as "action". A record in a locked stage refuses update and delete: prove that with denied.\n'
       : '') +
     VALUE_RULES +
+    ' In a case, write a user value as the person\'s full name from USERS ("assigned_to": "Sam Lee"), not their number, so the record goes to the person the case means.' +
     '\n\nFORMAT: {"cases":[{"name":"","why":"","steps":[]}]}'
   );
 }
@@ -399,7 +454,10 @@ export function unplayable(cases: TestCase[], def: BackedDef): { keep: TestCase[
         const t = tableOf(def, s.table || (P && P.table) || ''),
           v = s.values || {},
           missing = t ? t.columns.filter((c) => c.required && (v[c.name] === undefined || v[c.name] === null || v[c.name] === '')) : [];
-        if (t && missing.length && P && P.table === t.name && missing.every((c) => c.name === P.column))
+        // unless the list has rules: then the case is a save that breaks one of them, which the app refuses with or
+        // without the stage filled in
+        const ruled = (def.logic?.rules || []).some((r) => r.table === t?.name);
+        if (t && !ruled && missing.length && P && P.table === t.name && missing.every((c) => c.name === P.column))
           return 'It leaves out only ' + P.column + ', which the workflow fills in on every new record.';
       }
     }
@@ -633,7 +691,7 @@ export function testerSteps(app: BackedApp, run: Run) {
       );
       Q.by = Q.by === 'model' ? "rules, because the model's cases could not be used" : 'rules';
     }
-    app.def.cases = fillWorkflowSteps(cases, app.def);
+    app.def.cases = fillWorkflowSteps(alignOwners(cases, app.def, appUsers(app)), app.def);
     app.rev++;
     stepEnd(s1, true);
     toolCall(

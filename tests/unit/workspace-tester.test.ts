@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { AppTable, BackedDef, TestCase } from '@/shared/types/app';
-import { pFits } from '@/workspace/line';
+import type { AppTable, AppUser, BackedDef, TestCase } from '@/shared/types/app';
+import { narrowToPlan, pFits } from '@/workspace/line';
 import { checkViews, fillThinViews, normViews } from '@/workspace/viewspec';
-import { CASE_DO, testerPrompt, unplayable, type BackedApp } from '@/workspace/tester';
+import { CASE_DO, alignOwners, testerPrompt, unplayable, type BackedApp } from '@/workspace/tester';
 
 // Made-up apps, shaped like what real Live builds made: a reading list with stages, and a tutor's lessons with none.
 const books: AppTable = {
@@ -96,6 +96,18 @@ describe('test cases no change could make pass', () => {
     expect(r.keep.map((c) => c.id)).toEqual(['title']);
     expect(r.drop[0].why).toMatch(/only status/);
   });
+
+  it('keeps one that leaves out only the stage on a list with rules: it is a save that breaks a rule', () => {
+    const ruled = {
+      ...staged,
+      logic: { rules: [{ id: 'dates', table: 'books', when: 'started_on >= today()', message: 'Pick a later day.' }] },
+    } as BackedDef;
+    const r = unplayable(
+      [kase('rule', [{ role: 'owner', do: 'invalid', table: 'books', values: { title: 'Neuromancer', started_on: -3 } }])],
+      ruled,
+    );
+    expect(r.keep.map((c) => c.id)).toEqual(['rule']);
+  });
 });
 
 describe("the Tester's prompt", () => {
@@ -126,5 +138,99 @@ describe('the views that fit each table, as the View advisor is told', () => {
     expect(vw.views.books.map((v) => v.type)).toEqual(['table', 'board', 'calendar', 'timeline', 'chart', 'tree', 'cards']);
     expect(vw.views.lessons.map((v) => v.type)).toEqual(['table', 'board']);
     expect(checkViews(def, vw).find((c) => !c.ok)?.detail).toMatch(/Board on lessons needs a choice field/);
+  });
+});
+
+// A made-up clinic: the front desk books appointments for doctors, and each doctor sees only their own.
+const appointments: AppTable = {
+  name: 'appointments',
+  label: 'Appointments',
+  one: 'Appointment',
+  title: 'reason',
+  owner: 'doctor',
+  columns: [
+    { name: 'reason', label: 'Reason', type: 'text', required: true },
+    { name: 'doctor', label: 'Doctor', type: 'user', role: 'doctor', required: true },
+  ],
+};
+const clinic = {
+  ...flat,
+  tables: [appointments],
+  brief: {
+    ...brief,
+    roles: [
+      { id: 'front_desk', name: 'Front desk', can: 'books' },
+      { id: 'doctor', name: 'Doctor', can: 'sees own' },
+    ],
+  },
+  access: {
+    appointments: {
+      front_desk: { list: 'all', create: true, update: 'all', delete: false },
+      doctor: { list: 'own', create: false, update: 'own', delete: false },
+    },
+  },
+} as unknown as BackedDef;
+const people: AppUser[] = [
+  { id: 1, name: 'Marcus Bell', username: 'marcus', role: 'front_desk' },
+  { id: 2, name: 'Liam Chen', username: 'liam', role: 'doctor' },
+  { id: 3, name: 'Rachel Kim', username: 'rachel', role: 'doctor' },
+];
+const booked = (doctor: unknown, ...later: TestCase['steps']) =>
+  kase('own', [
+    { role: 'front_desk', user: 'marcus bell', do: 'create', table: 'appointments', values: { reason: 'Check-up', doctor } },
+    ...later,
+  ]);
+const doctorOf = (c: TestCase) => (c.steps[0].values || {}).doctor;
+
+describe('a case that gives its record to the wrong person', () => {
+  it('gives the appointment to the doctor who must find it, when the case miscounted', () => {
+    const [c] = alignOwners(
+      [
+        booked(
+          3,
+          { role: 'doctor', user: 'liam chen', do: 'see', table: 'appointments' },
+          { role: 'doctor', user: 'rachel kim', do: 'hidden', table: 'appointments' },
+        ),
+      ],
+      clinic,
+      people,
+    );
+    expect(doctorOf(c)).toBe(2);
+  });
+  it('moves it away from the doctor who must not find it, when no one is said to find it', () => {
+    const [c] = alignOwners([booked(3, { role: 'doctor', user: 'rachel', do: 'hidden', table: 'appointments' })], clinic, people);
+    expect(doctorOf(c)).toBe(2);
+  });
+  it('leaves a case that already agrees with itself, or names the person in words, as it is', () => {
+    const right = booked(
+        2,
+        { role: 'doctor', user: 'liam chen', do: 'see', table: 'appointments' },
+        { role: 'doctor', user: 'rachel kim', do: 'hidden', table: 'appointments' },
+      ),
+      named = booked('Liam Chen', { role: 'doctor', user: 'liam', do: 'see', table: 'appointments' });
+    expect(alignOwners([right, named], clinic, people)).toEqual([right, named]);
+  });
+});
+
+describe('the Backend agent may not open up what the plan kept private', () => {
+  it('narrows "every appointment" back to "their own" where the plan says so, and never widens', () => {
+    const access = {
+      appointments: {
+        front_desk: { list: 'all', create: true, update: 'own', delete: true },
+        doctor: { list: 'all', create: false, update: 'all', delete: false },
+      },
+    } as BackedDef['access'];
+    const changed = narrowToPlan(access, clinic.access, clinic);
+    expect(access.appointments.doctor).toEqual({ list: 'own', create: false, update: 'own', delete: false });
+    expect(access.appointments.front_desk).toEqual({ list: 'all', create: true, update: 'own', delete: false });
+    expect(changed.sort()).toEqual([
+      'doctor list appointments: all to own',
+      'doctor update appointments: all to own',
+      'front_desk delete appointments: not allowed',
+    ]);
+  });
+  it('keeps "every record" where a list has no owner, since "their own" cannot work there', () => {
+    const access = { appointments: { doctor: { list: 'all', create: false, update: 'all', delete: false } } } as BackedDef['access'];
+    expect(narrowToPlan(access, clinic.access, { tables: [{ ...appointments, owner: null }] })).toEqual([]);
   });
 });
