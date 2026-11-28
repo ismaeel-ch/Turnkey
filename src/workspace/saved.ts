@@ -4,6 +4,7 @@ import './quests';
 import './samples';
 import './expenses';
 import './complex';
+import './software';
 import { REC } from './registry';
 
 export const savedCount = () => Object.keys(REC).length;

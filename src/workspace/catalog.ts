@@ -14,6 +14,9 @@ export const TEMPLATES = ['clinic', 'helpdesk', 'leave', 'biddesk'];
 export const MORE_TEMPLATES = ['grants', 'purchasing', 'expenses'];
 // Four apps that work numbers out and enforce rules (complex.ts).
 export const COMPLEX_TEMPLATES = ['orders', 'vet', 'projects', 'dispatch'];
+// What a software house runs on itself, first on Home: three new apps (software.ts) and four from the lists above.
+export const SOFTWARE_NEW = ['sprints', 'billing', 'onboarding'];
+export const SOFTWARE_TEMPLATES = ['sprints', 'billing', 'onboarding', 'projects', 'biddesk', 'helpdesk', 'leave'];
 export const QUESTS = ['factcheck', 'priorart', 'debate'];
 
 export const CARDS: Dict<SavedCard> = {
@@ -35,7 +38,7 @@ export const CARDS: Dict<SavedCard> = {
     sentence:
       'An IT helpdesk where employees raise tickets, support agents work a queue by priority, and the team lead watches what is due.',
     blurb: 'Employees, agents and a team lead. Tickets move from new to closed.',
-    keys: ['helpdesk', 'ticket', 'support', 'it ', 'issue', 'incident', 'service desk', 'bug'],
+    keys: ['helpdesk', 'ticket', 'support', 'it ', 'issue', 'incident', 'service desk'],
   },
   leave: {
     id: 'leave',
@@ -166,9 +169,51 @@ export const CARDS: Dict<SavedCard> = {
     blurb: 'Jobs scheduled without clashes. Parts and labour are totalled before a job closes.',
     keys: ['dispatch', 'field service', 'technician', 'repair', 'call-out', 'callout', 'work order', 'engineer visit'],
   },
+  sprints: {
+    id: 'sprints',
+    title: 'Sprint board and bug triage',
+    icon: 'bug',
+    accent: 'royalBlue',
+    sentence:
+      'A software team plans sprints from a backlog of stories and bugs. Each item has story points and a sprint cannot take more than its capacity. Testers report bugs by severity, a critical bug cannot be closed as won\u2019t fix, and only a tester marks work as done.',
+    blurb: 'Story points against each sprint\u2019s capacity, bugs by severity, and nothing done until a tester checks it.',
+    keys: ['sprint', 'backlog', 'story point', 'scrum', 'agile', 'bug', 'triage', 'tester', 'software team'],
+  },
+  billing: {
+    id: 'billing',
+    title: 'Timesheets and client billing',
+    icon: 'clock',
+    accent: 'teal',
+    sentence:
+      'A software house bills its clients by the hour. Developers log time on client projects, the project lead approves it, the app prices the hours at the project rate, and finance puts approved hours on invoices and records payments until nothing is owed.',
+    blurb: 'Hours approved and priced at each project\u2019s rate, invoices totalled, and what every client still owes.',
+    keys: ['timesheet', 'billable', 'invoice', 'billing', 'bills', 'hourly rate', 'by the hour', 'time tracking', 'log time'],
+  },
+  onboarding: {
+    id: 'onboarding',
+    title: 'Client onboarding',
+    icon: 'rocket',
+    accent: 'purple',
+    sentence:
+      'A software house onboards each new client: sales hands over the signed deal, the delivery lead books the kickoff, adds a checklist and a team, the client signs off the scope, and the client goes live only when every required step is done and the deposit is in.',
+    blurb: 'A checklist and a team for each new client. Go-live waits for every required step and the deposit.',
+    keys: [
+      'onboard',
+      'onboarding',
+      'kickoff',
+      'kick-off',
+      'new client',
+      'go live',
+      'go-live',
+      'handover',
+      'hands over',
+      'checklist',
+      'deposit',
+    ],
+  },
 };
 
-export const HOME_TEMPLATES = TEMPLATES.concat(MORE_TEMPLATES, COMPLEX_TEMPLATES);
+export const HOME_TEMPLATES = TEMPLATES.concat(MORE_TEMPLATES, COMPLEX_TEMPLATES, SOFTWARE_NEW);
 export function matchTemplate(text: string) {
   const s = ' ' + String(text || '').toLowerCase() + ' ';
   let best = null,

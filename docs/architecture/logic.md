@@ -70,8 +70,9 @@ dropped on repair, so a plan never fails because of one.
 
 - `tests/unit/logic-expr.test.ts`: the language, validation, ordering and plain words.
 - `tests/unit/plan-logic.test.ts`: the plan keeps, repairs and shows its logic.
-- `tests/unit/complex-samples.test.ts`: the four saved builds are built on a real SQLite database and used through
-  their own endpoints (totals, refusals, held moves, locks).
+- `tests/unit/complex-samples.test.ts`: the seven saved builds that work things out (the four in
+  `src/workspace/complex.ts` and the sprint board, client billing and client onboarding in `src/workspace/software.ts`)
+  are built on a real SQLite database and used through their own endpoints (totals, refusals, held moves, locks).
 - `tests/unit/form-steps.test.ts`: which field goes on which step.
 - `complexChecks` in `tests/e2e/flows.cjs` (part of the `round6` flow): the inbox, the record page, the plan screen and the
   step-by-step form.

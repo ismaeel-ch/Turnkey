@@ -5,6 +5,27 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.15] - 2026-11-28
+
+Home opens on the apps a software house runs on itself.
+
+### Added
+
+- Three saved builds for a software house, each with demo data, a walkthrough, tests and its own Settings: a sprint
+  board with bug triage (story points against each sprint's capacity, critical bugs that cannot be closed as won't
+  fix, work done only once a tester checks it), timesheets and client billing (hours approved and priced at the
+  project rate, invoices totalled from their hours, payments and what each client still owes), and client onboarding
+  (a checklist and a team per client, the client signs off the scope, go-live waits for every required step and a 30%
+  deposit). ([#PR](https://github.com/ismaeel-ch/Turnkey/pull/PR))
+
+### Changed
+
+- Home shows a "For a software house" section first: the three new apps, then the project planner, bidding desk, IT
+  helpdesk and leave requests. Each card appears once, so those four left the sections below it.
+  ([#PR](https://github.com/ismaeel-ch/Turnkey/pull/PR))
+- A sentence about bugs now picks the sprint board instead of the IT helpdesk.
+  ([#PR](https://github.com/ismaeel-ch/Turnkey/pull/PR))
+
 ## [0.5.14] - 2026-11-28
 
 The row of view tabs in a built app's list page stays one low row.

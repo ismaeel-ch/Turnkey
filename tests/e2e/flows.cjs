@@ -1781,7 +1781,7 @@ async function flowCustom(browser, url) {
 /* ---------- round 6: plain navigation, the Tester's repair loop, agent rooms, an agent step that changes the schema, releases, the app on its own ---------- */
 async function flowRound6(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
-  check('home: four plain steps, and eleven business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 14 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
+  check('home: four plain steps, and fourteen business examples with the bidding desk among them', await page.locator('.how li').count() === 4 && await page.locator('.tpl').count() === 17 && await page.locator('[data-tpl="biddesk"]').count() === 1, await page.locator('.tpl').count());
   await buildTpl(page, 'biddesk'); a = await appFull(page);
   check('workspace: three plain steps and one Details tab', (await page.locator('.views .tab').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim().split(' ')[0]).join() === 'Build,App,Release,Details', await page.locator('.views .tab').allInnerTexts());
   check('bidding desk: every station passed first time, with four tables and its own team of agents', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && Object.keys(a.cols).join() === 'tenders,score_lines,price_options,risks', [a.status, a.line]);
@@ -2003,7 +2003,7 @@ async function flowRound6(browser, url) {
 /* ---------- The two more business apps on Home: a grant desk with its own agent team, and purchase requests ---------- */
 async function samplesChecks(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
-  check('home: the grant desk, purchase requests and the expense manager are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('[data-tpl="expenses"]').count() === 1 && await page.locator('.tpl').count() === 14);
+  check('home: the grant desk, purchase requests and the expense manager are under Business apps', await page.locator('[data-tpl="grants"]').count() === 1 && await page.locator('[data-tpl="purchasing"]').count() === 1 && await page.locator('[data-tpl="expenses"]').count() === 1 && await page.locator('.tpl').count() === 17);
   await page.fill('#home-prompt', 'a community foundation that reviews grant applications'); await page.locator('.prompt .btn.primary').click(); await page.waitForSelector('.iv-ask');
   check('Demo: a saved build with no question of its own asks only about demo data', (await ivNow(page)).n === 'Question 1 of 1' && (await ivNow(page)).card === 'demo_data' && /One quick question/.test(await page.locator('.iv-chat').innerText()) && (await ivNow(page)).name === 'GrantDesk', await ivNow(page));
   await page.locator('.iv-usual').click(); await page.locator('.iv-act .iv-build').click(); await onApp(page); const gd = await drive(page); a = gd.a;
@@ -2034,6 +2034,9 @@ async function samplesChecks(browser, url) {
 async function complexChecks(browser, url) {
   const { ctx, page } = await newPage(browser); await enter(page, url); let a;
   check('home: four apps that work things out sit under their own heading', await page.locator('[data-home="complex"]').count() === 1 && (await Promise.all(['orders', 'vet', 'projects', 'dispatch'].map((id) => page.locator('[data-tpl="' + id + '"]').count()))).join() === '1,1,1,1');
+  // a software house's own apps come first on Home, each card once: sprints, billing and onboarding, then four older ones
+  const soft = await page.evaluate(() => { const h = document.querySelector('[data-home="software"]'), grid = h && h.nextElementSibling, quests = document.querySelector('[data-tour="quests"]'); return { ids: grid ? [...grid.querySelectorAll('[data-tpl]')].map((x) => x.getAttribute('data-tpl')).join() : '', first: !!(h && quests && h.compareDocumentPosition(quests) & Node.DOCUMENT_POSITION_FOLLOWING), once: [...document.querySelectorAll('[data-tpl]')].length === new Set([...document.querySelectorAll('[data-tpl]')].map((x) => x.getAttribute('data-tpl'))).size }; });
+  check('home: "For a software house" comes before the other examples, with seven apps, and no card appears twice', soft.ids === 'sprints,billing,onboarding,projects,biddesk,helpdesk,leave' && soft.first && soft.once, soft);
   await buildTpl(page, 'orders'); a = await appFull(page);
   const od = await st(page, () => { const F = window.__formwork, s = F.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), A = s.apps[t.app], d = A.def; return { calcs: d.tables.reduce((n, x) => n + x.columns.filter((c) => c.formula).length, 0), rules: d.logic.rules.length, locked: d.process.locked.join(), held: d.process.transitions.filter((x) => x.when || (x.needs || []).length).length, first: F.sql(A.id, 'SELECT line_count, total FROM purchase_orders WHERE id = 1')[0], marketing: F.sql(A.id, 'SELECT committed, remaining, budget_state FROM departments WHERE id = 3')[0] }; });
   check('order desk: every station passed first time and every generated test passes', a.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => a.line[k].s === 'ok' && a.line[k].n === 1) && a.tests.failed === 0 && a.tests.fresh, [a.status, a.line, a.tests]);
@@ -2086,6 +2089,14 @@ async function complexChecks(browser, url) {
     await page.locator('.wz-steps .wz-go').first().click(); await page.waitForSelector('[data-wizard="basics"]'); for (const id of ['links', 'more', 'review']) { await page.locator('[data-step="next"]').click(); await page.waitForSelector('[data-wizard="' + id + '"]'); }
     await page.locator('[data-step="save"]').click(); await page.waitForFunction(() => /was created/.test(document.querySelector('.form-page').textContent));
     check('long form: Create saves one ticket and the form starts again at its first step', await tickets() === before + 1 && await at() === 'basics', [before, await tickets(), await at()]);
+    await ctx.close(); }
+  // timesheets and client billing: hours priced at the project rate, the lead's inbox, an invoice that totals its hours
+  { const { ctx, page } = await newPage(browser); await enter(page, url); await buildTpl(page, 'billing'); const b = await appFull(page);
+    const bl = await st(page, () => { const F = window.__formwork, s = F.state(), t = s.tabs[s.session].find((x) => x.id === s.active[s.session]), A = s.apps[t.app]; return { inv: F.sql(A.id, 'SELECT total, paid, balance, state FROM invoices WHERE id = 2')[0], owed: F.sql(A.id, 'SELECT owed FROM clients WHERE id = 1')[0].owed }; });
+    check('billing: every station passed first time, every generated test passes, and invoices are totalled from priced hours', b.status === 'ready' && ['research', 'database', 'backend', 'views', 'screens', 'walkthrough'].every((k) => b.line[k].s === 'ok' && b.line[k].n === 1) && b.tests.failed === 0 && bl.inv.total === 840 && bl.inv.balance === 340 && bl.inv.state === 'overdue' && bl.owed === 630, [b.status, b.line, b.tests, bl]);
+    await view(page, 'App'); await page.waitForSelector('.persona-btn'); await page.locator('.persona-btn').first().click(); await page.waitForSelector('.app-nav .nav-i');
+    await page.selectOption('select[aria-label="Preview as"]', { label: 'Sobia Nawaz · Project lead' }); await sleep(300); await nav(page, 'Overview'); await page.waitForSelector('.lg-inbox');
+    check('billing: the project lead finds the three submitted entries waiting, each with its Approve button', await page.locator('.lg-inbox').getAttribute('data-waiting') === '3' && await page.locator('.lg-inbox [data-move="approve"]:not([disabled])').count() === 3, await page.locator('.lg-inbox').innerText());
     await ctx.close(); }
 }
 /* ---------- What only React can get wrong: warnings, carets, handlers fired twice, focus, the other pages ---------- */
