@@ -205,8 +205,8 @@ async function waitBuilt(page, ms) {
   );
 }
 
-/** The row under a list page's title, on the sample just built: the view tabs, More views, Filter and Copy CSV on one row at one height, with More
- *  views a frameless square (it was once a wide framed box). This also proves the browser runs this release's code, not an older copy. The picture
+/** The row under a list page's title, on the sample just built: the view tabs, Filter and Copy CSV on one low row, with the More views menu only
+ *  when some tabs do not fit. This also proves the browser runs this release's code, not an older copy. The picture
  *  of the row is printed into the log as base64 between ::group:: lines, for anyone who cannot download the job's files. */
 async function viewTabsBar(page) {
   const name = 'the view tabs bar on a list page is one tidy row';
@@ -218,15 +218,17 @@ async function viewTabsBar(page) {
     await page.waitForSelector('.vx-bar', { timeout: 15000 });
     const b = await page.evaluate(() => {
       const box = (e) => e && e.getBoundingClientRect();
-      const tab = box(document.querySelector('.vswitch [role=tab]')),
-        moreEl = document.querySelector('.vswitch .menu-wrap > button'),
-        more = box(moreEl),
-        acts = [...document.querySelectorAll('.vx-acts > .menu-wrap > button, .vx-acts > button')].map(box);
-      if (!tab || !more || acts.length !== 2) return { ok: false, found: { tab: !!tab, more: !!more, acts: acts.length } };
+      const all = [...document.querySelectorAll('.vswitch [role=tab]')],
+        shown = all.filter((e) => e.offsetParent),
+        tab = box(shown[0]),
+        bar = box(document.querySelector('.vx-bar')),
+        more = document.querySelector('.vswitch .vs-more'),
+        acts = [...document.querySelectorAll('.vx-acts > button, .vx-acts > .menu-wrap > button')].map(box);
+      if (!tab || acts.length !== 2) return { ok: false, found: { tab: !!tab, acts: acts.length } };
       const mid = (r) => Math.round(r.top + r.height / 2);
-      const row = [more, ...acts].every((r) => Math.abs(mid(r) - mid(tab)) <= 1);
-      const square = Math.round(more.width) === Math.round(more.height) && getComputedStyle(moreEl).borderTopWidth === '0px';
-      return { ok: row && square, row, square, more: [Math.round(more.width), Math.round(more.height)] };
+      const row = acts.every((r) => Math.abs(mid(r) - mid(tab)) <= 1);
+      const moreOnlyWhenNeeded = !!more === shown.length < all.length;
+      return { ok: row && moreOnlyWhenNeeded && bar.height < 60, row, moreOnlyWhenNeeded, bar: Math.round(bar.height), tabs: shown.length + ' of ' + all.length };
     });
     const head = await page.locator('.scr.vx').first().boundingBox();
     if (head) {

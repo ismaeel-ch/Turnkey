@@ -208,7 +208,7 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 /* Pages across the top: a white bar of tabs under the header, the open one underlined in the accent. */
 .app-nav.top{display:flex;gap:4px;overflow-x:auto;flex:none;min-width:0;align-items:stretch;min-height:44px;padding:0 12px;background:var(--colorNeutralBackground1);border-bottom:1px solid var(--colorNeutralStroke2);scrollbar-width:none}.app-nav.top::-webkit-scrollbar{display:none}.app-nav.top .nav-i{padding:0 12px;border-radius:0;gap:8px}.app-nav.top .nav-i::after{content:"";position:absolute;left:12px;right:12px;bottom:0;height:3px;border-radius:var(--borderRadiusMedium) var(--borderRadiusMedium) 0 0;background:transparent}.app-nav.top .nav-i:hover{color:var(--colorNeutralForeground1)}.app-nav.top .nav-i:hover::after{background:var(--colorNeutralStroke1)}.app-nav.top .nav-i.on{color:var(--colorNeutralForeground1);font-weight:var(--fontWeightSemibold)}.app-nav.top .nav-i.on::after{background:var(--acc-mark)}.app-nav.top .nav-i:focus-visible{outline-offset:-2px}
 .app-main{flex:1;min-width:0;overflow:auto;display:flex;flex-direction:column}.scr{padding:20px 24px 24px;display:flex;flex-direction:column;gap:16px;flex:1}
-.scr-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.search{display:flex;align-items:center;gap:6px;position:relative;width:240px;max-width:100%}.search .ic{position:absolute;left:8px;z-index:1;pointer-events:none;color:var(--colorNeutralForeground3)}.search .input{padding-left:28px}
+.scr-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.scr-head>.grow{flex:1 1 160px;min-width:0}.search{display:flex;align-items:center;gap:6px;position:relative;width:240px;max-width:100%}.search .ic{position:absolute;left:8px;z-index:1;pointer-events:none;color:var(--colorNeutralForeground3)}.search .input{padding-left:28px}
 /* Lists: a white raised sheet, a quiet header row, 44 px rows, and the first column reads as the record's name. */
 .scr .tbl-wrap{background:var(--colorNeutralBackground1);border-radius:var(--borderRadiusXLarge);box-shadow:var(--shadow2)}.app .tbl th{font-weight:var(--fontWeightSemibold);color:var(--colorNeutralForeground2);padding:12px 16px;border-bottom:1px solid var(--colorNeutralStroke2)}.app .tbl thead th:first-child{border-top-left-radius:var(--borderRadiusXLarge)}.app .tbl thead th:last-child{border-top-right-radius:var(--borderRadiusXLarge)}.app .tbl td{padding:12px 16px;border-bottom:1px solid var(--colorNeutralStroke3);color:var(--colorNeutralForeground2)}.app .tbl:not(.pivot) tr.clickable td:first-child{color:var(--colorNeutralForeground1);font-weight:var(--fontWeightSemibold)}.app .tbl tbody tr:last-child td{border-bottom:0}.app .tbl tr.clickable:hover td{background:var(--colorNeutralBackground1Hover)}.scr .btn.primary{background:var(--acc);color:var(--acc-on)}.scr .btn.primary:hover{filter:brightness(.92)}
 .kb{display:flex;gap:12px;overflow-x:auto;align-items:flex-start;padding-bottom:8px;flex:1}.kb-col{flex:0 0 236px;background:var(--colorNeutralBackground4);border-radius:var(--borderRadiusXLarge);padding:8px;display:flex;flex-direction:column;gap:8px}
@@ -282,10 +282,10 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 /* The view tabs and the list's actions share one row: the tabs scroll sideways when they do not fit, so More views,
    Filter and Copy CSV always stay in sight and the row never wraps. */
 .vx-bar{display:flex;align-items:center;gap:8px;min-width:0;min-height:44px;padding:0 8px;background:var(--colorNeutralBackground1);border-radius:var(--borderRadiusXLarge);box-shadow:var(--shadow2)}
-.vswitch{display:flex;align-items:center;gap:2px;min-width:0;flex:0 1 auto}
-.vs-tabs{position:relative;display:flex;gap:2px;min-width:0;overflow-x:auto;scrollbar-width:none}.vs-tabs::-webkit-scrollbar{display:none}
-.vs-tabs[data-fade=r]{mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent)}.vs-tabs[data-fade=l]{mask-image:linear-gradient(to left,#000 calc(100% - 32px),transparent)}
-.vs-tabs[data-fade=lr]{mask-image:linear-gradient(to right,transparent,#000 32px,#000 calc(100% - 32px),transparent)}
+.vswitch{display:flex;align-items:center;gap:2px;min-width:0;flex:1 1 0;overflow:hidden}.vs-i{display:inline-flex;flex:none}.vs-over{display:inline-flex;flex:none}
+.vs-tabs{display:flex;gap:2px;min-width:0;flex:none}
+
+
 .vs-b{position:relative;display:inline-flex;align-items:center;flex:none;gap:6px;height:44px;padding:0 12px;border:0;border-radius:var(--borderRadiusMedium);background:none;color:var(--colorNeutralForeground2);font-size:var(--fontSizeBase300);white-space:nowrap;cursor:pointer}
 .vs-b .ic{color:var(--colorNeutralForeground3)}
 .vs-b::after{content:"";position:absolute;left:12px;right:12px;bottom:0;height:3px;border-radius:var(--borderRadiusMedium) var(--borderRadiusMedium) 0 0;background:transparent}.vs-b:hover{color:var(--colorNeutralForeground1)}.vs-b:hover::after{background:var(--colorNeutralStroke1)}
@@ -295,11 +295,11 @@ button.card:hover{box-shadow:var(--shadow8);border-color:var(--colorNeutralStrok
 .vswitch .vs-more.fui-Button{min-width:32px;width:32px;height:32px;padding:0;border:0;border-radius:var(--borderRadiusMedium);color:var(--colorNeutralForeground2)}.vswitch .vs-more.fui-Button::after{content:none}.vswitch .vs-more.fui-Button:hover{background:var(--colorSubtleBackgroundHover)}
 .vx-acts{display:flex;align-items:center;gap:4px;flex:none;margin-left:auto;padding-left:8px;border-left:1px solid var(--colorNeutralStroke2)}
 .vx-acts .btn.fui-Button{height:32px;min-width:0}
-.vx-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 6px;border-radius:var(--borderRadiusCircular);background:var(--colorBrandBackground);color:var(--colorNeutralForegroundOnBrand);font-size:var(--fontSizeBase200);font-weight:var(--fontWeightSemibold);line-height:1}
+.vx-count{margin-left:2px}
 .vx-body{display:flex;flex-direction:column;gap:10px;flex:1;min-width:0}
 .vopts{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;min-height:30px}
 .pick{display:inline-flex;align-items:center;gap:6px;font-size:var(--fontSizeBase200);color:var(--colorNeutralForeground3);white-space:nowrap}.pick .select{max-width:190px}
-.fbox{padding:10px;display:flex;flex-direction:column;gap:8px;width:250px}
+.fpop.fui-PopoverSurface{z-index:100}.fbox{display:flex;flex-direction:column;gap:8px;width:260px}.fbox .mlabel{padding:0;font-weight:var(--fontWeightSemibold);color:var(--colorNeutralForeground1)}.fbox-acts{display:flex;gap:8px;margin-top:4px}
 .chip-x{display:inline-grid;place-items:center;width:16px;height:16px;border:0;border-radius:var(--borderRadiusCircular);background:none;color:inherit;padding:0;margin-right:-4px}.chip-x:hover{background:var(--colorNeutralBackground1Hover)}
 .pager{display:inline-flex;align-items:center;gap:4px}
 .tbl tfoot td,.tbl tfoot th{font-weight:var(--fontWeightSemibold);border-top:2px solid var(--colorNeutralStroke1);border-bottom:0;background:var(--colorNeutralBackground2);padding:8px 12px;text-align:left;font-size:var(--fontSizeBase300);color:var(--colorNeutralForeground1)}.tbl tfoot td.num{text-align:right}

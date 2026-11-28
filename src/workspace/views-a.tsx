@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, type DragEvent, type FormEvent, type FunctionComponent, type ReactNode } from 'react';
-import type { AppDef, AppTable, AppUser, ColumnDef, Screen, StoredRow } from '@/shared/types/app';
+import { useState, type DragEvent, type FormEvent, type FunctionComponent, type ReactNode } from 'react';
+import type { AppDef, AppTable, AppUser, ColumnDef, Screen, StoredRow, ViewSpec } from '@/shared/types/app';
 import type { AppRecord, Dict, ExplorerState, Pane, ViewFilter, ViewOptions } from '@/shared/types/workspace';
 import { MON, MONTH, S, clone, copyText, cx, dayDiff, isoDate, label, notify, parseISO, saveSoon, str, toast, today } from './core';
 import { colFmt, defaultView, fmtOf } from './app-settings';
@@ -9,6 +9,16 @@ import { Btn, Empty, FilterChip, Icon, Input, LinkBtn, MBar, Menu, Seg, Select, 
 import { EmptyList } from './firstrun';
 import { Cell, cellText, fetchApi, isStatusCol, optLabel, patchPane, rowTitle, stateLabel, stateTone } from './runtime';
 import { DEMO_COL } from './db';
+import {
+  CounterBadge,
+  Overflow,
+  Popover,
+  PopoverSurface,
+  PopoverTrigger,
+  OverflowItem,
+  useOverflowMenu,
+  useOverflowVisibility,
+} from '@fluentui/react-components';
 import { addDemoData, canAddDemoData } from './demo-data';
 import { DemoTag } from './demo-data-ui';
 import { VChart, VPivot, VTimeline } from './views-b';
@@ -257,19 +267,8 @@ export function hiddenOf(st: ExplorerState, t: AppTable, scr: Screen): Dict<bool
   return st.hidden;
 }
 export function FilterBox({ app, user, t, st, set }: { app: AppRecord; user: AppUser; t: AppTable; st: ExplorerState; set: SetState }) {
-  const s0 = useState(false),
-    open = s0[0],
-    setOpen = s0[1],
-    ref = useRef<HTMLDivElement>(null),
+  const [open, setOpen] = useState(false),
     d = filterDraftOf(st, t);
-  useEffect(() => {
-    if (!open) return undefined;
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open, setOpen]);
   const c = colOf(t, d.col) || t.columns[0],
     ops = opsFor(c),
     op = ops.includes(d.op) ? d.op : ops[0],
@@ -322,19 +321,23 @@ export function FilterBox({ app, user, t, st, set }: { app: AppRecord; user: App
       />
     );
   return (
-    <div className="menu-wrap" ref={ref}>
-      <Btn
-        className={cx('btn subtle sm', st.filters.length && 'on')}
-        aria-expanded={open}
-        title="Filter rows"
-        onClick={() => setOpen(!open)}
-      >
-        <Icon n="filter" s="16" />
-        <span className="hide-sm">Filter</span>
-        {st.filters.length > 0 && <span className="vx-count">{st.filters.length}</span>}
-      </Btn>
-      {open && (
-        <form className="menu right fbox" onSubmit={add}>
+    // Fluent's Popover, anchored to the Filter button: it floats over the page, so the bar keeps its height.
+    <Popover
+      open={open}
+      onOpenChange={(_, o) => setOpen(o.open)}
+      positioning={{ position: 'below', align: 'end', offset: 4 }}
+      inline
+      trapFocus
+    >
+      <PopoverTrigger disableButtonEnhancement>
+        <Btn className={cx('btn subtle sm vx-filter', st.filters.length && 'on')} title="Filter rows">
+          <Icon n="filter" s="16" />
+          <span className="hide-sm">Filter</span>
+          {st.filters.length > 0 && <CounterBadge className="vx-count" count={st.filters.length} size="small" appearance="filled" />}
+        </Btn>
+      </PopoverTrigger>
+      <PopoverSurface className="fpop" aria-label="Filter rows">
+        <form className="fbox" onSubmit={add}>
           <div className="mlabel">Show rows where</div>
           <Select native className="select" id={id + 'c'} aria-label="Field" value={c.name} onChange={(e) => upd('col', e.target.value)}>
             {t.columns.map((x) => (
@@ -351,12 +354,17 @@ export function FilterBox({ app, user, t, st, set }: { app: AppRecord; user: App
             ))}
           </Select>
           {ctl}
-          <Btn className="btn primary sm" type="submit">
-            Add filter
-          </Btn>
+          <div className="fbox-acts">
+            <Btn className="btn primary sm" type="submit">
+              Add filter
+            </Btn>
+            <Btn className="btn sm" type="button" onClick={() => setOpen(false)}>
+              Cancel
+            </Btn>
+          </div>
         </form>
-      )}
-    </div>
+      </PopoverSurface>
+    </Popover>
   );
 }
 /** What every data view is given: the rows to draw, and ways to change the page. */
@@ -376,38 +384,57 @@ export interface ViewProps {
   drill: (pairs: (DrillPair | null | undefined)[]) => void;
   canCreate: boolean;
 }
-/** Marks which ends of a sideways-scrolling strip have more behind them, for the CSS fade. */
-function fadeEdges(el: HTMLElement) {
-  const l = el.scrollLeft > 1,
-    r = el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
-    v = (l ? 'l' : '') + (r ? 'r' : '');
-  if ((el.dataset.fade || '') !== v) el.dataset.fade = v;
+/** One view tab. It leaves the row for the More views menu when the row is too narrow; the chosen one leaves last. */
+function ViewTab({ v, on, pick }: { v: ViewSpec; on: boolean; pick: (v: string) => void }) {
+  return (
+    <OverflowItem id={v.type} priority={on ? 2 : 1}>
+      <span className="vs-i">
+        <Tip text={v.why}>
+          <button role="tab" aria-selected={on} className={cx('vs-b', on && 'on')} onClick={() => pick(v.type)}>
+            <Icon n={VIEW_ICON[v.type]} s="16" />
+            <span>{VIEW_LABEL[v.type]}</span>
+          </button>
+        </Tip>
+      </span>
+    </OverflowItem>
+  );
+}
+/** Fluent's overflow menu for the view tabs: there only while some tabs do not fit, and holding just those. */
+function MoreViews({ tabs, pick }: { tabs: ViewSpec[]; pick: (v: string) => void }) {
+  const { ref, isOverflowing } = useOverflowMenu<HTMLDivElement>(),
+    { itemVisibility } = useOverflowVisibility(),
+    hidden = tabs.filter((v) => itemVisibility[v.type] === false);
+  if (!isOverflowing || !hidden.length) return null;
+  return (
+    <div ref={ref} className="vs-over">
+      <Menu
+        align="left"
+        title="More views"
+        btn={{ cls: 'btn subtle icon vs-b vs-more', label: 'More views', body: <Icon n="more" s="16" /> }}
+        items={hidden.map((v): MenuEntry => ({ label: VIEW_LABEL[v.type], icon: VIEW_ICON[v.type], on: () => pick(v.type) }))}
+      />
+    </div>
+  );
+}
+/**
+ * The ways to view a table, as tabs: the advisor's choices first, then the other views that fit. When the row is too
+ * narrow the last tabs move into a More views menu (Fluent's overflow pattern); when everything fits there is no menu.
+ */
+function ViewTabs({ tabs, view, pick }: { tabs: ViewSpec[]; view: string; pick: (v: string) => void }) {
+  return (
+    <Overflow minimumVisible={1} padding={8}>
+      <div className="vswitch" data-tour="vswitch">
+        <div className="vs-tabs" role="tablist" aria-label="Ways to view this data">
+          {tabs.map((v) => (
+            <ViewTab key={v.type} v={v} on={v.type === view} pick={pick} />
+          ))}
+        </div>
+        <MoreViews tabs={tabs} pick={pick} />
+      </div>
+    </Overflow>
+  );
 }
 export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user: AppUser; pane: Pane; scr: Screen; test?: boolean }) {
-  const tabsRef = useRef<HTMLDivElement>(null),
-    shownTab = useRef(''),
-    watched = useRef<{ el: HTMLElement; ro: ResizeObserver } | null>(null);
-  // The tabs scroll sideways when they do not fit. Bring the chosen one into sight when it changes, without moving the
-  // page, and fade the edge that has more tabs behind it.
-  useEffect(() => {
-    const box = tabsRef.current;
-    if (!box) return;
-    if (typeof ResizeObserver !== 'undefined' && (!watched.current || watched.current.el !== box)) {
-      if (watched.current) watched.current.ro.disconnect();
-      const ro = new ResizeObserver(() => fadeEdges(box));
-      ro.observe(box);
-      watched.current = { el: box, ro };
-    }
-    const on = box.querySelector<HTMLElement>('.vs-b.on');
-    if (on && shownTab.current !== on.textContent) {
-      shownTab.current = on.textContent || '';
-      if (on.offsetLeft < box.scrollLeft) box.scrollLeft = on.offsetLeft;
-      else if (on.offsetLeft + on.offsetWidth > box.scrollLeft + box.clientWidth)
-        box.scrollLeft = on.offsetLeft + on.offsetWidth - box.clientWidth;
-    }
-    fadeEdges(box);
-  });
-  useEffect(() => () => watched.current?.ro.disconnect(), []);
   const def = app.def,
     t = tableOf(def, scr.table);
   if (!t)
@@ -554,19 +581,18 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
   // A list with nothing in it explains itself (firstrun.tsx) in place of an empty table. A board, calendar, chart or
   // timeline still draws when a filter leaves it empty, because its empty columns and days say where records would be.
   const nothing = !rows.length && (!res.data.length || ['table', 'cards', 'tree', 'pivot'].includes(view));
-  const more = DATA_VIEWS.filter((v) => !recT.includes(v)),
-    V = (
-      {
-        table: VTable,
-        board: VBoard,
-        calendar: VCalendar,
-        cards: VCards,
-        tree: VTree,
-        chart: VChart,
-        pivot: VPivot,
-        timeline: VTimeline,
-      } as Dict<FunctionComponent<ViewProps>>
-    )[view];
+  const V = (
+    {
+      table: VTable,
+      board: VBoard,
+      calendar: VCalendar,
+      cards: VCards,
+      tree: VTree,
+      chart: VChart,
+      pivot: VPivot,
+      timeline: VTimeline,
+    } as Dict<FunctionComponent<ViewProps>>
+  )[view];
   return (
     <div className="scr vx">
       <div className="scr-head">
@@ -607,75 +633,20 @@ export function Explorer({ app, user, pane, scr, test }: { app: AppRecord; user:
         )}
       </div>
       <div className="vx-bar">
-        <div className="vswitch" data-tour="vswitch">
-          <div
-            className="vs-tabs"
-            role="tablist"
-            aria-label="Ways to view this data"
-            ref={tabsRef}
-            onScroll={(e) => fadeEdges(e.currentTarget)}
-          >
-            {rec
-              .concat(
-                recT.includes(view)
-                  ? []
-                  : [
-                      {
-                        type: view,
-                        why: 'Not recommended by the advisor, but it fits.',
-                      },
-                    ],
-              )
-              .map((v) => (
-                <Tip text={v.why} key={v.type}>
-                  <button
-                    role="tab"
-                    aria-selected={v.type === view}
-                    className={cx('vs-b', v.type === view && 'on')}
-                    onClick={() =>
-                      set((s) => {
-                        s.view = v.type;
-                      })
-                    }
-                  >
-                    <Icon n={VIEW_ICON[v.type]} s="16" />
-                    <span>{VIEW_LABEL[v.type]}</span>
-                  </button>
-                </Tip>
-              ))}
-          </div>
-          {more.length > 0 && (
-            <Menu
-              align="left"
-              title="Views the advisor did not recommend for this table"
-              btn={{
-                cls: 'btn subtle icon vs-b vs-more',
-                label: 'More views',
-                body: <Icon n="more" s="16" />,
-              }}
-              items={[
-                {
-                  head: true,
-                  label: 'Not recommended here',
-                } as MenuEntry,
-              ].concat(
-                more.map((v): MenuEntry => {
-                  const why = viewFit(def, t, v);
-                  return {
-                    label: VIEW_LABEL[v],
-                    icon: VIEW_ICON[v],
-                    hint: why ? 'does not fit' : 'fits',
-                    disabled: !!why,
-                    on: () =>
-                      set((s) => {
-                        s.view = v;
-                      }),
-                  };
-                }),
-              )}
-            />
+        <ViewTabs
+          tabs={rec.concat(
+            DATA_VIEWS.filter((v) => !recT.includes(v) && (v === view || !viewFit(def, t, v))).map((v) => ({
+              type: v,
+              why: 'Not recommended by the advisor, but it fits.',
+            })),
           )}
-        </div>
+          view={view}
+          pick={(v) =>
+            set((s) => {
+              s.view = v;
+            })
+          }
+        />
         <div className="vx-acts">
           <FilterBox app={app} user={user} t={t} st={st} set={set} />
           <Btn className="btn subtle sm" title="Copy the rows you see as CSV" onClick={csv}>

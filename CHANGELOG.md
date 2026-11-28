@@ -5,6 +5,19 @@ versions are semantic versions. Each release lists the pull requests merged into
 
 ## [Unreleased]
 
+## [0.5.14] - 2026-11-28
+
+The row of view tabs in a built app's list page stays one low row.
+
+### Fixed
+
+- The filter opens as a Fluent popover under the Filter button instead of inside the bar, so the bar keeps its
+  height. ([#306](https://github.com/ismaeel-ch/Turnkey/pull/306))
+- The "..." More views menu shows only while some view tabs do not fit, and holds just those. Every view that fits
+  the table is a tab. ([#306](https://github.com/ismaeel-ch/Turnkey/pull/306))
+- A list page's title is no longer squeezed out by the search box on narrower panes.
+  ([#306](https://github.com/ismaeel-ch/Turnkey/pull/306))
+
 ## [0.5.13] - 2026-11-28
 
 The last three hand-made components are Fluent's own.

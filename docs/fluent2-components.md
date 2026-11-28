@@ -91,36 +91,36 @@ Rules that hold for every row, checked in the browser flows:
 
 ## Inside a built app (`src/workspace/runtime.tsx`, `views-a.tsx`, `views-b.tsx`, `room-ui.tsx`)
 
-| Component                     | Fluent 2 counterpart         | Status  | Notes                                                                      |
-| ----------------------------- | ---------------------------- | ------- | -------------------------------------------------------------------------- |
-| Header                        | (app bar)                    | Follows | Brand colour; owned by the built-app look pass.                            |
-| Account switcher              | Subtle button with a Persona | Fluent  | Owned by the built-app look pass.                                          |
-| Top navigation                | TabList                      | Follows | Underlined tabs, 44 px.                                                    |
-| Side navigation, rail         | Nav                          | Follows | Selected fill, accent bar, pressed fill.                                   |
-| Sign-in people                | Card with a Persona          | Follows | Avatar is Fluent's.                                                        |
-| "Sign in with a username"     | Accordion header             | Follows | Subtle hover and pressed; no underline.                                    |
-| View tabs, More views         | TabList, Menu                | Fluent  |                                                                            |
-| Filter, Copy CSV, Columns     | Toolbar buttons              | Fluent  |                                                                            |
-| Search                        | SearchBox                    | Fluent  | Input with a leading icon.                                                 |
-| Table                         | Table                        | Follows | 44 px rows, 12 px semibold header, sortable header buttons.                |
-| Board column and card         | Card                         | Follows | Hover lifts to shadow 8, pressed drops back.                               |
-| Calendar chips                | (calendar)                   | Follows | Hover no longer goes black in dark.                                        |
-| Timeline bars                 | (gantt)                      | Follows |                                                                            |
-| Charts                        | (charts)                     | Follows | Text in text colours, a tip on every mark.                                 |
-| Pivot                         | Table                        | Follows |                                                                            |
-| Tree                          | Tree                         | Follows | Rows have subtle hover and pressed.                                        |
-| Cards view                    | Card                         | Fluent  |                                                                            |
-| Number cards on the dashboard | Card                         | Follows |                                                                            |
-| Date range on the dashboard   | ToggleButton group           | Follows | `Seg`.                                                                     |
-| Record form                   | Field, Input, Select         | Fluent  |                                                                            |
-| Record drawer                 | Drawer, inline, at the end   | Fluent  | InlineDrawer with DrawerHeader and DrawerBody, placed over the app's pane. |
-| Stage buttons on a record     | Button                       | Fluent  |                                                                            |
-| Related records list          | List                         | Follows |                                                                            |
-| Status and choice values      | Badge                        | Follows |                                                                            |
-| Welcome card, tour, checklist | Card, TeachingPopover        | Follows |                                                                            |
-| Demo data bar                 | MessageBar                   | Follows | Its link is Fluent's Link.                                                 |
-| Agent room                    | Card, Avatar, Badge          | Follows |                                                                            |
-| Phone: floating New button    | (FAB)                        | Follows | Fluent 2 web has none; 56 px, shadow 16.                                   |
+| Component                     | Fluent 2 counterpart                   | Status  | Notes                                                                           |
+| ----------------------------- | -------------------------------------- | ------- | ------------------------------------------------------------------------------- |
+| Header                        | (app bar)                              | Follows | Brand colour; owned by the built-app look pass.                                 |
+| Account switcher              | Subtle button with a Persona           | Fluent  | Owned by the built-app look pass.                                               |
+| Top navigation                | TabList                                | Follows | Underlined tabs, 44 px.                                                         |
+| Side navigation, rail         | Nav                                    | Follows | Selected fill, accent bar, pressed fill.                                        |
+| Sign-in people                | Card with a Persona                    | Follows | Avatar is Fluent's.                                                             |
+| "Sign in with a username"     | Accordion header                       | Follows | Subtle hover and pressed; no underline.                                         |
+| View tabs, More views         | TabList with Overflow, Menu            | Fluent  | More views shows only while some tabs do not fit, and holds just those.         |
+| Filter, Copy CSV, Columns     | Toolbar buttons, Popover, CounterBadge | Fluent  | The filter form is a Popover under the Filter button; the bar keeps its height. |
+| Search                        | SearchBox                              | Fluent  | Input with a leading icon.                                                      |
+| Table                         | Table                                  | Follows | 44 px rows, 12 px semibold header, sortable header buttons.                     |
+| Board column and card         | Card                                   | Follows | Hover lifts to shadow 8, pressed drops back.                                    |
+| Calendar chips                | (calendar)                             | Follows | Hover no longer goes black in dark.                                             |
+| Timeline bars                 | (gantt)                                | Follows |                                                                                 |
+| Charts                        | (charts)                               | Follows | Text in text colours, a tip on every mark.                                      |
+| Pivot                         | Table                                  | Follows |                                                                                 |
+| Tree                          | Tree                                   | Follows | Rows have subtle hover and pressed.                                             |
+| Cards view                    | Card                                   | Fluent  |                                                                                 |
+| Number cards on the dashboard | Card                                   | Follows |                                                                                 |
+| Date range on the dashboard   | ToggleButton group                     | Follows | `Seg`.                                                                          |
+| Record form                   | Field, Input, Select                   | Fluent  |                                                                                 |
+| Record drawer                 | Drawer, inline, at the end             | Fluent  | InlineDrawer with DrawerHeader and DrawerBody, placed over the app's pane.      |
+| Stage buttons on a record     | Button                                 | Fluent  |                                                                                 |
+| Related records list          | List                                   | Follows |                                                                                 |
+| Status and choice values      | Badge                                  | Follows |                                                                                 |
+| Welcome card, tour, checklist | Card, TeachingPopover                  | Follows |                                                                                 |
+| Demo data bar                 | MessageBar                             | Follows | Its link is Fluent's Link.                                                      |
+| Agent room                    | Card, Avatar, Badge                    | Follows |                                                                                 |
+| Phone: floating New button    | (FAB)                                  | Follows | Fluent 2 web has none; 56 px, shadow 16.                                        |
 
 ## Still to do
 
