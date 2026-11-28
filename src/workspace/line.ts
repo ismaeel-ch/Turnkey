@@ -1,5 +1,5 @@
 import { modelOutage, modelProblem } from '@/shared/api-error';
-import type { AppDef, AppTable, BackedDef, Brief, BriefedDef, Check, Untrusted } from '@/shared/types/app';
+import type { AccessMap, AppDef, AppTable, BackedDef, Brief, BriefedDef, Check, Scope, Untrusted } from '@/shared/types/app';
 import {
   EXTRA_FIELDS,
   backendFromPlan,
@@ -440,6 +440,38 @@ const followable = (plan: PlanSpec) => {
  * its plan (worked out from that recording) is there to be shown. A plan that is not whole or fails its checks is
  * not followed either: that build asks its agents as it did before there were plans.
  */
+/**
+ * The access the owner approved in the plan is a ceiling for the Backend agent: where the plan says a kind of person
+ * sees or changes only their own records of a list (or none), the agent may not open the whole list to them. A model
+ * sometimes writes "all" where the plan said "own", and then one doctor sees another doctor's appointments. Narrows
+ * only; "own" is kept to lists that have an owner, since nothing else can tell whose a record is. Returns what changed.
+ */
+export function narrowToPlan(access: AccessMap, planned: AccessMap, def: Pick<AppDef, 'tables'>): string[] {
+  const rank: Record<Scope, number> = { none: 0, own: 1, all: 2 },
+    changed: string[] = [];
+  for (const [tn, byRole] of Object.entries(planned)) {
+    const t = def.tables.find((x) => x.name === tn),
+      mine = access[tn];
+    if (!t || !mine) continue;
+    for (const [role, want] of Object.entries(byRole)) {
+      const got = mine[role];
+      if (!got || !want) continue;
+      for (const k of ['list', 'update'] as const) {
+        const cap = want[k] === 'own' && !t.owner ? 'all' : want[k];
+        if (rank[got[k]] > rank[cap]) {
+          changed.push(role + ' ' + k + ' ' + tn + ': ' + got[k] + ' to ' + cap);
+          got[k] = cap;
+        }
+      }
+      for (const k of ['create', 'delete'] as const)
+        if (got[k] && !want[k]) {
+          changed.push(role + ' ' + k + ' ' + tn + ': not allowed');
+          got[k] = false;
+        }
+    }
+  }
+  return changed;
+}
 export const planOf = (app: AppRecord): PlanSpec | null => (app.mode === 'live' && app.plan && followable(app.plan) ? app.plan : null);
 
 /** The first station of a planned build: the Planner already wrote the plan, so code reads the brief off it. No model call. */
@@ -602,6 +634,7 @@ export const APPLY: Dict<(app: BuildApp, out: Untrusted, run: Run, attempt?: num
       be.logic = planned.logic;
       if (planned.process.locked) be.process.locked = planned.process.locked.filter((s) => be.process.states.some((x) => x.id === s));
       else delete be.process.locked;
+      narrowToPlan(be.access, planned.access, app.def);
       const match = matchMoves(planned.process.transitions, be.process.transitions);
       for (const tr of be.process.transitions) {
         const same = match.get(tr);
