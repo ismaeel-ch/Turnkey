@@ -46,19 +46,19 @@ const describeApp = async (page, text, pick) => { await page.fill('#home-prompt'
 const ivNow = (page) => st(page, () => { const iv = window.__formwork.view().home.interview, q = (s) => document.querySelector(s), all = (s) => [...document.querySelectorAll(s)].map((x) => x.innerText.replace(/\s+/g, ' ').trim()); return iv ? { step: iv.step, attr: q('.iv') && q('.iv').dataset.step, steps: all('.iv-st'), on: (q('.iv-st[aria-current=step]') || {}).innerText, name: (q('#iv-name') || {}).innerText, sum: (q('#iv-sum') || {}).innerText, people: all('.iv-person strong'), card: q('.iv-ask') ? q('.iv-ask').dataset.card : null, demo: q('#iv-demo') ? q('#iv-demo').checked : null, demoText: (q('#iv-demo-text') || {}).innerText, n: (q('.iv-ask .iv-n') || {}).innerText, opts: all('.iv-ask .iv-opt'), answered: all('.iv-answered li'), assumed: all('.iv-assumed li'), access: Object.fromEntries([...document.querySelectorAll('.iv-access tbody tr')].map((r) => [r.querySelector('th').innerText.trim(), [...r.querySelectorAll('td')].map((c) => c.innerText.trim()).join()])), agents: [...document.querySelectorAll('.iv-agent[data-agent]')].map((x) => x.dataset.agent), plan: !!iv.plan, apps: Object.keys(window.__formwork.state().apps).length } : null; });
 const land = async (page) => { await page.waitForSelector('.app-nav .nav-i'); await page.locator('.app-nav .nav-i').nth(1).click(); await sleep(80); }; // the Overview is first now, so the page that used to open first is the second one
 const nav = (page, name) => page.locator('.app-nav .nav-i', { hasText: name }).first().click();
-// The row under a list page's title: view tabs, the More views button, Filter and Copy CSV. Measures that they sit on one row (the buttons at one height, the tabs as tall as the bar so their underline sits on its edge), that
-// More views is a frameless square like the tabs (it was once a 96 px framed box), and that the tabs scroll inside the row rather than wrap.
+// The row under a list page's title: view tabs, Filter and Copy CSV, and the More views menu only when some tabs do not fit. Measures that they sit on one row (the buttons at one height, the tabs as tall as the bar so their underline sits on its edge),
+// that More views, when it is there, is a frameless square like the tabs and holds only the hidden tabs, that the tabs never wrap, and that the bar keeps its height with the filter open.
 const vxBarLook = (page) => st(page, () => {
   const box = (e) => { const r = e.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; };
-  const bar = document.querySelector('.vx-bar'), tabs = [...document.querySelectorAll('.vswitch [role=tab]')], more = document.querySelector('.vswitch .menu-wrap > button'), acts = [...document.querySelectorAll('.vx-acts > .menu-wrap > button, .vx-acts > button')];
-  if (!bar || !tabs.length || !more || acts.length !== 2) return { ok: false, missing: { bar: !!bar, tabs: tabs.length, more: !!more, acts: acts.length } };
-  const t = box(tabs[0]), m = box(more), a = acts.map(box), strip = document.querySelector('.vs-tabs'), cs = getComputedStyle(more);
-  const mid = (b) => b.y + b.h / 2, row = [t, m, ...a].every((b) => Math.abs(mid(b) - mid(t)) <= 1), same = [m, ...a].every((b) => b.h === m.h) && t.h >= m.h;
-  const square = m.w === m.h && cs.borderTopWidth === '0px', inside = a.every((b) => b.x + b.w <= box(bar).x + box(bar).w + 1) && m.x + m.w <= a[0].x;
-  const oneRow = tabs.every((e) => Math.abs(box(e).y - t.y) <= 1) && strip.scrollHeight <= strip.clientHeight + 1;
-  return { ok: row && same && square && inside && oneRow, row, same, square, inside, oneRow, tab: t, more: m, acts: a };
+  const bar = document.querySelector('.vx-bar'), all = [...document.querySelectorAll('.vswitch [role=tab]')], tabs = all.filter((e) => e.offsetParent), more = document.querySelector('.vswitch .vs-more'), acts = [...document.querySelectorAll('.vx-acts > .menu-wrap > button, .vx-acts > button')];
+  if (!bar || !tabs.length || acts.length !== 2) return { ok: false, missing: { bar: !!bar, tabs: tabs.length, acts: acts.length } };
+  const t = box(tabs[0]), m = more && box(more), a = acts.map(box), cs = more && getComputedStyle(more);
+  const mid = (b) => b.y + b.h / 2, row = [t, ...(m ? [m] : []), ...a].every((b) => Math.abs(mid(b) - mid(t)) <= 1), same = a.every((b) => b.h === a[0].h) && (!m || m.h === a[0].h) && t.h >= a[0].h;
+  const square = !m || (m.w === m.h && cs.borderTopWidth === '0px'), inside = a.every((b) => b.x + b.w <= box(bar).x + box(bar).w + 1) && box(tabs[tabs.length - 1]).x + box(tabs[tabs.length - 1]).w <= a[0].x;
+  const oneRow = tabs.every((e) => Math.abs(box(e).y - t.y) <= 1), moreOnlyWhenNeeded = !!more === tabs.length < all.length;
+  return { ok: row && same && square && inside && oneRow && moreOnlyWhenNeeded, row, same, square, inside, oneRow, moreOnlyWhenNeeded, shown: tabs.length, all: all.length, hidden: all.filter((e) => !e.offsetParent).map((e) => e.innerText.trim()), bar: box(bar).h, tab: t, more: m, acts: a };
 });
-const vtab = async (page, name) => { await page.locator('.vswitch [role=tab]', { hasText: name }).click(); await sleep(90); };
+const vtab = async (page, name) => { const t = page.locator('.vswitch [role=tab]', { hasText: name }); if (await t.isVisible()) await t.click(); else { await page.locator('.vswitch .vs-more').click(); await page.locator('.menu .mi', { hasText: name }).click(); } await sleep(90); }; // a tab that did not fit is in More views
 
 async function quickStarts(browser, url) { // the two ways in from the first screen, for a judge who opens the URL cold
   for (const [intent, next] of [['sample', '.iv-ask'], ['start', '#ob-name']]) { // the welcome the server draws works before the workspace script has run
@@ -919,15 +919,31 @@ async function flowViews(browser, url) {
   check('the inspector shows which views fit each table', await page.locator('.viewplan tbody tr').count() === 3 && await page.locator('.viewplan .badge.b-success').count() === 15, await page.locator('.viewplan .badge.b-success').count());
   await view(page, 'App'); await page.locator('.persona-btn').nth(5).click(); await land(page); await page.waitForSelector('.kb-col'); await nav(page, 'Schedule'); await page.waitForSelector('.cal-grid');
   const tabs = (await page.locator('.vswitch [role=tab]').allInnerTexts()).map((x) => x.trim());
-  check('the switcher offers the seven recommended views', tabs.join(',') === 'Board,Calendar,Timeline,Table,Chart,Pivot,Tree', tabs);
-  for (const w of [1440, 1100]) { // wide and normal: one tidy row, whatever fits
-    await page.setViewportSize({ width: w, height: 900 }); await sleep(150);
-    const b = await vxBarLook(page);
-    check('view tabs bar at ' + w + ' px: tabs, More views, Filter and Copy CSV on one row, the buttons the same height, More views a small square with no frame', b.ok, b);
+  check('the switcher offers the seven recommended views, then Cards, which fits but was not recommended', tabs.join(',') === 'Board,Calendar,Timeline,Table,Chart,Pivot,Tree,Cards', tabs);
+  for (const w of [1920, 1440, 1100]) { // wide to normal: one tidy row; More views only while some tabs do not fit, holding just those
+    await page.setViewportSize({ width: w, height: 900 }); await sleep(250);
+    const b = await vxBarLook(page); await shot(page, '72-tabs-' + w);
+    check('view tabs bar at ' + w + ' px: tabs, Filter and Copy CSV on one row at one height, More views only when tabs do not fit (' + b.shown + ' of ' + b.all + ' fit)', b.ok, b);
+    if (b.shown < b.all) {
+      await page.locator('.vswitch .vs-more').click(); await sleep(150);
+      const items = (await page.locator('.menu .mi').allInnerTexts()).map((x) => x.trim());
+      check('More views holds just the tabs that did not fit', items.join() === b.hidden.join(), { items, hidden: b.hidden });
+      await page.keyboard.press('Escape'); await sleep(100);
+    }
+  }
+  {
+    await page.setViewportSize({ width: 1440, height: 900 }); await sleep(200);
+    const h0 = (await page.locator('.vx-bar').boundingBox()).height;
+    await page.locator('.vx-bar .btn', { hasText: 'Filter' }).click(); await page.waitForSelector('.fpop .fbox'); await sleep(400); await shot(page, '72-filter-popover');
+    const pop = await st(page, () => { const b = document.querySelector('.vx-filter').getBoundingClientRect(), p = document.querySelector('.fpop').getBoundingClientRect(); return { below: p.top >= b.bottom, right: Math.abs(p.right - b.right) <= 2 }; });
+    const h1 = (await page.locator('.vx-bar').boundingBox()).height;
+    check('the filter opens as a popover under the Filter button and the bar keeps its height', h1 === h0 && pop.below && pop.right, { h0, h1, pop });
+    await page.keyboard.press('Escape'); await sleep(150);
+    check('Escape closes the filter popover', !(await page.locator('.fpop').count()));
   }
   await page.setViewportSize({ width: 1440, height: 900 }); await sleep(150);
   { const ramp = await offRamp(page, '.shell', true); check('Fluent type ramp: every text size in a built app, its list page and the agents chat is a step of the ramp', onRamp(ramp), ramp); }
-  const expect = { Board: '.kb-col', Calendar: '.cal-grid .cal-chip', Timeline: '.gt .gt-item', Table: '.vx .tbl tbody tr', Chart: '.hb-row .hb-seg', Pivot: '.tbl.pivot .pv-b', Tree: '.tree .tree-row' }, drawn = {};
+  const expect = { Board: '.kb-col', Calendar: '.cal-grid .cal-chip', Timeline: '.gt .gt-item', Table: '.vx .tbl tbody tr', Chart: '.hb-row .hb-seg', Pivot: '.tbl.pivot .pv-b', Tree: '.tree .tree-row', Cards: '.rcard' }, drawn = {};
   for (const name of tabs) { await vtab(page, name); drawn[name] = await page.locator(expect[name]).count(); await shot(page, '72-view-' + name.toLowerCase()); }
   check('every view draws the same 39 appointments', Object.values(drawn).every((n) => n > 0) && drawn.Board === 6, drawn);
   // table: paging, grouping
@@ -972,9 +988,8 @@ async function flowViews(browser, url) {
   check('tree groups collapse', await page.locator('.tree-row').count() < rows0, [rows0, await page.locator('.tree-row').count()]);
   // a view the advisor did not recommend, and one that cannot fit
   await nav(page, 'Patients'); await vtab(page, 'Cards'); check('cards view shows every patient', await page.locator('.rcard').count() === 14);
-  await page.locator('.vswitch .menu-wrap > button').click(); await sleep(60);
-  check('other views say whether they fit', (await page.locator('.vswitch .menu .mi', { hasText: 'Pivot' }).innerText()).includes('does not fit') && await page.locator('.vswitch .menu .mi', { hasText: 'Pivot' }).isDisabled());
-  await page.locator('.vswitch .menu .mi', { hasText: 'Board' }).click(); await sleep(80); check('a fitting view that was not recommended still works', await page.locator('.kb-col').count() === 3);
+  check('views that do not fit are not offered: patients have no pivot', !(await page.locator('.vswitch [role=tab]', { hasText: 'Pivot' }).count()));
+  await vtab(page, 'Board'); check('a fitting view that was not recommended still works', await page.locator('.kb-col').count() === 3);
   // dashboard
   await nav(page, 'Overview'); await page.waitForSelector('.kpis'); await sleep(100); await shot(page, '75-dashboard');
   const kv = async () => (await page.locator('.kpi-v').allInnerTexts()).map((x) => x.trim());
@@ -2214,10 +2229,10 @@ async function flowSizes(browser, url) {
       await page.waitForSelector('.app-tabs'); await sleep(300); await fitBoth(page, at + 'the app full screen');
       if (w === 390 && await page.locator('.app-tabs > *', { hasText: 'Schedule' }).count()) { // a pivot keeps its total row, and a timeline scrolls sideways instead of piling its labels on top of each other
         await page.locator('.app-tabs > *', { hasText: 'Schedule' }).first().click(); await sleep(200);
-        await page.locator('.vs-tabs [role=tab]', { hasText: 'Pivot' }).click(); await page.waitForSelector('.tbl.pivot');
+        await vtab(page, 'Pivot'); await page.waitForSelector('.tbl.pivot');
         const pv = await st(page, () => { const f = document.querySelector('.tbl.pivot tfoot tr'), h = document.querySelector('.tbl.pivot thead tr'); return { disp: getComputedStyle(f).display, cells: f.children.length, cols: h.children.length, w: Math.round(f.getBoundingClientRect().width), tw: Math.round(document.querySelector('.tbl.pivot').getBoundingClientRect().width) }; });
         check(at + 'the pivot total is a row of the table, one cell per column', pv.disp === 'table-row' && pv.cells === pv.cols && pv.w === pv.tw, pv);
-        await page.locator('.vs-tabs [role=tab]', { hasText: 'Timeline' }).click(); await page.waitForSelector('.gt .gt-item');
+        await vtab(page, 'Timeline'); await page.waitForSelector('.gt .gt-item');
         const gt = await st(page, () => { const g = document.querySelector('.gt'), t = [...document.querySelectorAll('.gt-tick')].filter((e) => e.textContent).map((e) => e.getBoundingClientRect()); return { scrolls: g.scrollWidth > g.clientWidth, overlap: t.some((r, i) => i && r.left < t[i - 1].right - 1) }; });
         check(at + 'the timeline scrolls sideways and its day labels do not overlap', gt.scrolls && !gt.overlap, gt);
       }
